@@ -138,6 +138,7 @@ public sealed partial class SceneMakerMain : Control
 
         _overviewNavigationBar.Name = "NavigationOverview";
         _overviewNavigationBar.CustomMinimumSize = new Vector2(0f, 44f);
+        _overviewNavigationBar.AddThemeFontSizeOverride("font_size", 14);
         root.AddChild(_overviewNavigationBar);
         AddPerspectiveButton(_overviewNavigationBar, "Terrain", available: true, "Terrain foundation view");
         AddPerspectiveButton(_overviewNavigationBar, "Placements", available: true, "Placement foundation view");
@@ -157,6 +158,7 @@ public sealed partial class SceneMakerMain : Control
         _settingsButton.Name = "Settings";
         _settingsButton.Text = "Settings";
         _settingsButton.CustomMinimumSize = new Vector2(140f, 0f);
+        _settingsButton.AddThemeFontSizeOverride("font_size", 14);
         _settingsButton.SetAnchorsPreset(LayoutPreset.TopRight);
         _settingsButton.OffsetLeft = -152f;
         _settingsButton.OffsetTop = 6f;
@@ -168,12 +170,14 @@ public sealed partial class SceneMakerMain : Control
 
         _contextNavigationBar.Name = "NavigationContext";
         _contextNavigationBar.CustomMinimumSize = new Vector2(0f, 44f);
+        _contextNavigationBar.AddThemeFontSizeOverride("font_size", 14);
         _contextNavigationBar.Visible = false;
         root.AddChild(_contextNavigationBar);
         _returnNavigationButton.Name = "Return";
         _returnNavigationButton.Text = "←";
         _returnNavigationButton.TooltipText = "Return to navigation overview";
         _returnNavigationButton.CustomMinimumSize = new Vector2(56f, 0f);
+        _returnNavigationButton.AddThemeFontSizeOverride("font_size", 16);
         _returnNavigationButton.Pressed += ShowNavigationOverview;
         _contextNavigationBar.AddChild(_returnNavigationButton);
 
@@ -203,6 +207,7 @@ public sealed partial class SceneMakerMain : Control
         BuildMapBar();
 
         var documentBar = new HBoxContainer { Name = "DocumentStatus" };
+        documentBar.AddThemeFontSizeOverride("font_size", 14);
         root.AddChild(documentBar);
         _workspaceLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _sceneLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -274,6 +279,7 @@ public sealed partial class SceneMakerMain : Control
         content.AddChild(_canvas);
 
         var footer = new HBoxContainer { Name = "Footer" };
+        footer.AddThemeFontSizeOverride("font_size", 12);
         root.AddChild(footer);
         _statusLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         footer.AddChild(_statusLabel);
@@ -296,10 +302,10 @@ public sealed partial class SceneMakerMain : Control
             ToggleMode = true,
             ButtonGroup = _drawingToolButtons,
             TooltipText = tooltip,
-            CustomMinimumSize = new Vector2(44f, 44f),
+            CustomMinimumSize = new Vector2(42f, 42f),
             Disabled = true,
         };
-        button.AddThemeConstantOverride("icon_max_width", 26);
+        button.AddThemeConstantOverride("icon_max_width", 24);
         button.Pressed += () => SelectDrawingTool(tool);
         if (tool == CanvasDrawingTool.Pencil)
         {
