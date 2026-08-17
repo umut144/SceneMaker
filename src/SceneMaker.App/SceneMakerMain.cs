@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Godot;
@@ -11,6 +12,7 @@ public sealed partial class SceneMakerMain : Control
 {
     private const int CreateWorkspaceMenuId = 10;
     private const int LoadWorkspaceMenuId = 11;
+    private const int WorkspaceAssetsMenuId = 12;
     private const int CreateSceneMenuId = 20;
     private const int LoadSceneMenuId = 21;
     private const int ChunkHelperMenuId = 30;
@@ -55,6 +57,9 @@ public sealed partial class SceneMakerMain : Control
     private readonly ConfirmationDialog _createWorkspaceDialog = new();
     private readonly ConfirmationDialog _createSceneDialog = new();
     private readonly AcceptDialog _errorDialog = new();
+    private readonly ConfirmationDialog _workspaceAssetsDialog = new();
+    private readonly VBoxContainer _workspaceAssetRows = new();
+    private readonly Dictionary<string, WorkspaceAssetEditorRow> _workspaceAssetEditorRows = [];
     private readonly LineEdit _workspaceIdEdit = new();
     private readonly LineEdit _sceneIdEdit = new();
     private readonly SpinBox _sceneWidthEdit = new();
@@ -79,6 +84,15 @@ public sealed partial class SceneMakerMain : Control
     private string? _selectedTemplateAnchorId;
     private bool _updatingAnchorGroupEdit;
     private TemplateCompositionResult? _templatePreview;
+
+    private sealed record WorkspaceAssetEditorRow(
+        SceneMakerCatalogAsset Asset,
+        CheckBox Enabled,
+        LineEdit Color,
+        LineEdit Width,
+        LineEdit Height,
+        LineEdit AnchorX,
+        LineEdit AnchorY);
 
     public override void _Ready()
     {
@@ -549,6 +563,7 @@ public sealed partial class SceneMakerMain : Control
         menu.AddSeparator("Workspaces");
         menu.AddItem("Create Workspace", CreateWorkspaceMenuId);
         menu.AddItem("Load Workspace", LoadWorkspaceMenuId);
+        menu.AddItem("Workspace Assets", WorkspaceAssetsMenuId);
         menu.AddSeparator("Scenes");
         menu.AddItem("Create Scene", CreateSceneMenuId);
         menu.AddItem("Load Scene", LoadSceneMenuId);
@@ -587,6 +602,19 @@ public sealed partial class SceneMakerMain : Control
         _sceneFileDialog.UseNativeDialog = true;
         _sceneFileDialog.FileSelected += LoadScene;
         AddChild(_sceneFileDialog);
+
+        _workspaceAssetsDialog.Title = "Workspace Assets";
+        _workspaceAssetsDialog.OkButtonText = "Save";
+        var assetScroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(900f, 420f),
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        _workspaceAssetRows.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        assetScroll.AddChild(_workspaceAssetRows);
+        _workspaceAssetsDialog.AddChild(assetScroll);
+        _workspaceAssetsDialog.Confirmed += SaveWorkspaceAssets;
+        AddChild(_workspaceAssetsDialog);
 
         _createWorkspaceDialog.Title = "Create Workspace";
         _createWorkspaceDialog.OkButtonText = "Create";
@@ -732,6 +760,9 @@ public sealed partial class SceneMakerMain : Control
                 _workspaceManifestDialog.CurrentDir = WorkspaceDialogStartDirectory();
                 _workspaceManifestDialog.PopupCenteredRatio(0.75f);
                 break;
+            case WorkspaceAssetsMenuId:
+                ShowWorkspaceAssetsDialog();
+                break;
             case CreateSceneMenuId:
                 if (_workspace is null)
                 {
@@ -757,6 +788,110 @@ public sealed partial class SceneMakerMain : Control
                 _sceneFileDialog.PopupCenteredRatio(0.75f);
                 break;
         }
+    }
+
+    private void ShowWorkspaceAssetsDialog()
+    {
+        if (_workspaceConfiguration is null || _catalog is null) return;
+        foreach (var child in _workspaceAssetRows.GetChildren())
+        {
+            _workspaceAssetRows.RemoveChild(child);
+            child.QueueFree();
+        }
+        _workspaceAssetEditorRows.Clear();
+        _workspaceAssetRows.AddChild(new Label
+        {
+            Text = "Enable the assets this game uses. Props and Transitions require footprint and anchor values in meters.",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        });
+        foreach (var asset in _catalog.Assets)
+        {
+            var profile = _workspaceConfiguration.AssetProfiles
+                .SingleOrDefault(value => value.AssetKey == asset.AssetKey);
+            var row = new GridContainer { Columns = 8 };
+            var enabled = new CheckBox { Text = asset.AssetKey, ButtonPressed = profile is not null };
+            enabled.CustomMinimumSize = new Vector2(180f, 0f);
+            var color = NewAssetField(profile?.Color ?? string.Empty, "#RRGGBB");
+            row.AddChild(enabled);
+            row.AddChild(new Label { Text = asset.Category.ToString() });
+            row.AddChild(color);
+            var width = NewAssetField(FormatMetric(profile?.FootprintWidthMeters), "width m");
+            var height = NewAssetField(FormatMetric(profile?.FootprintHeightMeters), "height m");
+            var anchorX = NewAssetField(FormatMetric(profile?.AnchorXMeters), "anchor x m");
+            var anchorY = NewAssetField(FormatMetric(profile?.AnchorYMeters), "anchor y m");
+            row.AddChild(width);
+            row.AddChild(height);
+            row.AddChild(anchorX);
+            row.AddChild(anchorY);
+            if (asset.Category == SceneMakerAssetCategory.Terrain)
+            {
+                width.Editable = false;
+                height.Editable = false;
+                anchorX.Editable = false;
+                anchorY.Editable = false;
+            }
+            _workspaceAssetRows.AddChild(row);
+            _workspaceAssetEditorRows.Add(asset.AssetKey,
+                new WorkspaceAssetEditorRow(asset, enabled, color, width, height, anchorX, anchorY));
+        }
+        _workspaceAssetsDialog.PopupCentered(new Vector2I(960, 520));
+    }
+
+    private static LineEdit NewAssetField(string value, string placeholder) => new()
+    {
+        Text = value,
+        PlaceholderText = placeholder,
+        CustomMinimumSize = new Vector2(100f, 0f),
+    };
+
+    private static string FormatMetric(decimal? value) => value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+
+    private void SaveWorkspaceAssets()
+    {
+        if (_workspace is null || _workspaceConfiguration is null || _catalog is null) return;
+        TryDocumentAction(() =>
+        {
+            List<WorkspaceAssetProfile> profiles = [];
+            foreach (var row in _workspaceAssetEditorRows.Values)
+            {
+                if (!row.Enabled.ButtonPressed) continue;
+                var color = row.Color.Text.Trim();
+                if (row.Asset.Category == SceneMakerAssetCategory.Terrain)
+                {
+                    profiles.Add(new WorkspaceAssetProfile(row.Asset.AssetKey, color, null, null, null, null));
+                    continue;
+                }
+                profiles.Add(new WorkspaceAssetProfile(
+                    row.Asset.AssetKey,
+                    color,
+                    ParseMetric(row.Width, row.Asset.AssetKey, "footprint width"),
+                    ParseMetric(row.Height, row.Asset.AssetKey, "footprint height"),
+                    ParseMetric(row.AnchorX, row.Asset.AssetKey, "anchor x"),
+                    ParseMetric(row.AnchorY, row.Asset.AssetKey, "anchor y")));
+            }
+            var candidate = _workspaceConfiguration.WithAssetProfiles(profiles, _catalog);
+            var terrain = TerrainDisplayCatalogLoader.Load(_catalog, candidate);
+            var placements = PlacementDisplayCatalogLoader.Load(_catalog, candidate);
+            var transitions = TransitionDisplayCatalogLoader.Load(_catalog, candidate);
+            if (_scene is not null)
+            {
+                DocumentValidation.ValidateGrid(_scene.Document, candidate.Metrics);
+                TerrainEditing.ValidateAssetReferences(_scene.Document, terrain);
+                PlacementEditing.ValidateAssetReferences(_scene.Document, placements, transitions);
+                TransitionEditing.ValidateAssetReferences(_scene.Document, placements, transitions);
+            }
+            WorkspaceConfigurationStore.Save(_workspace.DirectoryPath, candidate);
+            LoadWorkspaceAssets();
+            UpdateDocumentStatus();
+            SetStatus("Saved Workspace asset profiles.");
+        });
+    }
+
+    private static decimal ParseMetric(LineEdit input, string assetKey, string label)
+    {
+        if (!decimal.TryParse(input.Text.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
+            throw new SceneMakerDocumentException($"Asset '{assetKey}' requires a numeric {label} in meters.");
+        return value;
     }
 
     private void CreateWorkspace()
@@ -1321,6 +1456,7 @@ public sealed partial class SceneMakerMain : Control
 
         var menu = _settingsButton.GetPopup();
         var sceneActionsAvailable = _workspace is not null;
+        menu.SetItemDisabled(menu.GetItemIndex(WorkspaceAssetsMenuId), !sceneActionsAvailable);
         menu.SetItemDisabled(menu.GetItemIndex(CreateSceneMenuId), !sceneActionsAvailable);
         menu.SetItemDisabled(menu.GetItemIndex(LoadSceneMenuId), !sceneActionsAvailable);
         UpdateDrawingToolAvailability();

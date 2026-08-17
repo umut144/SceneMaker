@@ -180,6 +180,28 @@ public sealed class StandaloneWorkspaceTests
                 workspace.Metrics));
     }
 
+    [Fact]
+    public void WorkspaceProfilesCanBeChangedAndSavedWithoutExternalCatalogs()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalog = SceneMakerCatalogLoader.Load(WriteCatalog(directory.Path));
+        var configuration = WorkspaceConfigurationStore.Create(
+            "game03",
+            new WorkspaceGridConfiguration(1m, 10m, 40m),
+            [
+                new WorkspaceAssetProfile("terrain.grass", "#99E550", null, null, null, null),
+                new WorkspaceAssetProfile("prop.tree", "#2E7D32", 2m, 3m, 1m, 0m),
+            ],
+            catalog);
+
+        WorkspaceConfigurationStore.Save(directory.Path, configuration);
+        var restored = WorkspaceConfigurationStore.Load(directory.Path, catalog);
+
+        Assert.Equal(10, restored.Metrics.AuthoringPixelsPerTerrainCell);
+        Assert.Equal(2m, restored.ResolveAssetProfile("prop.tree").FootprintWidthMeters);
+        Assert.Equal(1m, restored.ResolveAssetProfile("prop.tree").AnchorXMeters);
+    }
+
     private static string WriteCatalog(string directory) 
     {
         var path = Path.Combine(directory, "catalog.json");

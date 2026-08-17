@@ -42,6 +42,11 @@ public sealed class WorkspaceConfiguration
             ? profile
             : throw new SceneMakerDocumentException(
                 $"Workspace '{WorkspaceKey}' does not configure asset_key '{assetKey}'.");
+
+    public WorkspaceConfiguration WithAssetProfiles(
+        IEnumerable<WorkspaceAssetProfile> assetProfiles,
+        SceneMakerCatalog catalog) =>
+        WorkspaceConfigurationStore.Create(WorkspaceKey, Grid, assetProfiles, catalog);
 }
 
 public static class WorkspaceConfigurationStore
@@ -67,52 +72,7 @@ public static class WorkspaceConfigurationStore
             var document = JsonSerializer.Deserialize<ConfigurationDocument>(
                 File.ReadAllText(path), JsonOptions)
                 ?? throw new SceneMakerDocumentException("Workspace config must not be JSON null.");
-            if (document.Format != Format || document.Version != Version)
-                throw new SceneMakerDocumentException(
-                    $"Workspace config must use {Format} version {Version}.");
-            if (string.IsNullOrWhiteSpace(document.WorkspaceKey))
-                throw new SceneMakerDocumentException("Workspace config requires workspace_key.");
-            if (document.Grid is null
-                || document.Grid.TerrainCellMeters <= 0m
-                || document.Grid.AuthoringPixelsPerMeter <= 0m
-                || document.Grid.GamePixelsPerMeter <= 0m)
-            {
-                throw new SceneMakerDocumentException(
-                    "Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, and game_pixels_per_meter.");
-            }
-            var pixelsPerCell = document.Grid.TerrainCellMeters * document.Grid.AuthoringPixelsPerMeter;
-            if (pixelsPerCell != decimal.Truncate(pixelsPerCell) || pixelsPerCell < 1m)
-            {
-                throw new SceneMakerDocumentException(
-                    "terrain_cell_meters × authoring_pixels_per_meter must be a positive whole authoring pixel count.");
-            }
-            if (document.Assets is null)
-                throw new SceneMakerDocumentException("Workspace config requires an assets array.");
-
-            SortedDictionary<string, WorkspaceAssetProfile> profiles =
-                new(StringComparer.Ordinal);
-            foreach (var entry in document.Assets)
-            {
-                var asset = catalog.Resolve(entry.AssetKey);
-                ValidateProfile(entry, asset);
-                var profile = new WorkspaceAssetProfile(
-                    entry.AssetKey,
-                    entry.Color,
-                    entry.FootprintMeters?.Width,
-                    entry.FootprintMeters?.Height,
-                    entry.AnchorMeters?.X,
-                    entry.AnchorMeters?.Y);
-                if (!profiles.TryAdd(entry.AssetKey, profile))
-                    throw new SceneMakerDocumentException(
-                        $"Workspace config contains duplicate asset_key '{entry.AssetKey}'.");
-            }
-            return new WorkspaceConfiguration(
-                document.WorkspaceKey,
-                new WorkspaceGridConfiguration(
-                    document.Grid.TerrainCellMeters,
-                    document.Grid.AuthoringPixelsPerMeter,
-                    document.Grid.GamePixelsPerMeter),
-                profiles);
+            return Parse(document, catalog);
         }
         catch (SceneMakerDocumentException)
         {
@@ -123,6 +83,81 @@ public static class WorkspaceConfigurationStore
             throw new SceneMakerDocumentException(
                 $"Could not load Workspace config: {exception.Message}", exception);
         }
+    }
+
+    public static WorkspaceConfiguration Create(
+        string workspaceKey,
+        WorkspaceGridConfiguration grid,
+        IEnumerable<WorkspaceAssetProfile> profiles,
+        SceneMakerCatalog catalog)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceKey);
+        ArgumentNullException.ThrowIfNull(grid);
+        ArgumentNullException.ThrowIfNull(profiles);
+        ArgumentNullException.ThrowIfNull(catalog);
+        var document = new ConfigurationDocument
+        {
+            Format = Format,
+            Version = Version,
+            WorkspaceKey = workspaceKey,
+            Grid = new GridDocument
+            {
+                TerrainCellMeters = grid.TerrainCellMeters,
+                AuthoringPixelsPerMeter = grid.AuthoringPixelsPerMeter,
+                GamePixelsPerMeter = grid.GamePixelsPerMeter,
+            },
+            Assets = profiles.Select(profile => new AssetProfileDocument
+            {
+                AssetKey = profile.AssetKey,
+                Color = profile.Color,
+                FootprintMeters = profile.FootprintWidthMeters is null && profile.FootprintHeightMeters is null ? null : new SizeDocument
+                {
+                    Width = profile.FootprintWidthMeters ?? 0m,
+                    Height = profile.FootprintHeightMeters ?? 0m,
+                },
+                AnchorMeters = profile.AnchorXMeters is null && profile.AnchorYMeters is null ? null : new PointDocument
+                {
+                    X = profile.AnchorXMeters ?? -1m,
+                    Y = profile.AnchorYMeters ?? -1m,
+                },
+            }).ToList(),
+        };
+        return Parse(document, catalog);
+    }
+
+    public static void Save(string workspaceDirectory, WorkspaceConfiguration configuration)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
+        ArgumentNullException.ThrowIfNull(configuration);
+        var document = new ConfigurationDocument
+        {
+            Format = Format,
+            Version = Version,
+            WorkspaceKey = configuration.WorkspaceKey,
+            Grid = new GridDocument
+            {
+                TerrainCellMeters = configuration.Grid.TerrainCellMeters,
+                AuthoringPixelsPerMeter = configuration.Grid.AuthoringPixelsPerMeter,
+                GamePixelsPerMeter = configuration.Grid.GamePixelsPerMeter,
+            },
+            Assets = configuration.AssetProfiles.Select(profile => new AssetProfileDocument
+            {
+                AssetKey = profile.AssetKey,
+                Color = profile.Color,
+                FootprintMeters = profile.FootprintWidthMeters is null && profile.FootprintHeightMeters is null ? null : new SizeDocument
+                {
+                    Width = profile.FootprintWidthMeters ?? 0m,
+                    Height = profile.FootprintHeightMeters ?? 0m,
+                },
+                AnchorMeters = profile.AnchorXMeters is null && profile.AnchorYMeters is null ? null : new PointDocument
+                {
+                    X = profile.AnchorXMeters ?? -1m,
+                    Y = profile.AnchorYMeters ?? -1m,
+                },
+            }).OrderBy(static entry => entry.AssetKey, StringComparer.Ordinal).ToList(),
+        };
+        var path = Path.Combine(Path.GetFullPath(workspaceDirectory), FileName);
+        AtomicTextFile.Write(path, JsonSerializer.Serialize(document, JsonOptions) + "\n");
     }
 
     public static void CreateDefault(string workspaceDirectory, string workspaceKey)
@@ -174,6 +209,36 @@ public static class WorkspaceConfigurationStore
             throw new SceneMakerDocumentException(
                 $"{asset.Category} asset '{asset.AssetKey}' requires a positive footprint and an in-bounds anchor.");
         }
+    }
+
+    private static WorkspaceConfiguration Parse(ConfigurationDocument document, SceneMakerCatalog catalog)
+    {
+        if (document.Format != Format || document.Version != Version)
+            throw new SceneMakerDocumentException($"Workspace config must use {Format} version {Version}.");
+        if (string.IsNullOrWhiteSpace(document.WorkspaceKey))
+            throw new SceneMakerDocumentException("Workspace config requires workspace_key.");
+        if (document.Grid is null || document.Grid.TerrainCellMeters <= 0m
+            || document.Grid.AuthoringPixelsPerMeter <= 0m || document.Grid.GamePixelsPerMeter <= 0m)
+            throw new SceneMakerDocumentException("Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, and game_pixels_per_meter.");
+        var grid = new WorkspaceGridConfiguration(
+            document.Grid.TerrainCellMeters,
+            document.Grid.AuthoringPixelsPerMeter,
+            document.Grid.GamePixelsPerMeter);
+        _ = new WorkspaceMetrics(grid);
+        if (document.Assets is null)
+            throw new SceneMakerDocumentException("Workspace config requires an assets array.");
+        SortedDictionary<string, WorkspaceAssetProfile> profiles = new(StringComparer.Ordinal);
+        foreach (var entry in document.Assets)
+        {
+            var asset = catalog.Resolve(entry.AssetKey);
+            ValidateProfile(entry, asset);
+            var profile = new WorkspaceAssetProfile(entry.AssetKey, entry.Color,
+                entry.FootprintMeters?.Width, entry.FootprintMeters?.Height,
+                entry.AnchorMeters?.X, entry.AnchorMeters?.Y);
+            if (!profiles.TryAdd(entry.AssetKey, profile))
+                throw new SceneMakerDocumentException($"Workspace config contains duplicate asset_key '{entry.AssetKey}'.");
+        }
+        return new WorkspaceConfiguration(document.WorkspaceKey, grid, profiles);
     }
 
     private sealed record ConfigurationDocument
