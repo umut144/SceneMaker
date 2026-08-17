@@ -13,7 +13,8 @@ public sealed partial class SceneMakerMain : Control
     private const int CreateWorkspaceMenuId = 10;
     private const int LoadWorkspaceMenuId = 11;
     private const int WorkspaceAssetsMenuId = 12;
-    private const int LoadWorkspaceConfigMenuId = 13;
+    private const int LoadWorkspaceFolderModeId = 1;
+    private const int LoadWorkspaceConfigModeId = 2;
     private const int CreateSceneMenuId = 20;
     private const int LoadSceneMenuId = 21;
     private const int ExportSceneMenuId = 22;
@@ -56,6 +57,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly FileDialog _workspaceDirectoryDialog = new();
     private readonly FileDialog _workspaceDirectoryLoadDialog = new();
     private readonly FileDialog _workspaceConfigLoadDialog = new();
+    private readonly PopupMenu _workspaceLoadModeMenu = new();
     private readonly FileDialog _sceneFileDialog = new();
     private readonly ConfirmationDialog _createWorkspaceDialog = new();
     private readonly ConfirmationDialog _createSceneDialog = new();
@@ -583,7 +585,6 @@ public sealed partial class SceneMakerMain : Control
         menu.AddSeparator("Workspaces");
         menu.AddItem("Create Workspace", CreateWorkspaceMenuId);
         menu.AddItem("Load Workspace", LoadWorkspaceMenuId);
-        menu.AddItem("Load Workspace config.json", LoadWorkspaceConfigMenuId);
         menu.AddItem("Workspace Assets", WorkspaceAssetsMenuId);
         menu.AddSeparator("Scenes");
         menu.AddItem("Create Scene", CreateSceneMenuId);
@@ -597,6 +598,11 @@ public sealed partial class SceneMakerMain : Control
 
     private void BuildDialogs()
     {
+        _workspaceLoadModeMenu.AddItem("Choose Workspace Folder", LoadWorkspaceFolderModeId);
+        _workspaceLoadModeMenu.AddItem("Choose config.json", LoadWorkspaceConfigModeId);
+        _workspaceLoadModeMenu.IdPressed += HandleWorkspaceLoadMode;
+        AddChild(_workspaceLoadModeMenu);
+
         _workspaceDirectoryDialog.Title = "Choose Parent Directory for Workspace";
         _workspaceDirectoryDialog.Access = FileDialog.AccessEnum.Filesystem;
         _workspaceDirectoryDialog.FileMode = FileDialog.FileModeEnum.OpenDir;
@@ -835,12 +841,7 @@ public sealed partial class SceneMakerMain : Control
                 _workspaceDirectoryDialog.PopupCenteredRatio(0.75f);
                 break;
             case LoadWorkspaceMenuId:
-                _workspaceDirectoryLoadDialog.CurrentDir = WorkspaceDialogStartDirectory();
-                _workspaceDirectoryLoadDialog.PopupCenteredRatio(0.75f);
-                break;
-            case LoadWorkspaceConfigMenuId:
-                _workspaceConfigLoadDialog.CurrentDir = WorkspaceDialogStartDirectory();
-                _workspaceConfigLoadDialog.PopupCenteredRatio(0.75f);
+                _workspaceLoadModeMenu.PopupCentered(new Vector2I(300, 110));
                 break;
             case WorkspaceAssetsMenuId:
                 ShowWorkspaceAssetsDialog();
@@ -873,6 +874,21 @@ public sealed partial class SceneMakerMain : Control
             case ExportSceneMenuId:
                 ExportCurrentScene();
                 break;
+        }
+    }
+
+    private void HandleWorkspaceLoadMode(long id)
+    {
+        var startDirectory = WorkspaceDialogStartDirectory();
+        if (id == LoadWorkspaceFolderModeId)
+        {
+            _workspaceDirectoryLoadDialog.CurrentDir = startDirectory;
+            _workspaceDirectoryLoadDialog.PopupCenteredRatio(0.75f);
+        }
+        else if (id == LoadWorkspaceConfigModeId)
+        {
+            _workspaceConfigLoadDialog.CurrentDir = startDirectory;
+            _workspaceConfigLoadDialog.PopupCenteredRatio(0.75f);
         }
     }
 
