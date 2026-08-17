@@ -13,6 +13,7 @@ public sealed partial class SceneMakerMain : Control
     private const int CreateWorkspaceMenuId = 10;
     private const int LoadWorkspaceMenuId = 11;
     private const int WorkspaceAssetsMenuId = 12;
+    private const int LoadWorkspaceConfigMenuId = 13;
     private const int CreateSceneMenuId = 20;
     private const int LoadSceneMenuId = 21;
     private const int ExportSceneMenuId = 22;
@@ -54,6 +55,7 @@ public sealed partial class SceneMakerMain : Control
 
     private readonly FileDialog _workspaceDirectoryDialog = new();
     private readonly FileDialog _workspaceDirectoryLoadDialog = new();
+    private readonly FileDialog _workspaceConfigLoadDialog = new();
     private readonly FileDialog _sceneFileDialog = new();
     private readonly ConfirmationDialog _createWorkspaceDialog = new();
     private readonly ConfirmationDialog _createSceneDialog = new();
@@ -581,6 +583,7 @@ public sealed partial class SceneMakerMain : Control
         menu.AddSeparator("Workspaces");
         menu.AddItem("Create Workspace", CreateWorkspaceMenuId);
         menu.AddItem("Load Workspace", LoadWorkspaceMenuId);
+        menu.AddItem("Load Workspace config.json", LoadWorkspaceConfigMenuId);
         menu.AddItem("Workspace Assets", WorkspaceAssetsMenuId);
         menu.AddSeparator("Scenes");
         menu.AddItem("Create Scene", CreateSceneMenuId);
@@ -608,11 +611,18 @@ public sealed partial class SceneMakerMain : Control
 
         _workspaceDirectoryLoadDialog.Title = "Load Workspace";
         _workspaceDirectoryLoadDialog.Access = FileDialog.AccessEnum.Filesystem;
-        _workspaceDirectoryLoadDialog.FileMode = FileDialog.FileModeEnum.OpenFile;
-        _workspaceDirectoryLoadDialog.Filters = ["config.json ; SceneMaker Workspace"];
+        _workspaceDirectoryLoadDialog.FileMode = FileDialog.FileModeEnum.OpenDir;
         _workspaceDirectoryLoadDialog.UseNativeDialog = true;
-        _workspaceDirectoryLoadDialog.FileSelected += LoadWorkspace;
+        _workspaceDirectoryLoadDialog.DirSelected += LoadWorkspaceFromDirectory;
         AddChild(_workspaceDirectoryLoadDialog);
+
+        _workspaceConfigLoadDialog.Title = "Load Workspace config.json";
+        _workspaceConfigLoadDialog.Access = FileDialog.AccessEnum.Filesystem;
+        _workspaceConfigLoadDialog.FileMode = FileDialog.FileModeEnum.OpenFile;
+        _workspaceConfigLoadDialog.Filters = ["config.json ; SceneMaker Workspace"];
+        _workspaceConfigLoadDialog.UseNativeDialog = true;
+        _workspaceConfigLoadDialog.FileSelected += LoadWorkspace;
+        AddChild(_workspaceConfigLoadDialog);
 
         _sceneFileDialog.Title = "Load Scene";
         _sceneFileDialog.Access = FileDialog.AccessEnum.Filesystem;
@@ -828,6 +838,10 @@ public sealed partial class SceneMakerMain : Control
                 _workspaceDirectoryLoadDialog.CurrentDir = WorkspaceDialogStartDirectory();
                 _workspaceDirectoryLoadDialog.PopupCenteredRatio(0.75f);
                 break;
+            case LoadWorkspaceConfigMenuId:
+                _workspaceConfigLoadDialog.CurrentDir = WorkspaceDialogStartDirectory();
+                _workspaceConfigLoadDialog.PopupCenteredRatio(0.75f);
+                break;
             case WorkspaceAssetsMenuId:
                 ShowWorkspaceAssetsDialog();
                 break;
@@ -1014,6 +1028,19 @@ public sealed partial class SceneMakerMain : Control
         });
     }
 
+    private void LoadWorkspaceFromDirectory(string directory)
+    {
+        var workspaceDirectory = ResolveFileSystemPath(directory);
+        var configPath = Path.Combine(workspaceDirectory, WorkspaceConfigurationStore.FileName);
+        if (!File.Exists(configPath))
+        {
+            SetStatus($"Workspace load blocked: no {WorkspaceConfigurationStore.FileName} in the selected folder.");
+            return;
+        }
+
+        LoadWorkspace(configPath);
+    }
+
     private void LoadWorkspace(string configPath)
     {
         var previousWorkspace = _workspace;
@@ -1027,6 +1054,11 @@ public sealed partial class SceneMakerMain : Control
             if (!string.Equals(Path.GetFileName(fullConfigPath), WorkspaceConfigurationStore.FileName, StringComparison.Ordinal))
             {
                 SetStatus("Workspace load blocked: select a workspace config.json file.");
+                return;
+            }
+            if (!File.Exists(fullConfigPath))
+            {
+                SetStatus("Workspace load blocked: config.json was not found.");
                 return;
             }
             var workspaceDirectory = Path.GetDirectoryName(fullConfigPath)
