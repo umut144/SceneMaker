@@ -13,8 +13,6 @@ public sealed partial class SceneMakerMain : Control
     private const int CreateWorkspaceMenuId = 10;
     private const int LoadWorkspaceMenuId = 11;
     private const int WorkspaceAssetsMenuId = 12;
-    private const int LoadWorkspaceFolderModeId = 1;
-    private const int LoadWorkspaceConfigModeId = 2;
     private const int CreateSceneMenuId = 20;
     private const int LoadSceneMenuId = 21;
     private const int ExportSceneMenuId = 22;
@@ -56,8 +54,6 @@ public sealed partial class SceneMakerMain : Control
 
     private readonly FileDialog _workspaceDirectoryDialog = new();
     private readonly FileDialog _workspaceDirectoryLoadDialog = new();
-    private readonly FileDialog _workspaceConfigLoadDialog = new();
-    private readonly PopupMenu _workspaceLoadModeMenu = new();
     private readonly FileDialog _sceneFileDialog = new();
     private readonly ConfirmationDialog _createWorkspaceDialog = new();
     private readonly ConfirmationDialog _createSceneDialog = new();
@@ -598,11 +594,6 @@ public sealed partial class SceneMakerMain : Control
 
     private void BuildDialogs()
     {
-        _workspaceLoadModeMenu.AddItem("Choose Workspace Folder", LoadWorkspaceFolderModeId);
-        _workspaceLoadModeMenu.AddItem("Choose config.json", LoadWorkspaceConfigModeId);
-        _workspaceLoadModeMenu.IdPressed += HandleWorkspaceLoadMode;
-        AddChild(_workspaceLoadModeMenu);
-
         _workspaceDirectoryDialog.Title = "Choose Parent Directory for Workspace";
         _workspaceDirectoryDialog.Access = FileDialog.AccessEnum.Filesystem;
         _workspaceDirectoryDialog.FileMode = FileDialog.FileModeEnum.OpenDir;
@@ -614,21 +605,6 @@ public sealed partial class SceneMakerMain : Control
             _createWorkspaceDialog.PopupCentered(new Vector2I(460, 180));
         };
         AddChild(_workspaceDirectoryDialog);
-
-        _workspaceDirectoryLoadDialog.Title = "Load Workspace";
-        _workspaceDirectoryLoadDialog.Access = FileDialog.AccessEnum.Filesystem;
-        _workspaceDirectoryLoadDialog.FileMode = FileDialog.FileModeEnum.OpenDir;
-        _workspaceDirectoryLoadDialog.UseNativeDialog = true;
-        _workspaceDirectoryLoadDialog.DirSelected += LoadWorkspaceFromDirectory;
-        AddChild(_workspaceDirectoryLoadDialog);
-
-        _workspaceConfigLoadDialog.Title = "Load Workspace config.json";
-        _workspaceConfigLoadDialog.Access = FileDialog.AccessEnum.Filesystem;
-        _workspaceConfigLoadDialog.FileMode = FileDialog.FileModeEnum.OpenFile;
-        _workspaceConfigLoadDialog.Filters = ["config.json ; SceneMaker Workspace"];
-        _workspaceConfigLoadDialog.UseNativeDialog = true;
-        _workspaceConfigLoadDialog.FileSelected += LoadWorkspace;
-        AddChild(_workspaceConfigLoadDialog);
 
         _sceneFileDialog.Title = "Load Scene";
         _sceneFileDialog.Access = FileDialog.AccessEnum.Filesystem;
@@ -841,7 +817,7 @@ public sealed partial class SceneMakerMain : Control
                 _workspaceDirectoryDialog.PopupCenteredRatio(0.75f);
                 break;
             case LoadWorkspaceMenuId:
-                _workspaceLoadModeMenu.PopupCentered(new Vector2I(300, 110));
+                OpenWorkspaceFinder();
                 break;
             case WorkspaceAssetsMenuId:
                 ShowWorkspaceAssetsDialog();
@@ -877,19 +853,39 @@ public sealed partial class SceneMakerMain : Control
         }
     }
 
-    private void HandleWorkspaceLoadMode(long id)
+    private void OpenWorkspaceFinder()
     {
-        var startDirectory = WorkspaceDialogStartDirectory();
-        if (id == LoadWorkspaceFolderModeId)
+        if (OS.GetName() == "macOS")
         {
-            _workspaceDirectoryLoadDialog.CurrentDir = startDirectory;
-            _workspaceDirectoryLoadDialog.PopupCenteredRatio(0.75f);
+            var startDirectory = WorkspaceDialogStartDirectory()
+                .Replace("\\", "\\\\", StringComparison.Ordinal)
+                .Replace("\"", "\\\"", StringComparison.Ordinal);
+            var script = $"try\n" +
+                         $"set chosenItem to choose file or folder with prompt \"Load Workspace\" default location POSIX file \"{startDirectory}\"\n" +
+                         $"return POSIX path of chosenItem\n" +
+                         $"on error number -128\n" +
+                         $"return \"\"\n" +
+                         $"end try";
+            var output = new Godot.Collections.Array();
+            var exitCode = OS.Execute("osascript", ["-e", script], output, true);
+            if (exitCode == 0 && output.Count > 0)
+            {
+                var selectedPath = output[0].AsString().Trim();
+                if (!string.IsNullOrWhiteSpace(selectedPath))
+                    LoadWorkspaceSelection(selectedPath);
+            }
+            return;
         }
-        else if (id == LoadWorkspaceConfigModeId)
-        {
-            _workspaceConfigLoadDialog.CurrentDir = startDirectory;
-            _workspaceConfigLoadDialog.PopupCenteredRatio(0.75f);
-        }
+
+        // Non-macOS fallback: Godot's folder dialog still enforces config.json.
+        _workspaceDirectoryLoadDialog.Title = "Load Workspace Folder";
+        _workspaceDirectoryLoadDialog.Access = FileDialog.AccessEnum.Filesystem;
+        _workspaceDirectoryLoadDialog.FileMode = FileDialog.FileModeEnum.OpenDir;
+        _workspaceDirectoryLoadDialog.UseNativeDialog = true;
+        _workspaceDirectoryLoadDialog.CurrentDir = WorkspaceDialogStartDirectory();
+        _workspaceDirectoryLoadDialog.DirSelected -= LoadWorkspaceFromDirectory;
+        _workspaceDirectoryLoadDialog.DirSelected += LoadWorkspaceFromDirectory;
+        _workspaceDirectoryLoadDialog.PopupCenteredRatio(0.75f);
     }
 
     private void ExportCurrentScene()
@@ -1055,6 +1051,24 @@ public sealed partial class SceneMakerMain : Control
         }
 
         LoadWorkspace(configPath);
+    }
+
+    private void LoadWorkspaceSelection(string selectedPath)
+    {
+        var path = ResolveFileSystemPath(selectedPath);
+        if (Directory.Exists(path))
+        {
+            LoadWorkspaceFromDirectory(path);
+            return;
+        }
+
+        if (File.Exists(path))
+        {
+            LoadWorkspace(path);
+            return;
+        }
+
+        SetStatus("Workspace load blocked: selected path does not exist.");
     }
 
     private void LoadWorkspace(string configPath)
