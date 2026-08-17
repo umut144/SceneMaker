@@ -137,7 +137,7 @@ public sealed partial class SceneMakerMain : Control
         AddChild(root);
 
         _overviewNavigationBar.Name = "NavigationOverview";
-        _overviewNavigationBar.CustomMinimumSize = new Vector2(0f, 48f);
+        _overviewNavigationBar.CustomMinimumSize = new Vector2(0f, 44f);
         root.AddChild(_overviewNavigationBar);
         AddPerspectiveButton(_overviewNavigationBar, "Terrain", available: true, "Terrain foundation view");
         AddPerspectiveButton(_overviewNavigationBar, "Placements", available: true, "Placement foundation view");
@@ -167,7 +167,7 @@ public sealed partial class SceneMakerMain : Control
         BuildSettingsMenu();
 
         _contextNavigationBar.Name = "NavigationContext";
-        _contextNavigationBar.CustomMinimumSize = new Vector2(0f, 48f);
+        _contextNavigationBar.CustomMinimumSize = new Vector2(0f, 44f);
         _contextNavigationBar.Visible = false;
         root.AddChild(_contextNavigationBar);
         _returnNavigationButton.Name = "Return";
@@ -220,21 +220,21 @@ public sealed partial class SceneMakerMain : Control
         var toolPanel = new PanelContainer
         {
             Name = "ToolBar",
-            CustomMinimumSize = new Vector2(64f, 0f),
+            CustomMinimumSize = new Vector2(52f, 0f),
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
         content.AddChild(toolPanel);
         var toolMargin = new MarginContainer();
-        toolMargin.AddThemeConstantOverride("margin_left", 6);
-        toolMargin.AddThemeConstantOverride("margin_top", 8);
-        toolMargin.AddThemeConstantOverride("margin_right", 6);
-        toolMargin.AddThemeConstantOverride("margin_bottom", 8);
+        toolMargin.AddThemeConstantOverride("margin_left", 4);
+        toolMargin.AddThemeConstantOverride("margin_top", 6);
+        toolMargin.AddThemeConstantOverride("margin_right", 4);
+        toolMargin.AddThemeConstantOverride("margin_bottom", 6);
         toolPanel.AddChild(toolMargin);
         var toolColumn = new VBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.Begin,
         };
-        toolColumn.AddThemeConstantOverride("separation", 8);
+        toolColumn.AddThemeConstantOverride("separation", 6);
         toolMargin.AddChild(toolColumn);
         AddDrawingToolButton(toolColumn, CanvasDrawingTool.Selector, "select.svg", "Selector");
         AddDrawingToolButton(toolColumn, CanvasDrawingTool.Eraser, "eraser.svg", "Eraser");
@@ -246,7 +246,7 @@ public sealed partial class SceneMakerMain : Control
         _anchorGroupEdit.MaxValue = int.MaxValue;
         _anchorGroupEdit.Step = 1;
         _anchorGroupEdit.Value = 1;
-        _anchorGroupEdit.CustomMinimumSize = new Vector2(52f, 0f);
+        _anchorGroupEdit.CustomMinimumSize = new Vector2(44f, 0f);
         _anchorGroupEdit.TooltipText = "Group number for a new or selected Template Anchor";
         _anchorGroupEdit.ValueChanged += SetSelectedTemplateAnchorGroup;
         toolColumn.AddChild(_anchorGroupEdit);
@@ -292,12 +292,14 @@ public sealed partial class SceneMakerMain : Control
             Text = string.Empty,
             Icon = GD.Load<Texture2D>($"res://assets/icons/{iconFileName}"),
             ExpandIcon = false,
+            Alignment = HorizontalAlignment.Center,
             ToggleMode = true,
             ButtonGroup = _drawingToolButtons,
             TooltipText = tooltip,
-            CustomMinimumSize = new Vector2(52f, 52f),
+            CustomMinimumSize = new Vector2(44f, 44f),
             Disabled = true,
         };
+        button.AddThemeConstantOverride("icon_max_width", 26);
         button.Pressed += () => SelectDrawingTool(tool);
         if (tool == CanvasDrawingTool.Pencil)
         {
