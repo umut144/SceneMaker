@@ -72,6 +72,9 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _templateGroupEdit = new();
     private readonly SpinBox _templateInsertionXEdit = new();
     private readonly SpinBox _templateInsertionYEdit = new();
+    private readonly CheckBox _templatePivotCenterToggle = new();
+    private readonly Label _templateInsertionXMetricsLabel = new();
+    private readonly Label _templateInsertionYMetricsLabel = new();
 
     private LoadedWorkspace? _workspace;
     private LoadedScene? _scene;
@@ -638,6 +641,7 @@ public sealed partial class SceneMakerMain : Control
         var sceneFields = new GridContainer { Columns = 3 };
         sceneFields.AddChild(new Label { Text = "Stable scene ID" });
         _sceneIdEdit.PlaceholderText = "scene_name";
+        _sceneIdEdit.TextChanged += _ => UpdateCreateSceneButton();
         sceneFields.AddChild(_sceneIdEdit);
         sceneFields.AddChild(new Control());
         sceneFields.AddChild(new Label { Text = "Scene type" });
@@ -661,18 +665,43 @@ public sealed partial class SceneMakerMain : Control
         _templateCreationFields.AddChild(new Label { Text = "Template group" });
         ConfigurePositiveIntegerInput(_templateGroupEdit, 1);
         _templateCreationFields.AddChild(_templateGroupEdit);
-        _templateCreationFields.AddChild(new Label { Text = "Insertion anchor X (authoring px)" });
-        ConfigureGridCoordinateInput(_templateInsertionXEdit);
-        _templateCreationFields.AddChild(_templateInsertionXEdit);
-        _templateCreationFields.AddChild(new Label { Text = "Insertion anchor Y (authoring px)" });
-        ConfigureGridCoordinateInput(_templateInsertionYEdit);
-        _templateCreationFields.AddChild(_templateInsertionYEdit);
+        _templateCreationFields.AddChild(new Label { Text = "Pivot X (m)" });
+        _templateInsertionXEdit.Step = 0.01;
+        _templateInsertionXEdit.MinValue = 0;
+        _templateInsertionXEdit.MaxValue = int.MaxValue;
+        _templateInsertionXEdit.AllowGreater = false;
+        _templateInsertionXEdit.AllowLesser = false;
+        _templateInsertionXEdit.ValueChanged += _ => UpdateTemplatePivotFields();
+        var pivotXRow = new HBoxContainer();
+        pivotXRow.AddChild(_templateInsertionXEdit);
+        ConfigureMetricsLabel(_templateInsertionXMetricsLabel);
+        pivotXRow.AddChild(_templateInsertionXMetricsLabel);
+        _templateCreationFields.AddChild(pivotXRow);
+        _templateCreationFields.AddChild(new Label { Text = "Pivot Y (m)" });
+        _templateInsertionYEdit.Step = 0.01;
+        _templateInsertionYEdit.MinValue = 0;
+        _templateInsertionYEdit.MaxValue = int.MaxValue;
+        _templateInsertionYEdit.AllowGreater = false;
+        _templateInsertionYEdit.AllowLesser = false;
+        _templateInsertionYEdit.ValueChanged += _ => UpdateTemplatePivotFields();
+        var pivotYRow = new HBoxContainer();
+        pivotYRow.AddChild(_templateInsertionYEdit);
+        ConfigureMetricsLabel(_templateInsertionYMetricsLabel);
+        pivotYRow.AddChild(_templateInsertionYMetricsLabel);
+        _templateCreationFields.AddChild(pivotYRow);
+        _templatePivotCenterToggle.Text = "Center Pivot automatically";
+        _templatePivotCenterToggle.TooltipText = "Use the center of the new Template as its insertion pivot.";
+        _templatePivotCenterToggle.Toggled += _ => UpdateTemplatePivotFields();
+        _templateCreationFields.AddChild(new Label());
+        _templateCreationFields.AddChild(_templatePivotCenterToggle);
         sceneFields.AddChild(_templateCreationFields);
         sceneFields.AddChild(new Control());
         UpdateSceneSizeMetrics();
         _createSceneDialog.AddChild(sceneFields);
         _createSceneDialog.Confirmed += CreateScene;
         AddChild(_createSceneDialog);
+
+        UpdateCreateSceneButton();
 
         _errorDialog.Title = "SceneMaker";
         AddChild(_errorDialog);
@@ -699,6 +728,7 @@ public sealed partial class SceneMakerMain : Control
     {
         _sceneWidthMetricsLabel.Text = FormatSceneSizeMetrics(_sceneWidthEdit.Value);
         _sceneHeightMetricsLabel.Text = FormatSceneSizeMetrics(_sceneHeightEdit.Value);
+        UpdateTemplatePivotFields();
     }
 
     private string FormatSceneSizeMetrics(double cells)
@@ -734,6 +764,36 @@ public sealed partial class SceneMakerMain : Control
     private void UpdateTemplateCreationFields()
     {
         _templateCreationFields.Visible = SelectedSceneKind() == SceneKind.Template;
+        UpdateTemplatePivotFields();
+    }
+
+    private void UpdateCreateSceneButton()
+    {
+        _createSceneDialog.GetOkButton().Disabled = string.IsNullOrWhiteSpace(_sceneIdEdit.Text);
+    }
+
+    private void UpdateTemplatePivotFields()
+    {
+        if (_workspaceConfiguration is null) return;
+        var metrics = _workspaceConfiguration.Metrics;
+        if (_templatePivotCenterToggle.ButtonPressed && SelectedSceneKind() == SceneKind.Template)
+        {
+            var widthMeters = (decimal)_sceneWidthEdit.Value * metrics.TerrainCellMeters;
+            var heightMeters = (decimal)_sceneHeightEdit.Value * metrics.TerrainCellMeters;
+            _templateInsertionXEdit.SetValueNoSignal((double)(widthMeters / 2m));
+            _templateInsertionYEdit.SetValueNoSignal((double)(heightMeters / 2m));
+        }
+        _templateInsertionXEdit.Editable = !_templatePivotCenterToggle.ButtonPressed;
+        _templateInsertionYEdit.Editable = !_templatePivotCenterToggle.ButtonPressed;
+        _templateInsertionXMetricsLabel.Text = FormatPivotPixels(_templateInsertionXEdit.Value);
+        _templateInsertionYMetricsLabel.Text = FormatPivotPixels(_templateInsertionYEdit.Value);
+    }
+
+    private string FormatPivotPixels(double meters)
+    {
+        if (_workspaceConfiguration is null) return string.Empty;
+        var pixels = (decimal)meters * _workspaceConfiguration.Metrics.AuthoringPixelsPerMeter;
+        return $"= {pixels:0.###} px";
     }
 
     private SceneKind SelectedSceneKind() =>
@@ -779,6 +839,7 @@ public sealed partial class SceneMakerMain : Control
                 _sceneIdEdit.Clear();
                 _sceneKindEdit.Select(0);
                 _templateGroupEdit.Value = 1;
+                _templatePivotCenterToggle.ButtonPressed = false;
                 _templateInsertionXEdit.Value = 0;
                 _templateInsertionYEdit.Value = 0;
                 UpdateTemplateCreationFields();
@@ -980,8 +1041,8 @@ public sealed partial class SceneMakerMain : Control
                 checked((int)_sceneHeightEdit.Value),
                 SelectedSceneKind(),
                 checked((int)_templateGroupEdit.Value),
-                checked((int)_templateInsertionXEdit.Value),
-                checked((int)_templateInsertionYEdit.Value));
+                MetersToAuthoringPixels(_templateInsertionXEdit.Value, "Pivot X"),
+                MetersToAuthoringPixels(_templateInsertionYEdit.Value, "Pivot Y"));
             _canvas.ShowScene(_scene);
             _selectedTemplateAnchorId = null;
             _templatePreview = null;
@@ -1594,6 +1655,17 @@ public sealed partial class SceneMakerMain : Control
         SetStatus(message);
         _errorDialog.DialogText = message;
         _errorDialog.PopupCentered(new Vector2I(560, 180));
+    }
+
+    private int MetersToAuthoringPixels(double meters, string label)
+    {
+        if (_workspaceConfiguration is null)
+            throw new SceneMakerDocumentException("Workspace metrics are required for Template pivot values.");
+        var pixels = (decimal)meters * _workspaceConfiguration.Metrics.AuthoringPixelsPerMeter;
+        if (pixels != decimal.Truncate(pixels))
+            throw new SceneMakerDocumentException(
+                $"{label} must map to a whole authoring pixel; current value is {pixels:0.###} px.");
+        return checked((int)pixels);
     }
 
     private static string ResolveFileSystemPath(string path) =>
