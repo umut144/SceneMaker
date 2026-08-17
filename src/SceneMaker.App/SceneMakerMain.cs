@@ -608,9 +608,10 @@ public sealed partial class SceneMakerMain : Control
 
         _workspaceDirectoryLoadDialog.Title = "Load Workspace";
         _workspaceDirectoryLoadDialog.Access = FileDialog.AccessEnum.Filesystem;
-        _workspaceDirectoryLoadDialog.FileMode = FileDialog.FileModeEnum.OpenDir;
+        _workspaceDirectoryLoadDialog.FileMode = FileDialog.FileModeEnum.OpenFile;
+        _workspaceDirectoryLoadDialog.Filters = ["config.json ; SceneMaker Workspace"];
         _workspaceDirectoryLoadDialog.UseNativeDialog = true;
-        _workspaceDirectoryLoadDialog.DirSelected += LoadWorkspace;
+        _workspaceDirectoryLoadDialog.FileSelected += LoadWorkspace;
         AddChild(_workspaceDirectoryLoadDialog);
 
         _sceneFileDialog.Title = "Load Scene";
@@ -1013,11 +1014,25 @@ public sealed partial class SceneMakerMain : Control
         });
     }
 
-    private void LoadWorkspace(string workspaceDirectory)
+    private void LoadWorkspace(string configPath)
     {
-        TryDocumentAction(() =>
+        var previousWorkspace = _workspace;
+        var previousConfiguration = _workspaceConfiguration;
+        var previousTerrainAssets = _terrainAssets;
+        var previousPlacementAssets = _placementAssets;
+        var previousTransitionAssets = _transitionAssets;
+        try
         {
-            _workspace = WorkspaceStore.Load(ResolveFileSystemPath(workspaceDirectory), _catalog!);
+            var fullConfigPath = ResolveFileSystemPath(configPath);
+            if (!string.Equals(Path.GetFileName(fullConfigPath), WorkspaceConfigurationStore.FileName, StringComparison.Ordinal))
+            {
+                SetStatus("Workspace load blocked: select a workspace config.json file.");
+                return;
+            }
+            var workspaceDirectory = Path.GetDirectoryName(fullConfigPath)
+                ?? throw new SceneMakerDocumentException("Workspace config requires a parent directory.");
+            var loadedWorkspace = WorkspaceStore.Load(workspaceDirectory, _catalog!);
+            _workspace = loadedWorkspace;
             LoadWorkspaceAssets();
             _scene = null;
             _selectedTemplateAnchorId = null;
@@ -1026,7 +1041,19 @@ public sealed partial class SceneMakerMain : Control
             SaveRecentSession();
             UpdateDocumentStatus();
             SetStatus($"Loaded Workspace '{_workspace.WorkspaceKey}'.");
-        });
+        }
+        catch (Exception exception) when (exception is SceneMakerDocumentException
+                                          or IOException
+                                          or UnauthorizedAccessException
+                                          or OverflowException)
+        {
+            _workspace = previousWorkspace;
+            _workspaceConfiguration = previousConfiguration;
+            _terrainAssets = previousTerrainAssets;
+            _placementAssets = previousPlacementAssets;
+            _transitionAssets = previousTransitionAssets;
+            SetStatus($"Workspace load blocked: {exception.Message}");
+        }
     }
 
     private void CreateScene()
