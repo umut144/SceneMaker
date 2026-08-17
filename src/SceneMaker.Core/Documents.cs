@@ -2,9 +2,7 @@ namespace SceneMaker.Core;
 
 public static class SceneMakerSchemas
 {
-    public const string Workspace = "srt.scene_maker_workspace";
     public const string Scene = "srt.scene_maker_scene";
-    public const int WorkspaceVersion = 1;
     public const int SceneVersion = 5;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
@@ -13,20 +11,6 @@ public enum SceneKind
 {
     Instance,
     Template,
-}
-
-public sealed record WorkspaceDocument
-{
-    public required string Schema { get; init; }
-    public required int Version { get; init; }
-    public required string WorkspaceId { get; init; }
-
-    public static WorkspaceDocument Create(string workspaceId) => new()
-    {
-        Schema = SceneMakerSchemas.Workspace,
-        Version = SceneMakerSchemas.WorkspaceVersion,
-        WorkspaceId = workspaceId,
-    };
 }
 
 public sealed record SceneSizeCells
@@ -122,7 +106,7 @@ public sealed record SceneDocument
     };
 }
 
-public sealed record LoadedWorkspace(string DirectoryPath, WorkspaceDocument Document)
+public sealed record LoadedWorkspace(string DirectoryPath, string WorkspaceKey)
 {
     public string ScenesDirectoryPath => Path.Combine(DirectoryPath, WorkspaceStore.ScenesDirectoryName);
     public string TemplatesDirectoryPath => Path.Combine(DirectoryPath, WorkspaceStore.TemplatesDirectoryName);

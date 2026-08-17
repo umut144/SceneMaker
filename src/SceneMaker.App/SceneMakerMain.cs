@@ -52,7 +52,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly Dictionary<CanvasDrawingTool, Button> _drawingToolControlsByTool = [];
 
     private readonly FileDialog _workspaceDirectoryDialog = new();
-    private readonly FileDialog _workspaceManifestDialog = new();
+    private readonly FileDialog _workspaceDirectoryLoadDialog = new();
     private readonly FileDialog _sceneFileDialog = new();
     private readonly ConfirmationDialog _createWorkspaceDialog = new();
     private readonly ConfirmationDialog _createSceneDialog = new();
@@ -587,13 +587,12 @@ public sealed partial class SceneMakerMain : Control
         };
         AddChild(_workspaceDirectoryDialog);
 
-        _workspaceManifestDialog.Title = "Load Workspace";
-        _workspaceManifestDialog.Access = FileDialog.AccessEnum.Filesystem;
-        _workspaceManifestDialog.FileMode = FileDialog.FileModeEnum.OpenFile;
-        _workspaceManifestDialog.Filters = ["workspace.json ; SceneMaker Workspace"];
-        _workspaceManifestDialog.UseNativeDialog = true;
-        _workspaceManifestDialog.FileSelected += LoadWorkspace;
-        AddChild(_workspaceManifestDialog);
+        _workspaceDirectoryLoadDialog.Title = "Load Workspace";
+        _workspaceDirectoryLoadDialog.Access = FileDialog.AccessEnum.Filesystem;
+        _workspaceDirectoryLoadDialog.FileMode = FileDialog.FileModeEnum.OpenDir;
+        _workspaceDirectoryLoadDialog.UseNativeDialog = true;
+        _workspaceDirectoryLoadDialog.DirSelected += LoadWorkspace;
+        AddChild(_workspaceDirectoryLoadDialog);
 
         _sceneFileDialog.Title = "Load Scene";
         _sceneFileDialog.Access = FileDialog.AccessEnum.Filesystem;
@@ -757,8 +756,8 @@ public sealed partial class SceneMakerMain : Control
                 _workspaceDirectoryDialog.PopupCenteredRatio(0.75f);
                 break;
             case LoadWorkspaceMenuId:
-                _workspaceManifestDialog.CurrentDir = WorkspaceDialogStartDirectory();
-                _workspaceManifestDialog.PopupCenteredRatio(0.75f);
+                _workspaceDirectoryLoadDialog.CurrentDir = WorkspaceDialogStartDirectory();
+                _workspaceDirectoryLoadDialog.PopupCenteredRatio(0.75f);
                 break;
             case WorkspaceAssetsMenuId:
                 ShowWorkspaceAssetsDialog();
@@ -909,7 +908,7 @@ public sealed partial class SceneMakerMain : Control
                 _workspaceIdEdit.Text.Trim());
             WorkspaceConfigurationStore.CreateDefault(
                 _workspace.DirectoryPath,
-                _workspace.Document.WorkspaceId);
+                _workspace.WorkspaceKey);
             LoadWorkspaceAssets();
             _scene = null;
             _selectedTemplateAnchorId = null;
@@ -917,15 +916,15 @@ public sealed partial class SceneMakerMain : Control
             _canvas.ShowScene(null);
             SaveRecentSession();
             UpdateDocumentStatus();
-            SetStatus($"Created Workspace '{_workspace.Document.WorkspaceId}'.");
+            SetStatus($"Created Workspace '{_workspace.WorkspaceKey}'.");
         });
     }
 
-    private void LoadWorkspace(string manifestPath)
+    private void LoadWorkspace(string workspaceDirectory)
     {
         TryDocumentAction(() =>
         {
-            _workspace = WorkspaceStore.Load(ResolveFileSystemPath(manifestPath));
+            _workspace = WorkspaceStore.Load(ResolveFileSystemPath(workspaceDirectory), _catalog!);
             LoadWorkspaceAssets();
             _scene = null;
             _selectedTemplateAnchorId = null;
@@ -933,7 +932,7 @@ public sealed partial class SceneMakerMain : Control
             _canvas.ShowScene(null);
             SaveRecentSession();
             UpdateDocumentStatus();
-            SetStatus($"Loaded Workspace '{_workspace.Document.WorkspaceId}'.");
+            SetStatus($"Loaded Workspace '{_workspace.WorkspaceKey}'.");
         });
     }
 
@@ -1449,7 +1448,7 @@ public sealed partial class SceneMakerMain : Control
     {
         _workspaceLabel.Text = _workspace is null
             ? "Workspace: none"
-            : $"Workspace: {_workspace.Document.WorkspaceId}";
+            : $"Workspace: {_workspace.WorkspaceKey}";
         _sceneLabel.Text = _scene is null
             ? "Scene: none"
             : $"Scene: {_scene.Document.SceneId}  ·  {(_scene.Document.SceneKind == SceneKind.Instance ? "Instance" : "Template")}  ·  {_scene.Document.SizeCells.Width} × {_scene.Document.SizeCells.Height} cells";
@@ -1578,11 +1577,11 @@ public sealed partial class SceneMakerMain : Control
             _workspace.DirectoryPath, _catalog);
         if (!string.Equals(
                 _workspaceConfiguration.WorkspaceKey,
-                _workspace.Document.WorkspaceId,
+                _workspace.WorkspaceKey,
                 StringComparison.Ordinal))
         {
             throw new SceneMakerDocumentException(
-                $"Workspace config key '{_workspaceConfiguration.WorkspaceKey}' must match workspace '{_workspace.Document.WorkspaceId}'.");
+                $"Workspace config key '{_workspaceConfiguration.WorkspaceKey}' must match workspace '{_workspace.WorkspaceKey}'.");
         }
         _terrainAssets = TerrainDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
         _placementAssets = PlacementDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
@@ -1624,7 +1623,7 @@ public sealed partial class SceneMakerMain : Control
         {
             var recent = RecentSessionStore.Load(_recentSessionPath!);
             if (recent is null) return;
-            _workspace = WorkspaceStore.Load(recent.WorkspaceManifestPath);
+            _workspace = WorkspaceStore.Load(recent.WorkspaceDirectoryPath, _catalog!);
             LoadWorkspaceAssets();
             _templatePreview = null;
             _scene = recent.SceneRelativePath is null
@@ -1647,8 +1646,8 @@ public sealed partial class SceneMakerMain : Control
             }
             _canvas.ShowScene(_scene);
             SetStatus(_scene is null
-                ? $"Restored Workspace '{_workspace.Document.WorkspaceId}'."
-                : $"Restored Workspace '{_workspace.Document.WorkspaceId}' and Scene '{_scene.Document.SceneId}'.");
+                ? $"Restored Workspace '{_workspace.WorkspaceKey}'."
+                : $"Restored Workspace '{_workspace.WorkspaceKey}' and Scene '{_scene.Document.SceneId}'.");
         }
         catch (Exception exception) when (exception is SceneMakerDocumentException
                                           or IOException

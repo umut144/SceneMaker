@@ -4,19 +4,16 @@ namespace SceneMaker.Core;
 
 public static class WorkspaceStore
 {
-    public const string ManifestFileName = "workspace.json";
     public const string ScenesDirectoryName = "scenes";
     public const string TemplatesDirectoryName = "templates";
 
     public static LoadedWorkspace Create(string parentDirectoryPath, string workspaceId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(parentDirectoryPath);
-        var document = WorkspaceDocument.Create(workspaceId);
-        DocumentValidation.Validate(document);
+        DocumentValidation.ValidateStableId("workspace_key", workspaceId);
 
         var fullParentDirectory = Path.GetFullPath(parentDirectoryPath);
         var fullDirectory = Path.Combine(fullParentDirectory, workspaceId);
-        var manifestPath = Path.Combine(fullDirectory, ManifestFileName);
         if (Directory.Exists(fullDirectory))
         {
             throw new SceneMakerDocumentException(
@@ -29,8 +26,7 @@ public static class WorkspaceStore
             Directory.CreateDirectory(fullDirectory);
             Directory.CreateDirectory(Path.Combine(fullDirectory, ScenesDirectoryName));
             Directory.CreateDirectory(Path.Combine(fullDirectory, TemplatesDirectoryName));
-            AtomicTextFile.WriteNew(manifestPath, DocumentJson.Serialize(document));
-            return new LoadedWorkspace(fullDirectory, document);
+            return new LoadedWorkspace(fullDirectory, workspaceId);
         }
         catch (SceneMakerDocumentException)
         {
@@ -43,43 +39,39 @@ public static class WorkspaceStore
         }
     }
 
-    public static LoadedWorkspace Load(string manifestPath)
+    public static LoadedWorkspace Load(string workspaceDirectory, SceneMakerCatalog catalog)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
-        var fullPath = Path.GetFullPath(manifestPath);
-        if (Path.GetFileName(fullPath) != ManifestFileName)
-        {
-            throw new SceneMakerDocumentException(
-                $"Workspace manifest must be named '{ManifestFileName}'.");
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
+        ArgumentNullException.ThrowIfNull(catalog);
+        var directory = Path.GetFullPath(workspaceDirectory);
 
         try
         {
-            var document = DocumentJson.DeserializeWorkspace(File.ReadAllText(fullPath));
-            var directory = Path.GetDirectoryName(fullPath)
-                ?? throw new SceneMakerDocumentException("Workspace manifest requires a parent directory.");
+            if (!Directory.Exists(directory))
+                throw new SceneMakerDocumentException($"Workspace directory '{directory}' does not exist.");
+            var configuration = WorkspaceConfigurationStore.Load(directory, catalog);
             var directoryName = Path.GetFileName(directory.TrimEnd(
                 Path.DirectorySeparatorChar,
                 Path.AltDirectorySeparatorChar));
-            if (!string.Equals(directoryName, document.WorkspaceId, StringComparison.Ordinal))
+            if (!string.Equals(directoryName, configuration.WorkspaceKey, StringComparison.Ordinal))
             {
                 throw new SceneMakerDocumentException(
-                    $"Workspace '{document.WorkspaceId}' must use directory '{document.WorkspaceId}'.");
+                    $"Workspace '{configuration.WorkspaceKey}' must use directory '{configuration.WorkspaceKey}'.");
             }
 
             var scenesDirectory = Path.Combine(directory, ScenesDirectoryName);
             if (!Directory.Exists(scenesDirectory))
             {
                 throw new SceneMakerDocumentException(
-                    $"Workspace '{document.WorkspaceId}' requires its '{ScenesDirectoryName}' directory.");
+                    $"Workspace '{configuration.WorkspaceKey}' requires its '{ScenesDirectoryName}' directory.");
             }
             var templatesDirectory = Path.Combine(directory, TemplatesDirectoryName);
             if (!Directory.Exists(templatesDirectory))
             {
                 throw new SceneMakerDocumentException(
-                    $"Workspace '{document.WorkspaceId}' requires its '{TemplatesDirectoryName}' directory.");
+                    $"Workspace '{configuration.WorkspaceKey}' requires its '{TemplatesDirectoryName}' directory.");
             }
-            return new LoadedWorkspace(directory, document);
+            return new LoadedWorkspace(directory, configuration.WorkspaceKey);
         }
         catch (SceneMakerDocumentException)
         {
@@ -88,7 +80,7 @@ public static class WorkspaceStore
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             throw new SceneMakerDocumentException(
-                $"Could not load Workspace '{fullPath}': {exception.Message}", exception);
+                $"Could not load Workspace '{directory}': {exception.Message}", exception);
         }
     }
 }

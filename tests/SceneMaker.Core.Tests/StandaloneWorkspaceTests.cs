@@ -202,6 +202,21 @@ public sealed class StandaloneWorkspaceTests
         Assert.Equal(1m, restored.ResolveAssetProfile("prop.tree").AnchorXMeters);
     }
 
+    [Fact]
+    public void WorkspaceDirectoryUsesConfigAsItsOnlyManifest()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalog = SceneMakerCatalogLoader.Load(WriteCatalog(directory.Path));
+        var workspace = WorkspaceStore.Create(directory.Path, "game04");
+        WorkspaceConfigurationStore.CreateDefault(workspace.DirectoryPath, workspace.WorkspaceKey);
+
+        var loaded = WorkspaceStore.Load(workspace.DirectoryPath, catalog);
+
+        Assert.Equal("game04", loaded.WorkspaceKey);
+        Assert.False(File.Exists(Path.Combine(workspace.DirectoryPath, "workspace.json")));
+        Assert.True(File.Exists(Path.Combine(workspace.DirectoryPath, "config.json")));
+    }
+
     private static string WriteCatalog(string directory) 
     {
         var path = Path.Combine(directory, "catalog.json");

@@ -18,23 +18,10 @@ public static class DocumentJson
         Options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower));
     }
 
-    public static string Serialize(WorkspaceDocument document)
-    {
-        DocumentValidation.Validate(document);
-        return JsonSerializer.Serialize(document, Options) + "\n";
-    }
-
     public static string Serialize(SceneDocument document)
     {
         DocumentValidation.Validate(document);
         return JsonSerializer.Serialize(document, Options) + "\n";
-    }
-
-    public static WorkspaceDocument DeserializeWorkspace(string json)
-    {
-        var document = Deserialize<WorkspaceDocument>(json, "Workspace");
-        DocumentValidation.Validate(document);
-        return document;
     }
 
     public static SceneDocument DeserializeScene(string json)

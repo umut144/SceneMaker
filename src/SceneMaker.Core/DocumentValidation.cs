@@ -10,20 +10,6 @@ public sealed class SceneMakerDocumentException : Exception
 
 public static partial class DocumentValidation
 {
-    public static void Validate(WorkspaceDocument? document)
-    {
-        if (document is null)
-            throw new SceneMakerDocumentException("Workspace document must not be null.");
-        if (document.Schema != SceneMakerSchemas.Workspace
-            || document.Version != SceneMakerSchemas.WorkspaceVersion)
-        {
-            throw new SceneMakerDocumentException(
-                $"Workspace must use {SceneMakerSchemas.Workspace} version {SceneMakerSchemas.WorkspaceVersion}.");
-        }
-
-        ValidateStableId("workspace_id", document.WorkspaceId);
-    }
-
     public static void Validate(SceneDocument? document)
     {
         if (document is null)

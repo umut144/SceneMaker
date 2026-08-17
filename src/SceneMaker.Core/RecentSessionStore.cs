@@ -7,14 +7,14 @@ public sealed record RecentSessionDocument
 {
     public required string Schema { get; init; }
     public required int Version { get; init; }
-    public required string WorkspaceManifestPath { get; init; }
+    public required string WorkspaceDirectoryPath { get; init; }
     public required string? SceneRelativePath { get; init; }
 }
 
 public static class RecentSessionStore
 {
-    public const string Schema = "srt.scene_maker_recent_session";
-    public const int Version = 2;
+    public const string Schema = "scene_maker_recent_session";
+    public const int Version = 3;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -28,31 +28,26 @@ public static class RecentSessionStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(statePath);
         ArgumentNullException.ThrowIfNull(workspace);
+        string? sceneRelativePath = null;
         if (scene is not null)
         {
-            var fullWorkspaceDirectory = Path.GetFullPath(workspace.DirectoryPath);
-            var sceneRelativePath = Path.GetRelativePath(fullWorkspaceDirectory, scene.FilePath);
+            sceneRelativePath = Path.GetRelativePath(workspace.DirectoryPath, scene.FilePath);
             if (Path.IsPathRooted(sceneRelativePath)
                 || sceneRelativePath == ".."
                 || sceneRelativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            throw new SceneMakerDocumentException("Recent Scene must belong to its Workspace.");
-            if (Path.GetFileName(scene.FilePath) != scene.Document.SceneId + SceneStore.FileSuffix)
-                throw new SceneMakerDocumentException("Recent Scene ID and filename must match.");
+            {
+                throw new SceneMakerDocumentException("Recent Scene must belong to its Workspace.");
+            }
         }
-
         var document = new RecentSessionDocument
         {
             Schema = Schema,
             Version = Version,
-            WorkspaceManifestPath = Path.Combine(
-                Path.GetFullPath(workspace.DirectoryPath),
-                WorkspaceStore.ManifestFileName),
-            SceneRelativePath = scene is null
-                ? null
-                : Path.GetRelativePath(workspace.DirectoryPath, scene.FilePath),
+            WorkspaceDirectoryPath = Path.GetFullPath(workspace.DirectoryPath),
+            SceneRelativePath = sceneRelativePath,
         };
         Validate(document);
-        AtomicTextFile.Write(Path.GetFullPath(statePath), Serialize(document));
+        AtomicTextFile.Write(Path.GetFullPath(statePath), JsonSerializer.Serialize(document, JsonOptions) + "\n");
     }
 
     public static RecentSessionDocument? Load(string statePath)
@@ -62,15 +57,8 @@ public static class RecentSessionStore
         if (!File.Exists(fullPath)) return null;
         try
         {
-            var json = File.ReadAllText(fullPath);
-            using var root = JsonDocument.Parse(json);
-            var version = root.RootElement.TryGetProperty("version", out var versionElement)
-                ? versionElement.GetInt32()
-                : 0;
-            var document = version == 1
-                ? MigrateVersionOne(json)
-                : JsonSerializer.Deserialize<RecentSessionDocument>(json, JsonOptions)
-                  ?? throw new SceneMakerDocumentException("Recent session must not contain JSON null.");
+            var document = JsonSerializer.Deserialize<RecentSessionDocument>(File.ReadAllText(fullPath), JsonOptions)
+                ?? throw new SceneMakerDocumentException("Recent session must not contain JSON null.");
             Validate(document);
             return document;
         }
@@ -85,22 +73,14 @@ public static class RecentSessionStore
         }
     }
 
-    private static string Serialize(RecentSessionDocument document) =>
-        JsonSerializer.Serialize(document, JsonOptions) + "\n";
-
     private static void Validate(RecentSessionDocument document)
     {
         if (document.Schema != Schema || document.Version != Version)
+            throw new SceneMakerDocumentException($"Recent session must use {Schema} version {Version}.");
+        if (string.IsNullOrWhiteSpace(document.WorkspaceDirectoryPath)
+            || !Path.IsPathFullyQualified(document.WorkspaceDirectoryPath))
         {
-            throw new SceneMakerDocumentException(
-                $"Recent session must use {Schema} version {Version}.");
-        }
-        if (string.IsNullOrWhiteSpace(document.WorkspaceManifestPath)
-            || !Path.IsPathFullyQualified(document.WorkspaceManifestPath)
-            || Path.GetFileName(document.WorkspaceManifestPath) != WorkspaceStore.ManifestFileName)
-        {
-            throw new SceneMakerDocumentException(
-                $"Recent session requires an absolute '{WorkspaceStore.ManifestFileName}' path.");
+            throw new SceneMakerDocumentException("Recent session requires an absolute workspace_directory_path.");
         }
         if (document.SceneRelativePath is not null
             && (!document.SceneRelativePath.EndsWith(SceneStore.FileSuffix, StringComparison.Ordinal)
@@ -111,30 +91,5 @@ public static class RecentSessionStore
             throw new SceneMakerDocumentException(
                 $"Recent session Scene must be a Workspace-relative path ending with '{SceneStore.FileSuffix}'.");
         }
-    }
-
-    private static RecentSessionDocument MigrateVersionOne(string json)
-    {
-        var legacy = JsonSerializer.Deserialize<VersionOneRecentSessionDocument>(json, JsonOptions)
-            ?? throw new SceneMakerDocumentException("Recent session must not contain JSON null.");
-        if (legacy.Schema != Schema || legacy.Version != 1)
-            throw new SceneMakerDocumentException("Recent session version 1 is invalid.");
-        return new RecentSessionDocument
-        {
-            Schema = Schema,
-            Version = Version,
-            WorkspaceManifestPath = legacy.WorkspaceManifestPath,
-            SceneRelativePath = legacy.SceneFileName is null
-                ? null
-                : Path.Combine(WorkspaceStore.ScenesDirectoryName, legacy.SceneFileName),
-        };
-    }
-
-    private sealed record VersionOneRecentSessionDocument
-    {
-        public required string Schema { get; init; }
-        public required int Version { get; init; }
-        public required string WorkspaceManifestPath { get; init; }
-        public required string? SceneFileName { get; init; }
     }
 }
