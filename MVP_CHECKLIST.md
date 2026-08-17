@@ -5,7 +5,7 @@
 - [x] Add root `catalog.json` with readable stable asset keys.
 - [x] Add workspace-local `config.json` for spatial asset profiles.
 - [x] Migrate included `world01` documents from numeric IDs to asset keys.
-- [ ] Drive every canvas and editing metric from workspace configuration.
+- [x] Drive every canvas and editing metric from workspace configuration.
 - [ ] Add UI for workspace asset profiles.
 - [ ] Replace legacy `workspace.json` with `config.json` as the sole workspace manifest.
 - [ ] Define and implement a generic JSON export.

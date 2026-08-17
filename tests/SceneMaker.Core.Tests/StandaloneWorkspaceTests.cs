@@ -137,6 +137,49 @@ public sealed class StandaloneWorkspaceTests
         Assert.Contains("whole authoring pixel", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void WorkspaceMetricsDriveGridAndSpatialConversions()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalog = SceneMakerCatalogLoader.Load(WriteCatalog(directory.Path));
+        File.WriteAllText(Path.Combine(directory.Path, WorkspaceConfigurationStore.FileName), """
+        {
+          "format": "scene_maker_workspace",
+          "version": 1,
+          "workspace_key": "game02",
+          "grid": {
+            "terrain_cell_meters": 0.25,
+            "authoring_pixels_per_meter": 20,
+            "game_pixels_per_meter": 100
+          },
+          "assets": [
+            { "asset_key": "terrain.grass", "color": "#99E550" },
+            {
+              "asset_key": "prop.tree",
+              "color": "#2E7D32",
+              "footprint_meters": { "width": 1.5, "height": 2.0 },
+              "anchor_meters": { "x": 0.5, "y": 0.0 }
+            }
+          ]
+        }
+        """);
+
+        var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
+        var tree = PlacementDisplayCatalogLoader.Load(catalog, workspace).Resolve("prop.tree");
+
+        Assert.Equal(5, workspace.Metrics.AuthoringPixelsPerTerrainCell);
+        Assert.Equal(30, tree.FootprintWidthAuthoringPixels);
+        Assert.Equal(40, tree.FootprintHeightAuthoringPixels);
+        Assert.Equal(10, tree.AnchorXAuthoringPixels);
+        Assert.Equal(0.75m, PlacementEditing.PositionMeters(15, workspace.Metrics));
+        Assert.Equal(75, PlacementEditing.PositionGamePixels(15, workspace.Metrics));
+        Assert.Equal(
+            [new TerrainCellCoordinate(1, 0)],
+            TerrainCoverage.IntersectedCells(
+                new PlacementBoundsAuthoringPixels(5, 0, 5, 5),
+                workspace.Metrics));
+    }
+
     private static string WriteCatalog(string directory) 
     {
         var path = Path.Combine(directory, "catalog.json");

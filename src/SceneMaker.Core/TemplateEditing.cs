@@ -4,9 +4,11 @@ public static class TemplateEditing
 {
     public const int AnchorVisualSizeAuthoringPixels = 32;
 
-    public static int SnapToWorldGrid(int coordinate)
+    public static int SnapToWorldGrid(int coordinate, int authoringPixelsPerTerrainCell)
     {
-        var step = AuthoringMetrics.AuthoringPixelsPerWorldGridCell;
+        if (authoringPixelsPerTerrainCell <= 0)
+            throw new ArgumentOutOfRangeException(nameof(authoringPixelsPerTerrainCell));
+        var step = authoringPixelsPerTerrainCell;
         return checked((int)Math.Round(
             (decimal)coordinate / step,
             MidpointRounding.AwayFromZero) * step);
@@ -14,6 +16,7 @@ public static class TemplateEditing
 
     public static SceneDocument PlaceAnchor(
         SceneDocument scene,
+        WorkspaceMetrics metrics,
         int positionX,
         int positionY,
         int groupNumber)
@@ -25,8 +28,8 @@ public static class TemplateEditing
             GroupNumber = groupNumber,
             PositionAuthoringPx = new AuthoringPixelPosition
             {
-                X = SnapToWorldGrid(positionX),
-                Y = SnapToWorldGrid(positionY),
+                X = SnapToWorldGrid(positionX, metrics.AuthoringPixelsPerTerrainCell),
+                Y = SnapToWorldGrid(positionY, metrics.AuthoringPixelsPerTerrainCell),
             },
         };
         var updated = scene with
@@ -36,12 +39,13 @@ public static class TemplateEditing
                 .OrderBy(static value => value.AnchorId, StringComparer.Ordinal)
                 .ToList(),
         };
-        DocumentValidation.Validate(updated);
+        DocumentValidation.ValidateGrid(updated, metrics);
         return updated;
     }
 
     public static SceneDocument MoveAnchor(
         SceneDocument scene,
+        WorkspaceMetrics metrics,
         string anchorId,
         int positionX,
         int positionY)
@@ -58,15 +62,15 @@ public static class TemplateEditing
                 {
                     PositionAuthoringPx = new AuthoringPixelPosition
                     {
-                        X = SnapToWorldGrid(positionX),
-                        Y = SnapToWorldGrid(positionY),
+                        X = SnapToWorldGrid(positionX, metrics.AuthoringPixelsPerTerrainCell),
+                        Y = SnapToWorldGrid(positionY, metrics.AuthoringPixelsPerTerrainCell),
                     },
                 };
             }).ToList(),
         };
         if (!found)
             throw new SceneMakerDocumentException($"Unknown Template Anchor '{anchorId}'.");
-        DocumentValidation.Validate(updated);
+        DocumentValidation.ValidateGrid(updated, metrics);
         return updated;
     }
 
@@ -106,6 +110,7 @@ public static class TemplateEditing
 
     public static SceneDocument MoveTemplateInsertionAnchor(
         SceneDocument scene,
+        WorkspaceMetrics metrics,
         int positionX,
         int positionY)
     {
@@ -118,12 +123,12 @@ public static class TemplateEditing
             {
                 InsertionAnchorAuthoringPx = new AuthoringPixelPosition
                 {
-                    X = SnapToWorldGrid(positionX),
-                    Y = SnapToWorldGrid(positionY),
+                    X = SnapToWorldGrid(positionX, metrics.AuthoringPixelsPerTerrainCell),
+                    Y = SnapToWorldGrid(positionY, metrics.AuthoringPixelsPerTerrainCell),
                 },
             },
         };
-        DocumentValidation.Validate(updated);
+        DocumentValidation.ValidateGrid(updated, metrics);
         return updated;
     }
 

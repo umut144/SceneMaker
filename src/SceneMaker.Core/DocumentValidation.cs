@@ -48,17 +48,6 @@ public static partial class DocumentValidation
         if (document.SizeCells.Width <= 0 || document.SizeCells.Height <= 0)
             throw new SceneMakerDocumentException("Scene size_cells must be positive on both axes.");
 
-        try
-        {
-            _ = checked(document.SizeCells.Width * AuthoringMetrics.AuthoringPixelsPerWorldGridCell);
-            _ = checked(document.SizeCells.Height * AuthoringMetrics.AuthoringPixelsPerWorldGridCell);
-        }
-        catch (OverflowException exception)
-        {
-            throw new SceneMakerDocumentException(
-                "Scene size_cells exceeds the integer authoring coordinate range.", exception);
-        }
-
         if (document.TerrainCells is null)
             throw new SceneMakerDocumentException("Scene requires terrain_cells.");
 
@@ -137,10 +126,6 @@ public static partial class DocumentValidation
             if (document.TemplateAnchors.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own Template Anchors.");
             ValidateGroupNumber("Scene Template", document.TemplateDefinition.GroupNumber);
-            ValidateGridAnchor(
-                "Scene Template insertion anchor",
-                document.TemplateDefinition.InsertionAnchorAuthoringPx,
-                document.SizeCells);
         }
 
         string? previousAnchorId = null;
@@ -154,11 +139,40 @@ public static partial class DocumentValidation
                     "Template Anchors must have unique IDs in canonical ordinal order.");
             }
             ValidateGroupNumber($"Template Anchor '{anchor.AnchorId}'", anchor.GroupNumber);
+            previousAnchorId = anchor.AnchorId;
+        }
+    }
+
+    public static void ValidateGrid(SceneDocument? document, WorkspaceMetrics metrics)
+    {
+        Validate(document);
+        ArgumentNullException.ThrowIfNull(metrics);
+        try
+        {
+            _ = metrics.SceneWidthAuthoringPixels(document!);
+            _ = metrics.SceneHeightAuthoringPixels(document!);
+        }
+        catch (OverflowException exception)
+        {
+            throw new SceneMakerDocumentException(
+                "Scene size_cells exceeds the Workspace authoring coordinate range.", exception);
+        }
+
+        if (document!.SceneKind == SceneKind.Template)
+        {
+            ValidateGridAnchor(
+                "Scene Template insertion anchor",
+                document.TemplateDefinition!.InsertionAnchorAuthoringPx,
+                document.SizeCells,
+                metrics);
+        }
+        foreach (var anchor in document.TemplateAnchors)
+        {
             ValidateGridAnchor(
                 $"Template Anchor '{anchor.AnchorId}'",
                 anchor.PositionAuthoringPx,
-                document.SizeCells);
-            previousAnchorId = anchor.AnchorId;
+                document.SizeCells,
+                metrics);
         }
     }
 
@@ -171,11 +185,12 @@ public static partial class DocumentValidation
     private static void ValidateGridAnchor(
         string label,
         AuthoringPixelPosition? position,
-        SceneSizeCells size)
+        SceneSizeCells size,
+        WorkspaceMetrics metrics)
     {
         if (position is null)
             throw new SceneMakerDocumentException($"{label} requires an authoring-pixel position.");
-        var step = AuthoringMetrics.AuthoringPixelsPerWorldGridCell;
+        var step = metrics.AuthoringPixelsPerTerrainCell;
         var width = checked(size.Width * step);
         var height = checked(size.Height * step);
         if (position.X < 0 || position.X > width

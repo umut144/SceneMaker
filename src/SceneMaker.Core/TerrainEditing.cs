@@ -149,11 +149,12 @@ public readonly record struct TerrainCellCoordinate(int X, int Y);
 public static class TerrainCoverage
 {
     public static IReadOnlyList<TerrainCellCoordinate> IntersectedCells(
-        PlacementBoundsAuthoringPixels bounds)
+        PlacementBoundsAuthoringPixels bounds,
+        WorkspaceMetrics metrics)
     {
         if (bounds.Width <= 0 || bounds.Height <= 0)
             throw new ArgumentOutOfRangeException(nameof(bounds));
-        var step = AuthoringMetrics.AuthoringPixelsPerWorldGridCell;
+        var step = metrics.AuthoringPixelsPerTerrainCell;
         var firstX = FloorDivide(bounds.Left, step);
         var lastX = FloorDivide(checked(bounds.Right - 1), step);
         var firstY = FloorDivide(bounds.Bottom, step);
@@ -171,21 +172,23 @@ public static class TerrainCoverage
 
     public static IReadOnlyList<TerrainCellCoordinate> MissingCells(
         SceneDocument scene,
-        PlacementBoundsAuthoringPixels bounds)
+        PlacementBoundsAuthoringPixels bounds,
+        WorkspaceMetrics metrics)
     {
         ArgumentNullException.ThrowIfNull(scene);
         var authored = scene.TerrainCells
             .Select(static cell => new TerrainCellCoordinate(cell.X, cell.Y))
             .ToHashSet();
-        return IntersectedCells(bounds)
+        return IntersectedCells(bounds, metrics)
             .Where(cell => !authored.Contains(cell))
             .ToList();
     }
 
     public static bool IsComplete(
         SceneDocument scene,
-        PlacementBoundsAuthoringPixels bounds) =>
-        MissingCells(scene, bounds).Count == 0;
+        PlacementBoundsAuthoringPixels bounds,
+        WorkspaceMetrics metrics) =>
+        MissingCells(scene, bounds, metrics).Count == 0;
 
     public static string FormatMissingCells(IReadOnlyList<TerrainCellCoordinate> cells)
     {

@@ -13,7 +13,7 @@ public static class TransitionEditing
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(placementAssets);
         ArgumentNullException.ThrowIfNull(transitionAssets);
-        DocumentValidation.Validate(scene);
+        DocumentValidation.ValidateGrid(scene, transitionAssets.Metrics);
         var asset = transitionAssets.Resolve(assetKey);
         var validation = ValidateCandidate(
             scene,
@@ -38,7 +38,7 @@ public static class TransitionEditing
                 .OrderBy(static value => value.InstanceId, StringComparer.Ordinal)
                 .ToList(),
         };
-        DocumentValidation.Validate(placed);
+        DocumentValidation.ValidateGrid(placed, transitionAssets.Metrics);
         return placed;
     }
 
@@ -61,7 +61,7 @@ public static class TransitionEditing
             return new PlacementValidationResult(false, "Transition coordinates exceed the supported range.");
         }
 
-        if (!IsInsideScene(scene, candidate))
+        if (!IsInsideScene(scene, candidate, transitionAssets.Metrics))
             return new PlacementValidationResult(false, "Transition footprint lies outside the Scene bounds.");
 
         foreach (var placement in scene.Placements)
@@ -89,7 +89,7 @@ public static class TransitionEditing
                     false,
                     $"Transition footprint overlaps '{existing.InstanceId}'.");
         }
-        var missingTerrain = TerrainCoverage.MissingCells(scene, candidate);
+        var missingTerrain = TerrainCoverage.MissingCells(scene, candidate, transitionAssets.Metrics);
         return missingTerrain.Count == 0
             ? PlacementValidationResult.Valid
             : new PlacementValidationResult(
@@ -177,7 +177,7 @@ public static class TransitionEditing
                 .Where(transition => transition.InstanceId != found.InstanceId)
                 .ToList(),
         };
-        DocumentValidation.Validate(erased);
+        DocumentValidation.ValidateGrid(erased, transitionAssets.Metrics);
         return erased;
     }
 
@@ -186,7 +186,7 @@ public static class TransitionEditing
         PlacementDisplayCatalog placementAssets,
         TransitionDisplayCatalog transitionAssets)
     {
-        DocumentValidation.Validate(scene);
+        DocumentValidation.ValidateGrid(scene, transitionAssets.Metrics);
         List<PlacementBoundsAuthoringPixels> accepted = [];
         foreach (var transition in scene.Transitions)
         {
@@ -195,7 +195,7 @@ public static class TransitionEditing
                 asset,
                 transition.PositionAuthoringPx.X,
                 transition.PositionAuthoringPx.Y);
-            if (!IsInsideScene(scene, bounds))
+            if (!IsInsideScene(scene, bounds, transitionAssets.Metrics))
                 throw new SceneMakerDocumentException(
                     "Transition footprint lies outside the Scene bounds.");
             if (accepted.Any(bounds.Overlaps))
@@ -228,10 +228,11 @@ public static class TransitionEditing
 
     private static bool IsInsideScene(
         SceneDocument scene,
-        PlacementBoundsAuthoringPixels bounds)
+        PlacementBoundsAuthoringPixels bounds,
+        WorkspaceMetrics metrics)
     {
-        var width = AuthoringMetrics.SceneWidthAuthoringPixels(scene);
-        var height = AuthoringMetrics.SceneHeightAuthoringPixels(scene);
+        var width = metrics.SceneWidthAuthoringPixels(scene);
+        var height = metrics.SceneHeightAuthoringPixels(scene);
         return bounds.Left >= 0 && bounds.Bottom >= 0
             && bounds.Right <= width && bounds.Top <= height;
     }

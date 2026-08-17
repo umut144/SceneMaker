@@ -28,11 +28,13 @@ public sealed class WorkspaceConfiguration
     {
         WorkspaceKey = workspaceKey;
         Grid = grid;
+        Metrics = new WorkspaceMetrics(grid);
         _assetProfiles = new ReadOnlyDictionary<string, WorkspaceAssetProfile>(assetProfiles);
     }
 
     public string WorkspaceKey { get; }
     public WorkspaceGridConfiguration Grid { get; }
+    public WorkspaceMetrics Metrics { get; }
     public IReadOnlyList<WorkspaceAssetProfile> AssetProfiles => [.. _assetProfiles.Values];
 
     public WorkspaceAssetProfile ResolveAssetProfile(string assetKey) =>

@@ -35,7 +35,7 @@ public static class PlacementEditing
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(placementAssets);
-        DocumentValidation.Validate(scene);
+        DocumentValidation.ValidateGrid(scene, placementAssets.Metrics);
         var asset = placementAssets.Resolve(assetKey);
         var validation = ValidateCandidate(
             scene,
@@ -60,7 +60,7 @@ public static class PlacementEditing
                 .OrderBy(static value => value.InstanceId, StringComparer.Ordinal)
                 .ToList(),
         };
-        DocumentValidation.Validate(placed);
+        DocumentValidation.ValidateGrid(placed, placementAssets.Metrics);
         return placed;
     }
 
@@ -85,7 +85,7 @@ public static class PlacementEditing
             return new PlacementValidationResult(false, "Placement coordinates exceed the supported range.");
         }
 
-        if (!IsInsideScene(scene, candidate))
+        if (!IsInsideScene(scene, candidate, placementAssets.Metrics))
             return new PlacementValidationResult(false, "Placement footprint lies outside the Scene bounds.");
 
         foreach (var existing in scene.Placements)
@@ -112,7 +112,7 @@ public static class PlacementEditing
                     false,
                     $"Placement footprint overlaps Transition '{transition.InstanceId}'.");
         }
-        var missingTerrain = TerrainCoverage.MissingCells(scene, candidate);
+        var missingTerrain = TerrainCoverage.MissingCells(scene, candidate, placementAssets.Metrics);
         return missingTerrain.Count == 0
             ? PlacementValidationResult.Valid
             : new PlacementValidationResult(
@@ -205,7 +205,7 @@ public static class PlacementEditing
                 .Where(placement => placement.InstanceId != found.InstanceId)
                 .ToList(),
         };
-        DocumentValidation.Validate(erased);
+        DocumentValidation.ValidateGrid(erased, placementAssets.Metrics);
         return erased;
     }
 
@@ -214,7 +214,7 @@ public static class PlacementEditing
         PlacementDisplayCatalog placementAssets,
         TransitionDisplayCatalog transitionAssets)
     {
-        DocumentValidation.Validate(scene);
+        DocumentValidation.ValidateGrid(scene, placementAssets.Metrics);
         List<PlacementBoundsAuthoringPixels> accepted = [];
         foreach (var placement in scene.Placements)
         {
@@ -223,7 +223,7 @@ public static class PlacementEditing
                 asset,
                 placement.PositionAuthoringPx.X,
                 placement.PositionAuthoringPx.Y);
-            if (!IsInsideScene(scene, bounds))
+            if (!IsInsideScene(scene, bounds, placementAssets.Metrics))
                 throw new SceneMakerDocumentException(
                     "Placement footprint lies outside the Scene bounds.");
             if (accepted.Any(bounds.Overlaps))
@@ -262,17 +262,19 @@ public static class PlacementEditing
             asset.FootprintWidthAuthoringPixels,
             asset.FootprintHeightAuthoringPixels);
 
-    public static decimal PositionMeters(int authoringPixels) =>
-        (decimal)authoringPixels / AuthoringMetrics.AuthoringPixelsPerMeter;
+    public static decimal PositionMeters(int authoringPixels, WorkspaceMetrics metrics) =>
+        (decimal)authoringPixels / metrics.AuthoringPixelsPerMeter;
 
-    public static int PositionGamePixels(int authoringPixels) => checked(authoringPixels * 4);
+    public static int PositionGamePixels(int authoringPixels, WorkspaceMetrics metrics) =>
+        checked((int)(authoringPixels * metrics.GamePixelsPerMeter / metrics.AuthoringPixelsPerMeter));
 
     private static bool IsInsideScene(
         SceneDocument scene,
-        PlacementBoundsAuthoringPixels bounds)
+        PlacementBoundsAuthoringPixels bounds,
+        WorkspaceMetrics metrics)
     {
-        var width = AuthoringMetrics.SceneWidthAuthoringPixels(scene);
-        var height = AuthoringMetrics.SceneHeightAuthoringPixels(scene);
+        var width = metrics.SceneWidthAuthoringPixels(scene);
+        var height = metrics.SceneHeightAuthoringPixels(scene);
         return bounds.Left >= 0 && bounds.Bottom >= 0
             && bounds.Right <= width && bounds.Top <= height;
     }

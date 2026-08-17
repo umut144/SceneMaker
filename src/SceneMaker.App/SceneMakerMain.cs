@@ -429,10 +429,10 @@ public sealed partial class SceneMakerMain : Control
         _mapDimensionsLabel.VerticalAlignment = VerticalAlignment.Center;
         _mapBar.AddChild(_mapDimensionsLabel);
         _mapBar.AddChild(new Label { Text = "Extend" });
-        _mapExtensionCellsEdit.MinValue = AuthoringMetrics.AuthoringPixelsPerWorldGridCell;
-        _mapExtensionCellsEdit.MaxValue = int.MaxValue / AuthoringMetrics.AuthoringPixelsPerWorldGridCell;
-        _mapExtensionCellsEdit.Step = AuthoringMetrics.AuthoringPixelsPerWorldGridCell;
-        _mapExtensionCellsEdit.Value = 16;
+        _mapExtensionCellsEdit.MinValue = 1;
+        _mapExtensionCellsEdit.MaxValue = int.MaxValue;
+        _mapExtensionCellsEdit.Step = 1;
+        _mapExtensionCellsEdit.Value = 1;
         _mapExtensionCellsEdit.CustomMinimumSize = new Vector2(100f, 0f);
         _mapExtensionCellsEdit.TooltipText = "WorldGrid Cells to add to the selected map edge.";
         _mapExtensionCellsEdit.ValueChanged += _ => UpdateMapControls();
@@ -646,7 +646,7 @@ public sealed partial class SceneMakerMain : Control
     private static void ConfigureSizeInput(SpinBox input)
     {
         input.MinValue = 1;
-        input.MaxValue = int.MaxValue / AuthoringMetrics.AuthoringPixelsPerWorldGridCell;
+        input.MaxValue = int.MaxValue;
         input.Step = 1;
         input.AllowGreater = false;
         input.AllowLesser = false;
@@ -666,12 +666,13 @@ public sealed partial class SceneMakerMain : Control
         _sceneHeightMetricsLabel.Text = FormatSceneSizeMetrics(_sceneHeightEdit.Value);
     }
 
-    private static string FormatSceneSizeMetrics(double cells)
+    private string FormatSceneSizeMetrics(double cells)
     {
+        if (_workspaceConfiguration is null) return string.Empty;
         var integralCells = checked((int)cells);
-        var authoringPixels = checked(
-            integralCells * AuthoringMetrics.AuthoringPixelsPerWorldGridCell);
-        var meters = integralCells * 0.5m;
+        var metrics = _workspaceConfiguration.Metrics;
+        var authoringPixels = checked(integralCells * metrics.AuthoringPixelsPerTerrainCell);
+        var meters = integralCells * metrics.TerrainCellMeters;
         return $"= {meters:0.###} m · {authoringPixels} px";
     }
 
@@ -688,8 +689,8 @@ public sealed partial class SceneMakerMain : Control
     private static void ConfigureGridCoordinateInput(SpinBox input)
     {
         input.MinValue = 0;
-        input.MaxValue = int.MaxValue - AuthoringMetrics.AuthoringPixelsPerWorldGridCell;
-        input.Step = AuthoringMetrics.AuthoringPixelsPerWorldGridCell;
+        input.MaxValue = int.MaxValue;
+        input.Step = 1;
         input.AllowGreater = false;
         input.AllowLesser = false;
         input.Value = 0;
@@ -835,6 +836,7 @@ public sealed partial class SceneMakerMain : Control
         TryDocumentAction(() =>
         {
             _scene = SceneStore.Load(_workspace, ResolveFileSystemPath(filePath));
+            DocumentValidation.ValidateGrid(_scene.Document, _workspaceConfiguration!.Metrics);
             TerrainEditing.ValidateAssetReferences(_scene.Document, _terrainAssets!);
             PlacementEditing.ValidateAssetReferences(
                 _scene.Document,
@@ -1012,6 +1014,7 @@ public sealed partial class SceneMakerMain : Control
                 .ToHashSet(StringComparer.Ordinal);
             var document = TemplateEditing.PlaceAnchor(
                 _scene.Document,
+                _workspaceConfiguration!.Metrics,
                 authoringX,
                 authoringY,
                 checked((int)_anchorGroupEdit.Value));
@@ -1057,6 +1060,7 @@ public sealed partial class SceneMakerMain : Control
         {
             var document = TemplateEditing.MoveAnchor(
                 _scene.Document,
+                _workspaceConfiguration!.Metrics,
                 anchorId,
                 authoringX,
                 authoringY);
@@ -1342,11 +1346,11 @@ public sealed partial class SceneMakerMain : Control
 
         _mapDimensionsLabel.Text =
             $"{scene.SizeCells.Width} × {scene.SizeCells.Height} Cells  ·  "
-            + $"{scene.SizeCells.Width * 0.5m:0.###} × {scene.SizeCells.Height * 0.5m:0.###} m  ·  "
-            + $"{AuthoringMetrics.SceneWidthAuthoringPixels(scene)} × {AuthoringMetrics.SceneHeightAuthoringPixels(scene)} px";
+            + $"{scene.SizeCells.Width * _workspaceConfiguration!.Metrics.TerrainCellMeters:0.###} × {scene.SizeCells.Height * _workspaceConfiguration.Metrics.TerrainCellMeters:0.###} m  ·  "
+            + $"{_workspaceConfiguration.Metrics.SceneWidthAuthoringPixels(scene)} × {_workspaceConfiguration.Metrics.SceneHeightAuthoringPixels(scene)} px";
         var extensionCells = checked((int)_mapExtensionCellsEdit.Value);
         _mapExtensionMetricsLabel.Text =
-            $"= {extensionCells * 0.5m:0.###} m · {extensionCells * AuthoringMetrics.AuthoringPixelsPerWorldGridCell} px";
+            $"= {extensionCells * _workspaceConfiguration!.Metrics.TerrainCellMeters:0.###} m · {extensionCells * _workspaceConfiguration.Metrics.AuthoringPixelsPerTerrainCell} px";
     }
 
     private void UpdateDrawingToolAvailability()
@@ -1447,9 +1451,11 @@ public sealed partial class SceneMakerMain : Control
         _terrainAssets = TerrainDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
         _placementAssets = PlacementDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
         _transitionAssets = TransitionDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
+        _canvas.ConfigureMetrics(_workspaceConfiguration.Metrics);
         _canvas.ConfigureTerrainAssets(_terrainAssets);
         _canvas.ConfigurePlacementAssets(_placementAssets);
         _canvas.ConfigureTransitionAssets(_transitionAssets);
+        UpdateSceneSizeMetrics();
         RebuildAssetBars();
     }
 
@@ -1492,6 +1498,7 @@ public sealed partial class SceneMakerMain : Control
                     Path.Combine(_workspace.DirectoryPath, recent.SceneRelativePath));
             if (_scene is not null)
             {
+                DocumentValidation.ValidateGrid(_scene.Document, _workspaceConfiguration!.Metrics);
                 TerrainEditing.ValidateAssetReferences(_scene.Document, _terrainAssets!);
                 PlacementEditing.ValidateAssetReferences(
                     _scene.Document,

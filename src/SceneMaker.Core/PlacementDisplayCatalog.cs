@@ -19,9 +19,15 @@ public sealed class PlacementDisplayCatalog
 {
     private readonly IReadOnlyDictionary<string, PlacementDisplayAsset> _byKey;
 
-    internal PlacementDisplayCatalog(SortedDictionary<string, PlacementDisplayAsset> byKey) =>
+    internal PlacementDisplayCatalog(
+        WorkspaceMetrics metrics,
+        SortedDictionary<string, PlacementDisplayAsset> byKey)
+    {
+        Metrics = metrics;
         _byKey = new ReadOnlyDictionary<string, PlacementDisplayAsset>(byKey);
+    }
 
+    public WorkspaceMetrics Metrics { get; }
     public IReadOnlyList<PlacementDisplayAsset> Assets => [.. _byKey.Values];
 
     public PlacementDisplayAsset Resolve(string assetKey) =>
@@ -43,7 +49,7 @@ public static class PlacementDisplayCatalogLoader
             assets.Add(profile.AssetKey, Create(
                 profile, catalogAsset, workspace.Grid.AuthoringPixelsPerMeter));
         }
-        return new PlacementDisplayCatalog(assets);
+        return new PlacementDisplayCatalog(workspace.Metrics, assets);
     }
 
     internal static PlacementDisplayAsset Create(

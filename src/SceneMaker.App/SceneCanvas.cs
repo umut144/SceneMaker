@@ -33,6 +33,7 @@ public sealed partial class SceneCanvas : Control
     private static readonly Color TemplatePreviewOutline = Color.FromHtml("#FFFFFF");
 
     private LoadedScene? _scene;
+    private WorkspaceMetrics? _metrics;
     private SceneDocument? _templatePreview;
     private IReadOnlyList<TemplateTerrainMask> _templatePreviewMasks = [];
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
@@ -118,6 +119,12 @@ public sealed partial class SceneCanvas : Control
         foreach (var asset in catalog.Assets)
             colors.Add(asset.AssetKey, Color.FromHtml(asset.Color));
         _terrainColors = colors;
+        QueueRedraw();
+    }
+
+    public void ConfigureMetrics(WorkspaceMetrics metrics)
+    {
+        _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
         QueueRedraw();
     }
 
@@ -338,13 +345,13 @@ public sealed partial class SceneCanvas : Control
     public override void _Draw()
     {
         DrawRect(new Rect2(Vector2.Zero, Size), CanvasBackground);
-        if (_scene is null) return;
+        if (_scene is null || _metrics is null) return;
 
         var document = _templatePreview ?? _scene.Document;
         var zoom = (float)ViewState.Zoom;
         var pan = new Vector2((float)ViewState.PanX, (float)ViewState.PanY);
-        var widthAuthoringPixels = AuthoringMetrics.SceneWidthAuthoringPixels(document);
-        var heightAuthoringPixels = AuthoringMetrics.SceneHeightAuthoringPixels(document);
+        var widthAuthoringPixels = _metrics.SceneWidthAuthoringPixels(document);
+        var heightAuthoringPixels = _metrics.SceneHeightAuthoringPixels(document);
         var sceneSize = new Vector2(widthAuthoringPixels, heightAuthoringPixels) * zoom;
         var sceneRect = new Rect2(pan, sceneSize);
         DrawRect(sceneRect, SceneBackground);
@@ -411,7 +418,7 @@ public sealed partial class SceneCanvas : Control
                 zoom,
                 widthAuthoringPixels,
                 heightAuthoringPixels,
-                AuthoringMetrics.AuthoringPixelsPerWorldGridCell,
+                _metrics.AuthoringPixelsPerTerrainCell,
                 CellGrid,
                 1.0f);
 
@@ -608,8 +615,8 @@ public sealed partial class SceneCanvas : Control
                     _selectedTemplateAnchorId = anchor.AnchorId;
                     _draggedTemplateAnchorId = anchor.AnchorId;
                     _draggedTemplateAnchorPosition = (
-                        TemplateEditing.SnapToWorldGrid(coordinate.X),
-                        TemplateEditing.SnapToWorldGrid(coordinate.Y));
+                        TemplateEditing.SnapToWorldGrid(coordinate.X, _metrics!.AuthoringPixelsPerTerrainCell),
+                        TemplateEditing.SnapToWorldGrid(coordinate.Y, _metrics!.AuthoringPixelsPerTerrainCell));
                     TemplateAnchorSelectRequested?.Invoke(coordinate.X, coordinate.Y);
                     QueueRedraw();
                     break;
@@ -647,8 +654,8 @@ public sealed partial class SceneCanvas : Control
         {
             var coordinate = AuthoringCoordinate(screenPosition);
             _draggedTemplateAnchorPosition = (
-                TemplateEditing.SnapToWorldGrid(coordinate.X),
-                TemplateEditing.SnapToWorldGrid(coordinate.Y));
+                TemplateEditing.SnapToWorldGrid(coordinate.X, _metrics!.AuthoringPixelsPerTerrainCell),
+                TemplateEditing.SnapToWorldGrid(coordinate.Y, _metrics!.AuthoringPixelsPerTerrainCell));
             QueueRedraw();
         }
     }
@@ -677,13 +684,14 @@ public sealed partial class SceneCanvas : Control
         ViewState.ScreenToTerrainCell(
             screenPosition.X,
             screenPosition.Y,
-            _scene!.Document.SizeCells.Height);
+            _scene!.Document.SizeCells.Height,
+            _metrics!.AuthoringPixelsPerTerrainCell);
 
     private (int X, int Y) AuthoringCoordinate(Vector2 screenPosition) =>
         ViewState.ScreenToAuthoringPixel(
             screenPosition.X,
             screenPosition.Y,
-            AuthoringMetrics.SceneHeightAuthoringPixels(_scene!.Document));
+            _metrics!.SceneHeightAuthoringPixels(_scene!.Document));
 
     private void DrawTerrain(
         SceneDocument document,
@@ -691,7 +699,7 @@ public sealed partial class SceneCanvas : Control
         float zoom,
         bool highlighted)
     {
-        var cellSize = AuthoringMetrics.AuthoringPixelsPerWorldGridCell * zoom;
+        var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
         foreach (var cell in document.TerrainCells)
         {
             if (!_terrainColors.TryGetValue(cell.AssetKey, out var color)) continue;
@@ -747,7 +755,7 @@ public sealed partial class SceneCanvas : Control
                 width: highlighted && placement.InstanceId == _selectedPlacementInstanceId
                     ? 3f
                     : highlighted ? 2f : 1f);
-            if (!TerrainCoverage.IsComplete(document, bounds))
+            if (!TerrainCoverage.IsComplete(document, bounds, _metrics!))
                 DrawDashedRectangle(rectangle, InvalidPreviewColor, 2.5f);
 
             var anchorSize = Math.Max(3f, zoom);
@@ -798,7 +806,7 @@ public sealed partial class SceneCanvas : Control
                 width: highlighted && transition.InstanceId == _selectedTransitionInstanceId
                     ? 3f
                     : highlighted ? 2f : 1f);
-            if (!TerrainCoverage.IsComplete(document, bounds))
+            if (!TerrainCoverage.IsComplete(document, bounds, _metrics!))
                 DrawDashedRectangle(rectangle, InvalidPreviewColor, 2.5f);
             DrawAnchor(
                 transition.PositionAuthoringPx.X,
@@ -854,8 +862,8 @@ public sealed partial class SceneCanvas : Control
             DrawTemplateAnchor(
                 new AuthoringPixelPosition
                 {
-                    X = TemplateEditing.SnapToWorldGrid(pointer.X),
-                    Y = TemplateEditing.SnapToWorldGrid(pointer.Y),
+                    X = TemplateEditing.SnapToWorldGrid(pointer.X, _metrics!.AuthoringPixelsPerTerrainCell),
+                    Y = TemplateEditing.SnapToWorldGrid(pointer.Y, _metrics!.AuthoringPixelsPerTerrainCell),
                 },
                 "+",
                 selected: true,
@@ -873,7 +881,7 @@ public sealed partial class SceneCanvas : Control
         int sceneHeightCells)
     {
         if (_templatePreview is null || _templatePreviewMasks.Count == 0) return;
-        var cellSize = AuthoringMetrics.AuthoringPixelsPerWorldGridCell * zoom;
+        var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
         foreach (var mask in _templatePreviewMasks)
         {
             var cells = mask.Cells.Select(static cell => (cell.X, cell.Y)).ToHashSet();

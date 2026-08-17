@@ -82,17 +82,18 @@ public sealed class CanvasViewState
     public (int X, int Y) ScreenToTerrainCell(
         double screenX,
         double screenY,
-        int sceneHeightCells)
+        int sceneHeightCells,
+        int authoringPixelsPerTerrainCell)
     {
         if (!double.IsFinite(screenX) || !double.IsFinite(screenY))
             throw new ArgumentOutOfRangeException(nameof(screenX));
-        if (sceneHeightCells <= 0)
+        if (sceneHeightCells <= 0 || authoringPixelsPerTerrainCell <= 0)
             throw new ArgumentOutOfRangeException(nameof(sceneHeightCells));
         var logicalX = (screenX - PanX) / Zoom;
         var topDownCellY = checked((int)Math.Floor(
-            (screenY - PanY) / Zoom / AuthoringMetrics.AuthoringPixelsPerWorldGridCell));
+            (screenY - PanY) / Zoom / authoringPixelsPerTerrainCell));
         return (
-            checked((int)Math.Floor(logicalX / AuthoringMetrics.AuthoringPixelsPerWorldGridCell)),
+            checked((int)Math.Floor(logicalX / authoringPixelsPerTerrainCell)),
             checked(sceneHeightCells - 1 - topDownCellY));
     }
 

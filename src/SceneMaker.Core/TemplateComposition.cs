@@ -39,7 +39,7 @@ public static class TemplateComposition
         ArgumentNullException.ThrowIfNull(workspaceScenes);
         ArgumentNullException.ThrowIfNull(placementAssets);
         ArgumentNullException.ThrowIfNull(transitionAssets);
-        DocumentValidation.Validate(baseScene);
+        DocumentValidation.ValidateGrid(baseScene, placementAssets.Metrics);
         if (baseScene.SceneKind != SceneKind.Instance)
             throw new SceneMakerDocumentException(
                 "Only a Scene Instance can receive Scene Templates.");
@@ -48,7 +48,7 @@ public static class TemplateComposition
             .Where(static scene => scene is not null)
             .Select(scene =>
             {
-                DocumentValidation.Validate(scene);
+                DocumentValidation.ValidateGrid(scene, placementAssets.Metrics);
                 return scene;
             })
             .Where(static scene => scene.SceneKind == SceneKind.Template)
@@ -64,7 +64,7 @@ public static class TemplateComposition
         List<(SelectedTemplate Candidate, HashSet<(int X, int Y)> Mask)> masks = [];
         foreach (var candidate in selected)
         {
-            var translation = Translation(candidate.Anchor, candidate.Template);
+            var translation = Translation(candidate.Anchor, candidate.Template, placementAssets.Metrics);
             var mask = TranslateTerrainMask(baseScene, candidate.Template, translation);
             masks.Add((candidate, mask));
             RejectPortalMaskIntersection(
@@ -85,7 +85,8 @@ public static class TemplateComposition
                         placementAssets.Resolve(placement.AssetKey),
                         placement.PositionAuthoringPx.X,
                         placement.PositionAuthoringPx.Y),
-                    mask))
+                    mask,
+                    placementAssets.Metrics))
                 .ToList();
             transitions = transitions
                 .Where(transition => !FootprintIntersectsMask(
@@ -93,7 +94,8 @@ public static class TemplateComposition
                         transitionAssets.Resolve(transition.AssetKey),
                         transition.PositionAuthoringPx.X,
                         transition.PositionAuthoringPx.Y),
-                    mask))
+                    mask,
+                    transitionAssets.Metrics))
                 .ToList();
 
             placements.AddRange(candidate.Template.Placements.Select(placement =>
@@ -121,7 +123,7 @@ public static class TemplateComposition
                 .OrderBy(static value => value.InstanceId, StringComparer.Ordinal)
                 .ToList(),
         };
-        DocumentValidation.Validate(composed);
+        DocumentValidation.ValidateGrid(composed, placementAssets.Metrics);
         PlacementEditing.ValidateAssetReferences(composed, placementAssets, transitionAssets);
         TransitionEditing.ValidateAssetReferences(composed, placementAssets, transitionAssets);
         ValidateTerrainCoverage(composed, placementAssets, transitionAssets);
@@ -200,12 +202,13 @@ public static class TemplateComposition
 
     private static TemplateTranslation Translation(
         TemplateAnchorDocument anchor,
-        SceneDocument template)
+        SceneDocument template,
+        WorkspaceMetrics metrics)
     {
         var insertion = template.TemplateDefinition!.InsertionAnchorAuthoringPx;
         var authoringX = checked(anchor.PositionAuthoringPx.X - insertion.X);
         var authoringY = checked(anchor.PositionAuthoringPx.Y - insertion.Y);
-        var step = AuthoringMetrics.AuthoringPixelsPerWorldGridCell;
+        var step = metrics.AuthoringPixelsPerTerrainCell;
         if (authoringX % step != 0 || authoringY % step != 0)
         {
             throw new SceneMakerDocumentException(
@@ -273,9 +276,10 @@ public static class TemplateComposition
 
     private static bool FootprintIntersectsMask(
         PlacementBoundsAuthoringPixels bounds,
-        IReadOnlySet<(int X, int Y)> mask)
+        IReadOnlySet<(int X, int Y)> mask,
+        WorkspaceMetrics metrics)
     {
-        var step = AuthoringMetrics.AuthoringPixelsPerWorldGridCell;
+        var step = metrics.AuthoringPixelsPerTerrainCell;
         var firstX = bounds.Left / step;
         var lastX = checked(bounds.Right - 1) / step;
         var firstY = bounds.Bottom / step;
@@ -304,7 +308,7 @@ public static class TemplateComposition
                 asset,
                 transition.PositionAuthoringPx.X,
                 transition.PositionAuthoringPx.Y);
-            if (FootprintIntersectsMask(bounds, mask))
+            if (FootprintIntersectsMask(bounds, mask, assets.Metrics))
             {
                 throw new SceneMakerDocumentException(
                     $"Template Anchor '{anchorId}' would overwrite Portal '{transition.InstanceId}'. Portals remain authored only on the Scene Instance.");
@@ -323,7 +327,7 @@ public static class TemplateComposition
                 placements.Resolve(placement.AssetKey),
                 placement.PositionAuthoringPx.X,
                 placement.PositionAuthoringPx.Y);
-            ThrowIfMissingTerrain(scene, bounds, "Placement", placement.InstanceId);
+            ThrowIfMissingTerrain(scene, bounds, "Placement", placement.InstanceId, placements.Metrics);
         }
         foreach (var transition in scene.Transitions)
         {
@@ -331,7 +335,7 @@ public static class TemplateComposition
                 transitions.Resolve(transition.AssetKey),
                 transition.PositionAuthoringPx.X,
                 transition.PositionAuthoringPx.Y);
-            ThrowIfMissingTerrain(scene, bounds, "Transition", transition.InstanceId);
+            ThrowIfMissingTerrain(scene, bounds, "Transition", transition.InstanceId, transitions.Metrics);
         }
     }
 
@@ -339,9 +343,10 @@ public static class TemplateComposition
         SceneDocument scene,
         PlacementBoundsAuthoringPixels bounds,
         string label,
-        string instanceId)
+        string instanceId,
+        WorkspaceMetrics metrics)
     {
-        var missing = TerrainCoverage.MissingCells(scene, bounds);
+        var missing = TerrainCoverage.MissingCells(scene, bounds, metrics);
         if (missing.Count == 0) return;
         throw new SceneMakerDocumentException(
             $"Composed {label} '{instanceId}' lacks Terrain at {TerrainCoverage.FormatMissingCells(missing)}.");

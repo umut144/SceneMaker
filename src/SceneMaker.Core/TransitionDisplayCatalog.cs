@@ -19,10 +19,16 @@ public sealed class TransitionDisplayCatalog
 {
     private readonly IReadOnlyDictionary<string, TransitionDisplayAsset> _byKey;
 
-    internal TransitionDisplayCatalog(SortedDictionary<string, TransitionDisplayAsset> byKey) =>
+    internal TransitionDisplayCatalog(
+        WorkspaceMetrics metrics,
+        SortedDictionary<string, TransitionDisplayAsset> byKey)
+    {
+        Metrics = metrics;
         _byKey = new ReadOnlyDictionary<string, TransitionDisplayAsset>(byKey);
+    }
 
     public IReadOnlyList<TransitionDisplayAsset> Assets => [.. _byKey.Values];
+    public WorkspaceMetrics Metrics { get; }
 
     public TransitionDisplayAsset Resolve(string assetKey) =>
         _byKey.TryGetValue(assetKey, out var asset)
@@ -49,6 +55,6 @@ public static class TransitionDisplayCatalogLoader
                 spatial.FootprintWidthAuthoringPixels, spatial.FootprintHeightAuthoringPixels,
                 spatial.AnchorXAuthoringPixels, spatial.AnchorYAuthoringPixels));
         }
-        return new TransitionDisplayCatalog(assets);
+        return new TransitionDisplayCatalog(workspace.Metrics, assets);
     }
 }
