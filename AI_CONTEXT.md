@@ -13,4 +13,6 @@ anchors. Scenes store only semantic terrain, placements, transitions, template
 anchors, and their `asset_key`s.
 
 SceneMaker has no runtime dependency. Later consumers receive a small generic
-JSON export; they resolve the same `asset_key`s in their own catalogs.
+JSON export; they resolve the same `asset_key`s in their own catalogs. Each
+export is a versioned snapshot of the Scene, Workspace grid, and semantic
+enabled asset profiles; editor colors and `catalog.json` are not exported.

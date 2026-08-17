@@ -8,5 +8,5 @@
 - [x] Drive every canvas and editing metric from workspace configuration.
 - [x] Add UI for workspace asset profiles.
 - [x] Replace legacy `workspace.json` with `config.json` as the sole workspace manifest.
-- [ ] Define and implement a generic JSON export.
+- [x] Define and implement a generic JSON export.
 - [ ] Complete manual acceptance of the standalone workflow.

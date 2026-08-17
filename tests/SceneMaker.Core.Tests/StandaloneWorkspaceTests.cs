@@ -217,6 +217,37 @@ public sealed class StandaloneWorkspaceTests
         Assert.True(File.Exists(Path.Combine(workspace.DirectoryPath, "config.json")));
     }
 
+    [Fact]
+    public void ExportEmbedsSemanticWorkspaceSnapshotButNotEditorColors()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalog = SceneMakerCatalogLoader.Load(WriteCatalog(directory.Path));
+        var configuration = WorkspaceConfigurationStore.Create(
+            "game05",
+            new WorkspaceGridConfiguration(0.5m, 32m, 128m),
+            [new WorkspaceAssetProfile("terrain.grass", "#99E550", null, null, null, null)],
+            catalog);
+        var terrain = TerrainDisplayCatalogLoader.Load(catalog, configuration);
+        var placements = PlacementDisplayCatalogLoader.Load(catalog, configuration);
+        var transitions = TransitionDisplayCatalogLoader.Load(catalog, configuration);
+        var scene = TerrainEditing.Paint(SceneDocument.Create("field", 1, 1), terrain, 0, 0, "terrain.grass");
+        var workspace = new LoadedWorkspace(directory.Path, "game05");
+        var path = SceneExport.Write(
+            workspace,
+            new LoadedScene(Path.Combine(directory.Path, "scenes", "field.scene.json"), scene),
+            configuration,
+            terrain,
+            placements,
+            transitions);
+        var json = File.ReadAllText(path);
+
+        Assert.Equal(Path.Combine(directory.Path, "exports", "field.scene_export.json"), path);
+        Assert.Contains("\"format\": \"scene_maker_scene_export\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"terrain_cell_meters\": 0.5", json, StringComparison.Ordinal);
+        Assert.Contains("\"asset_key\": \"terrain.grass\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("#99E550", json, StringComparison.Ordinal);
+    }
+
     private static string WriteCatalog(string directory) 
     {
         var path = Path.Combine(directory, "catalog.json");

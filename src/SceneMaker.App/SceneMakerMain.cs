@@ -15,6 +15,7 @@ public sealed partial class SceneMakerMain : Control
     private const int WorkspaceAssetsMenuId = 12;
     private const int CreateSceneMenuId = 20;
     private const int LoadSceneMenuId = 21;
+    private const int ExportSceneMenuId = 22;
     private const int ChunkHelperMenuId = 30;
 
     private readonly SceneCanvas _canvas = new();
@@ -567,6 +568,7 @@ public sealed partial class SceneMakerMain : Control
         menu.AddSeparator("Scenes");
         menu.AddItem("Create Scene", CreateSceneMenuId);
         menu.AddItem("Load Scene", LoadSceneMenuId);
+        menu.AddItem("Export Scene", ExportSceneMenuId);
         menu.AddSeparator("Canvas Helpers");
         menu.AddItem("Chunk Helper: not applicable", ChunkHelperMenuId);
         menu.SetItemDisabled(menu.GetItemIndex(ChunkHelperMenuId), true);
@@ -786,7 +788,31 @@ public sealed partial class SceneMakerMain : Control
                 _sceneFileDialog.CurrentDir = _workspace.DirectoryPath;
                 _sceneFileDialog.PopupCenteredRatio(0.75f);
                 break;
+            case ExportSceneMenuId:
+                ExportCurrentScene();
+                break;
         }
+    }
+
+    private void ExportCurrentScene()
+    {
+        if (_workspace is null || _scene is null || _workspaceConfiguration is null
+            || _terrainAssets is null || _placementAssets is null || _transitionAssets is null)
+        {
+            ShowError("Load a Scene before exporting.");
+            return;
+        }
+        TryDocumentAction(() =>
+        {
+            var path = SceneExport.Write(
+                _workspace,
+                _scene,
+                _workspaceConfiguration,
+                _terrainAssets,
+                _placementAssets,
+                _transitionAssets);
+            SetStatus($"Exported Scene snapshot to '{path}'.");
+        });
     }
 
     private void ShowWorkspaceAssetsDialog()
@@ -1458,6 +1484,7 @@ public sealed partial class SceneMakerMain : Control
         menu.SetItemDisabled(menu.GetItemIndex(WorkspaceAssetsMenuId), !sceneActionsAvailable);
         menu.SetItemDisabled(menu.GetItemIndex(CreateSceneMenuId), !sceneActionsAvailable);
         menu.SetItemDisabled(menu.GetItemIndex(LoadSceneMenuId), !sceneActionsAvailable);
+        menu.SetItemDisabled(menu.GetItemIndex(ExportSceneMenuId), _scene is null);
         UpdateDrawingToolAvailability();
         UpdateTemplateControls();
         UpdateMapControls();
