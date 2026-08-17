@@ -12,17 +12,17 @@
     {
       "x": 3,
       "y": 3,
-      "asset_id": 1003
+      "asset_key": "terrain.grass"
     },
     {
       "x": 1,
       "y": 6,
-      "asset_id": 1003
+      "asset_key": "terrain.grass"
     },
     {
       "x": 2,
       "y": 6,
-      "asset_id": 1003
+      "asset_key": "terrain.grass"
     }
   ],
   "placements": [],

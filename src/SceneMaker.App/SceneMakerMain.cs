@@ -13,7 +13,6 @@ public sealed partial class SceneMakerMain : Control
     private const int LoadWorkspaceMenuId = 11;
     private const int CreateSceneMenuId = 20;
     private const int LoadSceneMenuId = 21;
-    private const int ExportRuntimeScenePackageMenuId = 23;
     private const int ChunkHelperMenuId = 30;
 
     private readonly SceneCanvas _canvas = new();
@@ -70,6 +69,8 @@ public sealed partial class SceneMakerMain : Control
 
     private LoadedWorkspace? _workspace;
     private LoadedScene? _scene;
+    private SceneMakerCatalog? _catalog;
+    private WorkspaceConfiguration? _workspaceConfiguration;
     private TerrainDisplayCatalog? _terrainAssets;
     private PlacementDisplayCatalog? _placementAssets;
     private TransitionDisplayCatalog? _transitionAssets;
@@ -83,9 +84,8 @@ public sealed partial class SceneMakerMain : Control
     {
         try
         {
-            _terrainAssets = LoadTerrainAssets();
-            _placementAssets = LoadPlacementAssets();
-            _transitionAssets = LoadTransitionAssets();
+            _catalog = SceneMakerCatalogLoader.Load(
+                Path.Combine(ProjectSettings.GlobalizePath("res://"), "catalog.json"));
         }
         catch (Exception exception) when (exception is SceneMakerDocumentException
                                           or IOException
@@ -98,14 +98,13 @@ public sealed partial class SceneMakerMain : Control
 
         BuildInterface();
         BuildDialogs();
-        if (TryRunCommandLineExport(OS.GetCmdlineUserArgs())) return;
         ShowNavigationOverview();
         _recentSessionPath = ProjectSettings.GlobalizePath("user://recent_session.json");
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--ignore-recent-session") < 0)
             RestoreRecentSession();
         UpdateDocumentStatus();
         _canvas.CallDeferred(Control.MethodName.GrabFocus);
-        GD.Print("SceneMaker Terrain Fill and runtime export validation ready");
+        GD.Print("SceneMaker standalone authoring tool ready");
     }
 
     private void BuildInterface()
@@ -229,9 +228,9 @@ public sealed partial class SceneMakerMain : Control
         toolColumn.AddChild(_anchorGroupEdit);
 
         _canvas.Name = "Canvas";
-        _canvas.ConfigureTerrainAssets(_terrainAssets!);
-        _canvas.ConfigurePlacementAssets(_placementAssets!);
-        _canvas.ConfigureTransitionAssets(_transitionAssets!);
+        if (_terrainAssets is not null) _canvas.ConfigureTerrainAssets(_terrainAssets);
+        if (_placementAssets is not null) _canvas.ConfigurePlacementAssets(_placementAssets);
+        if (_transitionAssets is not null) _canvas.ConfigureTransitionAssets(_transitionAssets);
         _canvas.ViewChanged += UpdateViewStatus;
         _canvas.TerrainPaintRequested += PaintTerrainCell;
         _canvas.TerrainEraseRequested += EraseTerrainCell;
@@ -288,23 +287,23 @@ public sealed partial class SceneMakerMain : Control
     private void BuildTerrainAssetBar()
     {
         _terrainAssetBar.AddChild(new Label { Text = "Terrain  ›" });
-        foreach (var asset in _terrainAssets!.Assets)
+        foreach (var asset in _terrainAssets?.Assets ?? [])
         {
             var button = new Button
             {
                 Text = asset.Name,
                 ToggleMode = true,
                 ButtonGroup = _terrainAssetButtons,
-                TooltipText = $"{asset.Name} · World Asset {asset.AssetId}",
+                TooltipText = $"{asset.Name} · {asset.AssetKey}",
                 CustomMinimumSize = new Vector2(120f, 0f),
             };
             button.AddThemeColorOverride("font_color", Color.FromHtml(asset.Color));
-            button.Pressed += () => SelectTerrainAsset(asset.AssetId);
+            button.Pressed += () => SelectTerrainAsset(asset.AssetKey);
             _terrainAssetBar.AddChild(button);
-            if (_canvas.SelectedTerrainAssetId is null)
+            if (_canvas.SelectedTerrainAssetKey is null)
             {
                 button.ButtonPressed = true;
-                SelectTerrainAsset(asset.AssetId);
+                SelectTerrainAsset(asset.AssetKey);
             }
         }
         _terrainAssetBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
@@ -313,7 +312,7 @@ public sealed partial class SceneMakerMain : Control
     private void BuildPlacementAssetBar()
     {
         _placementAssetBar.AddChild(new Label { Text = "Placements  ›" });
-        foreach (var asset in _placementAssets!.Assets)
+        foreach (var asset in _placementAssets?.Assets ?? [])
         {
             var button = new Button
             {
@@ -324,12 +323,12 @@ public sealed partial class SceneMakerMain : Control
                 CustomMinimumSize = new Vector2(160f, 0f),
             };
             button.AddThemeColorOverride("font_color", Color.FromHtml(asset.Color));
-            button.Pressed += () => SelectPlacementAsset(asset.AssetId);
+            button.Pressed += () => SelectPlacementAsset(asset.AssetKey);
             _placementAssetBar.AddChild(button);
-            if (_canvas.SelectedPlacementAssetId is null)
+            if (_canvas.SelectedPlacementAssetKey is null)
             {
                 button.ButtonPressed = true;
-                SelectPlacementAsset(asset.AssetId);
+                SelectPlacementAsset(asset.AssetKey);
             }
         }
         _placementAssetBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
@@ -338,7 +337,7 @@ public sealed partial class SceneMakerMain : Control
     private void BuildTransitionAssetBar()
     {
         _transitionAssetBar.AddChild(new Label { Text = "Transitions  ›" });
-        foreach (var asset in _transitionAssets!.Assets)
+        foreach (var asset in _transitionAssets?.Assets ?? [])
         {
             var button = new Button
             {
@@ -349,12 +348,12 @@ public sealed partial class SceneMakerMain : Control
                 CustomMinimumSize = new Vector2(160f, 0f),
             };
             button.AddThemeColorOverride("font_color", Color.FromHtml(asset.Color));
-            button.Pressed += () => SelectTransitionAsset(asset.AssetId);
+            button.Pressed += () => SelectTransitionAsset(asset.AssetKey);
             _transitionAssetBar.AddChild(button);
-            if (_canvas.SelectedTransitionAssetId is null)
+            if (_canvas.SelectedTransitionAssetKey is null)
             {
                 button.ButtonPressed = true;
-                SelectTransitionAsset(asset.AssetId);
+                SelectTransitionAsset(asset.AssetKey);
             }
         }
         _transitionAssetBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
@@ -553,7 +552,6 @@ public sealed partial class SceneMakerMain : Control
         menu.AddSeparator("Scenes");
         menu.AddItem("Create Scene", CreateSceneMenuId);
         menu.AddItem("Load Scene", LoadSceneMenuId);
-        menu.AddItem("Export Runtime Scene Package", ExportRuntimeScenePackageMenuId);
         menu.AddSeparator("Canvas Helpers");
         menu.AddItem("Chunk Helper: not applicable", ChunkHelperMenuId);
         menu.SetItemDisabled(menu.GetItemIndex(ChunkHelperMenuId), true);
@@ -757,9 +755,6 @@ public sealed partial class SceneMakerMain : Control
                 _sceneFileDialog.CurrentDir = _workspace.DirectoryPath;
                 _sceneFileDialog.PopupCenteredRatio(0.75f);
                 break;
-            case ExportRuntimeScenePackageMenuId:
-                ExportRuntimeScenePackage();
-                break;
         }
     }
 
@@ -776,6 +771,10 @@ public sealed partial class SceneMakerMain : Control
             _workspace = WorkspaceStore.Create(
                 _pendingWorkspaceParentDirectory,
                 _workspaceIdEdit.Text.Trim());
+            WorkspaceConfigurationStore.CreateDefault(
+                _workspace.DirectoryPath,
+                _workspace.Document.WorkspaceId);
+            LoadWorkspaceAssets();
             _scene = null;
             _selectedTemplateAnchorId = null;
             _templatePreview = null;
@@ -791,6 +790,7 @@ public sealed partial class SceneMakerMain : Control
         TryDocumentAction(() =>
         {
             _workspace = WorkspaceStore.Load(ResolveFileSystemPath(manifestPath));
+            LoadWorkspaceAssets();
             _scene = null;
             _selectedTemplateAnchorId = null;
             _templatePreview = null;
@@ -916,60 +916,6 @@ public sealed partial class SceneMakerMain : Control
         });
     }
 
-    private void ExportRuntimeScenePackage()
-    {
-        if (_workspace is null)
-        {
-            ShowError("Create or load a Workspace before exporting its Runtime Scene Package.");
-            return;
-        }
-
-        TryDocumentAction(() =>
-        {
-            var path = RuntimeScenePackageStore.Export(
-                _workspace,
-                _terrainAssets!,
-                _placementAssets!,
-                _transitionAssets!,
-                WorldAssetCatalogPath(),
-                RuntimeScenePackageDeploymentDirectory());
-            SetStatus($"Exported role-neutral Runtime Scene Package to '{path}'.");
-        });
-    }
-
-    private bool TryRunCommandLineExport(string[] arguments)
-    {
-        var marker = Array.IndexOf(arguments, "--export-runtime-workspace");
-        if (marker < 0) return false;
-        if (marker + 1 >= arguments.Length)
-        {
-            GD.PushError("--export-runtime-workspace requires a workspace.json path.");
-            GetTree().Quit(1);
-            return true;
-        }
-        try
-        {
-            var workspace = WorkspaceStore.Load(ResolveFileSystemPath(arguments[marker + 1]));
-            var path = RuntimeScenePackageStore.Export(
-                workspace,
-                _terrainAssets!,
-                _placementAssets!,
-                _transitionAssets!,
-                WorldAssetCatalogPath(),
-                RuntimeScenePackageDeploymentDirectory());
-            GD.Print($"Exported Runtime Scene Package to '{path}'.");
-            GetTree().Quit();
-        }
-        catch (Exception exception) when (exception is SceneMakerDocumentException
-                                          or IOException
-                                          or UnauthorizedAccessException)
-        {
-            GD.PushError(exception.Message);
-            GetTree().Quit(1);
-        }
-        return true;
-    }
-
     private void SelectDrawingTool(CanvasDrawingTool tool)
     {
         _canvas.ActiveTool = tool;
@@ -986,24 +932,24 @@ public sealed partial class SceneMakerMain : Control
         }}.");
     }
 
-    private void SelectTerrainAsset(uint assetId)
+    private void SelectTerrainAsset(string assetKey)
     {
-        var asset = _terrainAssets!.Resolve(assetId);
-        _canvas.SelectedTerrainAssetId = assetId;
-        SetStatus($"Selected Terrain '{asset.Name}' (World Asset {asset.AssetId}).");
+        var asset = _terrainAssets!.Resolve(assetKey);
+        _canvas.SelectedTerrainAssetKey = assetKey;
+        SetStatus($"Selected Terrain '{asset.Name}' ({asset.AssetKey}).");
     }
 
-    private void SelectPlacementAsset(uint assetId)
+    private void SelectPlacementAsset(string assetKey)
     {
-        var asset = _placementAssets!.Resolve(assetId);
-        _canvas.SelectedPlacementAssetId = assetId;
+        var asset = _placementAssets!.Resolve(assetKey);
+        _canvas.SelectedPlacementAssetKey = assetKey;
         SetStatus($"Selected Placement '{asset.Name}' · footprint {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels}).");
     }
 
-    private void SelectTransitionAsset(uint assetId)
+    private void SelectTransitionAsset(string assetKey)
     {
-        var asset = _transitionAssets!.Resolve(assetId);
-        _canvas.SelectedTransitionAssetId = assetId;
+        var asset = _transitionAssets!.Resolve(assetKey);
+        _canvas.SelectedTransitionAssetKey = assetKey;
         SetStatus($"Selected Transition '{asset.Name}' · footprint {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels}).");
     }
 
@@ -1144,7 +1090,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void PaintTerrainCell(int cellX, int cellY)
     {
-        if (_workspace is null || _scene is null || _canvas.SelectedTerrainAssetId is not { } assetId)
+        if (_workspace is null || _scene is null || _canvas.SelectedTerrainAssetKey is not { } assetKey)
             return;
 
         TryDocumentAction(() =>
@@ -1154,13 +1100,13 @@ public sealed partial class SceneMakerMain : Control
                 _terrainAssets!,
                 cellX,
                 cellY,
-                assetId);
+                assetKey);
             var updated = new LoadedScene(_scene.FilePath, document);
             SceneStore.Save(_workspace, updated);
             _scene = updated;
             _canvas.UpdateScene(updated);
             SaveRecentSession();
-            var asset = _terrainAssets!.Resolve(assetId);
+            var asset = _terrainAssets!.Resolve(assetKey);
             SetStatus($"Painted {asset.Name} at Terrain cell ({cellX}, {cellY}).");
         });
     }
@@ -1179,7 +1125,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void FillTerrainRegion(int cellX, int cellY)
     {
-        if (_workspace is null || _scene is null || _canvas.SelectedTerrainAssetId is not { } assetId)
+        if (_workspace is null || _scene is null || _canvas.SelectedTerrainAssetKey is not { } assetKey)
             return;
         TryDocumentAction(() =>
         {
@@ -1188,21 +1134,21 @@ public sealed partial class SceneMakerMain : Control
                 _terrainAssets!,
                 cellX,
                 cellY,
-                assetId);
+                assetKey);
             if (ReferenceEquals(document, _scene.Document))
             {
                 SetStatus("Terrain Fill made no change because source and target Terrain are identical.");
                 return;
             }
             SaveUpdatedScene(document);
-            var asset = _terrainAssets!.Resolve(assetId);
+            var asset = _terrainAssets!.Resolve(assetKey);
             SetStatus($"Filled the connected region at ({cellX}, {cellY}) with {asset.Name}.");
         });
     }
 
     private void PlaceAsset(int authoringX, int authoringY)
     {
-        if (_workspace is null || _scene is null || _canvas.SelectedPlacementAssetId is not { } assetId)
+        if (_workspace is null || _scene is null || _canvas.SelectedPlacementAssetKey is not { } assetKey)
             return;
 
         TryPlacementAction("Pencil Draw", () =>
@@ -1213,16 +1159,16 @@ public sealed partial class SceneMakerMain : Control
                 _transitionAssets!,
                 authoringX,
                 authoringY,
-                assetId);
+                assetKey);
             SaveUpdatedScene(document);
-            var asset = _placementAssets!.Resolve(assetId);
+            var asset = _placementAssets!.Resolve(assetKey);
             SetStatus($"Placed {asset.Name} anchor at ({authoringX}, {authoringY}) authoring px.");
         });
     }
 
     private void PlaceAssetLine(int startX, int startY, int endX, int endY)
     {
-        if (_workspace is null || _scene is null || _canvas.SelectedPlacementAssetId is not { } assetId)
+        if (_workspace is null || _scene is null || _canvas.SelectedPlacementAssetKey is not { } assetKey)
             return;
 
         TryPlacementAction("Line Draw", () =>
@@ -1236,7 +1182,7 @@ public sealed partial class SceneMakerMain : Control
                 startY,
                 endX,
                 endY,
-                assetId);
+                assetKey);
             SaveUpdatedScene(document);
             _canvas.CompleteLinePlacement();
             var added = document.Placements.Count - beforeCount;
@@ -1246,7 +1192,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void PlaceTransition(int authoringX, int authoringY)
     {
-        if (_workspace is null || _scene is null || _canvas.SelectedTransitionAssetId is not { } assetId)
+        if (_workspace is null || _scene is null || _canvas.SelectedTransitionAssetKey is not { } assetKey)
             return;
 
         TryPlacementAction("Pencil Draw", () =>
@@ -1257,16 +1203,16 @@ public sealed partial class SceneMakerMain : Control
                 _transitionAssets!,
                 authoringX,
                 authoringY,
-                assetId);
+                assetKey);
             SaveUpdatedScene(document);
-            var asset = _transitionAssets!.Resolve(assetId);
+            var asset = _transitionAssets!.Resolve(assetKey);
             SetStatus($"Placed {asset.Name} anchor at ({authoringX}, {authoringY}) authoring px.");
         });
     }
 
     private void PlaceTransitionLine(int startX, int startY, int endX, int endY)
     {
-        if (_workspace is null || _scene is null || _canvas.SelectedTransitionAssetId is not { } assetId)
+        if (_workspace is null || _scene is null || _canvas.SelectedTransitionAssetKey is not { } assetKey)
             return;
 
         TryPlacementAction("Line Draw", () =>
@@ -1280,7 +1226,7 @@ public sealed partial class SceneMakerMain : Control
                 startY,
                 endX,
                 endY,
-                assetId);
+                assetKey);
             SaveUpdatedScene(document);
             _canvas.CompleteLinePlacement();
             var added = document.Transitions.Count - beforeCount;
@@ -1373,9 +1319,6 @@ public sealed partial class SceneMakerMain : Control
         var sceneActionsAvailable = _workspace is not null;
         menu.SetItemDisabled(menu.GetItemIndex(CreateSceneMenuId), !sceneActionsAvailable);
         menu.SetItemDisabled(menu.GetItemIndex(LoadSceneMenuId), !sceneActionsAvailable);
-        menu.SetItemDisabled(
-            menu.GetItemIndex(ExportRuntimeScenePackageMenuId),
-            _workspace is null);
         UpdateDrawingToolAvailability();
         UpdateTemplateControls();
         UpdateMapControls();
@@ -1487,42 +1430,44 @@ public sealed partial class SceneMakerMain : Control
             ? ProjectSettings.GlobalizePath(path)
             : Path.GetFullPath(path);
 
-    private static TerrainDisplayCatalog LoadTerrainAssets()
+    private void LoadWorkspaceAssets()
     {
-        var sceneMakerDirectory = ProjectSettings.GlobalizePath("res://");
-        return TerrainDisplayCatalogLoader.Load(
-            Path.Combine(sceneMakerDirectory, "config", "terrain_display.json"),
-            WorldAssetCatalogPath());
+        if (_workspace is null || _catalog is null)
+            throw new InvalidOperationException("Workspace and SceneMaker catalog are required.");
+        _workspaceConfiguration = WorkspaceConfigurationStore.Load(
+            _workspace.DirectoryPath, _catalog);
+        if (!string.Equals(
+                _workspaceConfiguration.WorkspaceKey,
+                _workspace.Document.WorkspaceId,
+                StringComparison.Ordinal))
+        {
+            throw new SceneMakerDocumentException(
+                $"Workspace config key '{_workspaceConfiguration.WorkspaceKey}' must match workspace '{_workspace.Document.WorkspaceId}'.");
+        }
+        _terrainAssets = TerrainDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
+        _placementAssets = PlacementDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
+        _transitionAssets = TransitionDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
+        _canvas.ConfigureTerrainAssets(_terrainAssets);
+        _canvas.ConfigurePlacementAssets(_placementAssets);
+        _canvas.ConfigureTransitionAssets(_transitionAssets);
+        RebuildAssetBars();
     }
 
-    private static PlacementDisplayCatalog LoadPlacementAssets()
+    private void RebuildAssetBars()
     {
-        var sceneMakerDirectory = ProjectSettings.GlobalizePath("res://");
-        return PlacementDisplayCatalogLoader.Load(
-            Path.Combine(sceneMakerDirectory, "config", "placement_display.json"),
-            WorldAssetCatalogPath());
+        RebuildAssetBar(_terrainAssetBar, BuildTerrainAssetBar);
+        RebuildAssetBar(_placementAssetBar, BuildPlacementAssetBar);
+        RebuildAssetBar(_transitionAssetBar, BuildTransitionAssetBar);
     }
 
-    private static TransitionDisplayCatalog LoadTransitionAssets()
+    private static void RebuildAssetBar(Container container, Action build)
     {
-        var sceneMakerDirectory = ProjectSettings.GlobalizePath("res://");
-        return TransitionDisplayCatalogLoader.Load(
-            Path.Combine(sceneMakerDirectory, "config", "transition_display.json"),
-            WorldAssetCatalogPath());
-    }
-
-    private static string WorldAssetCatalogPath()
-    {
-        var sceneMakerDirectory = ProjectSettings.GlobalizePath("res://");
-        var repositoryRoot = Path.GetFullPath(Path.Combine(sceneMakerDirectory, "..", ".."));
-        return Path.Combine(repositoryRoot, "world_assets", "world_assets.json");
-    }
-
-    private static string RuntimeScenePackageDeploymentDirectory()
-    {
-        var sceneMakerDirectory = ProjectSettings.GlobalizePath("res://");
-        var repositoryRoot = Path.GetFullPath(Path.Combine(sceneMakerDirectory, "..", ".."));
-        return Path.Combine(repositoryRoot, "design", "runtime_scenes");
+        foreach (var child in container.GetChildren())
+        {
+            container.RemoveChild(child);
+            child.QueueFree();
+        }
+        build();
     }
 
     private void SaveRecentSession()
@@ -1538,6 +1483,7 @@ public sealed partial class SceneMakerMain : Control
             var recent = RecentSessionStore.Load(_recentSessionPath!);
             if (recent is null) return;
             _workspace = WorkspaceStore.Load(recent.WorkspaceManifestPath);
+            LoadWorkspaceAssets();
             _templatePreview = null;
             _scene = recent.SceneRelativePath is null
                 ? null

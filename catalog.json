@@ -1,0 +1,10 @@
+{
+  "format": "scene_maker_catalog",
+  "version": 1,
+  "assets": [
+    { "asset_key": "terrain.grass", "category": "terrain", "name": "Grass" },
+    { "asset_key": "terrain.water", "category": "terrain", "name": "Water" },
+    { "asset_key": "prop.tree", "category": "prop", "name": "Tree" },
+    { "asset_key": "transition.portal", "category": "transition", "name": "Portal" }
+  ]
+}

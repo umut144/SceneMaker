@@ -39,7 +39,7 @@ public sealed record TerrainCellDocument
 {
     public required int X { get; init; }
     public required int Y { get; init; }
-    public required uint AssetId { get; init; }
+    public required string AssetKey { get; init; }
 }
 
 public sealed record AuthoringPixelPosition
@@ -51,14 +51,14 @@ public sealed record AuthoringPixelPosition
 public sealed record PlacementDocument
 {
     public required string InstanceId { get; init; }
-    public required uint AssetId { get; init; }
+    public required string AssetKey { get; init; }
     public required AuthoringPixelPosition PositionAuthoringPx { get; init; }
 }
 
 public sealed record TransitionDocument
 {
     public required string InstanceId { get; init; }
-    public required uint AssetId { get; init; }
+    public required string AssetKey { get; init; }
     public required AuthoringPixelPosition PositionAuthoringPx { get; init; }
 }
 

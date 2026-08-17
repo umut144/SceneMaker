@@ -1,0 +1,32 @@
+{
+  "format": "scene_maker_workspace",
+  "version": 1,
+  "workspace_key": "world01",
+  "grid": {
+    "terrain_cell_meters": 0.5,
+    "authoring_pixels_per_meter": 32,
+    "game_pixels_per_meter": 128
+  },
+  "assets": [
+    {
+      "asset_key": "terrain.grass",
+      "color": "#99E550"
+    },
+    {
+      "asset_key": "terrain.water",
+      "color": "#5B6EE1"
+    },
+    {
+      "asset_key": "prop.tree",
+      "color": "#2E7D32",
+      "footprint_meters": { "width": 3.5, "height": 6.5 },
+      "anchor_meters": { "x": 1.75, "y": 0.0 }
+    },
+    {
+      "asset_key": "transition.portal",
+      "color": "#8E6CFF",
+      "footprint_meters": { "width": 2.0, "height": 3.0 },
+      "anchor_meters": { "x": 1.0, "y": 0.0 }
+    }
+  ]
+}

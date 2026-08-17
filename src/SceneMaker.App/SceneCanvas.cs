@@ -35,7 +35,7 @@ public sealed partial class SceneCanvas : Control
     private LoadedScene? _scene;
     private SceneDocument? _templatePreview;
     private IReadOnlyList<TemplateTerrainMask> _templatePreviewMasks = [];
-    private IReadOnlyDictionary<uint, Color> _terrainColors = new Dictionary<uint, Color>();
+    private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
     private PlacementDisplayCatalog? _placementAssets;
     private TransitionDisplayCatalog? _transitionAssets;
     private string _perspectiveName = "Terrain";
@@ -65,9 +65,9 @@ public sealed partial class SceneCanvas : Control
 
     public CanvasViewState ViewState { get; private set; } = new();
     public LoadedScene? Scene => _scene;
-    public uint? SelectedTerrainAssetId { get; set; }
-    public uint? SelectedPlacementAssetId { get; set; }
-    public uint? SelectedTransitionAssetId { get; set; }
+    public string? SelectedTerrainAssetKey { get; set; }
+    public string? SelectedPlacementAssetKey { get; set; }
+    public string? SelectedTransitionAssetKey { get; set; }
     public CanvasDrawingTool ActiveTool
     {
         get => _activeTool;
@@ -114,9 +114,9 @@ public sealed partial class SceneCanvas : Control
     public void ConfigureTerrainAssets(TerrainDisplayCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        var colors = new Dictionary<uint, Color>();
+        var colors = new Dictionary<string, Color>();
         foreach (var asset in catalog.Assets)
-            colors.Add(asset.AssetId, Color.FromHtml(asset.Color));
+            colors.Add(asset.AssetKey, Color.FromHtml(asset.Color));
         _terrainColors = colors;
         QueueRedraw();
     }
@@ -460,15 +460,15 @@ public sealed partial class SceneCanvas : Control
                 case CanvasDrawingTool.Eraser:
                     TerrainEraseRequested?.Invoke(cellX, cellY);
                     break;
-                case CanvasDrawingTool.Pencil when SelectedTerrainAssetId is not null:
+                case CanvasDrawingTool.Pencil when SelectedTerrainAssetKey is not null:
                     TerrainPaintRequested?.Invoke(cellX, cellY);
                     break;
-                case CanvasDrawingTool.Fill when SelectedTerrainAssetId is not null:
+                case CanvasDrawingTool.Fill when SelectedTerrainAssetKey is not null:
                     TerrainFillRequested?.Invoke(cellX, cellY);
                     break;
             }
         }
-        else if (PerspectiveName == "Placements" && SelectedPlacementAssetId is not null)
+        else if (PerspectiveName == "Placements" && SelectedPlacementAssetKey is not null)
         {
             var coordinate = AuthoringCoordinate(screenPosition);
             switch (ActiveTool)
@@ -527,7 +527,7 @@ public sealed partial class SceneCanvas : Control
                     throw new ArgumentOutOfRangeException();
             }
         }
-        else if (PerspectiveName == "Transitions" && SelectedTransitionAssetId is not null)
+        else if (PerspectiveName == "Transitions" && SelectedTransitionAssetKey is not null)
         {
             var coordinate = AuthoringCoordinate(screenPosition);
             switch (ActiveTool)
@@ -623,7 +623,7 @@ public sealed partial class SceneCanvas : Control
         if (PerspectiveName == "Terrain" && leftButtonPressed)
         {
             var (cellX, cellY) = TerrainCoordinate(screenPosition);
-            if (ActiveTool == CanvasDrawingTool.Pencil && SelectedTerrainAssetId is not null)
+            if (ActiveTool == CanvasDrawingTool.Pencil && SelectedTerrainAssetKey is not null)
                 TerrainPaintRequested?.Invoke(cellX, cellY);
             else if (ActiveTool == CanvasDrawingTool.Eraser)
                 TerrainEraseRequested?.Invoke(cellX, cellY);
@@ -694,7 +694,7 @@ public sealed partial class SceneCanvas : Control
         var cellSize = AuthoringMetrics.AuthoringPixelsPerWorldGridCell * zoom;
         foreach (var cell in document.TerrainCells)
         {
-            if (!_terrainColors.TryGetValue(cell.AssetId, out var color)) continue;
+            if (!_terrainColors.TryGetValue(cell.AssetKey, out var color)) continue;
             var rectangle = new Rect2(
                 pan + new Vector2(
                     cell.X * cellSize,
@@ -721,7 +721,7 @@ public sealed partial class SceneCanvas : Control
         if (_placementAssets is null) return;
         foreach (var placement in document.Placements)
         {
-            var asset = _placementAssets.Resolve(placement.AssetId);
+            var asset = _placementAssets.Resolve(placement.AssetKey);
             var bounds = PlacementEditing.BoundsFor(
                 asset,
                 placement.PositionAuthoringPx.X,
@@ -772,7 +772,7 @@ public sealed partial class SceneCanvas : Control
         if (_transitionAssets is null) return;
         foreach (var transition in document.Transitions)
         {
-            var asset = _transitionAssets.Resolve(transition.AssetId);
+            var asset = _transitionAssets.Resolve(transition.AssetKey);
             var bounds = TransitionEditing.BoundsFor(
                 asset,
                 transition.PositionAuthoringPx.X,
@@ -944,10 +944,10 @@ public sealed partial class SceneCanvas : Control
         int sceneHeightAuthoringPixels)
     {
         if (_placementAssets is null
-            || SelectedPlacementAssetId is not { } assetId)
+            || SelectedPlacementAssetKey is not { } assetKey)
             return;
 
-        var asset = _placementAssets.Resolve(assetId);
+        var asset = _placementAssets.Resolve(assetKey);
         IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> preview;
         if (ActiveTool == CanvasDrawingTool.Pencil)
         {
@@ -1013,10 +1013,10 @@ public sealed partial class SceneCanvas : Control
         int sceneHeightAuthoringPixels)
     {
         if (_transitionAssets is null
-            || SelectedTransitionAssetId is not { } assetId)
+            || SelectedTransitionAssetKey is not { } assetKey)
             return;
 
-        var asset = _transitionAssets.Resolve(assetId);
+        var asset = _transitionAssets.Resolve(assetKey);
         IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> preview;
         if (ActiveTool == CanvasDrawingTool.Pencil)
         {
@@ -1080,7 +1080,7 @@ public sealed partial class SceneCanvas : Control
             _transitionAssets!,
             coordinate.X,
             coordinate.Y,
-            SelectedPlacementAssetId!.Value);
+            SelectedPlacementAssetKey!);
 
     private PlacementValidationResult ValidateTransition((int X, int Y) coordinate) =>
         TransitionEditing.ValidateCandidate(
@@ -1089,13 +1089,13 @@ public sealed partial class SceneCanvas : Control
             _transitionAssets!,
             coordinate.X,
             coordinate.Y,
-            SelectedTransitionAssetId!.Value);
+            SelectedTransitionAssetKey!);
 
     private IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> PlacementLinePreview(
         (int X, int Y) start,
         (int X, int Y) end)
     {
-        var asset = _placementAssets!.Resolve(SelectedPlacementAssetId!.Value);
+        var asset = _placementAssets!.Resolve(SelectedPlacementAssetKey!);
         return PlacementEditing.LineAnchors(asset, start.X, start.Y, end.X, end.Y)
             .Select(anchor => (
                 anchor.X,
@@ -1108,7 +1108,7 @@ public sealed partial class SceneCanvas : Control
         (int X, int Y) start,
         (int X, int Y) end)
     {
-        var asset = _transitionAssets!.Resolve(SelectedTransitionAssetId!.Value);
+        var asset = _transitionAssets!.Resolve(SelectedTransitionAssetKey!);
         return TransitionEditing.LineAnchors(asset, start.X, start.Y, end.X, end.Y)
             .Select(anchor => (
                 anchor.X,

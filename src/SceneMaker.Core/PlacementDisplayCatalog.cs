@@ -1,14 +1,9 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
-using MMORPG.Simulation.WorldAssets;
 
 namespace SceneMaker.Core;
 
 public sealed record PlacementDisplayAsset(
-    uint AssetId,
-    string Key,
+    string AssetKey,
     string Name,
     string Color,
     decimal WidthMeters,
@@ -22,150 +17,67 @@ public sealed record PlacementDisplayAsset(
 
 public sealed class PlacementDisplayCatalog
 {
-    private readonly IReadOnlyDictionary<uint, PlacementDisplayAsset> _byId;
+    private readonly IReadOnlyDictionary<string, PlacementDisplayAsset> _byKey;
 
-    internal PlacementDisplayCatalog(SortedDictionary<uint, PlacementDisplayAsset> byId) =>
-        _byId = new ReadOnlyDictionary<uint, PlacementDisplayAsset>(byId);
+    internal PlacementDisplayCatalog(SortedDictionary<string, PlacementDisplayAsset> byKey) =>
+        _byKey = new ReadOnlyDictionary<string, PlacementDisplayAsset>(byKey);
 
-    public IReadOnlyList<PlacementDisplayAsset> Assets => [.. _byId.Values];
+    public IReadOnlyList<PlacementDisplayAsset> Assets => [.. _byKey.Values];
 
-    public PlacementDisplayAsset Resolve(uint assetId) =>
-        _byId.TryGetValue(assetId, out var asset)
+    public PlacementDisplayAsset Resolve(string assetKey) =>
+        _byKey.TryGetValue(assetKey, out var asset)
             ? asset
             : throw new SceneMakerDocumentException(
-                $"Placement Asset ID {assetId} is not enabled in SceneMaker.");
+                $"Placement asset_key '{assetKey}' is not enabled in this Workspace.");
 }
 
-public static partial class PlacementDisplayCatalogLoader
+public static class PlacementDisplayCatalogLoader
 {
-    public const string Schema = "srt.scene_maker_placement_display";
-    public const int Version = 1;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    public static PlacementDisplayCatalog Load(SceneMakerCatalog catalog, WorkspaceConfiguration workspace)
     {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = false,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-    };
-
-    public static PlacementDisplayCatalog Load(string displayPath, string worldAssetCatalogPath)
-    {
-        var display = LoadDisplay(displayPath);
-        LoadedWorldAssetCatalog canonical;
-        try
+        SortedDictionary<string, PlacementDisplayAsset> assets = new(StringComparer.Ordinal);
+        foreach (var profile in workspace.AssetProfiles)
         {
-            canonical = WorldAssetCatalogLoader.Load(worldAssetCatalogPath);
+            var catalogAsset = catalog.Resolve(profile.AssetKey);
+            if (catalogAsset.Category != SceneMakerAssetCategory.Prop) continue;
+            assets.Add(profile.AssetKey, Create(
+                profile, catalogAsset, workspace.Grid.AuthoringPixelsPerMeter));
         }
-        catch (WorldAssetCatalogException exception)
-        {
+        return new PlacementDisplayCatalog(assets);
+    }
+
+    internal static PlacementDisplayAsset Create(
+        WorkspaceAssetProfile profile,
+        SceneMakerCatalogAsset catalogAsset,
+        decimal authoringPixelsPerMeter)
+    {
+        var width = checked((int)decimal.Ceiling(profile.FootprintWidthMeters!.Value * authoringPixelsPerMeter));
+        var height = checked((int)decimal.Ceiling(profile.FootprintHeightMeters!.Value * authoringPixelsPerMeter));
+        var anchorX = ExactPixels(profile.AnchorXMeters!.Value, authoringPixelsPerMeter, profile.AssetKey, "anchor x");
+        var anchorY = ExactPixels(profile.AnchorYMeters!.Value, authoringPixelsPerMeter, profile.AssetKey, "anchor y");
+        if (anchorX > width || anchorY > height)
             throw new SceneMakerDocumentException(
-                $"World Asset catalog is invalid: {exception.Message}", exception);
-        }
-
-        SortedDictionary<uint, PlacementDisplayAsset> resolved = [];
-        uint? previousId = null;
-        foreach (var entry in display.Assets)
-        {
-            if (previousId is not null && entry.AssetId <= previousId)
-                throw new SceneMakerDocumentException(
-                    "Placement display Asset IDs must be unique and strictly increasing.");
-            previousId = entry.AssetId;
-            if (string.IsNullOrWhiteSpace(entry.Color) || !ColorRegex().IsMatch(entry.Color))
-                throw new SceneMakerDocumentException(
-                    $"Placement display Asset ID {entry.AssetId} requires an uppercase #RRGGBB color.");
-
-            var catalogEntry = canonical.Catalog.Assets.SingleOrDefault(
-                asset => asset.AssetId == entry.AssetId)
-                ?? throw new SceneMakerDocumentException(
-                    $"Placement display references unknown World Asset ID {entry.AssetId}.");
-            if (catalogEntry.Status != WorldAssetStatus.Active
-                || catalogEntry.Domain != WorldAssetDomain.Placements)
-            {
-                throw new SceneMakerDocumentException(
-                    $"SceneMaker Placement Asset '{catalogEntry.Key}' must be active in the placements ID domain.");
-            }
-
-            var definition = canonical.Resolve(entry.AssetId);
-            var spatial = definition.Spatial
-                ?? throw new SceneMakerDocumentException(
-                    $"SceneMaker Placement Asset '{catalogEntry.Key}' requires reviewed spatial data.");
-            var anchorX = ExactAuthoringPixels(spatial.AnchorMeters.X, catalogEntry.Key, "anchor x");
-            var anchorY = ExactAuthoringPixels(spatial.AnchorMeters.Y, catalogEntry.Key, "anchor y");
-            var width = ConservativeAuthoringPixels(spatial.ExtentMeters.Width);
-            var height = ConservativeAuthoringPixels(spatial.ExtentMeters.Height);
-            if (anchorX > width || anchorY > height)
-                throw new SceneMakerDocumentException(
-                    $"Placement Asset '{catalogEntry.Key}' anchor lies outside its conservative footprint.");
-
-            resolved.Add(entry.AssetId, new PlacementDisplayAsset(
-                entry.AssetId,
-                definition.Asset.Key,
-                definition.Asset.Name,
-                entry.Color,
-                spatial.ExtentMeters.Width,
-                spatial.ExtentMeters.Height,
-                spatial.AnchorMeters.X,
-                spatial.AnchorMeters.Y,
-                width,
-                height,
-                anchorX,
-                anchorY));
-        }
-        return new PlacementDisplayCatalog(resolved);
+                $"Asset '{profile.AssetKey}' anchor lies outside its authoring footprint.");
+        return new PlacementDisplayAsset(
+            profile.AssetKey,
+            catalogAsset.Name,
+            profile.Color,
+            profile.FootprintWidthMeters.Value,
+            profile.FootprintHeightMeters.Value,
+            profile.AnchorXMeters.Value,
+            profile.AnchorYMeters.Value,
+            width,
+            height,
+            anchorX,
+            anchorY);
     }
 
-    private static PlacementDisplayDocument LoadDisplay(string displayPath)
+    internal static int ExactPixels(decimal meters, decimal pixelsPerMeter, string key, string label)
     {
-        try
-        {
-            var display = JsonSerializer.Deserialize<PlacementDisplayDocument>(
-                File.ReadAllText(Path.GetFullPath(displayPath)), JsonOptions)
-                ?? throw new SceneMakerDocumentException(
-                    "Placement display document must not be JSON null.");
-            if (display.Schema != Schema || display.Version != Version)
-                throw new SceneMakerDocumentException(
-                    $"Placement display data must use {Schema} version {Version}.");
-            if (display.Assets is null || display.Assets.Count == 0)
-                throw new SceneMakerDocumentException(
-                    "Placement display data requires at least one Asset.");
-            return display;
-        }
-        catch (SceneMakerDocumentException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (exception is IOException or JsonException)
-        {
+        var pixels = meters * pixelsPerMeter;
+        if (pixels != decimal.Truncate(pixels))
             throw new SceneMakerDocumentException(
-                $"Could not load SceneMaker Placement display data: {exception.Message}", exception);
-        }
+                $"Asset '{key}' {label} must map to a whole authoring pixel.");
+        return checked((int)pixels);
     }
-
-    private static int ConservativeAuthoringPixels(decimal meters) =>
-        checked((int)decimal.Ceiling(meters * AuthoringMetrics.AuthoringPixelsPerMeter));
-
-    private static int ExactAuthoringPixels(decimal meters, string key, string label)
-    {
-        var scaled = meters * AuthoringMetrics.AuthoringPixelsPerMeter;
-        if (scaled != decimal.Truncate(scaled))
-            throw new SceneMakerDocumentException(
-                $"Placement Asset '{key}' {label} must map exactly to an integer authoring pixel.");
-        return checked((int)scaled);
-    }
-
-    private sealed record PlacementDisplayDocument
-    {
-        public required string Schema { get; init; }
-        public required int Version { get; init; }
-        public required List<PlacementDisplayEntry> Assets { get; init; }
-    }
-
-    private sealed record PlacementDisplayEntry
-    {
-        public required uint AssetId { get; init; }
-        public required string Color { get; init; }
-    }
-
-    [GeneratedRegex("^#[0-9A-F]{6}$", RegexOptions.CultureInvariant)]
-    private static partial Regex ColorRegex();
 }

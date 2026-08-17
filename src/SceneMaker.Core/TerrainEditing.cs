@@ -15,12 +15,12 @@ public static class TerrainEditing
         TerrainDisplayCatalog terrainAssets,
         int cellX,
         int cellY,
-        uint assetId)
+        string assetKey)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
         DocumentValidation.Validate(scene);
-        _ = terrainAssets.Resolve(assetId);
+        _ = terrainAssets.Resolve(assetKey);
 
         if (cellX < 0 || cellX >= scene.SizeCells.Width
             || cellY < 0 || cellY >= scene.SizeCells.Height)
@@ -31,7 +31,7 @@ public static class TerrainEditing
 
         var cells = scene.TerrainCells
             .Where(cell => cell.X != cellX || cell.Y != cellY)
-            .Append(new TerrainCellDocument { X = cellX, Y = cellY, AssetId = assetId })
+            .Append(new TerrainCellDocument { X = cellX, Y = cellY, AssetKey = assetKey })
             .OrderBy(static cell => cell.Y)
             .ThenBy(static cell => cell.X)
             .ToList();
@@ -61,20 +61,20 @@ public static class TerrainEditing
         TerrainDisplayCatalog terrainAssets,
         int startCellX,
         int startCellY,
-        uint assetId)
+        string assetKey)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
         DocumentValidation.Validate(scene);
-        _ = terrainAssets.Resolve(assetId);
+        _ = terrainAssets.Resolve(assetKey);
         RequireInsideScene(scene, startCellX, startCellY);
 
-        Dictionary<TerrainCellCoordinate, uint> cells = scene.TerrainCells.ToDictionary(
+        Dictionary<TerrainCellCoordinate, string> cells = scene.TerrainCells.ToDictionary(
             static cell => new TerrainCellCoordinate(cell.X, cell.Y),
-            static cell => cell.AssetId);
+            static cell => cell.AssetKey);
         var start = new TerrainCellCoordinate(startCellX, startCellY);
-        uint? sourceAssetId = cells.TryGetValue(start, out var source) ? source : null;
-        if (sourceAssetId == assetId) return scene;
+        string? sourceAssetKey = cells.TryGetValue(start, out var source) ? source : null;
+        if (sourceAssetKey == assetKey) return scene;
 
         Queue<TerrainCellCoordinate> frontier = new();
         HashSet<TerrainCellCoordinate> region = [start];
@@ -92,16 +92,16 @@ public static class TerrainEditing
                     continue;
                 }
 
-                uint? neighbourAssetId = cells.TryGetValue(neighbour, out var neighbourAsset)
+                string? neighbourAssetKey = cells.TryGetValue(neighbour, out var neighbourAsset)
                     ? neighbourAsset
                     : null;
-                if (neighbourAssetId != sourceAssetId) continue;
+                if (neighbourAssetKey != sourceAssetKey) continue;
                 region.Add(neighbour);
                 frontier.Enqueue(neighbour);
             }
         }
 
-        foreach (var coordinate in region) cells[coordinate] = assetId;
+        foreach (var coordinate in region) cells[coordinate] = assetKey;
         var filled = scene with
         {
             TerrainCells = cells
@@ -111,7 +111,7 @@ public static class TerrainEditing
                 {
                     X = pair.Key.X,
                     Y = pair.Key.Y,
-                    AssetId = pair.Value,
+                    AssetKey = pair.Value,
                 })
                 .ToList(),
         };
@@ -127,7 +127,7 @@ public static class TerrainEditing
         ArgumentNullException.ThrowIfNull(terrainAssets);
         DocumentValidation.Validate(scene);
         foreach (var cell in scene.TerrainCells)
-            _ = terrainAssets.Resolve(cell.AssetId);
+            _ = terrainAssets.Resolve(cell.AssetKey);
     }
 
     private static void RequireInsideScene(SceneDocument scene, int cellX, int cellY)

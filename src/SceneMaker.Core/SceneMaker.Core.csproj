@@ -7,7 +7,4 @@
     <RootNamespace>SceneMaker.Core</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="../../../../src/MMORPG.Simulation/MMORPG.Simulation.csproj" />
-  </ItemGroup>
 </Project>

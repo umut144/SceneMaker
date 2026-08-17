@@ -58,7 +58,7 @@ public static class TemplateComposition
 
         var terrain = baseScene.TerrainCells.ToDictionary(
             static cell => (cell.X, cell.Y),
-            static cell => cell.AssetId);
+            static cell => cell.AssetKey);
         var placements = baseScene.Placements.ToList();
         var transitions = baseScene.Transitions.ToList();
         List<(SelectedTemplate Candidate, HashSet<(int X, int Y)> Mask)> masks = [];
@@ -76,13 +76,13 @@ public static class TemplateComposition
             foreach (var cell in candidate.Template.TerrainCells)
             {
                 terrain[(checked(cell.X + translation.CellX), checked(cell.Y + translation.CellY))] =
-                    cell.AssetId;
+                    cell.AssetKey;
             }
 
             placements = placements
                 .Where(placement => !FootprintIntersectsMask(
                     PlacementEditing.BoundsFor(
-                        placementAssets.Resolve(placement.AssetId),
+                        placementAssets.Resolve(placement.AssetKey),
                         placement.PositionAuthoringPx.X,
                         placement.PositionAuthoringPx.Y),
                     mask))
@@ -90,7 +90,7 @@ public static class TemplateComposition
             transitions = transitions
                 .Where(transition => !FootprintIntersectsMask(
                     TransitionEditing.BoundsFor(
-                        transitionAssets.Resolve(transition.AssetId),
+                        transitionAssets.Resolve(transition.AssetKey),
                         transition.PositionAuthoringPx.X,
                         transition.PositionAuthoringPx.Y),
                     mask))
@@ -111,7 +111,7 @@ public static class TemplateComposition
                 {
                     X = value.Key.X,
                     Y = value.Key.Y,
-                    AssetId = value.Value,
+                    AssetKey = value.Value,
                 })
                 .ToList(),
             Placements = placements
@@ -242,7 +242,7 @@ public static class TemplateComposition
         TemplateTranslation translation) => new()
     {
         InstanceId = DerivedInstanceId(anchor, template, placement.InstanceId),
-        AssetId = placement.AssetId,
+        AssetKey = placement.AssetKey,
         PositionAuthoringPx = new AuthoringPixelPosition
         {
             X = checked(placement.PositionAuthoringPx.X + translation.AuthoringX),
@@ -257,7 +257,7 @@ public static class TemplateComposition
         TemplateTranslation translation) => new()
     {
         InstanceId = DerivedInstanceId(anchor, template, transition.InstanceId),
-        AssetId = transition.AssetId,
+        AssetKey = transition.AssetKey,
         PositionAuthoringPx = new AuthoringPixelPosition
         {
             X = checked(transition.PositionAuthoringPx.X + translation.AuthoringX),
@@ -298,8 +298,8 @@ public static class TemplateComposition
     {
         foreach (var transition in transitions)
         {
-            var asset = assets.Resolve(transition.AssetId);
-            if (asset.Key != "portal") continue;
+            var asset = assets.Resolve(transition.AssetKey);
+            if (asset.AssetKey != "transition.portal") continue;
             var bounds = TransitionEditing.BoundsFor(
                 asset,
                 transition.PositionAuthoringPx.X,
@@ -320,7 +320,7 @@ public static class TemplateComposition
         foreach (var placement in scene.Placements)
         {
             var bounds = PlacementEditing.BoundsFor(
-                placements.Resolve(placement.AssetId),
+                placements.Resolve(placement.AssetKey),
                 placement.PositionAuthoringPx.X,
                 placement.PositionAuthoringPx.Y);
             ThrowIfMissingTerrain(scene, bounds, "Placement", placement.InstanceId);
@@ -328,7 +328,7 @@ public static class TemplateComposition
         foreach (var transition in scene.Transitions)
         {
             var bounds = TransitionEditing.BoundsFor(
-                transitions.Resolve(transition.AssetId),
+                transitions.Resolve(transition.AssetKey),
                 transition.PositionAuthoringPx.X,
                 transition.PositionAuthoringPx.Y);
             ThrowIfMissingTerrain(scene, bounds, "Transition", transition.InstanceId);

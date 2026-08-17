@@ -20,21 +20,4 @@
     <ProjectReference Include="../../src/SceneMaker.Core/SceneMaker.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="../../config/terrain_display.json"
-             Link="config/terrain_display.json"
-             CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../config/placement_display.json"
-             Link="config/placement_display.json"
-             CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../config/transition_display.json"
-             Link="config/transition_display.json"
-             CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../../../world_assets/**/*.json"
-             Link="world_assets/%(RecursiveDir)%(Filename)%(Extension)"
-             CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../../../assets/**/*.json"
-             Link="assets/%(RecursiveDir)%(Filename)%(Extension)"
-             CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
 </Project>

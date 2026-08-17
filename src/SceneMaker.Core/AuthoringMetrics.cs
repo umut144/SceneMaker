@@ -1,5 +1,3 @@
-using MMORPG.Simulation;
-
 namespace SceneMaker.Core;
 
 public static class AuthoringMetrics
@@ -8,7 +6,7 @@ public static class AuthoringMetrics
     public const int AuthoringPixelsPerMeter = 32;
 
     public static decimal MetersPerAuthoringPixel =>
-        (decimal)WorldGrid.TileMeters / AuthoringPixelsPerWorldGridCell;
+        1m / AuthoringPixelsPerMeter;
 
     public static int SceneWidthAuthoringPixels(SceneDocument scene) =>
         checked(scene.SizeCells.Width * AuthoringPixelsPerWorldGridCell);

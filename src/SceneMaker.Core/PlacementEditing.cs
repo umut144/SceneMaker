@@ -31,26 +31,26 @@ public static class PlacementEditing
         TransitionDisplayCatalog transitionAssets,
         int anchorX,
         int anchorY,
-        uint assetId)
+        string assetKey)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(placementAssets);
         DocumentValidation.Validate(scene);
-        var asset = placementAssets.Resolve(assetId);
+        var asset = placementAssets.Resolve(assetKey);
         var validation = ValidateCandidate(
             scene,
             placementAssets,
             transitionAssets,
             anchorX,
             anchorY,
-            assetId);
+            assetKey);
         if (!validation.IsValid)
             throw new SceneMakerDocumentException(validation.Reason!);
 
         var placement = new PlacementDocument
         {
-            InstanceId = NextInstanceId(scene, asset.Key),
-            AssetId = assetId,
+            InstanceId = NextInstanceId(scene, asset.AssetKey),
+            AssetKey = assetKey,
             PositionAuthoringPx = new AuthoringPixelPosition { X = anchorX, Y = anchorY },
         };
         var placed = scene with
@@ -70,11 +70,11 @@ public static class PlacementEditing
         TransitionDisplayCatalog transitionAssets,
         int anchorX,
         int anchorY,
-        uint assetId)
+        string assetKey)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(placementAssets);
-        var asset = placementAssets.Resolve(assetId);
+        var asset = placementAssets.Resolve(assetKey);
         PlacementBoundsAuthoringPixels candidate;
         try
         {
@@ -90,7 +90,7 @@ public static class PlacementEditing
 
         foreach (var existing in scene.Placements)
         {
-            var existingAsset = placementAssets.Resolve(existing.AssetId);
+            var existingAsset = placementAssets.Resolve(existing.AssetKey);
             var existingBounds = BoundsFor(
                 existingAsset,
                 existing.PositionAuthoringPx.X,
@@ -102,7 +102,7 @@ public static class PlacementEditing
         }
         foreach (var transition in scene.Transitions)
         {
-            var transitionAsset = transitionAssets.Resolve(transition.AssetId);
+            var transitionAsset = transitionAssets.Resolve(transition.AssetKey);
             var transitionBounds = TransitionEditing.BoundsFor(
                 transitionAsset,
                 transition.PositionAuthoringPx.X,
@@ -130,9 +130,9 @@ public static class PlacementEditing
         int startAnchorY,
         int endAnchorX,
         int endAnchorY,
-        uint assetId)
+        string assetKey)
     {
-        var asset = placementAssets.Resolve(assetId);
+        var asset = placementAssets.Resolve(assetKey);
         var result = scene;
         foreach (var (anchorX, anchorY) in LineAnchors(
                      asset,
@@ -147,7 +147,7 @@ public static class PlacementEditing
                 transitionAssets,
                 anchorX,
                 anchorY,
-                assetId);
+                assetKey);
         }
         return result;
     }
@@ -179,7 +179,7 @@ public static class PlacementEditing
         for (var index = scene.Placements.Count - 1; index >= 0; index--)
         {
             var placement = scene.Placements[index];
-            var asset = placementAssets.Resolve(placement.AssetId);
+            var asset = placementAssets.Resolve(placement.AssetKey);
             var bounds = BoundsFor(
                 asset,
                 placement.PositionAuthoringPx.X,
@@ -218,7 +218,7 @@ public static class PlacementEditing
         List<PlacementBoundsAuthoringPixels> accepted = [];
         foreach (var placement in scene.Placements)
         {
-            var asset = placementAssets.Resolve(placement.AssetId);
+            var asset = placementAssets.Resolve(placement.AssetKey);
             var bounds = BoundsFor(
                 asset,
                 placement.PositionAuthoringPx.X,
@@ -233,14 +233,14 @@ public static class PlacementEditing
         }
         foreach (var transition in scene.Transitions)
         {
-            var transitionAsset = transitionAssets.Resolve(transition.AssetId);
+            var transitionAsset = transitionAssets.Resolve(transition.AssetKey);
             var transitionBounds = TransitionEditing.BoundsFor(
                 transitionAsset,
                 transition.PositionAuthoringPx.X,
                 transition.PositionAuthoringPx.Y);
             foreach (var placement in scene.Placements)
             {
-                var placementAsset = placementAssets.Resolve(placement.AssetId);
+                var placementAsset = placementAssets.Resolve(placement.AssetKey);
                 if (transitionBounds.Overlaps(BoundsFor(
                         placementAsset,
                         placement.PositionAuthoringPx.X,
