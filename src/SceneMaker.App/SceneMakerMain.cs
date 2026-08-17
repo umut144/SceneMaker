@@ -665,24 +665,16 @@ public sealed partial class SceneMakerMain : Control
         _templateCreationFields.AddChild(new Label { Text = "Template group" });
         ConfigurePositiveIntegerInput(_templateGroupEdit, 1);
         _templateCreationFields.AddChild(_templateGroupEdit);
-        _templateCreationFields.AddChild(new Label { Text = "Pivot X (m)" });
-        _templateInsertionXEdit.Step = 0.01;
-        _templateInsertionXEdit.MinValue = 0;
-        _templateInsertionXEdit.MaxValue = int.MaxValue;
-        _templateInsertionXEdit.AllowGreater = false;
-        _templateInsertionXEdit.AllowLesser = false;
+        _templateCreationFields.AddChild(new Label { Text = "Pivot X (authoring px)" });
+        ConfigureGridCoordinateInput(_templateInsertionXEdit);
         _templateInsertionXEdit.ValueChanged += _ => UpdateTemplatePivotFields();
         var pivotXRow = new HBoxContainer();
         pivotXRow.AddChild(_templateInsertionXEdit);
         ConfigureMetricsLabel(_templateInsertionXMetricsLabel);
         pivotXRow.AddChild(_templateInsertionXMetricsLabel);
         _templateCreationFields.AddChild(pivotXRow);
-        _templateCreationFields.AddChild(new Label { Text = "Pivot Y (m)" });
-        _templateInsertionYEdit.Step = 0.01;
-        _templateInsertionYEdit.MinValue = 0;
-        _templateInsertionYEdit.MaxValue = int.MaxValue;
-        _templateInsertionYEdit.AllowGreater = false;
-        _templateInsertionYEdit.AllowLesser = false;
+        _templateCreationFields.AddChild(new Label { Text = "Pivot Y (authoring px)" });
+        ConfigureGridCoordinateInput(_templateInsertionYEdit);
         _templateInsertionYEdit.ValueChanged += _ => UpdateTemplatePivotFields();
         var pivotYRow = new HBoxContainer();
         pivotYRow.AddChild(_templateInsertionYEdit);
@@ -778,22 +770,22 @@ public sealed partial class SceneMakerMain : Control
         var metrics = _workspaceConfiguration.Metrics;
         if (_templatePivotCenterToggle.ButtonPressed && SelectedSceneKind() == SceneKind.Template)
         {
-            var widthMeters = (decimal)_sceneWidthEdit.Value * metrics.TerrainCellMeters;
-            var heightMeters = (decimal)_sceneHeightEdit.Value * metrics.TerrainCellMeters;
-            _templateInsertionXEdit.SetValueNoSignal((double)(widthMeters / 2m));
-            _templateInsertionYEdit.SetValueNoSignal((double)(heightMeters / 2m));
+            var widthPixels = (decimal)_sceneWidthEdit.Value * metrics.AuthoringPixelsPerTerrainCell;
+            var heightPixels = (decimal)_sceneHeightEdit.Value * metrics.AuthoringPixelsPerTerrainCell;
+            _templateInsertionXEdit.SetValueNoSignal((double)(widthPixels / 2m));
+            _templateInsertionYEdit.SetValueNoSignal((double)(heightPixels / 2m));
         }
         _templateInsertionXEdit.Editable = !_templatePivotCenterToggle.ButtonPressed;
         _templateInsertionYEdit.Editable = !_templatePivotCenterToggle.ButtonPressed;
-        _templateInsertionXMetricsLabel.Text = FormatPivotPixels(_templateInsertionXEdit.Value);
-        _templateInsertionYMetricsLabel.Text = FormatPivotPixels(_templateInsertionYEdit.Value);
+        _templateInsertionXMetricsLabel.Text = FormatPivotMeters(_templateInsertionXEdit.Value);
+        _templateInsertionYMetricsLabel.Text = FormatPivotMeters(_templateInsertionYEdit.Value);
     }
 
-    private string FormatPivotPixels(double meters)
+    private string FormatPivotMeters(double authoringPixels)
     {
         if (_workspaceConfiguration is null) return string.Empty;
-        var pixels = (decimal)meters * _workspaceConfiguration.Metrics.AuthoringPixelsPerMeter;
-        return $"= {pixels:0.###} px";
+        var meters = (decimal)authoringPixels * _workspaceConfiguration.Metrics.MetersPerAuthoringPixel;
+        return $"= {meters:0.#####} m";
     }
 
     private SceneKind SelectedSceneKind() =>
@@ -1041,8 +1033,8 @@ public sealed partial class SceneMakerMain : Control
                 checked((int)_sceneHeightEdit.Value),
                 SelectedSceneKind(),
                 checked((int)_templateGroupEdit.Value),
-                MetersToAuthoringPixels(_templateInsertionXEdit.Value, "Pivot X"),
-                MetersToAuthoringPixels(_templateInsertionYEdit.Value, "Pivot Y"));
+                checked((int)_templateInsertionXEdit.Value),
+                checked((int)_templateInsertionYEdit.Value));
             _canvas.ShowScene(_scene);
             _selectedTemplateAnchorId = null;
             _templatePreview = null;
@@ -1655,17 +1647,6 @@ public sealed partial class SceneMakerMain : Control
         SetStatus(message);
         _errorDialog.DialogText = message;
         _errorDialog.PopupCentered(new Vector2I(560, 180));
-    }
-
-    private int MetersToAuthoringPixels(double meters, string label)
-    {
-        if (_workspaceConfiguration is null)
-            throw new SceneMakerDocumentException("Workspace metrics are required for Template pivot values.");
-        var pixels = (decimal)meters * _workspaceConfiguration.Metrics.AuthoringPixelsPerMeter;
-        if (pixels != decimal.Truncate(pixels))
-            throw new SceneMakerDocumentException(
-                $"{label} must map to a whole authoring pixel; current value is {pixels:0.###} px.");
-        return checked((int)pixels);
     }
 
     private static string ResolveFileSystemPath(string path) =>
