@@ -855,25 +855,16 @@ public sealed partial class SceneMakerMain : Control
 
     private void OpenWorkspaceFinder()
     {
-        if (OS.GetName() == "macOS")
+        if (DisplayServer.HasFeature(DisplayServer.Feature.NativeDialogFile))
         {
-            var startDirectory = WorkspaceDialogStartDirectory()
-                .Replace("\\", "\\\\", StringComparison.Ordinal)
-                .Replace("\"", "\\\"", StringComparison.Ordinal);
-            var script = $"try\n" +
-                         $"set chosenItem to choose file or folder with prompt \"Load Workspace\" default location POSIX file \"{startDirectory}\"\n" +
-                         $"return POSIX path of chosenItem\n" +
-                         $"on error number -128\n" +
-                         $"return \"\"\n" +
-                         $"end try";
-            var output = new Godot.Collections.Array();
-            var exitCode = OS.Execute("osascript", ["-e", script], output, true);
-            if (exitCode == 0 && output.Count > 0)
-            {
-                var selectedPath = output[0].AsString().Trim();
-                if (!string.IsNullOrWhiteSpace(selectedPath))
-                    LoadWorkspaceSelection(selectedPath);
-            }
+            DisplayServer.FileDialogShow(
+                "Load Workspace",
+                WorkspaceDialogStartDirectory(),
+                "",
+                false,
+                DisplayServer.FileDialogMode.OpenAny,
+                ["config.json ; SceneMaker Workspace"],
+                Callable.From<bool, Variant, int>(HandleWorkspaceFinderResult));
             return;
         }
 
@@ -886,6 +877,14 @@ public sealed partial class SceneMakerMain : Control
         _workspaceDirectoryLoadDialog.DirSelected -= LoadWorkspaceFromDirectory;
         _workspaceDirectoryLoadDialog.DirSelected += LoadWorkspaceFromDirectory;
         _workspaceDirectoryLoadDialog.PopupCenteredRatio(0.75f);
+    }
+
+    private void HandleWorkspaceFinderResult(bool accepted, Variant selectedPaths, int _)
+    {
+        if (!accepted) return;
+        var paths = selectedPaths.AsStringArray();
+        if (paths.Length > 0)
+            LoadWorkspaceSelection(paths[0]);
     }
 
     private void ExportCurrentScene()
