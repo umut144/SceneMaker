@@ -154,7 +154,13 @@ public sealed partial class SceneMakerMain : Control
         _settingsButton.Name = "Settings";
         _settingsButton.Text = "Settings";
         _settingsButton.CustomMinimumSize = new Vector2(140f, 0f);
-        _overviewNavigationBar.AddChild(_settingsButton);
+        _settingsButton.SetAnchorsPreset(LayoutPreset.TopRight);
+        _settingsButton.OffsetLeft = -152f;
+        _settingsButton.OffsetTop = 6f;
+        _settingsButton.OffsetRight = -12f;
+        _settingsButton.OffsetBottom = 42f;
+        _settingsButton.ZIndex = 1;
+        AddChild(_settingsButton);
         BuildSettingsMenu();
 
         _contextNavigationBar.Name = "NavigationContext";
@@ -1680,10 +1686,24 @@ public sealed partial class SceneMakerMain : Control
                                           or IOException
                                           or UnauthorizedAccessException)
         {
+            DiscardRecentSession();
             _workspace = null;
             _scene = null;
             _canvas.ShowScene(null);
-            SetStatus($"Recent session could not be restored: {exception.Message}");
+            SetStatus("No compatible recent session was restored.");
+        }
+    }
+
+    private void DiscardRecentSession()
+    {
+        if (_recentSessionPath is null) return;
+        try
+        {
+            if (File.Exists(_recentSessionPath)) File.Delete(_recentSessionPath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            GD.PushWarning($"Could not discard obsolete recent session: {exception.Message}");
         }
     }
 
