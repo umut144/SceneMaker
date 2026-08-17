@@ -1,0 +1,32 @@
+{
+  "schema": "srt.scene_maker_scene",
+  "version": 5,
+  "scene_id": "scene01",
+  "scene_kind": "instance",
+  "coordinate_space": "scene_local_bottom_left_y_up",
+  "size_cells": {
+    "width": 8,
+    "height": 8
+  },
+  "terrain_cells": [
+    {
+      "x": 3,
+      "y": 3,
+      "asset_id": 1003
+    },
+    {
+      "x": 1,
+      "y": 6,
+      "asset_id": 1003
+    },
+    {
+      "x": 2,
+      "y": 6,
+      "asset_id": 1003
+    }
+  ],
+  "placements": [],
+  "transitions": [],
+  "template_definition": null,
+  "template_anchors": []
+}

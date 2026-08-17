@@ -1,0 +1,1228 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Godot;
+using SceneMaker.Core;
+
+namespace SceneMaker.App;
+
+public enum CanvasDrawingTool
+{
+    Selector,
+    Eraser,
+    Pencil,
+    Line,
+    Fill,
+    AnchorPlace,
+    AnchorMove,
+}
+
+public sealed partial class SceneCanvas : Control
+{
+    private static readonly Color CanvasBackground = Color.FromHtml("#101722");
+    private static readonly Color SceneBackground = Color.FromHtml("#182434");
+    private static readonly Color SceneBorder = Color.FromHtml("#78A6C8");
+    private static readonly Color CellGrid = new(0.45f, 0.62f, 0.75f, 0.38f);
+    private static readonly Color AuthoringGrid = new(0.45f, 0.62f, 0.75f, 0.12f);
+    private static readonly Color SelectionColor = Color.FromHtml("#FFD866");
+    private static readonly Color ValidPreviewColor = Color.FromHtml("#FFD866");
+    private static readonly Color InvalidPreviewColor = Color.FromHtml("#FF5C5C");
+    private static readonly Color TemplateAnchorFill = Color.FromHtml("#FFFFFF");
+    private static readonly Color TemplateAnchorBorder = Color.FromHtml("#7B8491");
+    private static readonly Color TemplateAnchorText = Color.FromHtml("#252A31");
+    private static readonly Color TemplatePreviewOutline = Color.FromHtml("#FFFFFF");
+
+    private LoadedScene? _scene;
+    private SceneDocument? _templatePreview;
+    private IReadOnlyList<TemplateTerrainMask> _templatePreviewMasks = [];
+    private IReadOnlyDictionary<uint, Color> _terrainColors = new Dictionary<uint, Color>();
+    private PlacementDisplayCatalog? _placementAssets;
+    private TransitionDisplayCatalog? _transitionAssets;
+    private string _perspectiveName = "Terrain";
+    private CanvasDrawingTool _activeTool = CanvasDrawingTool.Pencil;
+    private string? _selectedPlacementInstanceId;
+    private string? _selectedTransitionInstanceId;
+    private string? _selectedTemplateAnchorId;
+    private string? _draggedTemplateAnchorId;
+    private (int X, int Y)? _draggedTemplateAnchorPosition;
+    private (int X, int Y)? _pointerAuthoringPosition;
+    private (int X, int Y)? _lineStart;
+    private (int X, int Y)? _lineEnd;
+
+    public SceneCanvas()
+    {
+        MouseFilter = MouseFilterEnum.Stop;
+        FocusMode = FocusModeEnum.All;
+        ClipContents = true;
+        SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        SizeFlagsVertical = SizeFlags.ExpandFill;
+        MouseExited += () =>
+        {
+            _pointerAuthoringPosition = null;
+            QueueRedraw();
+        };
+    }
+
+    public CanvasViewState ViewState { get; private set; } = new();
+    public LoadedScene? Scene => _scene;
+    public uint? SelectedTerrainAssetId { get; set; }
+    public uint? SelectedPlacementAssetId { get; set; }
+    public uint? SelectedTransitionAssetId { get; set; }
+    public CanvasDrawingTool ActiveTool
+    {
+        get => _activeTool;
+        set
+        {
+            _activeTool = value;
+            _lineStart = null;
+            _lineEnd = null;
+            _draggedTemplateAnchorId = null;
+            _draggedTemplateAnchorPosition = null;
+            QueueRedraw();
+        }
+    }
+    public string PerspectiveName
+    {
+        get => _perspectiveName;
+        set
+        {
+            _perspectiveName = value;
+            _lineStart = null;
+            _lineEnd = null;
+            _draggedTemplateAnchorId = null;
+            _draggedTemplateAnchorPosition = null;
+            QueueRedraw();
+        }
+    }
+    public event Action? ViewChanged;
+    public event Action<int, int>? TerrainPaintRequested;
+    public event Action<int, int>? TerrainEraseRequested;
+    public event Action<int, int>? TerrainFillRequested;
+    public event Action<int, int>? PlacementRequested;
+    public event Action<int, int, int, int>? PlacementLineRequested;
+    public event Action<int, int>? PlacementEraseRequested;
+    public event Action<int, int>? PlacementSelectRequested;
+    public event Action<int, int>? TransitionRequested;
+    public event Action<int, int, int, int>? TransitionLineRequested;
+    public event Action<int, int>? TransitionEraseRequested;
+    public event Action<int, int>? TransitionSelectRequested;
+    public event Action<int, int>? TemplateAnchorPlaceRequested;
+    public event Action<int, int>? TemplateAnchorSelectRequested;
+    public event Action<string, int, int>? TemplateAnchorMoveRequested;
+    public event Action<string>? ToolStatusRequested;
+
+    public void ConfigureTerrainAssets(TerrainDisplayCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        var colors = new Dictionary<uint, Color>();
+        foreach (var asset in catalog.Assets)
+            colors.Add(asset.AssetId, Color.FromHtml(asset.Color));
+        _terrainColors = colors;
+        QueueRedraw();
+    }
+
+    public void ConfigurePlacementAssets(PlacementDisplayCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        _placementAssets = catalog;
+        QueueRedraw();
+    }
+
+    public void ConfigureTransitionAssets(TransitionDisplayCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        _transitionAssets = catalog;
+        QueueRedraw();
+    }
+
+    public void ShowScene(LoadedScene? scene)
+    {
+        _scene = scene;
+        _templatePreview = null;
+        _templatePreviewMasks = [];
+        ViewState = new CanvasViewState();
+        _selectedPlacementInstanceId = null;
+        _selectedTransitionInstanceId = null;
+        _selectedTemplateAnchorId = null;
+        _draggedTemplateAnchorId = null;
+        _draggedTemplateAnchorPosition = null;
+        _pointerAuthoringPosition = null;
+        _lineStart = null;
+        _lineEnd = null;
+        QueueRedraw();
+        ViewChanged?.Invoke();
+    }
+
+    public void UpdateScene(LoadedScene scene)
+    {
+        _scene = scene;
+        QueueRedraw();
+    }
+
+    public void ShowTemplatePreview(
+        SceneDocument? scene,
+        IReadOnlyList<TemplateTerrainMask>? effectiveTerrainMasks = null)
+    {
+        _templatePreview = scene;
+        _templatePreviewMasks = effectiveTerrainMasks ?? [];
+        QueueRedraw();
+    }
+
+    public void SelectPlacement(string? instanceId)
+    {
+        _selectedPlacementInstanceId = instanceId;
+        QueueRedraw();
+    }
+
+    public void SelectTransition(string? instanceId)
+    {
+        _selectedTransitionInstanceId = instanceId;
+        QueueRedraw();
+    }
+
+    public void SelectTemplateAnchor(string? anchorId)
+    {
+        _selectedTemplateAnchorId = anchorId;
+        QueueRedraw();
+    }
+
+    public void CompleteLinePlacement()
+    {
+        _lineStart = null;
+        _lineEnd = null;
+        QueueRedraw();
+    }
+
+    public override void _GuiInput(InputEvent input)
+    {
+        if (input is InputEventMouseButton mouseButton
+            && mouseButton.ButtonIndex == MouseButton.Left
+            && mouseButton.Pressed)
+        {
+            GrabFocus();
+            UpdatePointer(mouseButton.Position);
+            BeginPrimaryAction(mouseButton.Position);
+        }
+        else if (input is InputEventMouseButton
+                 {
+                     ButtonIndex: MouseButton.Left,
+                     Pressed: false,
+                 })
+        {
+            CompletePrimaryAction();
+        }
+        else if (input is InputEventMouseMotion mouseMotion)
+        {
+            UpdatePointer(mouseMotion.Position);
+            ContinuePrimaryAction(
+                mouseMotion.Position,
+                (mouseMotion.ButtonMask & MouseButtonMask.Left) != 0);
+        }
+    }
+
+    public override void _UnhandledKeyInput(InputEvent input)
+    {
+        if (input is not InputEventKey keyEvent) return;
+
+        if (keyEvent.Pressed
+            && (PerspectiveName is "Placements" or "Transitions")
+            && ActiveTool == CanvasDrawingTool.Line
+            && HandleLineKey(keyEvent.Keycode))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        const double zoomFactor = 1.25;
+        var changed = true;
+        switch (keyEvent.Keycode)
+        {
+            case Key.Q:
+                if (!keyEvent.Pressed) return;
+                ZoomAtCenter(1.0 / zoomFactor);
+                break;
+            case Key.E:
+                if (!keyEvent.Pressed) return;
+                ZoomAtCenter(zoomFactor);
+                break;
+            case Key.W:
+            case Key.A:
+            case Key.S:
+            case Key.D:
+                GetViewport().SetInputAsHandled();
+                return;
+            default:
+                changed = false;
+                break;
+        }
+
+        if (!changed) return;
+        GetViewport().SetInputAsHandled();
+        QueueRedraw();
+        ViewChanged?.Invoke();
+    }
+
+    public override void _Process(double delta)
+    {
+        var inputX = 0.0;
+        var inputY = 0.0;
+        if (HasFocus())
+        {
+            if (Input.IsKeyPressed(Key.A)) inputX += 1.0;
+            if (Input.IsKeyPressed(Key.D)) inputX -= 1.0;
+            if (Input.IsKeyPressed(Key.W)) inputY += 1.0;
+            if (Input.IsKeyPressed(Key.S)) inputY -= 1.0;
+        }
+        if (!ViewState.AdvanceKeyboardPan(inputX, inputY, delta)) return;
+        QueueRedraw();
+        ViewChanged?.Invoke();
+    }
+
+    private bool HandleLineKey(Key key)
+    {
+        if (key == Key.Escape)
+        {
+            if (_lineEnd is not null)
+            {
+                _lineEnd = null;
+                ToolStatusRequested?.Invoke(
+                    "Line Draw: end point released; choose a new end point.");
+            }
+            else if (_lineStart is not null)
+            {
+                _lineStart = null;
+                ToolStatusRequested?.Invoke(
+                    "Line Draw: start point released; choose a new start point.");
+            }
+            else
+            {
+                ToolStatusRequested?.Invoke("Line Draw: choose a start point.");
+            }
+            QueueRedraw();
+            return true;
+        }
+
+        if (key is not (Key.Enter or Key.KpEnter)) return false;
+        if (_lineStart is not { } start || _lineEnd is not { } end)
+        {
+            ToolStatusRequested?.Invoke(
+                _lineStart is null
+                    ? "Line Draw: choose a start point before confirming."
+                    : "Line Draw: choose and lock an end point before confirming.");
+            return true;
+        }
+
+        var preview = CurrentLinePreview(start, end);
+        var invalidCount = preview.Count(candidate => !candidate.Validation.IsValid);
+        if (invalidCount > 0)
+        {
+            ToolStatusRequested?.Invoke(
+                $"Line Draw blocked: {invalidCount} of {preview.Count} {PerspectiveName} previews are invalid.");
+            return true;
+        }
+
+        if (PerspectiveName == "Placements")
+            PlacementLineRequested?.Invoke(start.X, start.Y, end.X, end.Y);
+        else
+            TransitionLineRequested?.Invoke(start.X, start.Y, end.X, end.Y);
+        var warningCount = preview.Count(candidate =>
+            candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain);
+        if (warningCount > 0)
+        {
+            ToolStatusRequested?.Invoke(
+                $"Line Draw authored {preview.Count} {PerspectiveName}; {warningCount} lack complete Terrain and block export.");
+        }
+        return true;
+    }
+
+    public override void _Draw()
+    {
+        DrawRect(new Rect2(Vector2.Zero, Size), CanvasBackground);
+        if (_scene is null) return;
+
+        var document = _templatePreview ?? _scene.Document;
+        var zoom = (float)ViewState.Zoom;
+        var pan = new Vector2((float)ViewState.PanX, (float)ViewState.PanY);
+        var widthAuthoringPixels = AuthoringMetrics.SceneWidthAuthoringPixels(document);
+        var heightAuthoringPixels = AuthoringMetrics.SceneHeightAuthoringPixels(document);
+        var sceneSize = new Vector2(widthAuthoringPixels, heightAuthoringPixels) * zoom;
+        var sceneRect = new Rect2(pan, sceneSize);
+        DrawRect(sceneRect, SceneBackground);
+
+        DrawTerrain(
+            document,
+            pan,
+            zoom,
+            highlighted: PerspectiveName == "Terrain");
+        if (PerspectiveName == "Placements")
+        {
+            DrawTransitions(
+                document,
+                pan,
+                zoom,
+                heightAuthoringPixels,
+                highlighted: false);
+            DrawPlacements(
+                document,
+                pan,
+                zoom,
+                heightAuthoringPixels,
+                highlighted: true);
+            DrawPlacementToolPreview(pan, zoom, heightAuthoringPixels);
+        }
+        else if (PerspectiveName == "Transitions")
+        {
+            DrawPlacements(
+                document,
+                pan,
+                zoom,
+                heightAuthoringPixels,
+                highlighted: false);
+            DrawTransitions(
+                document,
+                pan,
+                zoom,
+                heightAuthoringPixels,
+                highlighted: true);
+            DrawTransitionToolPreview(pan, zoom, heightAuthoringPixels);
+        }
+        else
+        {
+            DrawPlacements(
+                document,
+                pan,
+                zoom,
+                heightAuthoringPixels,
+                highlighted: false);
+            DrawTransitions(
+                document,
+                pan,
+                zoom,
+                heightAuthoringPixels,
+                highlighted: false);
+        }
+
+        var visible = new Rect2(Vector2.Zero, Size).Intersection(sceneRect);
+        if (visible.Size.X > 0f && visible.Size.Y > 0f)
+        {
+            DrawGrid(
+                visible,
+                pan,
+                zoom,
+                widthAuthoringPixels,
+                heightAuthoringPixels,
+                AuthoringMetrics.AuthoringPixelsPerWorldGridCell,
+                CellGrid,
+                1.0f);
+
+            if (zoom >= 4.0f)
+            {
+                DrawGrid(
+                    visible,
+                    pan,
+                    zoom,
+                    widthAuthoringPixels,
+                    heightAuthoringPixels,
+                    stepAuthoringPixels: 1,
+                    AuthoringGrid,
+                    1.0f);
+            }
+        }
+
+        DrawTemplatePreviewOutlines(
+            pan,
+            zoom,
+            document.SizeCells.Height);
+
+        DrawTemplateAnchors(
+            document,
+            pan,
+            zoom,
+            heightAuthoringPixels,
+            highlighted: PerspectiveName == "Scene Templates");
+
+        DrawRect(sceneRect, SceneBorder, filled: false, width: 2.0f);
+    }
+
+    private void ZoomAtCenter(double factor)
+    {
+        ViewState.ZoomBy(factor, Size.X * 0.5, Size.Y * 0.5);
+    }
+
+    private void BeginPrimaryAction(Vector2 screenPosition)
+    {
+        if (_scene is null) return;
+        if (PerspectiveName == "Terrain")
+        {
+            var (cellX, cellY) = TerrainCoordinate(screenPosition);
+            switch (ActiveTool)
+            {
+                case CanvasDrawingTool.Eraser:
+                    TerrainEraseRequested?.Invoke(cellX, cellY);
+                    break;
+                case CanvasDrawingTool.Pencil when SelectedTerrainAssetId is not null:
+                    TerrainPaintRequested?.Invoke(cellX, cellY);
+                    break;
+                case CanvasDrawingTool.Fill when SelectedTerrainAssetId is not null:
+                    TerrainFillRequested?.Invoke(cellX, cellY);
+                    break;
+            }
+        }
+        else if (PerspectiveName == "Placements" && SelectedPlacementAssetId is not null)
+        {
+            var coordinate = AuthoringCoordinate(screenPosition);
+            switch (ActiveTool)
+            {
+                case CanvasDrawingTool.Selector:
+                    PlacementSelectRequested?.Invoke(coordinate.X, coordinate.Y);
+                    break;
+                case CanvasDrawingTool.Eraser:
+                    PlacementEraseRequested?.Invoke(coordinate.X, coordinate.Y);
+                    break;
+                case CanvasDrawingTool.Pencil:
+                    var validation = ValidatePlacement(coordinate);
+                    if (validation.IsValid)
+                    {
+                        PlacementRequested?.Invoke(coordinate.X, coordinate.Y);
+                        if (!validation.HasCompleteTerrain)
+                        {
+                            ToolStatusRequested?.Invoke(
+                                $"Placement authored with export warning: {validation.Warning}");
+                        }
+                    }
+                    else
+                    {
+                        ToolStatusRequested?.Invoke(
+                            $"Pencil Draw blocked: {validation.Reason}");
+                    }
+                    break;
+                case CanvasDrawingTool.Line:
+                    if (_lineStart is null)
+                    {
+                        _lineStart = coordinate;
+                        ToolStatusRequested?.Invoke(
+                            $"Line Draw: start fixed at ({coordinate.X}, {coordinate.Y}); choose an end point.");
+                    }
+                    else if (_lineEnd is null)
+                    {
+                        _lineEnd = coordinate;
+                        var preview = CurrentLinePreview(_lineStart.Value, coordinate);
+                        var invalidCount = preview.Count(candidate => !candidate.Validation.IsValid);
+                        var warningCount = preview.Count(candidate =>
+                            candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain);
+                        ToolStatusRequested?.Invoke(invalidCount > 0
+                            ? $"Line Draw: end fixed; {invalidCount} of {preview.Count} previews are blocked. Press Escape to revise."
+                            : warningCount > 0
+                                ? $"Line Draw: end fixed; {warningCount} of {preview.Count} previews lack Terrain but may be authored. Enter confirms; Escape revises."
+                                : $"Line Draw: end fixed; {preview.Count} previews ready. Press Enter to confirm or Escape to revise.");
+                    }
+                    else
+                    {
+                        ToolStatusRequested?.Invoke(
+                            "Line Draw: end point is fixed. Press Enter to confirm or Escape to revise it.");
+                    }
+                    QueueRedraw();
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+        else if (PerspectiveName == "Transitions" && SelectedTransitionAssetId is not null)
+        {
+            var coordinate = AuthoringCoordinate(screenPosition);
+            switch (ActiveTool)
+            {
+                case CanvasDrawingTool.Selector:
+                    TransitionSelectRequested?.Invoke(coordinate.X, coordinate.Y);
+                    break;
+                case CanvasDrawingTool.Eraser:
+                    TransitionEraseRequested?.Invoke(coordinate.X, coordinate.Y);
+                    break;
+                case CanvasDrawingTool.Pencil:
+                    var validation = ValidateTransition(coordinate);
+                    if (validation.IsValid)
+                    {
+                        TransitionRequested?.Invoke(coordinate.X, coordinate.Y);
+                        if (!validation.HasCompleteTerrain)
+                        {
+                            ToolStatusRequested?.Invoke(
+                                $"Transition authored with export warning: {validation.Warning}");
+                        }
+                    }
+                    else
+                        ToolStatusRequested?.Invoke($"Pencil Draw blocked: {validation.Reason}");
+                    break;
+                case CanvasDrawingTool.Line:
+                    if (_lineStart is null)
+                    {
+                        _lineStart = coordinate;
+                        ToolStatusRequested?.Invoke(
+                            $"Line Draw: start fixed at ({coordinate.X}, {coordinate.Y}); choose an end point.");
+                    }
+                    else if (_lineEnd is null)
+                    {
+                        _lineEnd = coordinate;
+                        var preview = CurrentLinePreview(_lineStart.Value, coordinate);
+                        var invalidCount = preview.Count(candidate => !candidate.Validation.IsValid);
+                        var warningCount = preview.Count(candidate =>
+                            candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain);
+                        ToolStatusRequested?.Invoke(invalidCount > 0
+                            ? $"Line Draw: end fixed; {invalidCount} of {preview.Count} previews are blocked. Press Escape to revise."
+                            : warningCount > 0
+                                ? $"Line Draw: end fixed; {warningCount} of {preview.Count} previews lack Terrain but may be authored. Enter confirms; Escape revises."
+                                : $"Line Draw: end fixed; {preview.Count} previews ready. Press Enter to confirm or Escape to revise.");
+                    }
+                    else
+                    {
+                        ToolStatusRequested?.Invoke(
+                            "Line Draw: end point is fixed. Press Enter to confirm or Escape to revise it.");
+                    }
+                    QueueRedraw();
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+        else if (PerspectiveName == "Scene Templates"
+                 && _scene.Document.SceneKind == SceneKind.Instance)
+        {
+            var coordinate = AuthoringCoordinate(screenPosition);
+            switch (ActiveTool)
+            {
+                case CanvasDrawingTool.AnchorPlace:
+                    TemplateAnchorPlaceRequested?.Invoke(coordinate.X, coordinate.Y);
+                    break;
+                case CanvasDrawingTool.Selector:
+                    TemplateAnchorSelectRequested?.Invoke(coordinate.X, coordinate.Y);
+                    break;
+                case CanvasDrawingTool.AnchorMove:
+                    var anchor = TemplateEditing.FindAnchorAt(
+                        _scene.Document,
+                        coordinate.X,
+                        coordinate.Y);
+                    if (anchor is null)
+                    {
+                        ToolStatusRequested?.Invoke("Move Anchor: no Template Anchor selected.");
+                        break;
+                    }
+                    _selectedTemplateAnchorId = anchor.AnchorId;
+                    _draggedTemplateAnchorId = anchor.AnchorId;
+                    _draggedTemplateAnchorPosition = (
+                        TemplateEditing.SnapToWorldGrid(coordinate.X),
+                        TemplateEditing.SnapToWorldGrid(coordinate.Y));
+                    TemplateAnchorSelectRequested?.Invoke(coordinate.X, coordinate.Y);
+                    QueueRedraw();
+                    break;
+            }
+        }
+    }
+
+    private void ContinuePrimaryAction(Vector2 screenPosition, bool leftButtonPressed)
+    {
+        if (_scene is null) return;
+        if (PerspectiveName == "Terrain" && leftButtonPressed)
+        {
+            var (cellX, cellY) = TerrainCoordinate(screenPosition);
+            if (ActiveTool == CanvasDrawingTool.Pencil && SelectedTerrainAssetId is not null)
+                TerrainPaintRequested?.Invoke(cellX, cellY);
+            else if (ActiveTool == CanvasDrawingTool.Eraser)
+                TerrainEraseRequested?.Invoke(cellX, cellY);
+        }
+        else if (PerspectiveName == "Placements")
+        {
+            var coordinate = AuthoringCoordinate(screenPosition);
+            if (ActiveTool == CanvasDrawingTool.Eraser && leftButtonPressed)
+                PlacementEraseRequested?.Invoke(coordinate.X, coordinate.Y);
+        }
+        else if (PerspectiveName == "Transitions")
+        {
+            var coordinate = AuthoringCoordinate(screenPosition);
+            if (ActiveTool == CanvasDrawingTool.Eraser && leftButtonPressed)
+                TransitionEraseRequested?.Invoke(coordinate.X, coordinate.Y);
+        }
+        else if (PerspectiveName == "Scene Templates"
+                 && ActiveTool == CanvasDrawingTool.AnchorMove
+                 && leftButtonPressed
+                 && _draggedTemplateAnchorId is not null)
+        {
+            var coordinate = AuthoringCoordinate(screenPosition);
+            _draggedTemplateAnchorPosition = (
+                TemplateEditing.SnapToWorldGrid(coordinate.X),
+                TemplateEditing.SnapToWorldGrid(coordinate.Y));
+            QueueRedraw();
+        }
+    }
+
+    private void CompletePrimaryAction()
+    {
+        if (_draggedTemplateAnchorId is not { } anchorId
+            || _draggedTemplateAnchorPosition is not { } position)
+            return;
+        _draggedTemplateAnchorId = null;
+        _draggedTemplateAnchorPosition = null;
+        TemplateAnchorMoveRequested?.Invoke(anchorId, position.X, position.Y);
+        QueueRedraw();
+    }
+
+    private void UpdatePointer(Vector2 screenPosition)
+    {
+        if (_scene is null
+            || PerspectiveName is not ("Placements" or "Transitions" or "Scene Templates"))
+            return;
+        _pointerAuthoringPosition = AuthoringCoordinate(screenPosition);
+        QueueRedraw();
+    }
+
+    private (int X, int Y) TerrainCoordinate(Vector2 screenPosition) =>
+        ViewState.ScreenToTerrainCell(
+            screenPosition.X,
+            screenPosition.Y,
+            _scene!.Document.SizeCells.Height);
+
+    private (int X, int Y) AuthoringCoordinate(Vector2 screenPosition) =>
+        ViewState.ScreenToAuthoringPixel(
+            screenPosition.X,
+            screenPosition.Y,
+            AuthoringMetrics.SceneHeightAuthoringPixels(_scene!.Document));
+
+    private void DrawTerrain(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        bool highlighted)
+    {
+        var cellSize = AuthoringMetrics.AuthoringPixelsPerWorldGridCell * zoom;
+        foreach (var cell in document.TerrainCells)
+        {
+            if (!_terrainColors.TryGetValue(cell.AssetId, out var color)) continue;
+            var rectangle = new Rect2(
+                pan + new Vector2(
+                    cell.X * cellSize,
+                    (document.SizeCells.Height - cell.Y - 1) * cellSize),
+                new Vector2(cellSize, cellSize));
+            if (rectangle.End.X < 0f || rectangle.End.Y < 0f
+                || rectangle.Position.X > Size.X || rectangle.Position.Y > Size.Y)
+                continue;
+            DrawRect(
+                rectangle,
+                highlighted
+                    ? color
+                    : new Color(color.R, color.G, color.B, 0.24f));
+        }
+    }
+
+    private void DrawPlacements(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        bool highlighted)
+    {
+        if (_placementAssets is null) return;
+        foreach (var placement in document.Placements)
+        {
+            var asset = _placementAssets.Resolve(placement.AssetId);
+            var bounds = PlacementEditing.BoundsFor(
+                asset,
+                placement.PositionAuthoringPx.X,
+                placement.PositionAuthoringPx.Y);
+            var rectangle = new Rect2(
+                pan + new Vector2(
+                    bounds.Left * zoom,
+                    (sceneHeightAuthoringPixels - bounds.Top) * zoom),
+                new Vector2(bounds.Width, bounds.Height) * zoom);
+            var color = Color.FromHtml(asset.Color);
+            var outline = highlighted
+                ? color
+                : new Color(color.R, color.G, color.B, 0.32f);
+            DrawRect(
+                rectangle,
+                new Color(color.R, color.G, color.B, highlighted ? 0.38f : 0.10f));
+            DrawRect(
+                rectangle,
+                highlighted && placement.InstanceId == _selectedPlacementInstanceId
+                    ? SelectionColor
+                    : outline,
+                filled: false,
+                width: highlighted && placement.InstanceId == _selectedPlacementInstanceId
+                    ? 3f
+                    : highlighted ? 2f : 1f);
+            if (!TerrainCoverage.IsComplete(document, bounds))
+                DrawDashedRectangle(rectangle, InvalidPreviewColor, 2.5f);
+
+            var anchorSize = Math.Max(3f, zoom);
+            var anchor = pan + new Vector2(
+                placement.PositionAuthoringPx.X * zoom,
+                (sceneHeightAuthoringPixels - placement.PositionAuthoringPx.Y) * zoom);
+            DrawRect(
+                new Rect2(
+                    anchor - new Vector2(anchorSize * 0.5f, anchorSize * 0.5f),
+                    new Vector2(anchorSize, anchorSize)),
+                outline);
+        }
+    }
+
+    private void DrawTransitions(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        bool highlighted)
+    {
+        if (_transitionAssets is null) return;
+        foreach (var transition in document.Transitions)
+        {
+            var asset = _transitionAssets.Resolve(transition.AssetId);
+            var bounds = TransitionEditing.BoundsFor(
+                asset,
+                transition.PositionAuthoringPx.X,
+                transition.PositionAuthoringPx.Y);
+            var rectangle = CanvasRectangle(
+                bounds,
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels);
+            var color = Color.FromHtml(asset.Color);
+            var outline = highlighted
+                ? color
+                : new Color(color.R, color.G, color.B, 0.32f);
+            DrawRect(
+                rectangle,
+                new Color(color.R, color.G, color.B, highlighted ? 0.38f : 0.10f));
+            DrawRect(
+                rectangle,
+                highlighted && transition.InstanceId == _selectedTransitionInstanceId
+                    ? SelectionColor
+                    : outline,
+                filled: false,
+                width: highlighted && transition.InstanceId == _selectedTransitionInstanceId
+                    ? 3f
+                    : highlighted ? 2f : 1f);
+            if (!TerrainCoverage.IsComplete(document, bounds))
+                DrawDashedRectangle(rectangle, InvalidPreviewColor, 2.5f);
+            DrawAnchor(
+                transition.PositionAuthoringPx.X,
+                transition.PositionAuthoringPx.Y,
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels,
+                outline);
+        }
+    }
+
+    private void DrawTemplateAnchors(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        bool highlighted)
+    {
+        if (document.SceneKind == SceneKind.Template
+            && document.TemplateDefinition is { } definition)
+        {
+            DrawTemplateAnchor(
+                definition.InsertionAnchorAuthoringPx,
+                $"T{definition.GroupNumber}",
+                selected: false,
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels,
+                highlighted);
+            return;
+        }
+
+        foreach (var anchor in document.TemplateAnchors)
+        {
+            var position = anchor.AnchorId == _draggedTemplateAnchorId
+                           && _draggedTemplateAnchorPosition is { } preview
+                ? new AuthoringPixelPosition { X = preview.X, Y = preview.Y }
+                : anchor.PositionAuthoringPx;
+            DrawTemplateAnchor(
+                position,
+                anchor.GroupNumber.ToString(),
+                anchor.AnchorId == _selectedTemplateAnchorId,
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels,
+                highlighted);
+        }
+
+        if (highlighted
+            && ActiveTool == CanvasDrawingTool.AnchorPlace
+            && _pointerAuthoringPosition is { } pointer)
+        {
+            DrawTemplateAnchor(
+                new AuthoringPixelPosition
+                {
+                    X = TemplateEditing.SnapToWorldGrid(pointer.X),
+                    Y = TemplateEditing.SnapToWorldGrid(pointer.Y),
+                },
+                "+",
+                selected: true,
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels,
+                highlighted: true,
+                preview: true);
+        }
+    }
+
+    private void DrawTemplatePreviewOutlines(
+        Vector2 pan,
+        float zoom,
+        int sceneHeightCells)
+    {
+        if (_templatePreview is null || _templatePreviewMasks.Count == 0) return;
+        var cellSize = AuthoringMetrics.AuthoringPixelsPerWorldGridCell * zoom;
+        foreach (var mask in _templatePreviewMasks)
+        {
+            var cells = mask.Cells.Select(static cell => (cell.X, cell.Y)).ToHashSet();
+            foreach (var cell in cells)
+            {
+                var topLeft = pan + new Vector2(
+                    cell.X * cellSize,
+                    (sceneHeightCells - cell.Y - 1) * cellSize);
+                var topRight = topLeft + new Vector2(cellSize, 0f);
+                var bottomLeft = topLeft + new Vector2(0f, cellSize);
+                var bottomRight = topLeft + new Vector2(cellSize, cellSize);
+                if (!cells.Contains((cell.X, cell.Y + 1)))
+                    DrawDashedSegment(topLeft, topRight, TemplatePreviewOutline, 2f);
+                if (!cells.Contains((cell.X + 1, cell.Y)))
+                    DrawDashedSegment(topRight, bottomRight, TemplatePreviewOutline, 2f);
+                if (!cells.Contains((cell.X, cell.Y - 1)))
+                    DrawDashedSegment(bottomRight, bottomLeft, TemplatePreviewOutline, 2f);
+                if (!cells.Contains((cell.X - 1, cell.Y)))
+                    DrawDashedSegment(bottomLeft, topLeft, TemplatePreviewOutline, 2f);
+            }
+        }
+    }
+
+    private void DrawTemplateAnchor(
+        AuthoringPixelPosition position,
+        string label,
+        bool selected,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        bool highlighted,
+        bool preview = false)
+    {
+        var size = TemplateEditing.AnchorVisualSizeAuthoringPixels * zoom;
+        var center = pan + new Vector2(
+            position.X * zoom,
+            (sceneHeightAuthoringPixels - position.Y) * zoom);
+        var rectangle = new Rect2(
+            center - new Vector2(size * 0.5f, size * 0.5f),
+            new Vector2(size, size));
+        var alpha = highlighted ? preview ? 0.65f : 1f : 0.28f;
+        var fill = new Color(
+            TemplateAnchorFill.R,
+            TemplateAnchorFill.G,
+            TemplateAnchorFill.B,
+            alpha);
+        var borderBase = selected ? SelectionColor : TemplateAnchorBorder;
+        var border = new Color(borderBase.R, borderBase.G, borderBase.B, alpha);
+        DrawRect(rectangle, fill);
+        DrawRect(rectangle, border, filled: false, width: selected ? 3f : 2f);
+
+        if (size < 18f) return;
+        var font = ThemeDB.FallbackFont;
+        var fontSize = Math.Clamp((int)(14f * zoom), 10, 28);
+        var textSize = font.GetStringSize(label, HorizontalAlignment.Left, -1f, fontSize);
+        var baseline = center + new Vector2(-textSize.X * 0.5f, textSize.Y * 0.32f);
+        var textColor = new Color(
+            TemplateAnchorText.R,
+            TemplateAnchorText.G,
+            TemplateAnchorText.B,
+            alpha);
+        DrawString(font, baseline, label, HorizontalAlignment.Left, -1f, fontSize, textColor);
+    }
+
+    private void DrawPlacementToolPreview(
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        if (_placementAssets is null
+            || SelectedPlacementAssetId is not { } assetId)
+            return;
+
+        var asset = _placementAssets.Resolve(assetId);
+        IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> preview;
+        if (ActiveTool == CanvasDrawingTool.Pencil)
+        {
+            if (_pointerAuthoringPosition is not { } pointer) return;
+            preview = [(pointer.X, pointer.Y, ValidatePlacement(pointer))];
+        }
+        else if (ActiveTool == CanvasDrawingTool.Line)
+        {
+            if (_lineStart is not { } start)
+            {
+                if (_pointerAuthoringPosition is not { } pointer) return;
+                preview = [(pointer.X, pointer.Y, ValidatePlacement(pointer))];
+            }
+            else
+            {
+                var endpoint = _lineEnd ?? _pointerAuthoringPosition;
+                if (endpoint is null) return;
+                preview = PlacementLinePreview(start, endpoint.Value);
+            }
+        }
+        else
+        {
+            return;
+        }
+
+        foreach (var candidate in preview)
+        {
+            var bounds = PlacementEditing.BoundsFor(asset, candidate.X, candidate.Y);
+            var rectangle = new Rect2(
+                pan + new Vector2(
+                    bounds.Left * zoom,
+                    (sceneHeightAuthoringPixels - bounds.Top) * zoom),
+                new Vector2(bounds.Width, bounds.Height) * zoom);
+            var color = candidate.Validation.IsValid
+                ? candidate.Validation.HasCompleteTerrain
+                    ? ValidPreviewColor
+                    : InvalidPreviewColor
+                : InvalidPreviewColor;
+            DrawRect(
+                rectangle,
+                new Color(color.R, color.G, color.B,
+                    candidate.Validation.HasCompleteTerrain ? 0.22f : 0.08f));
+            if (candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain)
+                DrawDashedRectangle(rectangle, color, 2f);
+            else
+                DrawRect(rectangle, color, filled: false, width: 2f);
+
+            var anchorSize = Math.Max(3f, zoom);
+            var anchor = pan + new Vector2(
+                candidate.X * zoom,
+                (sceneHeightAuthoringPixels - candidate.Y) * zoom);
+            DrawRect(
+                new Rect2(
+                    anchor - new Vector2(anchorSize * 0.5f, anchorSize * 0.5f),
+                    new Vector2(anchorSize, anchorSize)),
+                color);
+        }
+    }
+
+    private void DrawTransitionToolPreview(
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        if (_transitionAssets is null
+            || SelectedTransitionAssetId is not { } assetId)
+            return;
+
+        var asset = _transitionAssets.Resolve(assetId);
+        IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> preview;
+        if (ActiveTool == CanvasDrawingTool.Pencil)
+        {
+            if (_pointerAuthoringPosition is not { } pointer) return;
+            preview = [(pointer.X, pointer.Y, ValidateTransition(pointer))];
+        }
+        else if (ActiveTool == CanvasDrawingTool.Line)
+        {
+            if (_lineStart is not { } start)
+            {
+                if (_pointerAuthoringPosition is not { } pointer) return;
+                preview = [(pointer.X, pointer.Y, ValidateTransition(pointer))];
+            }
+            else
+            {
+                var endpoint = _lineEnd ?? _pointerAuthoringPosition;
+                if (endpoint is null) return;
+                preview = TransitionLinePreview(start, endpoint.Value);
+            }
+        }
+        else
+        {
+            return;
+        }
+
+        foreach (var candidate in preview)
+        {
+            var bounds = TransitionEditing.BoundsFor(asset, candidate.X, candidate.Y);
+            var rectangle = CanvasRectangle(
+                bounds,
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels);
+            var color = candidate.Validation.IsValid
+                ? candidate.Validation.HasCompleteTerrain
+                    ? ValidPreviewColor
+                    : InvalidPreviewColor
+                : InvalidPreviewColor;
+            DrawRect(
+                rectangle,
+                new Color(color.R, color.G, color.B,
+                    candidate.Validation.HasCompleteTerrain ? 0.22f : 0.08f));
+            if (candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain)
+                DrawDashedRectangle(rectangle, color, 2f);
+            else
+                DrawRect(rectangle, color, filled: false, width: 2f);
+            DrawAnchor(
+                candidate.X,
+                candidate.Y,
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels,
+                color);
+        }
+    }
+
+    private PlacementValidationResult ValidatePlacement((int X, int Y) coordinate) =>
+        PlacementEditing.ValidateCandidate(
+            _scene!.Document,
+            _placementAssets!,
+            _transitionAssets!,
+            coordinate.X,
+            coordinate.Y,
+            SelectedPlacementAssetId!.Value);
+
+    private PlacementValidationResult ValidateTransition((int X, int Y) coordinate) =>
+        TransitionEditing.ValidateCandidate(
+            _scene!.Document,
+            _placementAssets!,
+            _transitionAssets!,
+            coordinate.X,
+            coordinate.Y,
+            SelectedTransitionAssetId!.Value);
+
+    private IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> PlacementLinePreview(
+        (int X, int Y) start,
+        (int X, int Y) end)
+    {
+        var asset = _placementAssets!.Resolve(SelectedPlacementAssetId!.Value);
+        return PlacementEditing.LineAnchors(asset, start.X, start.Y, end.X, end.Y)
+            .Select(anchor => (
+                anchor.X,
+                anchor.Y,
+                ValidatePlacement(anchor)))
+            .ToList();
+    }
+
+    private IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> TransitionLinePreview(
+        (int X, int Y) start,
+        (int X, int Y) end)
+    {
+        var asset = _transitionAssets!.Resolve(SelectedTransitionAssetId!.Value);
+        return TransitionEditing.LineAnchors(asset, start.X, start.Y, end.X, end.Y)
+            .Select(anchor => (
+                anchor.X,
+                anchor.Y,
+                ValidateTransition(anchor)))
+            .ToList();
+    }
+
+    private IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> CurrentLinePreview(
+        (int X, int Y) start,
+        (int X, int Y) end) => PerspectiveName == "Placements"
+            ? PlacementLinePreview(start, end)
+            : TransitionLinePreview(start, end);
+
+    private static Rect2 CanvasRectangle(
+        PlacementBoundsAuthoringPixels bounds,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels) => new(
+            pan + new Vector2(
+                bounds.Left * zoom,
+                (sceneHeightAuthoringPixels - bounds.Top) * zoom),
+            new Vector2(bounds.Width, bounds.Height) * zoom);
+
+    private void DrawAnchor(
+        int anchorX,
+        int anchorY,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        Color color)
+    {
+        var anchorSize = Math.Max(3f, zoom);
+        var anchor = pan + new Vector2(
+            anchorX * zoom,
+            (sceneHeightAuthoringPixels - anchorY) * zoom);
+        DrawRect(
+            new Rect2(
+                anchor - new Vector2(anchorSize * 0.5f, anchorSize * 0.5f),
+                new Vector2(anchorSize, anchorSize)),
+            color);
+    }
+
+    private void DrawDashedRectangle(Rect2 rectangle, Color color, float width)
+    {
+        var topLeft = rectangle.Position;
+        var topRight = new Vector2(rectangle.End.X, rectangle.Position.Y);
+        var bottomRight = rectangle.End;
+        var bottomLeft = new Vector2(rectangle.Position.X, rectangle.End.Y);
+        DrawDashedSegment(topLeft, topRight, color, width);
+        DrawDashedSegment(topRight, bottomRight, color, width);
+        DrawDashedSegment(bottomRight, bottomLeft, color, width);
+        DrawDashedSegment(bottomLeft, topLeft, color, width);
+    }
+
+    private void DrawDashedSegment(Vector2 from, Vector2 to, Color color, float width)
+    {
+        const float dashLength = 8f;
+        const float gapLength = 5f;
+        var displacement = to - from;
+        var length = displacement.Length();
+        if (length <= 0f) return;
+        var direction = displacement / length;
+        for (var offset = 0f; offset < length; offset += dashLength + gapLength)
+        {
+            DrawLine(
+                from + (direction * offset),
+                from + (direction * Math.Min(offset + dashLength, length)),
+                color,
+                width);
+        }
+    }
+
+    private void DrawGrid(
+        Rect2 visible,
+        Vector2 pan,
+        float zoom,
+        int sceneWidth,
+        int sceneHeight,
+        int stepAuthoringPixels,
+        Color color,
+        float width)
+    {
+        var logicalLeft = Math.Clamp((visible.Position.X - pan.X) / zoom, 0f, sceneWidth);
+        var logicalRight = Math.Clamp((visible.End.X - pan.X) / zoom, 0f, sceneWidth);
+        var logicalTop = Math.Clamp((visible.Position.Y - pan.Y) / zoom, 0f, sceneHeight);
+        var logicalBottom = Math.Clamp((visible.End.Y - pan.Y) / zoom, 0f, sceneHeight);
+
+        var firstX = Math.Max(0, (int)MathF.Floor(logicalLeft / stepAuthoringPixels));
+        var lastX = Math.Min(
+            sceneWidth / stepAuthoringPixels,
+            (int)MathF.Ceiling(logicalRight / stepAuthoringPixels));
+        for (var index = firstX; index <= lastX; index++)
+        {
+            var screenX = pan.X + (index * stepAuthoringPixels * zoom);
+            DrawLine(
+                new Vector2(screenX, visible.Position.Y),
+                new Vector2(screenX, visible.End.Y),
+                color,
+                width);
+        }
+
+        var firstY = Math.Max(0, (int)MathF.Floor(logicalTop / stepAuthoringPixels));
+        var lastY = Math.Min(
+            sceneHeight / stepAuthoringPixels,
+            (int)MathF.Ceiling(logicalBottom / stepAuthoringPixels));
+        for (var index = firstY; index <= lastY; index++)
+        {
+            var screenY = pan.Y + (index * stepAuthoringPixels * zoom);
+            DrawLine(
+                new Vector2(visible.Position.X, screenY),
+                new Vector2(visible.End.X, screenY),
+                color,
+                width);
+        }
+    }
+}

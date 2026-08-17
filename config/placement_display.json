@@ -1,0 +1,10 @@
+{
+  "schema": "srt.scene_maker_placement_display",
+  "version": 1,
+  "assets": [
+    {
+      "asset_id": 2,
+      "color": "#2E7D32"
+    }
+  ]
+}
