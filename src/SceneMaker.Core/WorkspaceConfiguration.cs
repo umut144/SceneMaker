@@ -173,7 +173,7 @@ public static class WorkspaceConfigurationStore
           "version": {{Version}},
           "workspace_key": "{{workspaceKey}}",
           "grid": {
-            "terrain_cell_meters": 0.5,
+            "terrain_cell_meters": 1.0,
             "authoring_pixels_per_meter": 32,
             "game_pixels_per_meter": 128
           },

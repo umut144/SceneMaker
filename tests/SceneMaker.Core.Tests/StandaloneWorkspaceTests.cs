@@ -211,8 +211,12 @@ public sealed class StandaloneWorkspaceTests
         WorkspaceConfigurationStore.CreateDefault(workspace.DirectoryPath, workspace.WorkspaceKey);
 
         var loaded = WorkspaceStore.Load(workspace.DirectoryPath, catalog);
+        var configuration = WorkspaceConfigurationStore.Load(workspace.DirectoryPath, catalog);
 
         Assert.Equal("game04", loaded.WorkspaceKey);
+        Assert.Equal(1m, configuration.Grid.TerrainCellMeters);
+        Assert.Equal(32, configuration.Metrics.AuthoringPixelsPerTerrainCell);
+        Assert.Equal(128m, configuration.Metrics.GamePixelsPerMeter);
         Assert.False(File.Exists(Path.Combine(workspace.DirectoryPath, "workspace.json")));
         Assert.True(File.Exists(Path.Combine(workspace.DirectoryPath, "config.json")));
     }
