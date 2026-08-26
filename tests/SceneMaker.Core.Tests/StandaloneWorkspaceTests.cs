@@ -18,7 +18,7 @@ public sealed class StandaloneWorkspaceTests
           "grid": {
             "terrain_cell_meters": 0.5,
             "authoring_pixels_per_meter": 32,
-            "game_pixels_per_meter": 128
+            "game_pixels_per_meter": 192
           },
           "assets": [
             { "asset_key": "terrain.grass", "color": "#99E550" },
@@ -66,7 +66,7 @@ public sealed class StandaloneWorkspaceTests
           "grid": {
             "terrain_cell_meters": 0.5,
             "authoring_pixels_per_meter": 32,
-            "game_pixels_per_meter": 128
+            "game_pixels_per_meter": 192
           },
           "assets": [
             { "asset_key": "terrain.grass", "color": "#99E550" },
@@ -117,7 +117,7 @@ public sealed class StandaloneWorkspaceTests
           "grid": {
             "terrain_cell_meters": 0.5,
             "authoring_pixels_per_meter": 32,
-            "game_pixels_per_meter": 128
+            "game_pixels_per_meter": 192
           },
           "assets": [
             {
@@ -216,7 +216,7 @@ public sealed class StandaloneWorkspaceTests
         Assert.Equal("game04", loaded.WorkspaceKey);
         Assert.Equal(1m, configuration.Grid.TerrainCellMeters);
         Assert.Equal(32, configuration.Metrics.AuthoringPixelsPerTerrainCell);
-        Assert.Equal(128m, configuration.Metrics.GamePixelsPerMeter);
+        Assert.Equal(192m, configuration.Metrics.GamePixelsPerMeter);
         Assert.False(File.Exists(Path.Combine(workspace.DirectoryPath, "workspace.json")));
         Assert.True(File.Exists(Path.Combine(workspace.DirectoryPath, "config.json")));
     }

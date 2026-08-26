@@ -5,7 +5,7 @@
   "grid": {
     "terrain_cell_meters": 1.0,
     "authoring_pixels_per_meter": 32,
-    "game_pixels_per_meter": 128
+    "game_pixels_per_meter": 192
   },
   "assets": [
     {

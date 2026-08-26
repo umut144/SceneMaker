@@ -1,0 +1,22 @@
+{
+  "schema": "srt.scene_maker_scene",
+  "version": 5,
+  "scene_id": "test",
+  "scene_kind": "template",
+  "coordinate_space": "scene_local_bottom_left_y_up",
+  "size_cells": {
+    "width": 8,
+    "height": 8
+  },
+  "terrain_cells": [],
+  "placements": [],
+  "transitions": [],
+  "template_definition": {
+    "group_number": 1,
+    "insertion_anchor_authoring_px": {
+      "x": 64,
+      "y": 64
+    }
+  },
+  "template_anchors": []
+}

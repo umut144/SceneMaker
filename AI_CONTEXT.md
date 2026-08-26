@@ -13,7 +13,7 @@ anchors. Scenes store only semantic terrain, placements, transitions, template
 anchors, and their `asset_key`s.
 
 New workspace manifests explicitly start with 1 m terrain cells at 32
-authoring pixels and 128 game pixels per meter. These values remain authored
+authoring pixels and 192 game pixels per meter. These values remain authored
 workspace data rather than an implicit reader or export fallback.
 
 SceneMaker has no runtime dependency. Later consumers receive a small generic
