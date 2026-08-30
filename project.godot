@@ -11,17 +11,16 @@ config_version=5
 [application]
 
 config/name="SceneMaker"
-config/icon="res://assets/scenemaker.svg"
 run/main_scene="res://src/SceneMaker.App/SceneMakerMain.tscn"
 config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
+config/icon="res://assets/scenemaker.svg"
 
 [display]
 
-window/size/viewport_width=1280
-window/size/viewport_height=800
+window/size/viewport_width=1920
+window/size/viewport_height=1200
 window/size/window_width_override=1280
 window/size/window_height_override=800
-window/size/mode=2
 window/stretch/mode="canvas_items"
 
 [dotnet]
