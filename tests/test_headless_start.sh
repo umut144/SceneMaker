@@ -15,7 +15,7 @@ output=$(
     2>&1
 )
 printf '%s\n' "$output"
-printf '%s\n' "$output" | grep -Fq "SceneMaker Slice 5 Portal transition authoring ready"
+printf '%s\n' "$output" | grep -Fq "SceneMaker standalone authoring tool ready"
 if printf '%s\n' "$output" | grep -E "WARNING:|ERROR:" >/dev/null; then
   exit 1
 fi

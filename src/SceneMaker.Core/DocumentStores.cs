@@ -39,7 +39,7 @@ public static class WorkspaceStore
         }
     }
 
-    public static LoadedWorkspace Load(string workspaceDirectory, SceneMakerCatalog catalog)
+    public static LoadedWorkspace Load(string workspaceDirectory, PolyToolsCatalog catalog)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
         ArgumentNullException.ThrowIfNull(catalog);

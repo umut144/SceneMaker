@@ -4,6 +4,13 @@ using System.Text.Json.Serialization;
 
 namespace SceneMaker.Core;
 
+public enum AuthoringAssetRole
+{
+    Terrain,
+    Prop,
+    Transition,
+}
+
 public sealed record WorkspaceGridConfiguration(
     decimal TerrainCellMeters,
     decimal AuthoringPixelsPerMeter,
@@ -12,10 +19,7 @@ public sealed record WorkspaceGridConfiguration(
 public sealed record WorkspaceAssetProfile(
     string AssetKey,
     string Color,
-    decimal? FootprintWidthMeters,
-    decimal? FootprintHeightMeters,
-    decimal? AnchorXMeters,
-    decimal? AnchorYMeters);
+    AuthoringAssetRole? AuthoringRole = null);
 
 public sealed class WorkspaceConfiguration
 {
@@ -41,11 +45,21 @@ public sealed class WorkspaceConfiguration
         _assetProfiles.TryGetValue(assetKey, out var profile)
             ? profile
             : throw new SceneMakerDocumentException(
-                $"Workspace '{WorkspaceKey}' does not configure asset_key '{assetKey}'.");
+                $"Workspace '{WorkspaceKey}' does not enable asset_key '{assetKey}'.");
+
+    public AuthoringAssetRole EffectiveRole(
+        WorkspaceAssetProfile profile,
+        PolyToolsCatalogAsset asset) => profile.AuthoringRole ?? asset.AssetType switch
+    {
+        PolyToolsAssetType.Terrain => AuthoringAssetRole.Terrain,
+        PolyToolsAssetType.Prop => AuthoringAssetRole.Prop,
+        _ => throw new SceneMakerDocumentException(
+            $"PolyTools asset '{asset.AssetKey}' has no supported authoring role."),
+    };
 
     public WorkspaceConfiguration WithAssetProfiles(
         IEnumerable<WorkspaceAssetProfile> assetProfiles,
-        SceneMakerCatalog catalog) =>
+        PolyToolsCatalog catalog) =>
         WorkspaceConfigurationStore.Create(WorkspaceKey, Grid, assetProfiles, catalog);
 }
 
@@ -53,16 +67,19 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 1;
+    public const int Version = 2;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         PropertyNameCaseInsensitive = false,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
     };
 
-    public static WorkspaceConfiguration Load(string workspaceDirectory, SceneMakerCatalog catalog)
+    public static WorkspaceConfiguration Load(string workspaceDirectory, PolyToolsCatalog catalog)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -89,7 +106,7 @@ public static class WorkspaceConfigurationStore
         string workspaceKey,
         WorkspaceGridConfiguration grid,
         IEnumerable<WorkspaceAssetProfile> profiles,
-        SceneMakerCatalog catalog)
+        PolyToolsCatalog catalog)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceKey);
         ArgumentNullException.ThrowIfNull(grid);
@@ -110,16 +127,7 @@ public static class WorkspaceConfigurationStore
             {
                 AssetKey = profile.AssetKey,
                 Color = profile.Color,
-                FootprintMeters = profile.FootprintWidthMeters is null && profile.FootprintHeightMeters is null ? null : new SizeDocument
-                {
-                    Width = profile.FootprintWidthMeters ?? 0m,
-                    Height = profile.FootprintHeightMeters ?? 0m,
-                },
-                AnchorMeters = profile.AnchorXMeters is null && profile.AnchorYMeters is null ? null : new PointDocument
-                {
-                    X = profile.AnchorXMeters ?? -1m,
-                    Y = profile.AnchorYMeters ?? -1m,
-                },
+                AuthoringRole = profile.AuthoringRole,
             }).ToList(),
         };
         return Parse(document, catalog);
@@ -144,16 +152,7 @@ public static class WorkspaceConfigurationStore
             {
                 AssetKey = profile.AssetKey,
                 Color = profile.Color,
-                FootprintMeters = profile.FootprintWidthMeters is null && profile.FootprintHeightMeters is null ? null : new SizeDocument
-                {
-                    Width = profile.FootprintWidthMeters ?? 0m,
-                    Height = profile.FootprintHeightMeters ?? 0m,
-                },
-                AnchorMeters = profile.AnchorXMeters is null && profile.AnchorYMeters is null ? null : new PointDocument
-                {
-                    X = profile.AnchorXMeters ?? -1m,
-                    Y = profile.AnchorYMeters ?? -1m,
-                },
+                AuthoringRole = profile.AuthoringRole,
             }).OrderBy(static entry => entry.AssetKey, StringComparer.Ordinal).ToList(),
         };
         var path = Path.Combine(Path.GetFullPath(workspaceDirectory), FileName);
@@ -183,43 +182,53 @@ public static class WorkspaceConfigurationStore
         AtomicTextFile.WriteNew(path, document);
     }
 
-    private static void ValidateProfile(AssetProfileDocument entry, SceneMakerCatalogAsset asset)
+    private static void ValidateProfile(
+        AssetProfileDocument entry,
+        PolyToolsCatalogAsset asset)
     {
         if (string.IsNullOrWhiteSpace(entry.AssetKey)
             || string.IsNullOrWhiteSpace(entry.Color)
             || entry.Color.Length != 7
-            || entry.Color[0] != '#')
+            || entry.Color[0] != '#'
+            || !entry.Color[1..].All(Uri.IsHexDigit))
         {
             throw new SceneMakerDocumentException(
                 "Every Workspace asset profile requires asset_key and a #RRGGBB color.");
         }
-        if (asset.Category == SceneMakerAssetCategory.Terrain)
-        {
-            if (entry.FootprintMeters is not null || entry.AnchorMeters is not null)
-                throw new SceneMakerDocumentException(
-                    $"Terrain asset '{asset.AssetKey}' must not define a footprint or anchor.");
-            return;
-        }
-        if (entry.FootprintMeters is null || entry.AnchorMeters is null
-            || entry.FootprintMeters.Width <= 0m || entry.FootprintMeters.Height <= 0m
-            || entry.AnchorMeters.X < 0m || entry.AnchorMeters.Y < 0m
-            || entry.AnchorMeters.X > entry.FootprintMeters.Width
-            || entry.AnchorMeters.Y > entry.FootprintMeters.Height)
+
+        if (asset.AssetType == PolyToolsAssetType.Terrain
+            && entry.AuthoringRole is not null and not AuthoringAssetRole.Terrain)
         {
             throw new SceneMakerDocumentException(
-                $"{asset.Category} asset '{asset.AssetKey}' requires a positive footprint and an in-bounds anchor.");
+                $"PolyTools terrain '{asset.AssetKey}' cannot be assigned a Prop or Transition role.");
+        }
+        if (asset.AssetType == PolyToolsAssetType.Prop
+            && entry.AuthoringRole == AuthoringAssetRole.Terrain)
+        {
+            throw new SceneMakerDocumentException(
+                $"PolyTools prop '{asset.AssetKey}' cannot be assigned a Terrain role.");
         }
     }
 
-    private static WorkspaceConfiguration Parse(ConfigurationDocument document, SceneMakerCatalog catalog)
+    private static WorkspaceConfiguration Parse(
+        ConfigurationDocument document,
+        PolyToolsCatalog catalog)
     {
         if (document.Format != Format || document.Version != Version)
             throw new SceneMakerDocumentException($"Workspace config must use {Format} version {Version}.");
         if (string.IsNullOrWhiteSpace(document.WorkspaceKey))
             throw new SceneMakerDocumentException("Workspace config requires workspace_key.");
+        if (!string.Equals(document.WorkspaceKey, catalog.WorldKey, StringComparison.Ordinal))
+        {
+            throw new SceneMakerDocumentException(
+                $"Workspace '{document.WorkspaceKey}' requires PolyTools world '{document.WorkspaceKey}', not '{catalog.WorldKey}'.");
+        }
         if (document.Grid is null || document.Grid.TerrainCellMeters <= 0m
             || document.Grid.AuthoringPixelsPerMeter <= 0m || document.Grid.GamePixelsPerMeter <= 0m)
-            throw new SceneMakerDocumentException("Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, and game_pixels_per_meter.");
+        {
+            throw new SceneMakerDocumentException(
+                "Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, and game_pixels_per_meter.");
+        }
         var grid = new WorkspaceGridConfiguration(
             document.Grid.TerrainCellMeters,
             document.Grid.AuthoringPixelsPerMeter,
@@ -227,16 +236,21 @@ public static class WorkspaceConfigurationStore
         _ = new WorkspaceMetrics(grid);
         if (document.Assets is null)
             throw new SceneMakerDocumentException("Workspace config requires an assets array.");
+
         SortedDictionary<string, WorkspaceAssetProfile> profiles = new(StringComparer.Ordinal);
         foreach (var entry in document.Assets)
         {
             var asset = catalog.Resolve(entry.AssetKey);
             ValidateProfile(entry, asset);
-            var profile = new WorkspaceAssetProfile(entry.AssetKey, entry.Color,
-                entry.FootprintMeters?.Width, entry.FootprintMeters?.Height,
-                entry.AnchorMeters?.X, entry.AnchorMeters?.Y);
+            var profile = new WorkspaceAssetProfile(
+                entry.AssetKey,
+                entry.Color,
+                entry.AuthoringRole);
             if (!profiles.TryAdd(entry.AssetKey, profile))
-                throw new SceneMakerDocumentException($"Workspace config contains duplicate asset_key '{entry.AssetKey}'.");
+            {
+                throw new SceneMakerDocumentException(
+                    $"Workspace config contains duplicate asset_key '{entry.AssetKey}'.");
+            }
         }
         return new WorkspaceConfiguration(document.WorkspaceKey, grid, profiles);
     }
@@ -261,19 +275,6 @@ public static class WorkspaceConfigurationStore
     {
         public required string AssetKey { get; init; }
         public required string Color { get; init; }
-        public SizeDocument? FootprintMeters { get; init; }
-        public PointDocument? AnchorMeters { get; init; }
-    }
-
-    private sealed record SizeDocument
-    {
-        public required decimal Width { get; init; }
-        public required decimal Height { get; init; }
-    }
-
-    private sealed record PointDocument
-    {
-        public required decimal X { get; init; }
-        public required decimal Y { get; init; }
+        public AuthoringAssetRole? AuthoringRole { get; init; }
     }
 }

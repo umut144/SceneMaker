@@ -67,7 +67,7 @@ public static class TemplateComposition
             var translation = Translation(candidate.Anchor, candidate.Template, placementAssets.Metrics);
             var mask = TranslateTerrainMask(baseScene, candidate.Template, translation);
             masks.Add((candidate, mask));
-            RejectPortalMaskIntersection(
+            RejectTransitionMaskIntersection(
                 transitions,
                 transitionAssets,
                 mask,
@@ -294,7 +294,7 @@ public static class TemplateComposition
         return false;
     }
 
-    private static void RejectPortalMaskIntersection(
+    private static void RejectTransitionMaskIntersection(
         IEnumerable<TransitionDocument> transitions,
         TransitionDisplayCatalog assets,
         IReadOnlySet<(int X, int Y)> mask,
@@ -303,7 +303,6 @@ public static class TemplateComposition
         foreach (var transition in transitions)
         {
             var asset = assets.Resolve(transition.AssetKey);
-            if (asset.AssetKey != "transition.portal") continue;
             var bounds = TransitionEditing.BoundsFor(
                 asset,
                 transition.PositionAuthoringPx.X,
@@ -311,7 +310,7 @@ public static class TemplateComposition
             if (FootprintIntersectsMask(bounds, mask, assets.Metrics))
             {
                 throw new SceneMakerDocumentException(
-                    $"Template Anchor '{anchorId}' would overwrite Portal '{transition.InstanceId}'. Portals remain authored only on the Scene Instance.");
+                    $"Template Anchor '{anchorId}' would overwrite Transition '{transition.InstanceId}'. Transitions remain authored only on the Scene Instance.");
             }
         }
     }

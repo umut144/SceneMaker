@@ -22,13 +22,14 @@ public sealed class TerrainDisplayCatalog
 
 public static class TerrainDisplayCatalogLoader
 {
-    public static TerrainDisplayCatalog Load(SceneMakerCatalog catalog, WorkspaceConfiguration workspace)
+    public static TerrainDisplayCatalog Load(PolyToolsCatalog catalog, WorkspaceConfiguration workspace)
     {
         SortedDictionary<string, TerrainDisplayAsset> assets = new(StringComparer.Ordinal);
         foreach (var profile in workspace.AssetProfiles)
         {
             var catalogAsset = catalog.Resolve(profile.AssetKey);
-            if (catalogAsset.Category != SceneMakerAssetCategory.Terrain) continue;
+            if (workspace.EffectiveRole(profile, catalogAsset) != AuthoringAssetRole.Terrain)
+                continue;
             assets.Add(profile.AssetKey, new TerrainDisplayAsset(
                 profile.AssetKey, catalogAsset.Name, profile.Color));
         }

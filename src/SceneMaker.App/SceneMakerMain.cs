@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using Godot;
@@ -78,7 +77,7 @@ public sealed partial class SceneMakerMain : Control
 
     private LoadedWorkspace? _workspace;
     private LoadedScene? _scene;
-    private SceneMakerCatalog? _catalog;
+    private PolyToolsCatalog? _catalog;
     private WorkspaceConfiguration? _workspaceConfiguration;
     private TerrainDisplayCatalog? _terrainAssets;
     private PlacementDisplayCatalog? _placementAssets;
@@ -90,30 +89,13 @@ public sealed partial class SceneMakerMain : Control
     private TemplateCompositionResult? _templatePreview;
 
     private sealed record WorkspaceAssetEditorRow(
-        SceneMakerCatalogAsset Asset,
+        PolyToolsCatalogAsset Asset,
         CheckBox Enabled,
         LineEdit Color,
-        LineEdit Width,
-        LineEdit Height,
-        LineEdit AnchorX,
-        LineEdit AnchorY);
+        OptionButton Role);
 
     public override void _Ready()
     {
-        try
-        {
-            _catalog = SceneMakerCatalogLoader.Load(
-                Path.Combine(ProjectSettings.GlobalizePath("res://"), "catalog.json"));
-        }
-        catch (Exception exception) when (exception is SceneMakerDocumentException
-                                          or IOException
-                                          or UnauthorizedAccessException)
-        {
-            GD.PushError(exception.Message);
-            GetTree().Quit(1);
-            return;
-        }
-
         BuildInterface();
         BuildDialogs();
         ShowNavigationOverview();
@@ -919,40 +901,37 @@ public sealed partial class SceneMakerMain : Control
         _workspaceAssetEditorRows.Clear();
         _workspaceAssetRows.AddChild(new Label
         {
-            Text = "Enable the assets this game uses. Props and Transitions require footprint and anchor values in meters.",
+            Text = "Assets come from the synchronized PolyTools catalog. SceneMaker owns only enablement, authoring color, and an optional Prop or Transition role.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         foreach (var asset in _catalog.Assets)
         {
             var profile = _workspaceConfiguration.AssetProfiles
                 .SingleOrDefault(value => value.AssetKey == asset.AssetKey);
-            var row = new GridContainer { Columns = 8 };
+            var row = new GridContainer { Columns = 4 };
             var enabled = new CheckBox { Text = asset.AssetKey, ButtonPressed = profile is not null };
             enabled.CustomMinimumSize = new Vector2(180f, 0f);
             var color = NewAssetField(profile?.Color ?? string.Empty, "#RRGGBB");
+            var role = new OptionButton();
+            role.AddItem("Terrain", (int)AuthoringAssetRole.Terrain);
+            role.AddItem("Prop", (int)AuthoringAssetRole.Prop);
+            role.AddItem("Transition", (int)AuthoringAssetRole.Transition);
+            var effectiveRole = profile is null
+                ? asset.AssetType == PolyToolsAssetType.Terrain
+                    ? AuthoringAssetRole.Terrain
+                    : AuthoringAssetRole.Prop
+                : _workspaceConfiguration.EffectiveRole(profile, asset);
+            role.Select(role.GetItemIndex((int)effectiveRole));
+            role.Disabled = asset.AssetType == PolyToolsAssetType.Terrain;
             row.AddChild(enabled);
-            row.AddChild(new Label { Text = asset.Category.ToString() });
+            row.AddChild(new Label { Text = asset.AssetType.ToString() });
             row.AddChild(color);
-            var width = NewAssetField(FormatMetric(profile?.FootprintWidthMeters), "width m");
-            var height = NewAssetField(FormatMetric(profile?.FootprintHeightMeters), "height m");
-            var anchorX = NewAssetField(FormatMetric(profile?.AnchorXMeters), "anchor x m");
-            var anchorY = NewAssetField(FormatMetric(profile?.AnchorYMeters), "anchor y m");
-            row.AddChild(width);
-            row.AddChild(height);
-            row.AddChild(anchorX);
-            row.AddChild(anchorY);
-            if (asset.Category == SceneMakerAssetCategory.Terrain)
-            {
-                width.Editable = false;
-                height.Editable = false;
-                anchorX.Editable = false;
-                anchorY.Editable = false;
-            }
+            row.AddChild(role);
             _workspaceAssetRows.AddChild(row);
             _workspaceAssetEditorRows.Add(asset.AssetKey,
-                new WorkspaceAssetEditorRow(asset, enabled, color, width, height, anchorX, anchorY));
+                new WorkspaceAssetEditorRow(asset, enabled, color, role));
         }
-        _workspaceAssetsDialog.PopupCentered(new Vector2I(960, 520));
+        _workspaceAssetsDialog.PopupCentered(new Vector2I(760, 520));
     }
 
     private static LineEdit NewAssetField(string value, string placeholder) => new()
@@ -961,8 +940,6 @@ public sealed partial class SceneMakerMain : Control
         PlaceholderText = placeholder,
         CustomMinimumSize = new Vector2(100f, 0f),
     };
-
-    private static string FormatMetric(decimal? value) => value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
 
     private void SaveWorkspaceAssets()
     {
@@ -974,18 +951,17 @@ public sealed partial class SceneMakerMain : Control
             {
                 if (!row.Enabled.ButtonPressed) continue;
                 var color = row.Color.Text.Trim();
-                if (row.Asset.Category == SceneMakerAssetCategory.Terrain)
+                var selectedRole = (AuthoringAssetRole)row.Role.GetSelectedId();
+                AuthoringAssetRole? roleOverride = row.Asset.AssetType switch
                 {
-                    profiles.Add(new WorkspaceAssetProfile(row.Asset.AssetKey, color, null, null, null, null));
-                    continue;
-                }
+                    PolyToolsAssetType.Terrain => null,
+                    PolyToolsAssetType.Prop when selectedRole == AuthoringAssetRole.Prop => null,
+                    _ => selectedRole,
+                };
                 profiles.Add(new WorkspaceAssetProfile(
                     row.Asset.AssetKey,
                     color,
-                    ParseMetric(row.Width, row.Asset.AssetKey, "footprint width"),
-                    ParseMetric(row.Height, row.Asset.AssetKey, "footprint height"),
-                    ParseMetric(row.AnchorX, row.Asset.AssetKey, "anchor x"),
-                    ParseMetric(row.AnchorY, row.Asset.AssetKey, "anchor y")));
+                    roleOverride));
             }
             var candidate = _workspaceConfiguration.WithAssetProfiles(profiles, _catalog);
             var terrain = TerrainDisplayCatalogLoader.Load(_catalog, candidate);
@@ -1005,13 +981,6 @@ public sealed partial class SceneMakerMain : Control
         });
     }
 
-    private static decimal ParseMetric(LineEdit input, string assetKey, string label)
-    {
-        if (!decimal.TryParse(input.Text.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
-            throw new SceneMakerDocumentException($"Asset '{assetKey}' requires a numeric {label} in meters.");
-        return value;
-    }
-
     private void CreateWorkspace()
     {
         if (_pendingWorkspaceParentDirectory is null)
@@ -1028,14 +997,19 @@ public sealed partial class SceneMakerMain : Control
             WorkspaceConfigurationStore.CreateDefault(
                 _workspace.DirectoryPath,
                 _workspace.WorkspaceKey);
-            LoadWorkspaceAssets();
+            _catalog = null;
+            _workspaceConfiguration = null;
+            _terrainAssets = null;
+            _placementAssets = null;
+            _transitionAssets = null;
             _scene = null;
             _selectedTemplateAnchorId = null;
             _templatePreview = null;
             _canvas.ShowScene(null);
             SaveRecentSession();
             UpdateDocumentStatus();
-            SetStatus($"Created Workspace '{_workspace.WorkspaceKey}'.");
+            SetStatus(
+                $"Created Workspace '{_workspace.WorkspaceKey}'. Synchronize its PolyTools import before editing.");
         });
     }
 
@@ -1073,6 +1047,7 @@ public sealed partial class SceneMakerMain : Control
     private void LoadWorkspace(string configPath)
     {
         var previousWorkspace = _workspace;
+        var previousCatalog = _catalog;
         var previousConfiguration = _workspaceConfiguration;
         var previousTerrainAssets = _terrainAssets;
         var previousPlacementAssets = _placementAssets;
@@ -1092,7 +1067,9 @@ public sealed partial class SceneMakerMain : Control
             }
             var workspaceDirectory = Path.GetDirectoryName(fullConfigPath)
                 ?? throw new SceneMakerDocumentException("Workspace config requires a parent directory.");
-            var loadedWorkspace = WorkspaceStore.Load(workspaceDirectory, _catalog!);
+            var catalog = PolyToolsCatalogImporter.Load(workspaceDirectory);
+            var loadedWorkspace = WorkspaceStore.Load(workspaceDirectory, catalog);
+            _catalog = catalog;
             _workspace = loadedWorkspace;
             LoadWorkspaceAssets();
             _scene = null;
@@ -1109,6 +1086,7 @@ public sealed partial class SceneMakerMain : Control
                                           or OverflowException)
         {
             _workspace = previousWorkspace;
+            _catalog = previousCatalog;
             _workspaceConfiguration = previousConfiguration;
             _terrainAssets = previousTerrainAssets;
             _placementAssets = previousPlacementAssets;
@@ -1754,7 +1732,7 @@ public sealed partial class SceneMakerMain : Control
     private void LoadWorkspaceAssets()
     {
         if (_workspace is null || _catalog is null)
-            throw new InvalidOperationException("Workspace and SceneMaker catalog are required.");
+            throw new InvalidOperationException("Workspace and synchronized PolyTools catalog are required.");
         _workspaceConfiguration = WorkspaceConfigurationStore.Load(
             _workspace.DirectoryPath, _catalog);
         if (!string.Equals(
@@ -1805,7 +1783,8 @@ public sealed partial class SceneMakerMain : Control
         {
             var recent = RecentSessionStore.Load(_recentSessionPath!);
             if (recent is null) return;
-            _workspace = WorkspaceStore.Load(recent.WorkspaceDirectoryPath, _catalog!);
+            _catalog = PolyToolsCatalogImporter.Load(recent.WorkspaceDirectoryPath);
+            _workspace = WorkspaceStore.Load(recent.WorkspaceDirectoryPath, _catalog);
             LoadWorkspaceAssets();
             _templatePreview = null;
             _scene = recent.SceneRelativePath is null

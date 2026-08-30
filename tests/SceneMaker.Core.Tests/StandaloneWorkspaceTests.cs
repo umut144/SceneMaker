@@ -1,4 +1,5 @@
 using SceneMaker.Core;
+using System.Globalization;
 using Xunit;
 
 namespace SceneMaker.Core.Tests;
@@ -6,171 +7,117 @@ namespace SceneMaker.Core.Tests;
 public sealed class StandaloneWorkspaceTests
 {
     [Fact]
-    public void CatalogAndWorkspaceProfileResolveEffectiveSpatialAssets()
+    public void PolyToolsCatalogAndWorkspaceDeriveEffectiveSpatialAssets()
     {
         using var directory = TemporaryDirectory.Create();
-        var catalog = SceneMakerCatalogLoader.Load(WriteCatalog(directory.Path));
-        File.WriteAllText(Path.Combine(directory.Path, WorkspaceConfigurationStore.FileName), """
-        {
-          "format": "scene_maker_workspace",
-          "version": 1,
-          "workspace_key": "game01",
-          "grid": {
-            "terrain_cell_meters": 0.5,
-            "authoring_pixels_per_meter": 32,
-            "game_pixels_per_meter": 192
-          },
-          "assets": [
-            { "asset_key": "terrain.grass", "color": "#99E550" },
-            { "asset_key": "terrain.water", "color": "#5B6EE1" },
-            {
-              "asset_key": "prop.tree",
-              "color": "#2E7D32",
-              "footprint_meters": { "width": 3.5, "height": 6.5 },
-              "anchor_meters": { "x": 1.75, "y": 0.0 }
-            },
-            {
-              "asset_key": "transition.portal",
-              "color": "#8E6CFF",
-              "footprint_meters": { "width": 2.0, "height": 3.0 },
-              "anchor_meters": { "x": 1.0, "y": 0.0 }
-            }
-          ]
-        }
+        WritePolyToolsImport(directory.Path, "game01");
+        WriteConfig(directory.Path, "game01", 0.5m, 32m, 192m, """
+            { "asset_key": "grass", "color": "#99E550" },
+            { "asset_key": "tree", "color": "#2E7D32" },
+            { "asset_key": "portal", "color": "#8E6CFF", "authoring_role": "transition" }
         """);
 
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
-        var tree = PlacementDisplayCatalogLoader.Load(catalog, workspace).Resolve("prop.tree");
-        var portal = TransitionDisplayCatalogLoader.Load(catalog, workspace)
-            .Resolve("transition.portal");
+        var tree = PlacementDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
+        var portal = TransitionDisplayCatalogLoader.Load(catalog, workspace).Resolve("portal");
 
-        Assert.Equal(112, tree.FootprintWidthAuthoringPixels);
-        Assert.Equal(208, tree.FootprintHeightAuthoringPixels);
-        Assert.Equal(56, tree.AnchorXAuthoringPixels);
+        Assert.Equal(66, tree.FootprintWidthAuthoringPixels);
+        Assert.Equal(65, tree.FootprintHeightAuthoringPixels);
+        Assert.Equal(33, tree.AnchorXAuthoringPixels);
         Assert.Equal(0, tree.AnchorYAuthoringPixels);
-        Assert.Equal(64, portal.FootprintWidthAuthoringPixels);
-        Assert.Equal(96, portal.FootprintHeightAuthoringPixels);
-        Assert.Equal(32, portal.AnchorXAuthoringPixels);
+        Assert.Equal(32, portal.FootprintWidthAuthoringPixels);
+        Assert.Equal(64, portal.FootprintHeightAuthoringPixels);
+        Assert.Equal(16, portal.AnchorXAuthoringPixels);
     }
 
     [Fact]
-    public void SceneDocumentsPersistStableAssetKeysAndRespectFootprints()
+    public void SceneDocumentsPersistPolyToolsAssetKeysAndRespectDerivedFootprints()
     {
         using var directory = TemporaryDirectory.Create();
-        var catalog = SceneMakerCatalogLoader.Load(WriteCatalog(directory.Path));
-        File.WriteAllText(Path.Combine(directory.Path, WorkspaceConfigurationStore.FileName), """
-        {
-          "format": "scene_maker_workspace",
-          "version": 1,
-          "workspace_key": "game01",
-          "grid": {
-            "terrain_cell_meters": 0.5,
-            "authoring_pixels_per_meter": 32,
-            "game_pixels_per_meter": 192
-          },
-          "assets": [
-            { "asset_key": "terrain.grass", "color": "#99E550" },
-            {
-              "asset_key": "prop.tree",
-              "color": "#2E7D32",
-              "footprint_meters": { "width": 3.5, "height": 6.5 },
-              "anchor_meters": { "x": 1.75, "y": 0.0 }
-            },
-            {
-              "asset_key": "transition.portal",
-              "color": "#8E6CFF",
-              "footprint_meters": { "width": 2.0, "height": 3.0 },
-              "anchor_meters": { "x": 1.0, "y": 0.0 }
-            }
-          ]
-        }
+        WritePolyToolsImport(directory.Path, "game01");
+        WriteConfig(directory.Path, "game01", 0.5m, 32m, 192m, """
+            { "asset_key": "grass", "color": "#99E550" },
+            { "asset_key": "tree", "color": "#2E7D32" },
+            { "asset_key": "portal", "color": "#8E6CFF", "authoring_role": "transition" }
         """);
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
         var terrain = TerrainDisplayCatalogLoader.Load(catalog, workspace);
         var placements = PlacementDisplayCatalogLoader.Load(catalog, workspace);
         var transitions = TransitionDisplayCatalogLoader.Load(catalog, workspace);
         var scene = SceneDocument.Create("test", 20, 20);
 
-        scene = TerrainEditing.Paint(scene, terrain, 0, 0, "terrain.grass");
-        scene = PlacementEditing.Place(scene, placements, transitions, 56, 0, "prop.tree");
-        scene = TransitionEditing.Place(scene, placements, transitions, 200, 0, "transition.portal");
+        scene = TerrainEditing.Paint(scene, terrain, 0, 0, "grass");
+        scene = PlacementEditing.Place(scene, placements, transitions, 33, 0, "tree");
+        scene = TransitionEditing.Place(scene, placements, transitions, 160, 32, "portal");
         var serialized = DocumentJson.Serialize(scene);
         var restored = DocumentJson.DeserializeScene(serialized);
 
-        Assert.Contains("\"asset_key\": \"prop.tree\"", serialized, StringComparison.Ordinal);
-        Assert.DoesNotContain("asset_id", serialized, StringComparison.Ordinal);
-        Assert.Equal("terrain.grass", restored.TerrainCells.Single().AssetKey);
-        Assert.Equal("prop.tree", restored.Placements.Single().AssetKey);
-        Assert.Equal("transition.portal", restored.Transitions.Single().AssetKey);
+        Assert.Contains("\"asset_key\": \"tree\"", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("prop.tree", serialized, StringComparison.Ordinal);
+        Assert.Equal("grass", restored.TerrainCells.Single().AssetKey);
+        Assert.Equal("tree", restored.Placements.Single().AssetKey);
+        Assert.Equal("portal", restored.Transitions.Single().AssetKey);
     }
 
     [Fact]
-    public void WorkspaceConfigurationRejectsSpatialProfileWithFractionalAnchorPixel()
+    public void PolyToolsPivotAndComponentHierarchyDetermineAuthoringBounds()
     {
         using var directory = TemporaryDirectory.Create();
-        var catalog = SceneMakerCatalogLoader.Load(WriteCatalog(directory.Path));
-        File.WriteAllText(Path.Combine(directory.Path, WorkspaceConfigurationStore.FileName), """
-        {
-          "format": "scene_maker_workspace",
-          "version": 1,
-          "workspace_key": "game01",
-          "grid": {
-            "terrain_cell_meters": 0.5,
-            "authoring_pixels_per_meter": 32,
-            "game_pixels_per_meter": 192
-          },
-          "assets": [
+        WritePolyToolsImport(directory.Path, "game01", treeComponents: """
             {
-              "asset_key": "prop.tree",
-              "color": "#2E7D32",
-              "footprint_meters": { "width": 3.5, "height": 6.5 },
-              "anchor_meters": { "x": 1.71, "y": 0.0 }
+              "component_id": "root",
+              "parent_component_id": null,
+              "local_transform": {
+                "position": [2.0, 1.0],
+                "rotation_radians": 0.0,
+                "scale": [1.0, 1.0]
+              },
+              "mesh": null,
+              "contour_stroke_mesh": null
+            },
+            {
+              "component_id": "child",
+              "parent_component_id": "root",
+              "local_transform": {
+                "position": [1.0, 2.0],
+                "rotation_radians": 0.0,
+                "scale": [2.0, 1.0]
+              },
+              "mesh": {
+                "vertices": [[0.0, 0.0], [1.0, 1.0]],
+                "indices": [0, 1, 1]
+              },
+              "contour_stroke_mesh": null
             }
-          ]
-        }
+        """, treePivot: "[4.0, 3.0]");
+        WriteConfig(directory.Path, "game01", 1m, 10m, 40m, """
+            { "asset_key": "tree", "color": "#2E7D32" }
         """);
 
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
-        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
-            PlacementDisplayCatalogLoader.Load(catalog, workspace));
+        var tree = PlacementDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
 
-        Assert.Contains("whole authoring pixel", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(20, tree.FootprintWidthAuthoringPixels);
+        Assert.Equal(10, tree.FootprintHeightAuthoringPixels);
+        Assert.Equal(10, tree.AnchorXAuthoringPixels);
+        Assert.Equal(0, tree.AnchorYAuthoringPixels);
     }
 
     [Fact]
     public void WorkspaceMetricsDriveGridAndSpatialConversions()
     {
         using var directory = TemporaryDirectory.Create();
-        var catalog = SceneMakerCatalogLoader.Load(WriteCatalog(directory.Path));
-        File.WriteAllText(Path.Combine(directory.Path, WorkspaceConfigurationStore.FileName), """
-        {
-          "format": "scene_maker_workspace",
-          "version": 1,
-          "workspace_key": "game02",
-          "grid": {
-            "terrain_cell_meters": 0.25,
-            "authoring_pixels_per_meter": 20,
-            "game_pixels_per_meter": 100
-          },
-          "assets": [
-            { "asset_key": "terrain.grass", "color": "#99E550" },
-            {
-              "asset_key": "prop.tree",
-              "color": "#2E7D32",
-              "footprint_meters": { "width": 1.5, "height": 2.0 },
-              "anchor_meters": { "x": 0.5, "y": 0.0 }
-            }
-          ]
-        }
+        WritePolyToolsImport(directory.Path, "game02");
+        WriteConfig(directory.Path, "game02", 0.25m, 20m, 100m, """
+            { "asset_key": "tree", "color": "#2E7D32" }
         """);
-
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
-        var tree = PlacementDisplayCatalogLoader.Load(catalog, workspace).Resolve("prop.tree");
 
         Assert.Equal(5, workspace.Metrics.AuthoringPixelsPerTerrainCell);
-        Assert.Equal(30, tree.FootprintWidthAuthoringPixels);
-        Assert.Equal(40, tree.FootprintHeightAuthoringPixels);
-        Assert.Equal(10, tree.AnchorXAuthoringPixels);
         Assert.Equal(0.75m, PlacementEditing.PositionMeters(15, workspace.Metrics));
         Assert.Equal(75, PlacementEditing.PositionGamePixels(15, workspace.Metrics));
         Assert.Equal(
@@ -181,60 +128,58 @@ public sealed class StandaloneWorkspaceTests
     }
 
     [Fact]
-    public void WorkspaceProfilesCanBeChangedAndSavedWithoutExternalCatalogs()
+    public void WorkspaceProfilesSaveOnlySceneMakerOwnedOverrides()
     {
         using var directory = TemporaryDirectory.Create();
-        var catalog = SceneMakerCatalogLoader.Load(WriteCatalog(directory.Path));
+        WritePolyToolsImport(directory.Path, "game03");
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var configuration = WorkspaceConfigurationStore.Create(
             "game03",
             new WorkspaceGridConfiguration(1m, 10m, 40m),
             [
-                new WorkspaceAssetProfile("terrain.grass", "#99E550", null, null, null, null),
-                new WorkspaceAssetProfile("prop.tree", "#2E7D32", 2m, 3m, 1m, 0m),
+                new WorkspaceAssetProfile("grass", "#99E550"),
+                new WorkspaceAssetProfile("portal", "#8E6CFF", AuthoringAssetRole.Transition),
             ],
             catalog);
 
         WorkspaceConfigurationStore.Save(directory.Path, configuration);
+        var json = File.ReadAllText(Path.Combine(directory.Path, "config.json"));
         var restored = WorkspaceConfigurationStore.Load(directory.Path, catalog);
 
-        Assert.Equal(10, restored.Metrics.AuthoringPixelsPerTerrainCell);
-        Assert.Equal(2m, restored.ResolveAssetProfile("prop.tree").FootprintWidthMeters);
-        Assert.Equal(1m, restored.ResolveAssetProfile("prop.tree").AnchorXMeters);
+        Assert.Equal(AuthoringAssetRole.Transition, restored.ResolveAssetProfile("portal").AuthoringRole);
+        Assert.DoesNotContain("footprint", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("anchor", json, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void WorkspaceDirectoryUsesConfigAsItsOnlyManifest()
+    public void WorkspaceLoadRequiresSynchronizedPolyToolsImport()
     {
-        using var directory = TemporaryDirectory.Create();
-        var catalog = SceneMakerCatalogLoader.Load(WriteCatalog(directory.Path));
-        var workspace = WorkspaceStore.Create(directory.Path, "game04");
+        using var parent = TemporaryDirectory.Create();
+        var workspace = WorkspaceStore.Create(parent.Path, "game04");
         WorkspaceConfigurationStore.CreateDefault(workspace.DirectoryPath, workspace.WorkspaceKey);
 
-        var loaded = WorkspaceStore.Load(workspace.DirectoryPath, catalog);
-        var configuration = WorkspaceConfigurationStore.Load(workspace.DirectoryPath, catalog);
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            PolyToolsCatalogImporter.Load(workspace.DirectoryPath));
 
-        Assert.Equal("game04", loaded.WorkspaceKey);
-        Assert.Equal(1m, configuration.Grid.TerrainCellMeters);
-        Assert.Equal(32, configuration.Metrics.AuthoringPixelsPerTerrainCell);
-        Assert.Equal(192m, configuration.Metrics.GamePixelsPerMeter);
-        Assert.False(File.Exists(Path.Combine(workspace.DirectoryPath, "workspace.json")));
-        Assert.True(File.Exists(Path.Combine(workspace.DirectoryPath, "config.json")));
+        Assert.Contains("synchronized PolyTools catalog", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ExportEmbedsSemanticWorkspaceSnapshotButNotEditorColors()
+    public void ExportEmbedsDerivedSpatialSnapshotButNotEditorColors()
     {
         using var directory = TemporaryDirectory.Create();
-        var catalog = SceneMakerCatalogLoader.Load(WriteCatalog(directory.Path));
-        var configuration = WorkspaceConfigurationStore.Create(
-            "game05",
-            new WorkspaceGridConfiguration(0.5m, 32m, 128m),
-            [new WorkspaceAssetProfile("terrain.grass", "#99E550", null, null, null, null)],
-            catalog);
+        WritePolyToolsImport(directory.Path, "game05");
+        WriteConfig(directory.Path, "game05", 0.5m, 32m, 128m, """
+            { "asset_key": "grass", "color": "#99E550" },
+            { "asset_key": "tree", "color": "#2E7D32" }
+        """);
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+        var configuration = WorkspaceConfigurationStore.Load(directory.Path, catalog);
         var terrain = TerrainDisplayCatalogLoader.Load(catalog, configuration);
         var placements = PlacementDisplayCatalogLoader.Load(catalog, configuration);
         var transitions = TransitionDisplayCatalogLoader.Load(catalog, configuration);
-        var scene = TerrainEditing.Paint(SceneDocument.Create("field", 1, 1), terrain, 0, 0, "terrain.grass");
+        var scene = TerrainEditing.Paint(
+            SceneDocument.Create("field", 1, 1), terrain, 0, 0, "grass");
         var workspace = new LoadedWorkspace(directory.Path, "game05");
         var path = SceneExport.Write(
             workspace,
@@ -245,29 +190,151 @@ public sealed class StandaloneWorkspaceTests
             transitions);
         var json = File.ReadAllText(path);
 
-        Assert.Equal(Path.Combine(directory.Path, "exports", "field.scene_export.json"), path);
-        Assert.Contains("\"format\": \"scene_maker_scene_export\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"terrain_cell_meters\": 0.5", json, StringComparison.Ordinal);
-        Assert.Contains("\"asset_key\": \"terrain.grass\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"asset_key\": \"grass\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"width\": 2.0625", json, StringComparison.Ordinal);
         Assert.DoesNotContain("#99E550", json, StringComparison.Ordinal);
     }
 
-    private static string WriteCatalog(string directory) 
+    [Fact]
+    public void ImportRejectsOutdatedPolyToolsManifestSchema()
     {
-        var path = Path.Combine(directory, "catalog.json");
-        File.WriteAllText(path, """
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game06", manifestSchema: 13);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            PolyToolsCatalogImporter.Load(directory.Path));
+
+        Assert.Contains("schema_version 14", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static void WriteConfig(
+        string directory,
+        string workspaceKey,
+        decimal terrainCellMeters,
+        decimal authoringPixelsPerMeter,
+        decimal gamePixelsPerMeter,
+        string assets)
+    {
+        File.WriteAllText(Path.Combine(directory, WorkspaceConfigurationStore.FileName), $$"""
         {
-          "format": "scene_maker_catalog",
-          "version": 1,
+          "format": "scene_maker_workspace",
+          "version": 2,
+          "workspace_key": "{{workspaceKey}}",
+          "grid": {
+            "terrain_cell_meters": {{terrainCellMeters.ToString(CultureInfo.InvariantCulture)}},
+            "authoring_pixels_per_meter": {{authoringPixelsPerMeter.ToString(CultureInfo.InvariantCulture)}},
+            "game_pixels_per_meter": {{gamePixelsPerMeter.ToString(CultureInfo.InvariantCulture)}}
+          },
           "assets": [
-            { "asset_key": "terrain.grass", "category": "terrain", "name": "Grass" },
-            { "asset_key": "terrain.water", "category": "terrain", "name": "Water" },
-            { "asset_key": "prop.tree", "category": "prop", "name": "Tree" },
-            { "asset_key": "transition.portal", "category": "transition", "name": "Portal" }
+            {{assets}}
           ]
         }
         """);
-        return path;
+    }
+
+    private static void WritePolyToolsImport(
+        string workspaceDirectory,
+        string worldKey,
+        string? treeComponents = null,
+        string treePivot = "[0.0, 0.0]",
+        int manifestSchema = 14)
+    {
+        var importDirectory = Path.Combine(
+            workspaceDirectory,
+            PolyToolsCatalogImporter.ImportDirectoryName,
+            PolyToolsCatalogImporter.PolyToolsDirectoryName);
+        Directory.CreateDirectory(importDirectory);
+        File.WriteAllText(Path.Combine(importDirectory, "catalog.json"), $$"""
+        {
+          "schema_version": 1,
+          "world_key": "{{worldKey}}",
+          "world_name": "Test World",
+          "assets": [
+            {
+              "asset_key": "grass",
+              "display_name": "Grass",
+              "asset_type": "terrain",
+              "runtime_package": "PolyToolsRuntimeExports/grass/manifest.json"
+            },
+            {
+              "asset_key": "portal",
+              "display_name": "Portal",
+              "asset_type": "props",
+              "runtime_package": "PolyToolsRuntimeExports/portal/manifest.json"
+            },
+            {
+              "asset_key": "tree",
+              "display_name": "Tree",
+              "asset_type": "props",
+              "runtime_package": "PolyToolsRuntimeExports/tree/manifest.json"
+            }
+          ]
+        }
+        """);
+
+        WriteManifest(
+            importDirectory,
+            "grass",
+            "terrain",
+            manifestSchema,
+            "[0.5, 0.5]",
+            BasicComponent("[[0.0, 0.0], [1.0, 1.0]]"));
+        WriteManifest(
+            importDirectory,
+            "portal",
+            "props",
+            manifestSchema,
+            "[0.0, 0.0]",
+            BasicComponent("[[-0.5, 0.0], [0.5, 2.0]]"));
+        WriteManifest(
+            importDirectory,
+            "tree",
+            "props",
+            manifestSchema,
+            treePivot,
+            treeComponents ?? BasicComponent("[[-1.01, 0.01], [1.02, 2.03]]"));
+    }
+
+    private static string BasicComponent(string vertices) => $$"""
+        {
+          "component_id": "body",
+          "parent_component_id": null,
+          "local_transform": {
+            "position": [0.0, 0.0],
+            "rotation_radians": 0.0,
+            "scale": [1.0, 1.0]
+          },
+          "mesh": {
+            "vertices": {{vertices}},
+            "indices": [0, 1, 1]
+          },
+          "contour_stroke_mesh": null
+        }
+        """;
+
+    private static void WriteManifest(
+        string importDirectory,
+        string assetKey,
+        string assetType,
+        int schema,
+        string assetPivot,
+        string components)
+    {
+        var directory = Path.Combine(
+            importDirectory, "PolyToolsRuntimeExports", assetKey);
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "manifest.json"), $$"""
+        {
+          "schema_version": {{schema}},
+          "asset_key": "{{assetKey}}",
+          "display_name": "{{assetKey}}",
+          "asset_type": "{{assetType}}",
+          "asset_pivot": {{assetPivot}},
+          "components": [
+            {{components}}
+          ]
+        }
+        """);
     }
 
     private sealed class TemporaryDirectory : IDisposable

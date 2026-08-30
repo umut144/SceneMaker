@@ -46,22 +46,8 @@ public static class SceneExport
                 AuthoringPixelsPerMeter = configuration.Grid.AuthoringPixelsPerMeter,
                 GamePixelsPerMeter = configuration.Grid.GamePixelsPerMeter,
             },
-            AssetProfiles = configuration.AssetProfiles
-                .OrderBy(static profile => profile.AssetKey, StringComparer.Ordinal)
-                .Select(static profile => new ExportAssetProfileDocument
-                {
-                    AssetKey = profile.AssetKey,
-                    FootprintMeters = profile.FootprintWidthMeters is null ? null : new ExportSizeDocument
-                    {
-                        Width = profile.FootprintWidthMeters.Value,
-                        Height = profile.FootprintHeightMeters!.Value,
-                    },
-                    AnchorMeters = profile.AnchorXMeters is null ? null : new ExportPointDocument
-                    {
-                        X = profile.AnchorXMeters.Value,
-                        Y = profile.AnchorYMeters!.Value,
-                    },
-                }).ToList(),
+            AssetProfiles = ExportProfiles(
+                configuration, placementAssets, transitionAssets),
             Scene = scene.Document,
         };
         var directory = Path.Combine(workspace.DirectoryPath, DirectoryName);
@@ -69,6 +55,54 @@ public static class SceneExport
         AtomicTextFile.Write(path, JsonSerializer.Serialize(document, JsonOptions) + "\n");
         return path;
     }
+
+    private static List<ExportAssetProfileDocument> ExportProfiles(
+        WorkspaceConfiguration configuration,
+        PlacementDisplayCatalog placementAssets,
+        TransitionDisplayCatalog transitionAssets)
+    {
+        var placements = placementAssets.Assets.ToDictionary(
+            static asset => asset.AssetKey, StringComparer.Ordinal);
+        var transitions = transitionAssets.Assets.ToDictionary(
+            static asset => asset.AssetKey, StringComparer.Ordinal);
+        return configuration.AssetProfiles
+            .OrderBy(static profile => profile.AssetKey, StringComparer.Ordinal)
+            .Select(profile =>
+            {
+                if (placements.TryGetValue(profile.AssetKey, out var placement))
+                {
+                    return SpatialProfile(
+                        placement.AssetKey,
+                        placement.WidthMeters,
+                        placement.HeightMeters,
+                        placement.AnchorXMeters,
+                        placement.AnchorYMeters);
+                }
+                if (transitions.TryGetValue(profile.AssetKey, out var transition))
+                {
+                    return SpatialProfile(
+                        transition.AssetKey,
+                        transition.WidthMeters,
+                        transition.HeightMeters,
+                        transition.AnchorXMeters,
+                        transition.AnchorYMeters);
+                }
+                return new ExportAssetProfileDocument { AssetKey = profile.AssetKey };
+            })
+            .ToList();
+    }
+
+    private static ExportAssetProfileDocument SpatialProfile(
+        string assetKey,
+        decimal width,
+        decimal height,
+        decimal anchorX,
+        decimal anchorY) => new()
+    {
+        AssetKey = assetKey,
+        FootprintMeters = new ExportSizeDocument { Width = width, Height = height },
+        AnchorMeters = new ExportPointDocument { X = anchorX, Y = anchorY },
+    };
 
     private static void Validate(
         SceneDocument scene,

@@ -39,13 +39,14 @@ public sealed class TransitionDisplayCatalog
 
 public static class TransitionDisplayCatalogLoader
 {
-    public static TransitionDisplayCatalog Load(SceneMakerCatalog catalog, WorkspaceConfiguration workspace)
+    public static TransitionDisplayCatalog Load(PolyToolsCatalog catalog, WorkspaceConfiguration workspace)
     {
         SortedDictionary<string, TransitionDisplayAsset> assets = new(StringComparer.Ordinal);
         foreach (var profile in workspace.AssetProfiles)
         {
             var catalogAsset = catalog.Resolve(profile.AssetKey);
-            if (catalogAsset.Category != SceneMakerAssetCategory.Transition) continue;
+            if (workspace.EffectiveRole(profile, catalogAsset) != AuthoringAssetRole.Transition)
+                continue;
             var spatial = PlacementDisplayCatalogLoader.Create(
                 profile, catalogAsset, workspace.Grid.AuthoringPixelsPerMeter);
             assets.Add(profile.AssetKey, new TransitionDisplayAsset(

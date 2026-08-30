@@ -39,13 +39,14 @@ public sealed class PlacementDisplayCatalog
 
 public static class PlacementDisplayCatalogLoader
 {
-    public static PlacementDisplayCatalog Load(SceneMakerCatalog catalog, WorkspaceConfiguration workspace)
+    public static PlacementDisplayCatalog Load(PolyToolsCatalog catalog, WorkspaceConfiguration workspace)
     {
         SortedDictionary<string, PlacementDisplayAsset> assets = new(StringComparer.Ordinal);
         foreach (var profile in workspace.AssetProfiles)
         {
             var catalogAsset = catalog.Resolve(profile.AssetKey);
-            if (catalogAsset.Category != SceneMakerAssetCategory.Prop) continue;
+            if (workspace.EffectiveRole(profile, catalogAsset) != AuthoringAssetRole.Prop)
+                continue;
             assets.Add(profile.AssetKey, Create(
                 profile, catalogAsset, workspace.Grid.AuthoringPixelsPerMeter));
         }
@@ -54,36 +55,35 @@ public static class PlacementDisplayCatalogLoader
 
     internal static PlacementDisplayAsset Create(
         WorkspaceAssetProfile profile,
-        SceneMakerCatalogAsset catalogAsset,
+        PolyToolsCatalogAsset catalogAsset,
         decimal authoringPixelsPerMeter)
     {
-        var width = checked((int)decimal.Ceiling(profile.FootprintWidthMeters!.Value * authoringPixelsPerMeter));
-        var height = checked((int)decimal.Ceiling(profile.FootprintHeightMeters!.Value * authoringPixelsPerMeter));
-        var anchorX = ExactPixels(profile.AnchorXMeters!.Value, authoringPixelsPerMeter, profile.AssetKey, "anchor x");
-        var anchorY = ExactPixels(profile.AnchorYMeters!.Value, authoringPixelsPerMeter, profile.AssetKey, "anchor y");
-        if (anchorX > width || anchorY > height)
+        var bounds = catalogAsset.BoundsMeters;
+        var left = checked((int)decimal.Floor(bounds.MinimumX * authoringPixelsPerMeter));
+        var bottom = checked((int)decimal.Floor(bounds.MinimumY * authoringPixelsPerMeter));
+        var right = checked((int)decimal.Ceiling(bounds.MaximumX * authoringPixelsPerMeter));
+        var top = checked((int)decimal.Ceiling(bounds.MaximumY * authoringPixelsPerMeter));
+        var width = checked(right - left);
+        var height = checked(top - bottom);
+        var anchorX = checked(-left);
+        var anchorY = checked(-bottom);
+        if (width <= 0 || height <= 0)
             throw new SceneMakerDocumentException(
-                $"Asset '{profile.AssetKey}' anchor lies outside its authoring footprint.");
+                $"Asset '{profile.AssetKey}' has an empty authoring footprint.");
+        if (anchorX < 0 || anchorY < 0 || anchorX > width || anchorY > height)
+            throw new SceneMakerDocumentException(
+                $"Asset '{profile.AssetKey}' PolyTools pivot lies outside its visible authoring footprint.");
         return new PlacementDisplayAsset(
             profile.AssetKey,
             catalogAsset.Name,
             profile.Color,
-            profile.FootprintWidthMeters.Value,
-            profile.FootprintHeightMeters.Value,
-            profile.AnchorXMeters.Value,
-            profile.AnchorYMeters.Value,
+            width / authoringPixelsPerMeter,
+            height / authoringPixelsPerMeter,
+            anchorX / authoringPixelsPerMeter,
+            anchorY / authoringPixelsPerMeter,
             width,
             height,
             anchorX,
             anchorY);
-    }
-
-    internal static int ExactPixels(decimal meters, decimal pixelsPerMeter, string key, string label)
-    {
-        var pixels = meters * pixelsPerMeter;
-        if (pixels != decimal.Truncate(pixels))
-            throw new SceneMakerDocumentException(
-                $"Asset '{key}' {label} must map to a whole authoring pixel.");
-        return checked((int)pixels);
     }
 }

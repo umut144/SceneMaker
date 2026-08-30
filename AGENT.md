@@ -1,18 +1,22 @@
 # SceneMaker guide
 
-SceneMaker is an independent Godot/C# authoring application. It must not
-reference MMORPG, Bevy, WorldAssets, PolyDraw, or any external asset catalog.
+SceneMaker is an independent Godot/C# authoring application. Its runtime and
+Core must not reference MMORPG, Bevy, WorldAssets, PolyDraw, or sibling project
+paths. Developer-time sync adapters may consume a game's current PolyTools
+Runtime Export and copy it into a Workspace-local import boundary.
 
 ## Data ownership
 
-- Root `catalog.json` declares only globally available stable `asset_key`s,
-  categories, and names.
-- A workspace represents a game. Its `config.json` owns grid metrics, enabled
-  assets, colors, footprints, and anchors.
+- A Workspace-local `imports/polytools/catalog.json` is the closed source of
+  available Asset identity, type, name, and Runtime package references. It and
+  the referenced Manifests are synchronized copies, never live sibling reads.
+- A workspace represents one PolyTools World/game. Its `config.json` owns grid
+  metrics, enabled assets, editor colors, and optional Prop/Transition role
+  overrides. PolyTools geometry owns footprints and anchors.
 - Scenes and templates are workspace data. Their documents use `asset_key`s,
   never numeric IDs.
-- No hidden metric defaults, external registry, or game-specific export format
-  may be introduced.
+- No hidden metric defaults, directory-discovered Assets, or game-specific
+  export format may be introduced.
 
 ## Engineering
 
@@ -27,6 +31,7 @@ Run for relevant changes:
 
 ```sh
 dotnet build SceneMaker.csproj
+dotnet build src/SceneMaker.Cli/SceneMaker.Cli.csproj
 dotnet test tests/SceneMaker.Core.Tests/SceneMaker.Core.Tests.csproj
 /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . --editor --quit
 ```
