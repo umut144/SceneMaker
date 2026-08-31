@@ -588,6 +588,13 @@ public sealed partial class SceneMakerMain : Control
         };
         AddChild(_workspaceDirectoryDialog);
 
+        _workspaceDirectoryLoadDialog.Title = "Load Workspace Folder";
+        _workspaceDirectoryLoadDialog.Access = FileDialog.AccessEnum.Filesystem;
+        _workspaceDirectoryLoadDialog.FileMode = FileDialog.FileModeEnum.OpenDir;
+        _workspaceDirectoryLoadDialog.UseNativeDialog = true;
+        _workspaceDirectoryLoadDialog.DirSelected += LoadWorkspaceFromDirectory;
+        AddChild(_workspaceDirectoryLoadDialog);
+
         _sceneFileDialog.Title = "Load Scene";
         _sceneFileDialog.Access = FileDialog.AccessEnum.Filesystem;
         _sceneFileDialog.FileMode = FileDialog.FileModeEnum.OpenFile;
@@ -851,13 +858,7 @@ public sealed partial class SceneMakerMain : Control
         }
 
         // Non-macOS fallback: Godot's folder dialog still enforces config.json.
-        _workspaceDirectoryLoadDialog.Title = "Load Workspace Folder";
-        _workspaceDirectoryLoadDialog.Access = FileDialog.AccessEnum.Filesystem;
-        _workspaceDirectoryLoadDialog.FileMode = FileDialog.FileModeEnum.OpenDir;
-        _workspaceDirectoryLoadDialog.UseNativeDialog = true;
         _workspaceDirectoryLoadDialog.CurrentDir = WorkspaceDialogStartDirectory();
-        _workspaceDirectoryLoadDialog.DirSelected -= LoadWorkspaceFromDirectory;
-        _workspaceDirectoryLoadDialog.DirSelected += LoadWorkspaceFromDirectory;
         _workspaceDirectoryLoadDialog.PopupCenteredRatio(0.75f);
     }
 
