@@ -1,4 +1,6 @@
-namespace SceneMaker.Core.Tests;
+using SceneMaker.Core;
+
+namespace SceneMaker.TestSupport;
 
 /// <summary>
 /// Shared fixture for Core tests. Writes a synchronized PolyTools import and a
@@ -15,7 +17,7 @@ namespace SceneMaker.Core.Tests;
 /// Assets: <c>grass</c> and <c>sand</c> are PolyTools terrain, <c>stone</c> and
 /// <c>portal</c> are PolyTools props.
 /// </summary>
-internal sealed class TestWorkspace : IDisposable
+public sealed class TestWorkspace : IDisposable
 {
     public const int AuthoringPixelsPerCell = 32;
 

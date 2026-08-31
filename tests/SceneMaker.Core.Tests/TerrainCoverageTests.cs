@@ -1,3 +1,4 @@
+using SceneMaker.TestSupport;
 using Xunit;
 
 namespace SceneMaker.Core.Tests;

@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/SceneMaker.Core/SceneMaker.Core.csproj" />
+    <ProjectReference Include="../SceneMaker.TestSupport/SceneMaker.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>

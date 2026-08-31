@@ -343,7 +343,7 @@ public sealed partial class SceneCanvas : Control
         }
 
         var preview = PropLinePreview(start, end);
-        var invalidCount = preview.Count(candidate => !candidate.Validation.IsValid);
+        var invalidCount = ToolPreviewBuilder.CountOf(preview, PropPreviewKind.Blocked);
         if (invalidCount > 0)
         {
             ToolStatusRequested?.Invoke(
@@ -352,8 +352,7 @@ public sealed partial class SceneCanvas : Control
         }
 
         PropLineRequested?.Invoke(start.X, start.Y, end.X, end.Y);
-        var warningCount = preview.Count(candidate =>
-            candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain);
+        var warningCount = ToolPreviewBuilder.CountOf(preview, PropPreviewKind.MissingTerrain);
         if (warningCount > 0)
         {
             ToolStatusRequested?.Invoke(
@@ -506,9 +505,8 @@ public sealed partial class SceneCanvas : Control
                     {
                         _lineEnd = coordinate;
                         var preview = PropLinePreview(_lineStart.Value, coordinate);
-                        var invalidCount = preview.Count(candidate => !candidate.Validation.IsValid);
-                        var warningCount = preview.Count(candidate =>
-                            candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain);
+                        var invalidCount = ToolPreviewBuilder.CountOf(preview, PropPreviewKind.Blocked);
+                        var warningCount = ToolPreviewBuilder.CountOf(preview, PropPreviewKind.MissingTerrain);
                         ToolStatusRequested?.Invoke(invalidCount > 0
                             ? $"Line Draw: end fixed; {invalidCount} of {preview.Count} previews are blocked. Press Escape to revise."
                             : warningCount > 0
@@ -693,27 +691,21 @@ public sealed partial class SceneCanvas : Control
         Vector2 pan,
         float zoom)
     {
-        if (ActiveTool is not (EditorTool.Pencil or EditorTool.Line)
-            || _pointerTerrainPosition is not { } pointer)
-        {
-            return;
-        }
+        var preview = ToolPreviewBuilder.BuildTerrain(
+            document,
+            ActiveTool,
+            EraserEnabled,
+            _pointerTerrainPosition is { } pointer
+                ? new TerrainCellCoordinate(pointer.X, pointer.Y)
+                : null,
+            _terrainLineDragging && _lineStart is { } start
+                ? new TerrainCellCoordinate(start.X, start.Y)
+                : null);
 
-        IReadOnlyList<TerrainCellCoordinate> cells = ActiveTool == EditorTool.Line
-            && _terrainLineDragging
-            && _lineStart is { } start
-                ? TerrainEditing.LineCells(start.X, start.Y, pointer.X, pointer.Y)
-                : [new TerrainCellCoordinate(pointer.X, pointer.Y)];
         var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
-        var color = EraserEnabled ? InvalidPreviewColor : SelectionColor;
-        foreach (var cell in cells)
+        var color = preview.Erasing ? InvalidPreviewColor : SelectionColor;
+        foreach (var cell in preview.Cells)
         {
-            if (cell.X < 0 || cell.X >= document.SizeCells.Width
-                || cell.Y < 0 || cell.Y >= document.SizeCells.Height)
-            {
-                continue;
-            }
-
             var rectangle = new Rect2(
                 pan + new Vector2(
                     cell.X * cellSize,
@@ -905,62 +897,68 @@ public sealed partial class SceneCanvas : Control
         float zoom,
         int sceneHeightAuthoringPixels)
     {
-        if (_propAssets is null || SelectedPropAssetKey is not { } assetKey) return;
-
-        var asset = _propAssets.Resolve(assetKey);
-        IReadOnlyList<(int X, int Y, PropValidationResult Validation)> preview;
-        if (ActiveTool == EditorTool.Pencil)
+        foreach (var candidate in CurrentPropPreviews())
         {
-            if (_pointerAuthoringPosition is not { } pointer) return;
-            preview = [(pointer.X, pointer.Y, ValidateProp(pointer))];
-        }
-        else if (ActiveTool == EditorTool.Line)
-        {
-            if (_lineStart is not { } start)
-            {
-                if (_pointerAuthoringPosition is not { } pointer) return;
-                preview = [(pointer.X, pointer.Y, ValidateProp(pointer))];
-            }
-            else
-            {
-                var endpoint = _lineEnd ?? _pointerAuthoringPosition;
-                if (endpoint is null) return;
-                preview = PropLinePreview(start, endpoint.Value);
-            }
-        }
-        else
-        {
-            return;
-        }
-
-        foreach (var candidate in preview)
-        {
-            var bounds = PropEditing.BoundsFor(asset, candidate.X, candidate.Y);
             var rectangle = CanvasRectangle(
-                bounds,
+                candidate.Bounds,
                 pan,
                 zoom,
                 sceneHeightAuthoringPixels);
-            var color = candidate.Validation.IsValid && candidate.Validation.HasCompleteTerrain
+            var missingTerrain = candidate.Kind == PropPreviewKind.MissingTerrain;
+            var color = candidate.Kind == PropPreviewKind.Ready
                 ? ValidPreviewColor
                 : InvalidPreviewColor;
             DrawRect(
                 rectangle,
-                new Color(color.R, color.G, color.B,
-                    candidate.Validation.HasCompleteTerrain ? 0.22f : 0.08f));
-            if (candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain)
+                new Color(color.R, color.G, color.B, missingTerrain ? 0.08f : 0.22f));
+            if (missingTerrain)
                 DrawDashedRectangle(rectangle, color, 2f);
             else
                 DrawRect(rectangle, color, filled: false, width: 2f);
             DrawAnchor(
-                candidate.X,
-                candidate.Y,
+                candidate.Anchor.X,
+                candidate.Anchor.Y,
                 pan,
                 zoom,
                 sceneHeightAuthoringPixels,
                 color);
         }
     }
+
+    /// <summary>What the Prop tool would author where the pointer currently is.</summary>
+    private IReadOnlyList<PropPreview> CurrentPropPreviews() =>
+        BuildPropPreviews(
+            ActiveTool,
+            _pointerAuthoringPosition is { } pointer
+                ? new AuthoringPoint(pointer.X, pointer.Y)
+                : null,
+            _lineStart is { } start ? new AuthoringPoint(start.X, start.Y) : null,
+            _lineEnd is { } end ? new AuthoringPoint(end.X, end.Y) : null);
+
+    private IReadOnlyList<PropPreview> PropLinePreview((int X, int Y) start, (int X, int Y) end) =>
+        BuildPropPreviews(
+            EditorTool.Line,
+            pointer: null,
+            new AuthoringPoint(start.X, start.Y),
+            new AuthoringPoint(end.X, end.Y));
+
+    private IReadOnlyList<PropPreview> BuildPropPreviews(
+        EditorTool tool,
+        AuthoringPoint? pointer,
+        AuthoringPoint? lineStart,
+        AuthoringPoint? lineEnd) =>
+        _scene is null || _propAssets is null
+            ? []
+            : ToolPreviewBuilder.BuildProps(
+                _scene.Document,
+                _propAssets,
+                _sceneTerrain,
+                SelectedPropAssetKey,
+                tool,
+                pointer,
+                lineStart,
+                lineEnd,
+                _interactionState.PropLineOffsetAuthoringPixels);
 
     private PropValidationResult ValidateProp((int X, int Y) coordinate) =>
         PropEditing.ValidateCandidate(
@@ -970,25 +968,6 @@ public sealed partial class SceneCanvas : Control
             coordinate.Y,
             SelectedPropAssetKey!,
             _sceneTerrain);
-
-    private IReadOnlyList<(int X, int Y, PropValidationResult Validation)> PropLinePreview(
-        (int X, int Y) start,
-        (int X, int Y) end)
-    {
-        var asset = _propAssets!.Resolve(SelectedPropAssetKey!);
-        return PropEditing.LineAnchors(
-                asset,
-                start.X,
-                start.Y,
-                end.X,
-                end.Y,
-                _interactionState.PropLineOffsetAuthoringPixels)
-            .Select(anchor => (
-                anchor.X,
-                anchor.Y,
-                ValidateProp(anchor)))
-            .ToList();
-    }
 
     private static Rect2 CanvasRectangle(
         PropBoundsAuthoringPixels bounds,
