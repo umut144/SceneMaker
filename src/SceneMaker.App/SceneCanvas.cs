@@ -26,7 +26,7 @@ public sealed partial class SceneCanvas : Control
     private SceneDocument? _templatePreview;
     private IReadOnlyList<TemplateTerrainMask> _templatePreviewMasks = [];
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
-    private PlacementDisplayCatalog? _placementAssets;
+    private PropDisplayCatalog? _placementAssets;
     private TransitionDisplayCatalog? _transitionAssets;
     private EditorInteractionState _interactionState = new();
     private string? _selectedPlacementInstanceId;
@@ -138,7 +138,7 @@ public sealed partial class SceneCanvas : Control
         QueueRedraw();
     }
 
-    public void ConfigurePlacementAssets(PlacementDisplayCatalog catalog)
+    public void ConfigurePlacementAssets(PropDisplayCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         _placementAssets = catalog;
@@ -848,7 +848,7 @@ public sealed partial class SceneCanvas : Control
         foreach (var placement in document.Placements)
         {
             var asset = _placementAssets.Resolve(placement.AssetKey);
-            var bounds = PlacementEditing.BoundsFor(
+            var bounds = PropEditing.BoundsFor(
                 asset,
                 placement.PositionAuthoringPx.X,
                 placement.PositionAuthoringPx.Y);
@@ -1074,7 +1074,7 @@ public sealed partial class SceneCanvas : Control
             return;
 
         var asset = _placementAssets.Resolve(assetKey);
-        IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> preview;
+        IReadOnlyList<(int X, int Y, PropValidationResult Validation)> preview;
         if (ActiveTool == EditorTool.Pencil)
         {
             if (_pointerAuthoringPosition is not { } pointer) return;
@@ -1101,7 +1101,7 @@ public sealed partial class SceneCanvas : Control
 
         foreach (var candidate in preview)
         {
-            var bounds = PlacementEditing.BoundsFor(asset, candidate.X, candidate.Y);
+            var bounds = PropEditing.BoundsFor(asset, candidate.X, candidate.Y);
             var rectangle = new Rect2(
                 pan + new Vector2(
                     bounds.Left * zoom,
@@ -1143,7 +1143,7 @@ public sealed partial class SceneCanvas : Control
             return;
 
         var asset = _transitionAssets.Resolve(assetKey);
-        IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> preview;
+        IReadOnlyList<(int X, int Y, PropValidationResult Validation)> preview;
         if (ActiveTool == EditorTool.Pencil)
         {
             if (_pointerAuthoringPosition is not { } pointer) return;
@@ -1199,8 +1199,8 @@ public sealed partial class SceneCanvas : Control
         }
     }
 
-    private PlacementValidationResult ValidatePlacement((int X, int Y) coordinate) =>
-        PlacementEditing.ValidateCandidate(
+    private PropValidationResult ValidatePlacement((int X, int Y) coordinate) =>
+        PropEditing.ValidateCandidate(
             _scene!.Document,
             _placementAssets!,
             _transitionAssets!,
@@ -1208,7 +1208,7 @@ public sealed partial class SceneCanvas : Control
             coordinate.Y,
             SelectedPlacementAssetKey!);
 
-    private PlacementValidationResult ValidateTransition((int X, int Y) coordinate) =>
+    private PropValidationResult ValidateTransition((int X, int Y) coordinate) =>
         TransitionEditing.ValidateCandidate(
             _scene!.Document,
             _placementAssets!,
@@ -1217,12 +1217,12 @@ public sealed partial class SceneCanvas : Control
             coordinate.Y,
             SelectedTransitionAssetKey!);
 
-    private IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> PlacementLinePreview(
+    private IReadOnlyList<(int X, int Y, PropValidationResult Validation)> PlacementLinePreview(
         (int X, int Y) start,
         (int X, int Y) end)
     {
         var asset = _placementAssets!.Resolve(SelectedPlacementAssetKey!);
-        return PlacementEditing.LineAnchors(
+        return PropEditing.LineAnchors(
                 asset,
                 start.X,
                 start.Y,
@@ -1236,7 +1236,7 @@ public sealed partial class SceneCanvas : Control
             .ToList();
     }
 
-    private IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> TransitionLinePreview(
+    private IReadOnlyList<(int X, int Y, PropValidationResult Validation)> TransitionLinePreview(
         (int X, int Y) start,
         (int X, int Y) end)
     {
@@ -1249,14 +1249,14 @@ public sealed partial class SceneCanvas : Control
             .ToList();
     }
 
-    private IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> CurrentLinePreview(
+    private IReadOnlyList<(int X, int Y, PropValidationResult Validation)> CurrentLinePreview(
         (int X, int Y) start,
         (int X, int Y) end) => Mode == EditorMode.Placements
             ? PlacementLinePreview(start, end)
             : TransitionLinePreview(start, end);
 
     private static Rect2 CanvasRectangle(
-        PlacementBoundsAuthoringPixels bounds,
+        PropBoundsAuthoringPixels bounds,
         Vector2 pan,
         float zoom,
         int sceneHeightAuthoringPixels) => new(

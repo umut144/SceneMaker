@@ -20,7 +20,7 @@ try
         scene,
         configuration,
         TerrainDisplayCatalogLoader.Load(catalog, configuration),
-        PlacementDisplayCatalogLoader.Load(catalog, configuration),
+        PropDisplayCatalogLoader.Load(catalog, configuration),
         TransitionDisplayCatalogLoader.Load(catalog, configuration));
     Console.WriteLine(output);
     return 0;

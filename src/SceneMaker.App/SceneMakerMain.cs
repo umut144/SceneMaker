@@ -88,7 +88,7 @@ public sealed partial class SceneMakerMain : Control
     private PolyToolsCatalog? _catalog;
     private WorkspaceConfiguration? _workspaceConfiguration;
     private TerrainDisplayCatalog? _terrainAssets;
-    private PlacementDisplayCatalog? _placementAssets;
+    private PropDisplayCatalog? _placementAssets;
     private TransitionDisplayCatalog? _transitionAssets;
     private string? _pendingWorkspaceParentDirectory;
     private string? _recentSessionPath;
@@ -1053,13 +1053,13 @@ public sealed partial class SceneMakerMain : Control
             }
             var candidate = _workspaceConfiguration.WithAssetProfiles(profiles, _catalog);
             var terrain = TerrainDisplayCatalogLoader.Load(_catalog, candidate);
-            var placements = PlacementDisplayCatalogLoader.Load(_catalog, candidate);
+            var placements = PropDisplayCatalogLoader.Load(_catalog, candidate);
             var transitions = TransitionDisplayCatalogLoader.Load(_catalog, candidate);
             if (_scene is not null)
             {
                 DocumentValidation.ValidateGrid(_scene.Document, candidate.Metrics);
                 TerrainEditing.ValidateAssetReferences(_scene.Document, terrain);
-                PlacementEditing.ValidateAssetReferences(_scene.Document, placements, transitions);
+                PropEditing.ValidateAssetReferences(_scene.Document, placements, transitions);
                 TransitionEditing.ValidateAssetReferences(_scene.Document, placements, transitions);
             }
             WorkspaceConfigurationStore.Save(_workspace.DirectoryPath, candidate);
@@ -1219,7 +1219,7 @@ public sealed partial class SceneMakerMain : Control
             _scene = SceneStore.Load(_workspace, ResolveFileSystemPath(filePath));
             DocumentValidation.ValidateGrid(_scene.Document, _workspaceConfiguration!.Metrics);
             TerrainEditing.ValidateAssetReferences(_scene.Document, _terrainAssets!);
-            PlacementEditing.ValidateAssetReferences(
+            PropEditing.ValidateAssetReferences(
                 _scene.Document,
                 _placementAssets!,
                 _transitionAssets!);
@@ -1609,7 +1609,7 @@ public sealed partial class SceneMakerMain : Control
 
         TryPlacementAction("Pencil Draw", () =>
         {
-            var document = PlacementEditing.Place(
+            var document = PropEditing.Place(
                 _scene.Document,
                 _placementAssets!,
                 _transitionAssets!,
@@ -1630,7 +1630,7 @@ public sealed partial class SceneMakerMain : Control
         TryPlacementAction("Line Draw", () =>
         {
             var beforeCount = _scene.Document.Placements.Count;
-            var document = PlacementEditing.PlaceLine(
+            var document = PropEditing.PlaceLine(
                 _scene.Document,
                 _placementAssets!,
                 _transitionAssets!,
@@ -1657,7 +1657,7 @@ public sealed partial class SceneMakerMain : Control
             var asset = _placementAssets!.Resolve(assetKey);
             var document = _scene.Document;
             var beforeCount = document.Placements.Count;
-            foreach (var anchor in PlacementEditing.LineAnchors(
+            foreach (var anchor in PropEditing.LineAnchors(
                          asset,
                          startX,
                          startY,
@@ -1665,7 +1665,7 @@ public sealed partial class SceneMakerMain : Control
                          endY,
                          _interactionState.PlacementLineOffsetAuthoringPixels))
             {
-                document = PlacementEditing.EraseAt(
+                document = PropEditing.EraseAt(
                     document,
                     _placementAssets!,
                     anchor.X,
@@ -1757,7 +1757,7 @@ public sealed partial class SceneMakerMain : Control
         if (_workspace is null || _scene is null) return;
         TryPlacementAction("Eraser", () =>
         {
-            var document = PlacementEditing.EraseAt(
+            var document = PropEditing.EraseAt(
                 _scene.Document,
                 _placementAssets!,
                 authoringX,
@@ -1772,7 +1772,7 @@ public sealed partial class SceneMakerMain : Control
     private void SelectPlacement(int authoringX, int authoringY)
     {
         if (_scene is null) return;
-        var placement = PlacementEditing.FindAt(
+        var placement = PropEditing.FindAt(
             _scene.Document,
             _placementAssets!,
             authoringX,
@@ -1962,7 +1962,7 @@ public sealed partial class SceneMakerMain : Control
                 $"Workspace config key '{_workspaceConfiguration.WorkspaceKey}' must match workspace '{_workspace.WorkspaceKey}'.");
         }
         _terrainAssets = TerrainDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
-        _placementAssets = PlacementDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
+        _placementAssets = PropDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
         _transitionAssets = TransitionDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
         _canvas.ConfigureMetrics(_workspaceConfiguration.Metrics);
         _canvas.ConfigureTerrainAssets(_terrainAssets);
@@ -2014,7 +2014,7 @@ public sealed partial class SceneMakerMain : Control
             {
                 DocumentValidation.ValidateGrid(_scene.Document, _workspaceConfiguration!.Metrics);
                 TerrainEditing.ValidateAssetReferences(_scene.Document, _terrainAssets!);
-                PlacementEditing.ValidateAssetReferences(
+                PropEditing.ValidateAssetReferences(
                     _scene.Document,
                     _placementAssets!,
                     _transitionAssets!);

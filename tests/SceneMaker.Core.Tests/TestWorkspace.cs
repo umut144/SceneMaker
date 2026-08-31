@@ -25,7 +25,7 @@ internal sealed class TestWorkspace : IDisposable
         PolyToolsCatalog catalog,
         WorkspaceConfiguration configuration,
         TerrainDisplayCatalog terrain,
-        PlacementDisplayCatalog placements,
+        PropDisplayCatalog placements,
         TransitionDisplayCatalog transitions)
     {
         RootPath = rootPath;
@@ -40,7 +40,7 @@ internal sealed class TestWorkspace : IDisposable
     public PolyToolsCatalog Catalog { get; }
     public WorkspaceConfiguration Configuration { get; }
     public TerrainDisplayCatalog Terrain { get; }
-    public PlacementDisplayCatalog Placements { get; }
+    public PropDisplayCatalog Placements { get; }
     public TransitionDisplayCatalog Transitions { get; }
     public WorkspaceMetrics Metrics => Configuration.Metrics;
 
@@ -59,7 +59,7 @@ internal sealed class TestWorkspace : IDisposable
             catalog,
             configuration,
             TerrainDisplayCatalogLoader.Load(catalog, configuration),
-            PlacementDisplayCatalogLoader.Load(catalog, configuration),
+            PropDisplayCatalogLoader.Load(catalog, configuration),
             TransitionDisplayCatalogLoader.Load(catalog, configuration));
     }
 

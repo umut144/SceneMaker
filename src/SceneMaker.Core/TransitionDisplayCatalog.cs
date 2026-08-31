@@ -47,7 +47,7 @@ public static class TransitionDisplayCatalogLoader
             var catalogAsset = catalog.Resolve(profile.AssetKey);
             if (workspace.EffectiveRole(profile, catalogAsset) != AuthoringAssetRole.Transition)
                 continue;
-            var spatial = PlacementDisplayCatalogLoader.Create(
+            var spatial = PropDisplayCatalogLoader.Create(
                 profile, catalogAsset, workspace.Grid.AuthoringPixelsPerMeter);
             assets.Add(profile.AssetKey, new TransitionDisplayAsset(
                 spatial.AssetKey, spatial.Name, spatial.Color,

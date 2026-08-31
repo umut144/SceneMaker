@@ -28,7 +28,7 @@ public static class SceneExport
         LoadedScene scene,
         WorkspaceConfiguration configuration,
         TerrainDisplayCatalog terrainAssets,
-        PlacementDisplayCatalog placementAssets,
+        PropDisplayCatalog placementAssets,
         TransitionDisplayCatalog transitionAssets)
     {
         ArgumentNullException.ThrowIfNull(workspace);
@@ -58,7 +58,7 @@ public static class SceneExport
 
     private static List<ExportAssetProfileDocument> ExportProfiles(
         WorkspaceConfiguration configuration,
-        PlacementDisplayCatalog placementAssets,
+        PropDisplayCatalog placementAssets,
         TransitionDisplayCatalog transitionAssets)
     {
         var placements = placementAssets.Assets.ToDictionary(
@@ -108,18 +108,18 @@ public static class SceneExport
         SceneDocument scene,
         WorkspaceConfiguration configuration,
         TerrainDisplayCatalog terrainAssets,
-        PlacementDisplayCatalog placementAssets,
+        PropDisplayCatalog placementAssets,
         TransitionDisplayCatalog transitionAssets)
     {
         DocumentValidation.ValidateGrid(scene, configuration.Metrics);
         TerrainEditing.ValidateAssetReferences(scene, terrainAssets);
-        PlacementEditing.ValidateAssetReferences(scene, placementAssets, transitionAssets);
+        PropEditing.ValidateAssetReferences(scene, placementAssets, transitionAssets);
         TransitionEditing.ValidateAssetReferences(scene, placementAssets, transitionAssets);
         foreach (var placement in scene.Placements)
         {
             var missing = TerrainCoverage.MissingCells(
                 scene,
-                PlacementEditing.BoundsFor(
+                PropEditing.BoundsFor(
                     placementAssets.Resolve(placement.AssetKey),
                     placement.PositionAuthoringPx.X,
                     placement.PositionAuthoringPx.Y),

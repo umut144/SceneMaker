@@ -19,7 +19,7 @@ public sealed class StandaloneWorkspaceTests
 
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
-        var tree = PlacementDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
+        var tree = PropDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
         var portal = TransitionDisplayCatalogLoader.Load(catalog, workspace).Resolve("portal");
 
         Assert.Equal(66, tree.FootprintWidthAuthoringPixels);
@@ -44,12 +44,12 @@ public sealed class StandaloneWorkspaceTests
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
         var terrain = TerrainDisplayCatalogLoader.Load(catalog, workspace);
-        var placements = PlacementDisplayCatalogLoader.Load(catalog, workspace);
+        var placements = PropDisplayCatalogLoader.Load(catalog, workspace);
         var transitions = TransitionDisplayCatalogLoader.Load(catalog, workspace);
         var scene = SceneDocument.Create("test", 20, 20);
 
         scene = TerrainEditing.Paint(scene, terrain, 0, 0, "grass");
-        scene = PlacementEditing.Place(scene, placements, transitions, 33, 0, "tree");
+        scene = PropEditing.Place(scene, placements, transitions, 33, 0, "tree");
         scene = TransitionEditing.Place(scene, placements, transitions, 160, 32, "portal");
         var serialized = DocumentJson.Serialize(scene);
         var restored = DocumentJson.DeserializeScene(serialized);
@@ -101,10 +101,10 @@ public sealed class StandaloneWorkspaceTests
         """);
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
-        var asset = PlacementDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
+        var asset = PropDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
 
-        var withoutOffset = PlacementEditing.LineAnchors(asset, 100, 100, 300, 100);
-        var withOffset = PlacementEditing.LineAnchors(
+        var withoutOffset = PropEditing.LineAnchors(asset, 100, 100, 300, 100);
+        var withOffset = PropEditing.LineAnchors(
             asset,
             100,
             100,
@@ -153,7 +153,7 @@ public sealed class StandaloneWorkspaceTests
 
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
-        var tree = PlacementDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
+        var tree = PropDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
 
         Assert.Equal(20, tree.FootprintWidthAuthoringPixels);
         Assert.Equal(10, tree.FootprintHeightAuthoringPixels);
@@ -173,12 +173,12 @@ public sealed class StandaloneWorkspaceTests
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
 
         Assert.Equal(5, workspace.Metrics.AuthoringPixelsPerTerrainCell);
-        Assert.Equal(0.75m, PlacementEditing.PositionMeters(15, workspace.Metrics));
-        Assert.Equal(75, PlacementEditing.PositionGamePixels(15, workspace.Metrics));
+        Assert.Equal(0.75m, PropEditing.PositionMeters(15, workspace.Metrics));
+        Assert.Equal(75, PropEditing.PositionGamePixels(15, workspace.Metrics));
         Assert.Equal(
             [new TerrainCellCoordinate(1, 0)],
             TerrainCoverage.IntersectedCells(
-                new PlacementBoundsAuthoringPixels(5, 0, 5, 5),
+                new PropBoundsAuthoringPixels(5, 0, 5, 5),
                 workspace.Metrics));
     }
 
@@ -231,7 +231,7 @@ public sealed class StandaloneWorkspaceTests
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var configuration = WorkspaceConfigurationStore.Load(directory.Path, catalog);
         var terrain = TerrainDisplayCatalogLoader.Load(catalog, configuration);
-        var placements = PlacementDisplayCatalogLoader.Load(catalog, configuration);
+        var placements = PropDisplayCatalogLoader.Load(catalog, configuration);
         var transitions = TransitionDisplayCatalogLoader.Load(catalog, configuration);
         var scene = TerrainEditing.Paint(
             SceneDocument.Create("field", 1, 1), terrain, 0, 0, "grass");

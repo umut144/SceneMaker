@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 
 namespace SceneMaker.Core;
 
-public sealed record PlacementDisplayAsset(
+public sealed record PropDisplayAsset(
     string AssetKey,
     string Name,
     string Color,
@@ -15,33 +15,33 @@ public sealed record PlacementDisplayAsset(
     int AnchorXAuthoringPixels,
     int AnchorYAuthoringPixels);
 
-public sealed class PlacementDisplayCatalog
+public sealed class PropDisplayCatalog
 {
-    private readonly IReadOnlyDictionary<string, PlacementDisplayAsset> _byKey;
+    private readonly IReadOnlyDictionary<string, PropDisplayAsset> _byKey;
 
-    internal PlacementDisplayCatalog(
+    internal PropDisplayCatalog(
         WorkspaceMetrics metrics,
-        SortedDictionary<string, PlacementDisplayAsset> byKey)
+        SortedDictionary<string, PropDisplayAsset> byKey)
     {
         Metrics = metrics;
-        _byKey = new ReadOnlyDictionary<string, PlacementDisplayAsset>(byKey);
+        _byKey = new ReadOnlyDictionary<string, PropDisplayAsset>(byKey);
     }
 
     public WorkspaceMetrics Metrics { get; }
-    public IReadOnlyList<PlacementDisplayAsset> Assets => [.. _byKey.Values];
+    public IReadOnlyList<PropDisplayAsset> Assets => [.. _byKey.Values];
 
-    public PlacementDisplayAsset Resolve(string assetKey) =>
+    public PropDisplayAsset Resolve(string assetKey) =>
         _byKey.TryGetValue(assetKey, out var asset)
             ? asset
             : throw new SceneMakerDocumentException(
                 $"Placement asset_key '{assetKey}' is not enabled in this Workspace.");
 }
 
-public static class PlacementDisplayCatalogLoader
+public static class PropDisplayCatalogLoader
 {
-    public static PlacementDisplayCatalog Load(PolyToolsCatalog catalog, WorkspaceConfiguration workspace)
+    public static PropDisplayCatalog Load(PolyToolsCatalog catalog, WorkspaceConfiguration workspace)
     {
-        SortedDictionary<string, PlacementDisplayAsset> assets = new(StringComparer.Ordinal);
+        SortedDictionary<string, PropDisplayAsset> assets = new(StringComparer.Ordinal);
         foreach (var profile in workspace.AssetProfiles)
         {
             var catalogAsset = catalog.Resolve(profile.AssetKey);
@@ -50,10 +50,10 @@ public static class PlacementDisplayCatalogLoader
             assets.Add(profile.AssetKey, Create(
                 profile, catalogAsset, workspace.Grid.AuthoringPixelsPerMeter));
         }
-        return new PlacementDisplayCatalog(workspace.Metrics, assets);
+        return new PropDisplayCatalog(workspace.Metrics, assets);
     }
 
-    internal static PlacementDisplayAsset Create(
+    internal static PropDisplayAsset Create(
         WorkspaceAssetProfile profile,
         PolyToolsCatalogAsset catalogAsset,
         decimal authoringPixelsPerMeter)
@@ -73,7 +73,7 @@ public static class PlacementDisplayCatalogLoader
         if (anchorX < 0 || anchorY < 0 || anchorX > width || anchorY > height)
             throw new SceneMakerDocumentException(
                 $"Asset '{profile.AssetKey}' PolyTools pivot lies outside its visible authoring footprint.");
-        return new PlacementDisplayAsset(
+        return new PropDisplayAsset(
             profile.AssetKey,
             catalogAsset.Name,
             profile.Color,

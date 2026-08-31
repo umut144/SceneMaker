@@ -32,7 +32,7 @@ public sealed record AuthoringPixelPosition
     public required int Y { get; init; }
 }
 
-public sealed record PlacementDocument
+public sealed record PropDocument
 {
     public required string InstanceId { get; init; }
     public required string AssetKey { get; init; }
@@ -68,7 +68,7 @@ public sealed record SceneDocument
     public required string CoordinateSpace { get; init; }
     public required SceneSizeCells SizeCells { get; init; }
     public required List<TerrainCellDocument> TerrainCells { get; init; }
-    public required List<PlacementDocument> Placements { get; init; }
+    public required List<PropDocument> Placements { get; init; }
     public required List<TransitionDocument> Transitions { get; init; }
     public required TemplateDefinitionDocument? TemplateDefinition { get; init; }
     public required List<TemplateAnchorDocument> TemplateAnchors { get; init; }

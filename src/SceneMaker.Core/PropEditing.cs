@@ -1,6 +1,6 @@
 namespace SceneMaker.Core;
 
-public readonly record struct PlacementBoundsAuthoringPixels(
+public readonly record struct PropBoundsAuthoringPixels(
     int Left,
     int Bottom,
     int Width,
@@ -9,25 +9,25 @@ public readonly record struct PlacementBoundsAuthoringPixels(
     public int Right => checked(Left + Width);
     public int Top => checked(Bottom + Height);
 
-    public bool Overlaps(PlacementBoundsAuthoringPixels other) =>
+    public bool Overlaps(PropBoundsAuthoringPixels other) =>
         Left < other.Right && Right > other.Left
         && Bottom < other.Top && Top > other.Bottom;
 }
 
-public readonly record struct PlacementValidationResult(
+public readonly record struct PropValidationResult(
     bool IsValid,
     string? Reason,
     bool HasCompleteTerrain = true,
     string? Warning = null)
 {
-    public static PlacementValidationResult Valid { get; } = new(true, null);
+    public static PropValidationResult Valid { get; } = new(true, null);
 }
 
-public static class PlacementEditing
+public static class PropEditing
 {
     public static SceneDocument Place(
         SceneDocument scene,
-        PlacementDisplayCatalog placementAssets,
+        PropDisplayCatalog placementAssets,
         TransitionDisplayCatalog transitionAssets,
         int anchorX,
         int anchorY,
@@ -47,7 +47,7 @@ public static class PlacementEditing
         if (!validation.IsValid)
             throw new SceneMakerDocumentException(validation.Reason!);
 
-        var placement = new PlacementDocument
+        var placement = new PropDocument
         {
             InstanceId = NextInstanceId(scene, asset.AssetKey),
             AssetKey = assetKey,
@@ -64,9 +64,9 @@ public static class PlacementEditing
         return placed;
     }
 
-    public static PlacementValidationResult ValidateCandidate(
+    public static PropValidationResult ValidateCandidate(
         SceneDocument scene,
-        PlacementDisplayCatalog placementAssets,
+        PropDisplayCatalog placementAssets,
         TransitionDisplayCatalog transitionAssets,
         int anchorX,
         int anchorY,
@@ -75,18 +75,18 @@ public static class PlacementEditing
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(placementAssets);
         var asset = placementAssets.Resolve(assetKey);
-        PlacementBoundsAuthoringPixels candidate;
+        PropBoundsAuthoringPixels candidate;
         try
         {
             candidate = BoundsFor(asset, anchorX, anchorY);
         }
         catch (OverflowException)
         {
-            return new PlacementValidationResult(false, "Placement coordinates exceed the supported range.");
+            return new PropValidationResult(false, "Placement coordinates exceed the supported range.");
         }
 
         if (!IsInsideScene(scene, candidate, placementAssets.Metrics))
-            return new PlacementValidationResult(false, "Placement footprint lies outside the Scene bounds.");
+            return new PropValidationResult(false, "Placement footprint lies outside the Scene bounds.");
 
         foreach (var existing in scene.Placements)
         {
@@ -96,7 +96,7 @@ public static class PlacementEditing
                 existing.PositionAuthoringPx.X,
                 existing.PositionAuthoringPx.Y);
             if (candidate.Overlaps(existingBounds))
-                return new PlacementValidationResult(
+                return new PropValidationResult(
                     false,
                     $"Placement footprint overlaps '{existing.InstanceId}'.");
         }
@@ -108,14 +108,14 @@ public static class PlacementEditing
                 transition.PositionAuthoringPx.X,
                 transition.PositionAuthoringPx.Y);
             if (candidate.Overlaps(transitionBounds))
-                return new PlacementValidationResult(
+                return new PropValidationResult(
                     false,
                     $"Placement footprint overlaps Transition '{transition.InstanceId}'.");
         }
         var missingTerrain = TerrainCoverage.MissingCells(scene, candidate, placementAssets.Metrics);
         return missingTerrain.Count == 0
-            ? PlacementValidationResult.Valid
-            : new PlacementValidationResult(
+            ? PropValidationResult.Valid
+            : new PropValidationResult(
                 IsValid: true,
                 Reason: null,
                 HasCompleteTerrain: false,
@@ -124,7 +124,7 @@ public static class PlacementEditing
 
     public static SceneDocument PlaceLine(
         SceneDocument scene,
-        PlacementDisplayCatalog placementAssets,
+        PropDisplayCatalog placementAssets,
         TransitionDisplayCatalog transitionAssets,
         int startAnchorX,
         int startAnchorY,
@@ -155,7 +155,7 @@ public static class PlacementEditing
     }
 
     public static IReadOnlyList<(int X, int Y)> LineAnchors(
-        PlacementDisplayAsset asset,
+        PropDisplayAsset asset,
         int startAnchorX,
         int startAnchorY,
         int endAnchorX,
@@ -172,9 +172,9 @@ public static class PlacementEditing
             offsetAuthoringPixels: placementOffsetAuthoringPixels);
     }
 
-    public static PlacementDocument? FindAt(
+    public static PropDocument? FindAt(
         SceneDocument scene,
-        PlacementDisplayCatalog placementAssets,
+        PropDisplayCatalog placementAssets,
         int authoringX,
         int authoringY)
     {
@@ -197,7 +197,7 @@ public static class PlacementEditing
 
     public static SceneDocument EraseAt(
         SceneDocument scene,
-        PlacementDisplayCatalog placementAssets,
+        PropDisplayCatalog placementAssets,
         int authoringX,
         int authoringY)
     {
@@ -215,11 +215,11 @@ public static class PlacementEditing
 
     public static void ValidateAssetReferences(
         SceneDocument scene,
-        PlacementDisplayCatalog placementAssets,
+        PropDisplayCatalog placementAssets,
         TransitionDisplayCatalog transitionAssets)
     {
         DocumentValidation.ValidateGrid(scene, placementAssets.Metrics);
-        List<PlacementBoundsAuthoringPixels> accepted = [];
+        List<PropBoundsAuthoringPixels> accepted = [];
         foreach (var placement in scene.Placements)
         {
             var asset = placementAssets.Resolve(placement.AssetKey);
@@ -257,8 +257,8 @@ public static class PlacementEditing
         }
     }
 
-    public static PlacementBoundsAuthoringPixels BoundsFor(
-        PlacementDisplayAsset asset,
+    public static PropBoundsAuthoringPixels BoundsFor(
+        PropDisplayAsset asset,
         int anchorX,
         int anchorY) => new(
             checked(anchorX - asset.AnchorXAuthoringPixels),
@@ -274,7 +274,7 @@ public static class PlacementEditing
 
     private static bool IsInsideScene(
         SceneDocument scene,
-        PlacementBoundsAuthoringPixels bounds,
+        PropBoundsAuthoringPixels bounds,
         WorkspaceMetrics metrics)
     {
         var width = metrics.SceneWidthAuthoringPixels(scene);

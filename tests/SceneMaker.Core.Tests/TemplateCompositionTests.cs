@@ -303,7 +303,7 @@ public sealed class TemplateCompositionTests
         int authoringX,
         int authoringY,
         string assetKey = "stone") =>
-        PlacementEditing.Place(
+        PropEditing.Place(
             scene,
             workspace.Placements,
             workspace.Transitions,

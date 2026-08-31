@@ -274,7 +274,7 @@ public readonly record struct TerrainCellCoordinate(int X, int Y);
 public static class TerrainCoverage
 {
     public static IReadOnlyList<TerrainCellCoordinate> IntersectedCells(
-        PlacementBoundsAuthoringPixels bounds,
+        PropBoundsAuthoringPixels bounds,
         WorkspaceMetrics metrics)
     {
         if (bounds.Width <= 0 || bounds.Height <= 0)
@@ -297,7 +297,7 @@ public static class TerrainCoverage
 
     public static IReadOnlyList<TerrainCellCoordinate> MissingCells(
         SceneDocument scene,
-        PlacementBoundsAuthoringPixels bounds,
+        PropBoundsAuthoringPixels bounds,
         WorkspaceMetrics metrics)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -311,7 +311,7 @@ public static class TerrainCoverage
 
     public static bool IsComplete(
         SceneDocument scene,
-        PlacementBoundsAuthoringPixels bounds,
+        PropBoundsAuthoringPixels bounds,
         WorkspaceMetrics metrics) =>
         MissingCells(scene, bounds, metrics).Count == 0;
 

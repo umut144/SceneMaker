@@ -31,7 +31,7 @@ public static class TemplateComposition
     public static TemplateCompositionResult Compose(
         SceneDocument baseScene,
         IEnumerable<SceneDocument> workspaceScenes,
-        PlacementDisplayCatalog placementAssets,
+        PropDisplayCatalog placementAssets,
         TransitionDisplayCatalog transitionAssets,
         ulong seed)
     {
@@ -81,7 +81,7 @@ public static class TemplateComposition
 
             placements = placements
                 .Where(placement => !FootprintIntersectsMask(
-                    PlacementEditing.BoundsFor(
+                    PropEditing.BoundsFor(
                         placementAssets.Resolve(placement.AssetKey),
                         placement.PositionAuthoringPx.X,
                         placement.PositionAuthoringPx.Y),
@@ -124,7 +124,7 @@ public static class TemplateComposition
                 .ToList(),
         };
         DocumentValidation.ValidateGrid(composed, placementAssets.Metrics);
-        PlacementEditing.ValidateAssetReferences(composed, placementAssets, transitionAssets);
+        PropEditing.ValidateAssetReferences(composed, placementAssets, transitionAssets);
         TransitionEditing.ValidateAssetReferences(composed, placementAssets, transitionAssets);
         ValidateTerrainCoverage(composed, placementAssets, transitionAssets);
         return new TemplateCompositionResult(
@@ -238,10 +238,10 @@ public static class TemplateComposition
         return mask;
     }
 
-    private static PlacementDocument TranslatePlacement(
+    private static PropDocument TranslatePlacement(
         TemplateAnchorDocument anchor,
         SceneDocument template,
-        PlacementDocument placement,
+        PropDocument placement,
         TemplateTranslation translation) => new()
     {
         InstanceId = DerivedInstanceId(anchor, template, placement.InstanceId),
@@ -275,7 +275,7 @@ public static class TemplateComposition
         $"{anchor.AnchorId}.{template.SceneId}.{sourceInstanceId}";
 
     private static bool FootprintIntersectsMask(
-        PlacementBoundsAuthoringPixels bounds,
+        PropBoundsAuthoringPixels bounds,
         IReadOnlySet<(int X, int Y)> mask,
         WorkspaceMetrics metrics)
     {
@@ -317,12 +317,12 @@ public static class TemplateComposition
 
     private static void ValidateTerrainCoverage(
         SceneDocument scene,
-        PlacementDisplayCatalog placements,
+        PropDisplayCatalog placements,
         TransitionDisplayCatalog transitions)
     {
         foreach (var placement in scene.Placements)
         {
-            var bounds = PlacementEditing.BoundsFor(
+            var bounds = PropEditing.BoundsFor(
                 placements.Resolve(placement.AssetKey),
                 placement.PositionAuthoringPx.X,
                 placement.PositionAuthoringPx.Y);
@@ -340,7 +340,7 @@ public static class TemplateComposition
 
     private static void ThrowIfMissingTerrain(
         SceneDocument scene,
-        PlacementBoundsAuthoringPixels bounds,
+        PropBoundsAuthoringPixels bounds,
         string label,
         string instanceId,
         WorkspaceMetrics metrics)
