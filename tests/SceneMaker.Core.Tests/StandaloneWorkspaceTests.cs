@@ -204,7 +204,18 @@ public sealed class StandaloneWorkspaceTests
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             PolyToolsCatalogImporter.Load(directory.Path));
 
-        Assert.Contains("schema_version 14", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("schema_version 14 or 15", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ImportAcceptsCurrentPolyToolsManifestSchema()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game07", manifestSchema: 15);
+
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+
+        Assert.Contains(catalog.Assets, asset => asset.AssetKey == "tree");
     }
 
     private static void WriteConfig(

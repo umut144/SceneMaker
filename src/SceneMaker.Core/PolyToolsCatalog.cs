@@ -49,7 +49,8 @@ public static class PolyToolsCatalogImporter
     public const string PolyToolsDirectoryName = "polytools";
     public const string CatalogFileName = "catalog.json";
     public const int CatalogSchemaVersion = 1;
-    public const int ManifestSchemaVersion = 14;
+    public const int LegacyManifestSchemaVersion = 14;
+    public const int ManifestSchemaVersion = 15;
 
     public static PolyToolsCatalog Load(string workspaceDirectory)
     {
@@ -153,11 +154,7 @@ public static class PolyToolsCatalogImporter
     {
         using var json = JsonDocument.Parse(File.ReadAllText(path));
         var root = RequireObject(json.RootElement, $"PolyTools manifest '{entry.AssetKey}'");
-        RequireInteger(
-            root,
-            "schema_version",
-            ManifestSchemaVersion,
-            $"PolyTools manifest '{entry.AssetKey}'");
+        RequireManifestSchema(root, $"PolyTools manifest '{entry.AssetKey}'");
         var assetKey = RequireString(root, "asset_key", $"PolyTools manifest '{entry.AssetKey}'");
         var assetType = RequireString(root, "asset_type", $"PolyTools manifest '{entry.AssetKey}'");
         if (!string.Equals(assetKey, entry.AssetKey, StringComparison.Ordinal)
@@ -377,6 +374,17 @@ public static class PolyToolsCatalogImporter
         {
             throw new SceneMakerDocumentException(
                 $"{label} must use {propertyName} {expected}.");
+        }
+    }
+
+    private static void RequireManifestSchema(JsonElement owner, string label)
+    {
+        if (!owner.TryGetProperty("schema_version", out var value)
+            || !value.TryGetInt32(out var actual)
+            || actual is not (LegacyManifestSchemaVersion or ManifestSchemaVersion))
+        {
+            throw new SceneMakerDocumentException(
+                $"{label} must use schema_version {LegacyManifestSchemaVersion} or {ManifestSchemaVersion}.");
         }
     }
 
