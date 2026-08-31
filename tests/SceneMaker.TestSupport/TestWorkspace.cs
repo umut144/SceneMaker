@@ -16,18 +16,26 @@ namespace SceneMaker.TestSupport;
 ///
 /// Assets: <c>grass</c> and <c>sand</c> are PolyTools terrain, <c>stone</c> and
 /// <c>portal</c> are PolyTools props.
+///
+/// The Workspace directory is named after its key and carries the empty
+/// <c>scenes</c> and <c>templates</c> directories, so it satisfies everything
+/// <see cref="WorkspaceStore.Load"/> requires of a real Workspace.
 /// </summary>
 public sealed class TestWorkspace : IDisposable
 {
     public const int AuthoringPixelsPerCell = 32;
 
+    private readonly string _containerPath;
+
     private TestWorkspace(
+        string containerPath,
         string rootPath,
         PolyToolsCatalog catalog,
         WorkspaceConfiguration configuration,
         TerrainDisplayCatalog terrain,
         PropDisplayCatalog props)
     {
+        _containerPath = containerPath;
         RootPath = rootPath;
         Catalog = catalog;
         Configuration = configuration;
@@ -44,15 +52,20 @@ public sealed class TestWorkspace : IDisposable
 
     public static TestWorkspace Create(string worldKey = "test_world")
     {
-        var rootPath = Path.Combine(
+        var containerPath = Path.Combine(
             Path.GetTempPath(),
             $"scene-maker-tests-{Guid.NewGuid():N}");
+        // WorkspaceStore.Load requires the directory to be named after the key.
+        var rootPath = Path.Combine(containerPath, worldKey);
         Directory.CreateDirectory(rootPath);
+        Directory.CreateDirectory(Path.Combine(rootPath, WorkspaceStore.ScenesDirectoryName));
+        Directory.CreateDirectory(Path.Combine(rootPath, WorkspaceStore.TemplatesDirectoryName));
         WriteImport(rootPath, worldKey);
         WriteConfiguration(rootPath, worldKey);
         var catalog = PolyToolsCatalogImporter.Load(rootPath);
         var configuration = WorkspaceConfigurationStore.Load(rootPath, catalog);
         return new TestWorkspace(
+            containerPath,
             rootPath,
             catalog,
             configuration,
@@ -60,7 +73,7 @@ public sealed class TestWorkspace : IDisposable
             PropDisplayCatalogLoader.Load(catalog, configuration));
     }
 
-    public void Dispose() => Directory.Delete(RootPath, recursive: true);
+    public void Dispose() => Directory.Delete(_containerPath, recursive: true);
 
     private static void WriteConfiguration(string rootPath, string worldKey)
     {

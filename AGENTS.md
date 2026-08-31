@@ -35,7 +35,7 @@ are no tests against `SceneMaker.App`: a test project cannot reference it withou
 pulling in `Godot.NET.Sdk`, which is why anything worth testing belongs in Core
 or Editor.
 
-Two rules follow from this and are worth stating outright:
+Three rules follow from this and are worth stating outright:
 
 - Editing operations are pure `SceneDocument -> SceneDocument` functions. They
   assume a canonical document and produce one; full validation runs at the IO
@@ -45,6 +45,11 @@ Two rules follow from this and are worth stating outright:
   hands them to `ToolInteraction`, which answers with exactly one `ToolOutcome`;
   `SceneMakerMain.ExecuteSceneCommand` applies it, records undo and reports it.
   New tools extend `ToolInteraction`; they do not add events to the canvas.
+- An open Workspace is one value. `EditorSession` bundles the Workspace, its
+  PolyTools catalog, its configuration and both display catalogs; it is built in
+  full before it is adopted and swapped as a unit. `SceneMakerMain` keeps one
+  `EditorSession?`, never a set of correlated nullable fields, so a failed load
+  cannot leave a half-opened Workspace behind.
 
 ## Engineering
 

@@ -87,14 +87,16 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _templateInsertionXMetricsLabel = new();
     private readonly Label _templateInsertionYMetricsLabel = new();
 
-    private LoadedWorkspace? _workspace;
+    /// <summary>
+    /// The open Workspace together with everything derived from it. Null means
+    /// no Workspace is open; there is no state in between.
+    /// </summary>
+    private EditorSession? _session;
     private LoadedScene? _scene;
     private SceneEditHistory? _history;
-    private PolyToolsCatalog? _catalog;
-    private WorkspaceConfiguration? _workspaceConfiguration;
-    private TerrainDisplayCatalog? _terrainAssets;
-    private PropDisplayCatalog? _propAssets;
     private string? _pendingWorkspaceParentDirectory;
+    /// <summary>Where the Workspace dialogs start looking.</summary>
+    private string? _lastWorkspaceDirectory;
     private string? _recentSessionPath;
     private bool _updatingAnchorGroupEdit;
     private TemplateCompositionResult? _templatePreview;
@@ -149,11 +151,11 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     public override void _ExitTree()
     {
-        if (_workspace is null || _scene is null || _history is null || !_history.IsDirty)
+        if (_session is null || _scene is null || _history is null || !_history.IsDirty)
             return;
         try
         {
-            SceneStore.Save(_workspace, _scene);
+            SceneStore.Save(_session.Workspace, _scene);
             _history.MarkSaved();
         }
         catch (Exception exception) when (exception is SceneMakerDocumentException
@@ -336,8 +338,12 @@ public sealed partial class SceneMakerMain : Control
 
         _canvas.Name = "Canvas";
         _canvas.ConfigureInteraction(_interaction);
-        if (_terrainAssets is not null) _canvas.ConfigureTerrainAssets(_terrainAssets);
-        if (_propAssets is not null) _canvas.ConfigurePropAssets(_propAssets);
+        if (_session is not null)
+        {
+            _canvas.ConfigureMetrics(_session.Metrics);
+            _canvas.ConfigureTerrainAssets(_session.TerrainAssets);
+            _canvas.ConfigurePropAssets(_session.PropAssets);
+        }
         _canvas.ViewChanged += UpdateViewStatus;
         _canvas.OutcomeProduced += HandleToolOutcome;
         _canvas.StrokeEnded += EndEditStroke;
@@ -411,7 +417,7 @@ public sealed partial class SceneMakerMain : Control
     private void BuildTerrainAssetBar()
     {
         _terrainAssetBar.AddChild(new Label { Text = "Terrain  ›" });
-        foreach (var asset in _terrainAssets?.Assets ?? [])
+        foreach (var asset in _session?.TerrainAssets.Assets ?? [])
         {
             var button = new Button
             {
@@ -436,7 +442,7 @@ public sealed partial class SceneMakerMain : Control
     private void BuildPropAssetBar()
     {
         _propAssetBar.AddChild(new Label { Text = "Props  ›" });
-        foreach (var asset in _propAssets?.Assets ?? [])
+        foreach (var asset in _session?.PropAssets.Assets ?? [])
         {
             var button = new Button
             {
@@ -565,7 +571,7 @@ public sealed partial class SceneMakerMain : Control
             child.QueueFree();
         }
 
-        if (_workspace is null)
+        if (_session is not { } session)
         {
             _templateRows.AddChild(new Label { Text = "No Workspace loaded." });
             return;
@@ -577,8 +583,8 @@ public sealed partial class SceneMakerMain : Control
             var search = _templateSearchEdit.Text.Trim();
             var groupFilter = checked((int)_templateGroupFilter.Value);
             var templates = SceneStore
-                .EnumeratePaths(_workspace)
-                .Select(path => SceneStore.Load(_workspace, path))
+                .EnumeratePaths(session.Workspace)
+                .Select(path => SceneStore.Load(session.Workspace, path))
                 .Where(static scene => scene.Document.SceneKind == SceneKind.Template)
                 .Where(scene => search.Length == 0
                     || scene.Document.SceneId.Contains(search, StringComparison.OrdinalIgnoreCase))
@@ -625,14 +631,14 @@ public sealed partial class SceneMakerMain : Control
 
     private void UpdateWorkspaceTemplateGroup(string filePath, int groupNumber)
     {
-        if (_workspace is null) return;
+        if (_session is not { } session) return;
         PersistScene();
         TryDocumentAction(() =>
         {
-            var loaded = SceneStore.Load(_workspace, filePath);
+            var loaded = SceneStore.Load(session.Workspace, filePath);
             var document = TemplateEditing.SetTemplateGroup(loaded.Document, groupNumber);
             var updated = new LoadedScene(loaded.FilePath, document);
-            SceneStore.Save(_workspace, updated);
+            SceneStore.Save(session.Workspace, updated);
             ClearTemplatePreview();
             if (_scene?.FilePath == updated.FilePath)
             {
@@ -809,9 +815,9 @@ public sealed partial class SceneMakerMain : Control
 
     private string FormatSceneSizeMetrics(double cells)
     {
-        if (_workspaceConfiguration is null) return string.Empty;
+        if (_session is null) return string.Empty;
         var integralCells = checked((int)cells);
-        var metrics = _workspaceConfiguration.Metrics;
+        var metrics = _session.Metrics;
         var authoringPixels = checked(integralCells * metrics.AuthoringPixelsPerTerrainCell);
         var meters = integralCells * metrics.TerrainCellMeters;
         return $"= {meters:0.###} m · {authoringPixels} px";
@@ -850,8 +856,8 @@ public sealed partial class SceneMakerMain : Control
 
     private void UpdateTemplatePivotFields()
     {
-        if (_workspaceConfiguration is null) return;
-        var metrics = _workspaceConfiguration.Metrics;
+        if (_session is null) return;
+        var metrics = _session.Metrics;
         if (_templatePivotCenterToggle.ButtonPressed && SelectedSceneKind() == SceneKind.Template)
         {
             var widthPixels = (decimal)_sceneWidthEdit.Value * metrics.AuthoringPixelsPerTerrainCell;
@@ -867,8 +873,8 @@ public sealed partial class SceneMakerMain : Control
 
     private string FormatPivotMeters(double authoringPixels)
     {
-        if (_workspaceConfiguration is null) return string.Empty;
-        var meters = (decimal)authoringPixels * _workspaceConfiguration.Metrics.MetersPerAuthoringPixel;
+        if (_session is null) return string.Empty;
+        var meters = (decimal)authoringPixels * _session.Metrics.MetersPerAuthoringPixel;
         return $"= {meters:0.#####} m";
     }
 
@@ -914,7 +920,7 @@ public sealed partial class SceneMakerMain : Control
                 ShowWorkspaceAssetsDialog();
                 break;
             case CreateSceneMenuId:
-                if (_workspace is null)
+                if (_session is null)
                 {
                     ShowError("Create or load a Workspace before creating a Scene.");
                     return;
@@ -930,12 +936,12 @@ public sealed partial class SceneMakerMain : Control
                 _createSceneDialog.PopupCentered(new Vector2I(760, 420));
                 break;
             case LoadSceneMenuId:
-                if (_workspace is null)
+                if (_session is null)
                 {
                     ShowError("Create or load a Workspace before loading a Scene.");
                     return;
                 }
-                _sceneFileDialog.CurrentDir = _workspace.DirectoryPath;
+                _sceneFileDialog.CurrentDir = _session.DirectoryPath;
                 _sceneFileDialog.PopupCenteredRatio(0.75f);
                 break;
             case ExportSceneMenuId:
@@ -975,8 +981,7 @@ public sealed partial class SceneMakerMain : Control
     private void ExportCurrentScene()
     {
         PersistScene();
-        if (_workspace is null || _scene is null || _workspaceConfiguration is null
-            || _terrainAssets is null || _propAssets is null)
+        if (_session is not { } session || _scene is not { } scene)
         {
             ShowError("Load a Scene before exporting.");
             return;
@@ -984,18 +989,18 @@ public sealed partial class SceneMakerMain : Control
         TryDocumentAction(() =>
         {
             var path = SceneExport.Write(
-                _workspace,
-                _scene,
-                _workspaceConfiguration,
-                _terrainAssets,
-                _propAssets);
+                session.Workspace,
+                scene,
+                session.Configuration,
+                session.TerrainAssets,
+                session.PropAssets);
             SetStatus($"Exported Scene snapshot to '{path}'.");
         });
     }
 
     private void ShowWorkspaceAssetsDialog()
     {
-        if (_workspaceConfiguration is null || _catalog is null) return;
+        if (_session is null) return;
         foreach (var child in _workspaceAssetRows.GetChildren())
         {
             _workspaceAssetRows.RemoveChild(child);
@@ -1007,9 +1012,9 @@ public sealed partial class SceneMakerMain : Control
             Text = "Assets come from the synchronized PolyTools catalog. SceneMaker owns only enablement and authoring color; whether an Asset is Terrain or a Prop is PolyTools data.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
-        foreach (var asset in _catalog.Assets)
+        foreach (var asset in _session.Catalog.Assets)
         {
-            var profile = _workspaceConfiguration.AssetProfiles
+            var profile = _session.Configuration.AssetProfiles
                 .SingleOrDefault(value => value.AssetKey == asset.AssetKey);
             var row = new GridContainer { Columns = 3 };
             var enabled = new CheckBox { Text = asset.AssetKey, ButtonPressed = profile is not null };
@@ -1034,7 +1039,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void SaveWorkspaceAssets()
     {
-        if (_workspace is null || _workspaceConfiguration is null || _catalog is null) return;
+        if (_session is not { } session) return;
         TryDocumentAction(() =>
         {
             List<WorkspaceAssetProfile> profiles = [];
@@ -1045,17 +1050,17 @@ public sealed partial class SceneMakerMain : Control
                     row.Asset.AssetKey,
                     row.Color.Text.Trim()));
             }
-            var candidate = _workspaceConfiguration.WithAssetProfiles(profiles, _catalog);
-            var terrain = TerrainDisplayCatalogLoader.Load(_catalog, candidate);
-            var props = PropDisplayCatalogLoader.Load(_catalog, candidate);
+            // The candidate session is built and checked in full before
+            // anything is written, so a rejected profile set changes nothing.
+            var candidate = session.WithAssetProfiles(profiles);
             if (_scene is not null)
             {
                 DocumentValidation.ValidateGrid(_scene.Document, candidate.Metrics);
-                TerrainEditing.ValidateAssetReferences(_scene.Document, terrain);
-                PropEditing.ValidateAssetReferences(_scene.Document, props);
+                TerrainEditing.ValidateAssetReferences(_scene.Document, candidate.TerrainAssets);
+                PropEditing.ValidateAssetReferences(_scene.Document, candidate.PropAssets);
             }
-            WorkspaceConfigurationStore.Save(_workspace.DirectoryPath, candidate);
-            LoadWorkspaceAssets();
+            WorkspaceConfigurationStore.Save(candidate.DirectoryPath, candidate.Configuration);
+            AdoptSession(candidate);
             UpdateDocumentStatus();
             SetStatus("Saved Workspace asset profiles.");
         });
@@ -1071,24 +1076,24 @@ public sealed partial class SceneMakerMain : Control
 
         TryDocumentAction(() =>
         {
-            _workspace = WorkspaceStore.Create(
+            var created = WorkspaceStore.Create(
                 _pendingWorkspaceParentDirectory,
                 _workspaceIdEdit.Text.Trim());
             WorkspaceConfigurationStore.CreateDefault(
-                _workspace.DirectoryPath,
-                _workspace.WorkspaceKey);
-            _catalog = null;
-            _workspaceConfiguration = null;
-            _terrainAssets = null;
-            _propAssets = null;
+                created.DirectoryPath,
+                created.WorkspaceKey);
+            // A new Workspace has no PolyTools import yet, so there is nothing
+            // to open a session on. The editor stays closed until the import is
+            // synchronized and the Workspace is loaded.
+            _session = null;
+            _lastWorkspaceDirectory = created.DirectoryPath;
             _scene = null;
             _history = null;
             _templatePreview = null;
             _canvas.ShowScene(null);
-            SaveRecentSession();
             UpdateDocumentStatus();
             SetStatus(
-                $"Created Workspace '{_workspace.WorkspaceKey}'. Synchronize its PolyTools import before editing.");
+                $"Created Workspace '{created.WorkspaceKey}'. Synchronize its PolyTools import before editing.");
         });
     }
 
@@ -1125,11 +1130,6 @@ public sealed partial class SceneMakerMain : Control
 
     private void LoadWorkspace(string configPath)
     {
-        var previousWorkspace = _workspace;
-        var previousCatalog = _catalog;
-        var previousConfiguration = _workspaceConfiguration;
-        var previousTerrainAssets = _terrainAssets;
-        var previousPropAssets = _propAssets;
         try
         {
             var fullConfigPath = ResolveFileSystemPath(configPath);
@@ -1145,41 +1145,35 @@ public sealed partial class SceneMakerMain : Control
             }
             var workspaceDirectory = Path.GetDirectoryName(fullConfigPath)
                 ?? throw new SceneMakerDocumentException("Workspace config requires a parent directory.");
-            var catalog = PolyToolsCatalogImporter.Load(workspaceDirectory);
-            var loadedWorkspace = WorkspaceStore.Load(workspaceDirectory, catalog);
-            _catalog = catalog;
-            _workspace = loadedWorkspace;
-            LoadWorkspaceAssets();
+            // The session is built completely before it is adopted, so a load
+            // that fails leaves the Workspace currently open untouched.
+            var session = EditorSession.Load(workspaceDirectory);
+            AdoptSession(session);
             _scene = null;
             _history = null;
             _templatePreview = null;
             _canvas.ShowScene(null);
             SaveRecentSession();
             UpdateDocumentStatus();
-            SetStatus($"Loaded Workspace '{_workspace.WorkspaceKey}'.");
+            SetStatus($"Loaded Workspace '{session.WorkspaceKey}'.");
         }
         catch (Exception exception) when (exception is SceneMakerDocumentException
                                           or IOException
                                           or UnauthorizedAccessException
                                           or OverflowException)
         {
-            _workspace = previousWorkspace;
-            _catalog = previousCatalog;
-            _workspaceConfiguration = previousConfiguration;
-            _terrainAssets = previousTerrainAssets;
-            _propAssets = previousPropAssets;
             SetStatus($"Workspace load blocked: {exception.Message}");
         }
     }
 
     private void CreateScene()
     {
-        if (_workspace is null) return;
+        if (_session is not { } session) return;
         PersistScene();
         TryDocumentAction(() =>
         {
             _scene = SceneStore.Create(
-                _workspace,
+                session.Workspace,
                 _sceneIdEdit.Text.Trim(),
                 checked((int)_sceneWidthEdit.Value),
                 checked((int)_sceneHeightEdit.Value),
@@ -1203,14 +1197,14 @@ public sealed partial class SceneMakerMain : Control
 
     private void LoadScene(string filePath)
     {
-        if (_workspace is null) return;
+        if (_session is not { } session) return;
         TryDocumentAction(() =>
         {
             PersistScene();
-            _scene = SceneStore.Load(_workspace, ResolveFileSystemPath(filePath));
-            DocumentValidation.ValidateGrid(_scene.Document, _workspaceConfiguration!.Metrics);
-            TerrainEditing.ValidateAssetReferences(_scene.Document, _terrainAssets!);
-            PropEditing.ValidateAssetReferences(_scene.Document, _propAssets!);
+            _scene = SceneStore.Load(session.Workspace, ResolveFileSystemPath(filePath));
+            DocumentValidation.ValidateGrid(_scene.Document, session.Metrics);
+            TerrainEditing.ValidateAssetReferences(_scene.Document, session.TerrainAssets);
+            PropEditing.ValidateAssetReferences(_scene.Document, session.PropAssets);
             _history = new SceneEditHistory(_scene.Document);
             _canvas.ShowScene(_scene);
             _templatePreview = null;
@@ -1258,7 +1252,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void ExtendMap(bool north)
     {
-        if (_scene is null || _workspace is null) return;
+        if (_scene is null || _session is null) return;
         var cells = checked((int)_mapExtensionCellsEdit.Value);
         var direction = north ? "north" : "east";
         ExecuteSceneCommand(new ToolOutcome.Edit(
@@ -1306,14 +1300,14 @@ public sealed partial class SceneMakerMain : Control
 
     private void SelectTerrainAsset(string assetKey)
     {
-        var asset = _terrainAssets!.Resolve(assetKey);
+        var asset = _session!.TerrainAssets.Resolve(assetKey);
         _canvas.SelectedTerrainAssetKey = assetKey;
         SetStatus($"Selected Terrain '{asset.Name}' ({asset.AssetKey}).");
     }
 
     private void SelectPropAsset(string assetKey)
     {
-        var asset = _propAssets!.Resolve(assetKey);
+        var asset = _session!.PropAssets.Resolve(assetKey);
         _canvas.SelectedPropAssetKey = assetKey;
         SetStatus($"Selected Prop '{asset.Name}' · footprint {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels}).");
     }
@@ -1335,19 +1329,19 @@ public sealed partial class SceneMakerMain : Control
 
     private void GenerateTemplatePreview()
     {
-        if (_workspace is null || _scene?.Document.SceneKind != SceneKind.Instance) return;
+        if (_session is not { } session || _scene?.Document.SceneKind != SceneKind.Instance) return;
         PersistScene();
         TryDocumentAction(() =>
         {
             var scenes = SceneStore
-                .EnumeratePaths(_workspace)
-                .Select(path => SceneStore.Load(_workspace, path).Document)
+                .EnumeratePaths(session.Workspace)
+                .Select(path => SceneStore.Load(session.Workspace, path).Document)
                 .ToList();
             var seed = unchecked((ulong)Random.Shared.NextInt64());
             _templatePreview = TemplateComposition.Compose(
                 _scene.Document,
                 scenes,
-                _propAssets!,
+                session.PropAssets,
                 seed);
             _canvas.ShowTemplatePreview(
                 _templatePreview.ComposedScene,
@@ -1398,7 +1392,7 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     private void ExecuteSceneCommand(ToolOutcome.Edit edit)
     {
-        if (_workspace is null || _scene is null || _history is null) return;
+        if (_session is null || _scene is null || _history is null) return;
         var before = _scene.Document;
         SceneDocument after;
         try
@@ -1443,7 +1437,7 @@ public sealed partial class SceneMakerMain : Control
         _canvas.TemplateAnchorGroupNumber = groupNumber;
         if (_updatingAnchorGroupEdit
             || _scene is null
-            || _workspace is null
+            || _session is null
             || _canvas.SelectedTemplateAnchorId is not { } anchorId)
         {
             return;
@@ -1474,11 +1468,11 @@ public sealed partial class SceneMakerMain : Control
     private void PersistScene()
     {
         _autosaveTimer.Stop();
-        if (_workspace is null || _scene is null || _history is null || !_history.IsDirty)
+        if (_session is null || _scene is null || _history is null || !_history.IsDirty)
             return;
         try
         {
-            SceneStore.Save(_workspace, _scene);
+            SceneStore.Save(_session.Workspace, _scene);
             _history.MarkSaved();
             UpdateDocumentState();
         }
@@ -1552,15 +1546,15 @@ public sealed partial class SceneMakerMain : Control
 
     private void UpdateDocumentStatus()
     {
-        _workspaceLabel.Text = _workspace is null
+        _workspaceLabel.Text = _session is null
             ? "Workspace: none"
-            : $"Workspace: {_workspace.WorkspaceKey}";
+            : $"Workspace: {_session.WorkspaceKey}";
         _sceneLabel.Text = _scene is null
             ? "Scene: none"
             : $"Scene: {_scene.Document.SceneId}  ·  {(_scene.Document.SceneKind == SceneKind.Instance ? "Instance" : "Template")}  ·  {_scene.Document.SizeCells.Width} × {_scene.Document.SizeCells.Height} cells";
 
         var menu = _settingsButton.GetPopup();
-        var sceneActionsAvailable = _workspace is not null;
+        var sceneActionsAvailable = _session is not null;
         menu.SetItemDisabled(menu.GetItemIndex(WorkspaceAssetsMenuId), !sceneActionsAvailable);
         menu.SetItemDisabled(menu.GetItemIndex(CreateSceneMenuId), !sceneActionsAvailable);
         menu.SetItemDisabled(menu.GetItemIndex(LoadSceneMenuId), !sceneActionsAvailable);
@@ -1587,13 +1581,15 @@ public sealed partial class SceneMakerMain : Control
             return;
         }
 
+        // A Scene can only be open while a session is open.
+        var metrics = _session!.Metrics;
         _mapDimensionsLabel.Text =
             $"{scene.SizeCells.Width} × {scene.SizeCells.Height} Cells  ·  "
-            + $"{scene.SizeCells.Width * _workspaceConfiguration!.Metrics.TerrainCellMeters:0.###} × {scene.SizeCells.Height * _workspaceConfiguration.Metrics.TerrainCellMeters:0.###} m  ·  "
-            + $"{_workspaceConfiguration.Metrics.SceneWidthAuthoringPixels(scene)} × {_workspaceConfiguration.Metrics.SceneHeightAuthoringPixels(scene)} px";
+            + $"{scene.SizeCells.Width * metrics.TerrainCellMeters:0.###} × {scene.SizeCells.Height * metrics.TerrainCellMeters:0.###} m  ·  "
+            + $"{metrics.SceneWidthAuthoringPixels(scene)} × {metrics.SceneHeightAuthoringPixels(scene)} px";
         var extensionCells = checked((int)_mapExtensionCellsEdit.Value);
         _mapExtensionMetricsLabel.Text =
-            $"= {extensionCells * _workspaceConfiguration!.Metrics.TerrainCellMeters:0.###} m · {extensionCells * _workspaceConfiguration.Metrics.AuthoringPixelsPerTerrainCell} px";
+            $"= {extensionCells * metrics.TerrainCellMeters:0.###} m · {extensionCells * metrics.AuthoringPixelsPerTerrainCell} px";
     }
 
     private void UpdateDrawingToolAvailability()
@@ -1612,7 +1608,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void UpdateTemplateControls()
     {
-        var workspaceActive = _workspace is not null;
+        var workspaceActive = _session is not null;
         var instanceActive = _scene?.Document.SceneKind == SceneKind.Instance;
         _placeTemplateAnchorButton.Disabled = !instanceActive;
         _templatesButton.Disabled = !workspaceActive;
@@ -1656,25 +1652,17 @@ public sealed partial class SceneMakerMain : Control
             ? ProjectSettings.GlobalizePath(path)
             : Path.GetFullPath(path);
 
-    private void LoadWorkspaceAssets()
+    /// <summary>
+    /// Takes a fully built session into use. Nothing is adopted piecemeal: the
+    /// editor swaps one complete session for another.
+    /// </summary>
+    private void AdoptSession(EditorSession session)
     {
-        if (_workspace is null || _catalog is null)
-            throw new InvalidOperationException("Workspace and synchronized PolyTools catalog are required.");
-        _workspaceConfiguration = WorkspaceConfigurationStore.Load(
-            _workspace.DirectoryPath, _catalog);
-        if (!string.Equals(
-                _workspaceConfiguration.WorkspaceKey,
-                _workspace.WorkspaceKey,
-                StringComparison.Ordinal))
-        {
-            throw new SceneMakerDocumentException(
-                $"Workspace config key '{_workspaceConfiguration.WorkspaceKey}' must match workspace '{_workspace.WorkspaceKey}'.");
-        }
-        _terrainAssets = TerrainDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
-        _propAssets = PropDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
-        _canvas.ConfigureMetrics(_workspaceConfiguration.Metrics);
-        _canvas.ConfigureTerrainAssets(_terrainAssets);
-        _canvas.ConfigurePropAssets(_propAssets);
+        _session = session;
+        _lastWorkspaceDirectory = session.DirectoryPath;
+        _canvas.ConfigureMetrics(session.Metrics);
+        _canvas.ConfigureTerrainAssets(session.TerrainAssets);
+        _canvas.ConfigurePropAssets(session.PropAssets);
         UpdateSceneSizeMetrics();
         RebuildAssetBars();
     }
@@ -1697,8 +1685,8 @@ public sealed partial class SceneMakerMain : Control
 
     private void SaveRecentSession()
     {
-        if (_recentSessionPath is null || _workspace is null) return;
-        RecentSessionStore.Save(_recentSessionPath, _workspace, _scene);
+        if (_recentSessionPath is null || _session is null) return;
+        RecentSessionStore.Save(_recentSessionPath, _session.Workspace, _scene);
     }
 
     private void RestoreRecentSession()
@@ -1707,33 +1695,32 @@ public sealed partial class SceneMakerMain : Control
         {
             var recent = RecentSessionStore.Load(_recentSessionPath!);
             if (recent is null) return;
-            _catalog = PolyToolsCatalogImporter.Load(recent.WorkspaceDirectoryPath);
-            _workspace = WorkspaceStore.Load(recent.WorkspaceDirectoryPath, _catalog);
-            LoadWorkspaceAssets();
+            var session = EditorSession.Load(recent.WorkspaceDirectoryPath);
+            AdoptSession(session);
             _templatePreview = null;
             _scene = recent.SceneRelativePath is null
                 ? null
                 : SceneStore.Load(
-                    _workspace,
-                    Path.Combine(_workspace.DirectoryPath, recent.SceneRelativePath));
+                    session.Workspace,
+                    Path.Combine(session.DirectoryPath, recent.SceneRelativePath));
             if (_scene is not null)
             {
-                DocumentValidation.ValidateGrid(_scene.Document, _workspaceConfiguration!.Metrics);
-                TerrainEditing.ValidateAssetReferences(_scene.Document, _terrainAssets!);
-                PropEditing.ValidateAssetReferences(_scene.Document, _propAssets!);
+                DocumentValidation.ValidateGrid(_scene.Document, session.Metrics);
+                TerrainEditing.ValidateAssetReferences(_scene.Document, session.TerrainAssets);
+                PropEditing.ValidateAssetReferences(_scene.Document, session.PropAssets);
             }
             _history = _scene is null ? null : new SceneEditHistory(_scene.Document);
             _canvas.ShowScene(_scene);
             SetStatus(_scene is null
-                ? $"Restored Workspace '{_workspace.WorkspaceKey}'."
-                : $"Restored Workspace '{_workspace.WorkspaceKey}' and Scene '{_scene.Document.SceneId}'.");
+                ? $"Restored Workspace '{session.WorkspaceKey}'."
+                : $"Restored Workspace '{session.WorkspaceKey}' and Scene '{_scene.Document.SceneId}'.");
         }
         catch (Exception exception) when (exception is SceneMakerDocumentException
                                           or IOException
                                           or UnauthorizedAccessException)
         {
             DiscardRecentSession();
-            _workspace = null;
+            _session = null;
             _scene = null;
             _history = null;
             _canvas.ShowScene(null);
@@ -1756,7 +1743,9 @@ public sealed partial class SceneMakerMain : Control
 
     private string WorkspaceDialogStartDirectory()
     {
-        if (_workspace is not null) return _workspace.DirectoryPath;
+        if (_session is not null) return _session.DirectoryPath;
+        if (_lastWorkspaceDirectory is not null && Directory.Exists(_lastWorkspaceDirectory))
+            return _lastWorkspaceDirectory;
         var defaultDirectory = ProjectSettings.GlobalizePath("res://workspaces");
         return Directory.Exists(defaultDirectory)
             ? defaultDirectory
