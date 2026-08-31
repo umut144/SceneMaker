@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using SceneMaker.Core;
+using SceneMaker.Editor;
 
 namespace SceneMaker.App;
 

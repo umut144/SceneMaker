@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Godot;
 using SceneMaker.Core;
+using SceneMaker.Editor;
 
 namespace SceneMaker.App;
 

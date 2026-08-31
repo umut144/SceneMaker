@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace SceneMaker.App;
+namespace SceneMaker.Editor;
 
 public enum EditorMode
 {

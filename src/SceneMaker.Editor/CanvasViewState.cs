@@ -1,4 +1,4 @@
-namespace SceneMaker.Core;
+namespace SceneMaker.Editor;
 
 public sealed class CanvasViewState
 {

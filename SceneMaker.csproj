@@ -5,10 +5,11 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>SceneMaker.App</RootNamespace>
-    <DefaultItemExcludes>$(DefaultItemExcludes);src/SceneMaker.Core/**;src/SceneMaker.Cli/**;tests/**;.godot/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);src/SceneMaker.Core/**;src/SceneMaker.Editor/**;src/SceneMaker.Cli/**;tests/**;.godot/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="src/SceneMaker.Core/SceneMaker.Core.csproj" />
+    <ProjectReference Include="src/SceneMaker.Editor/SceneMaker.Editor.csproj" />
   </ItemGroup>
 </Project>
