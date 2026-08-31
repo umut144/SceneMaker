@@ -8,7 +8,7 @@ source_catalog="$source_world_dir/catalog.json"
 config_path="$workspace_dir/config.json"
 import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
-required_manifest_schema=14
+current_manifest_schema=15
 
 cleanup() {
   local status=$?
@@ -98,10 +98,11 @@ while IFS=$'\t' read -r asset_key asset_type runtime_package; do
   if ! jq -e \
     --arg key "$asset_key" \
     --arg type "$asset_type" \
-    --argjson schema "$required_manifest_schema" '
-      .schema_version == $schema
+    --argjson current_schema "$current_manifest_schema" '
+      (.schema_version == 14 or .schema_version == $current_schema)
       and .asset_key == $key
       and .asset_type == $type
+      and (if .schema_version == $current_schema then (.regions | type == "array") else true end)
       and (.asset_pivot | type == "array" and length == 2
         and all(.[]; type == "number" and isfinite))
       and (.components | type == "array" and length > 0)

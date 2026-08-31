@@ -49,6 +49,7 @@ public sealed partial class SceneCanvas : Control
     private (int X, int Y)? _pointerAuthoringPosition;
     private (int X, int Y)? _lineStart;
     private (int X, int Y)? _lineEnd;
+    private bool _pointerOverCanvas;
 
     public SceneCanvas()
     {
@@ -59,9 +60,11 @@ public sealed partial class SceneCanvas : Control
         SizeFlagsVertical = SizeFlags.ExpandFill;
         MouseExited += () =>
         {
+            _pointerOverCanvas = false;
             _pointerAuthoringPosition = null;
             QueueRedraw();
         };
+        MouseEntered += () => _pointerOverCanvas = true;
     }
 
     public CanvasViewState ViewState { get; private set; } = new();
@@ -256,6 +259,11 @@ public sealed partial class SceneCanvas : Control
             case Key.A:
             case Key.S:
             case Key.D:
+                if (!_pointerOverCanvas)
+                {
+                    changed = false;
+                    break;
+                }
                 GetViewport().SetInputAsHandled();
                 return;
             default:
@@ -273,7 +281,7 @@ public sealed partial class SceneCanvas : Control
     {
         var inputX = 0.0;
         var inputY = 0.0;
-        if (HasFocus())
+        if (_pointerOverCanvas)
         {
             if (Input.IsKeyPressed(Key.A)) inputX += 1.0;
             if (Input.IsKeyPressed(Key.D)) inputX -= 1.0;

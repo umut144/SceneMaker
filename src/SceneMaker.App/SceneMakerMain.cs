@@ -20,6 +20,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly SceneCanvas _canvas = new();
     private readonly Label _workspaceLabel = new();
     private readonly Label _sceneLabel = new();
+    private readonly Label _toolContextLabel = new();
     private readonly Label _viewLabel = new();
     private readonly Label _statusLabel = new();
     private readonly MenuButton _settingsButton = new();
@@ -34,6 +35,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly HBoxContainer _mapBar = new();
     private readonly HBoxContainer _overviewNavigationBar = new();
     private readonly HBoxContainer _contextNavigationBar = new();
+    private readonly HBoxContainer _toolContextBar = new();
     private readonly Button _returnNavigationButton = new();
     private readonly Button _mapNavigationButton = new();
     private readonly Label _mapDimensionsLabel = new();
@@ -238,6 +240,24 @@ public sealed partial class SceneMakerMain : Control
         _anchorGroupEdit.ValueChanged += SetSelectedTemplateAnchorGroup;
         toolColumn.AddChild(_anchorGroupEdit);
 
+        _toolContextBar.Name = "ToolContextMenu";
+        _toolContextBar.CustomMinimumSize = new Vector2(0f, 38f);
+        _toolContextBar.AddThemeFontSizeOverride("font_size", 14);
+        _toolContextLabel.Name = "ActiveToolLabel";
+        _toolContextLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _toolContextLabel.VerticalAlignment = VerticalAlignment.Center;
+        _toolContextBar.AddChild(_toolContextLabel);
+        _toolContextBar.AddThemeConstantOverride("separation", 0);
+
+        var canvasColumn = new VBoxContainer
+        {
+            Name = "CanvasColumn",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        content.AddChild(canvasColumn);
+        canvasColumn.AddChild(_toolContextBar);
+
         _canvas.Name = "Canvas";
         if (_terrainAssets is not null) _canvas.ConfigureTerrainAssets(_terrainAssets);
         if (_placementAssets is not null) _canvas.ConfigurePlacementAssets(_placementAssets);
@@ -258,7 +278,10 @@ public sealed partial class SceneMakerMain : Control
         _canvas.TemplateAnchorSelectRequested += SelectTemplateAnchor;
         _canvas.TemplateAnchorMoveRequested += MoveTemplateAnchor;
         _canvas.ToolStatusRequested += SetStatus;
-        content.AddChild(_canvas);
+        _canvas.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _canvas.SizeFlagsVertical = SizeFlags.ExpandFill;
+        canvasColumn.AddChild(_canvas);
+        UpdateToolContextLabel();
 
         var footer = new HBoxContainer { Name = "Footer" };
         footer.AddThemeFontSizeOverride("font_size", 12);
@@ -1155,6 +1178,7 @@ public sealed partial class SceneMakerMain : Control
         {
             _drawingToolControlsByTool[CanvasDrawingTool.Pencil].ButtonPressed = true;
             _canvas.ActiveTool = CanvasDrawingTool.Pencil;
+            UpdateToolContextLabel();
         }
         _canvas.PerspectiveName = perspective;
         _overviewNavigationBar.Visible = false;
@@ -1168,6 +1192,7 @@ public sealed partial class SceneMakerMain : Control
         {
             _drawingToolControlsByTool[CanvasDrawingTool.Selector].ButtonPressed = true;
             _canvas.ActiveTool = CanvasDrawingTool.Selector;
+            UpdateToolContextLabel();
         }
         UpdateDrawingToolAvailability();
         UpdateTemplateControls();
@@ -1215,7 +1240,18 @@ public sealed partial class SceneMakerMain : Control
     private void SelectDrawingTool(CanvasDrawingTool tool)
     {
         _canvas.ActiveTool = tool;
-        SetStatus($"Selected {tool switch
+        UpdateToolContextLabel();
+        SetStatus($"Selected {ToolDisplayName(tool)}.");
+    }
+
+    private void UpdateToolContextLabel()
+    {
+        _toolContextLabel.Text = ToolDisplayName(_canvas.ActiveTool);
+    }
+
+    private static string ToolDisplayName(CanvasDrawingTool tool)
+    {
+        return tool switch
         {
             CanvasDrawingTool.Selector => "Selector",
             CanvasDrawingTool.Eraser => "Eraser",
@@ -1225,7 +1261,7 @@ public sealed partial class SceneMakerMain : Control
             CanvasDrawingTool.AnchorPlace => "Place Template Anchor",
             CanvasDrawingTool.AnchorMove => "Move Template Anchor",
             _ => throw new ArgumentOutOfRangeException(nameof(tool)),
-        }}.");
+        };
     }
 
     private void SelectTerrainAsset(string assetKey)
@@ -1259,6 +1295,7 @@ public sealed partial class SceneMakerMain : Control
         foreach (var control in _drawingToolControlsByTool.Values)
             control.ButtonPressed = false;
         _canvas.ActiveTool = CanvasDrawingTool.AnchorPlace;
+        UpdateToolContextLabel();
         SetStatus(
             $"Place Anchor: click a WorldGrid intersection for group {(int)_anchorGroupEdit.Value}.");
     }
