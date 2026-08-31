@@ -988,7 +988,7 @@ public sealed partial class SceneMakerMain : Control
                 "",
                 false,
                 DisplayServer.FileDialogMode.OpenAny,
-                ["config.json ; SceneMaker Workspace"],
+                ["*.json ; SceneMaker Workspace config"],
                 Callable.From<bool, Variant, int>(HandleWorkspaceFinderResult));
             return;
         }
@@ -1002,8 +1002,12 @@ public sealed partial class SceneMakerMain : Control
     {
         if (!accepted) return;
         var paths = selectedPaths.AsStringArray();
-        if (paths.Length > 0)
-            LoadWorkspaceSelection(paths[0]);
+        if (paths.Length == 0)
+        {
+            SetStatus("Workspace load blocked: the file chooser returned no selection.");
+            return;
+        }
+        LoadWorkspaceSelection(paths[0]);
     }
 
     private void ExportCurrentScene()
@@ -1180,7 +1184,7 @@ public sealed partial class SceneMakerMain : Control
             _canvas.ShowScene(null);
             SaveRecentSession();
             UpdateDocumentStatus();
-            SetStatus($"Loaded Workspace '{session.WorkspaceKey}'.");
+            SetStatus($"Loaded Workspace '{session.WorkspaceKey}'. Load a Scene to start editing.");
         }
         catch (Exception exception) when (exception is SceneMakerDocumentException
                                           or IOException
