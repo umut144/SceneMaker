@@ -58,6 +58,18 @@ horizontale `ContextMenu` zeigt diese Kombination beispielsweise als
 `Terrain:Line` oder `Placement:Line`. Jeder Modus merkt sich sein zuletzt
 ausgewähltes Werkzeug.
 
+Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
+
+- `Terrain:Pencil` hebt das Terrain-Tile unter dem Mauszeiger hervor und malt
+  beziehungsweise löscht direkt.
+- `Terrain:Line` beginnt beim Drücken der linken Maustaste, zeigt während des
+  Ziehens alle betroffenen Tiles und führt die Linie beim Loslassen aus.
+- `Placement:Line` und `Transition:Line` behalten Startpunkt, Endpunkt und die
+  Bestätigung mit Enter als getrennte Schritte.
+
+Ein aktiver `Eraser` verwendet für Terrain-Highlights die Löschfarbe, damit die
+Auswirkung vor dem Ausführen sichtbar ist.
+
 ## ToolOptionsBar
 
 Die `ToolOptionsBar` ist eine feste, vertikale Optionsleiste rechts neben dem

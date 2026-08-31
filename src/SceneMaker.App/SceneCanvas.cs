@@ -35,8 +35,10 @@ public sealed partial class SceneCanvas : Control
     private string? _draggedTemplateAnchorId;
     private (int X, int Y)? _draggedTemplateAnchorPosition;
     private (int X, int Y)? _pointerAuthoringPosition;
+    private (int X, int Y)? _pointerTerrainPosition;
     private (int X, int Y)? _lineStart;
     private (int X, int Y)? _lineEnd;
+    private bool _terrainLineDragging;
     private bool _pointerOverCanvas;
 
     public SceneCanvas()
@@ -50,6 +52,7 @@ public sealed partial class SceneCanvas : Control
         {
             _pointerOverCanvas = false;
             _pointerAuthoringPosition = null;
+            _pointerTerrainPosition = null;
             QueueRedraw();
         };
         MouseEntered += () => _pointerOverCanvas = true;
@@ -115,6 +118,7 @@ public sealed partial class SceneCanvas : Control
         _lineEnd = null;
         _draggedTemplateAnchorId = null;
         _draggedTemplateAnchorPosition = null;
+        _terrainLineDragging = false;
         QueueRedraw();
     }
 
@@ -160,8 +164,10 @@ public sealed partial class SceneCanvas : Control
         _draggedTemplateAnchorId = null;
         _draggedTemplateAnchorPosition = null;
         _pointerAuthoringPosition = null;
+        _pointerTerrainPosition = null;
         _lineStart = null;
         _lineEnd = null;
+        _terrainLineDragging = false;
         QueueRedraw();
         ViewChanged?.Invoke();
     }
@@ -203,6 +209,7 @@ public sealed partial class SceneCanvas : Control
     {
         _lineStart = null;
         _lineEnd = null;
+        _terrainLineDragging = false;
         QueueRedraw();
     }
 
@@ -216,12 +223,11 @@ public sealed partial class SceneCanvas : Control
             UpdatePointer(mouseButton.Position);
             BeginPrimaryAction(mouseButton.Position);
         }
-        else if (input is InputEventMouseButton
-                 {
-                     ButtonIndex: MouseButton.Left,
-                     Pressed: false,
-                 })
+        else if (input is InputEventMouseButton releasedMouseButton
+                 && releasedMouseButton.ButtonIndex == MouseButton.Left
+                 && !releasedMouseButton.Pressed)
         {
+            UpdatePointer(releasedMouseButton.Position);
             CompletePrimaryAction();
         }
         else if (input is InputEventMouseMotion mouseMotion)
@@ -238,7 +244,7 @@ public sealed partial class SceneCanvas : Control
         if (input is not InputEventKey keyEvent) return;
 
         if (keyEvent.Pressed
-            && (Mode is EditorMode.Terrain or EditorMode.Placements or EditorMode.Transitions)
+            && (Mode is EditorMode.Placements or EditorMode.Transitions)
             && ActiveTool == EditorTool.Line
             && HandleLineKey(keyEvent.Keycode))
         {
@@ -327,15 +333,6 @@ public sealed partial class SceneCanvas : Control
                 _lineStart is null
                     ? "Line Draw: choose a start point before confirming."
                     : "Line Draw: choose and lock an end point before confirming.");
-            return true;
-        }
-
-        if (Mode == EditorMode.Terrain)
-        {
-            if (EraserEnabled)
-                TerrainLineEraseRequested?.Invoke(start.X, start.Y, end.X, end.Y);
-            else
-                TerrainLineRequested?.Invoke(start.X, start.Y, end.X, end.Y);
             return true;
         }
 
@@ -437,6 +434,8 @@ public sealed partial class SceneCanvas : Control
                 heightAuthoringPixels,
                 highlighted: false);
         }
+        if (Mode == EditorMode.Terrain)
+            DrawTerrainToolPreview(document, pan, zoom);
 
         var visible = new Rect2(Vector2.Zero, Size).Intersection(sceneRect);
         if (visible.Size.X > 0f && visible.Size.Y > 0f)
@@ -506,28 +505,11 @@ public sealed partial class SceneCanvas : Control
                     TerrainFillRequested?.Invoke(cellX, cellY);
                     break;
                 case EditorTool.Line:
-                    if (_lineStart is null)
-                    {
-                        _lineStart = (cellX, cellY);
-                        ToolStatusRequested?.Invoke(
-                            $"Line Draw: start fixed at Terrain cell ({cellX}, {cellY}); choose an end point.");
-                    }
-                    else if (_lineEnd is null)
-                    {
-                        _lineEnd = (cellX, cellY);
-                        var count = TerrainEditing.LineCells(
-                            _lineStart.Value.X,
-                            _lineStart.Value.Y,
-                            cellX,
-                            cellY).Count;
-                        ToolStatusRequested?.Invoke(
-                            $"Line Draw: end fixed; {count} Terrain cells ready. Enter confirms; Escape revises.");
-                    }
-                    else
-                    {
-                        ToolStatusRequested?.Invoke(
-                            "Line Draw: end point is fixed. Press Enter to confirm or Escape to revise it.");
-                    }
+                    _lineStart = (cellX, cellY);
+                    _lineEnd = (cellX, cellY);
+                    _terrainLineDragging = true;
+                    ToolStatusRequested?.Invoke(
+                        $"Terrain Line: drag from cell ({cellX}, {cellY}) and release to apply.");
                     QueueRedraw();
                     break;
             }
@@ -687,7 +669,12 @@ public sealed partial class SceneCanvas : Control
         if (Mode == EditorMode.Terrain && leftButtonPressed)
         {
             var (cellX, cellY) = TerrainCoordinate(screenPosition);
-            if (ActiveTool == EditorTool.Pencil && EraserEnabled)
+            if (ActiveTool == EditorTool.Line && _terrainLineDragging)
+            {
+                _lineEnd = (cellX, cellY);
+                QueueRedraw();
+            }
+            else if (ActiveTool == EditorTool.Pencil && EraserEnabled)
                 TerrainEraseRequested?.Invoke(cellX, cellY);
             else if (ActiveTool == EditorTool.Pencil && SelectedTerrainAssetKey is not null)
                 TerrainPaintRequested?.Invoke(cellX, cellY);
@@ -721,6 +708,32 @@ public sealed partial class SceneCanvas : Control
 
     private void CompletePrimaryAction()
     {
+        if (Mode == EditorMode.Terrain
+            && ActiveTool == EditorTool.Line
+            && _terrainLineDragging
+            && _lineStart is { } terrainStart
+            && (_pointerTerrainPosition ?? _lineEnd) is { } terrainEnd)
+        {
+            _terrainLineDragging = false;
+            if (EraserEnabled)
+            {
+                TerrainLineEraseRequested?.Invoke(
+                    terrainStart.X,
+                    terrainStart.Y,
+                    terrainEnd.X,
+                    terrainEnd.Y);
+            }
+            else
+            {
+                TerrainLineRequested?.Invoke(
+                    terrainStart.X,
+                    terrainStart.Y,
+                    terrainEnd.X,
+                    terrainEnd.Y);
+            }
+            return;
+        }
+
         if (_draggedTemplateAnchorId is not { } anchorId
             || _draggedTemplateAnchorPosition is not { } position)
             return;
@@ -732,9 +745,17 @@ public sealed partial class SceneCanvas : Control
 
     private void UpdatePointer(Vector2 screenPosition)
     {
-        if (_scene is null
-            || Mode is not (EditorMode.Placements or EditorMode.Transitions or EditorMode.Templates))
+        if (_scene is null) return;
+        if (Mode == EditorMode.Terrain)
+        {
+            _pointerTerrainPosition = TerrainCoordinate(screenPosition);
+            _pointerAuthoringPosition = null;
+            QueueRedraw();
             return;
+        }
+        if (Mode is not (EditorMode.Placements or EditorMode.Transitions or EditorMode.Templates))
+            return;
+        _pointerTerrainPosition = null;
         _pointerAuthoringPosition = AuthoringCoordinate(screenPosition);
         QueueRedraw();
     }
@@ -775,6 +796,44 @@ public sealed partial class SceneCanvas : Control
                 highlighted
                     ? color
                     : new Color(color.R, color.G, color.B, 0.24f));
+        }
+    }
+
+    private void DrawTerrainToolPreview(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom)
+    {
+        if (ActiveTool is not (EditorTool.Pencil or EditorTool.Line)
+            || _pointerTerrainPosition is not { } pointer)
+        {
+            return;
+        }
+
+        IReadOnlyList<TerrainCellCoordinate> cells = ActiveTool == EditorTool.Line
+            && _terrainLineDragging
+            && _lineStart is { } start
+                ? TerrainEditing.LineCells(start.X, start.Y, pointer.X, pointer.Y)
+                : [new TerrainCellCoordinate(pointer.X, pointer.Y)];
+        var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
+        var color = EraserEnabled ? InvalidPreviewColor : SelectionColor;
+        foreach (var cell in cells)
+        {
+            if (cell.X < 0 || cell.X >= document.SizeCells.Width
+                || cell.Y < 0 || cell.Y >= document.SizeCells.Height)
+            {
+                continue;
+            }
+
+            var rectangle = new Rect2(
+                pan + new Vector2(
+                    cell.X * cellSize,
+                    (document.SizeCells.Height - cell.Y - 1) * cellSize),
+                new Vector2(cellSize, cellSize));
+            DrawRect(
+                rectangle,
+                new Color(color.R, color.G, color.B, 0.25f));
+            DrawRect(rectangle, color, filled: false, width: 2f);
         }
     }
 
