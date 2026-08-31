@@ -19,6 +19,33 @@ Runtime Export and copy it into a Workspace-local import boundary.
 - No hidden metric defaults, directory-discovered Assets, or game-specific
   export format may be introduced.
 
+## Project layout
+
+Four projects, layered strictly downwards. Nothing ever references upwards.
+
+| Project | Depends on | Holds |
+| --- | --- | --- |
+| `src/SceneMaker.Core` | nothing | Documents, validation, stores, PolyTools import, editing operations, export |
+| `src/SceneMaker.Editor` | Core | Editor state that is not Godot: view projection, tool state machine, previews, undo history |
+| `src/SceneMaker.App` | Core, Editor | The Godot application: layout, dialogs, drawing, input plumbing |
+| `src/SceneMaker.Cli` | Core | Headless validate-and-export |
+
+`tests/SceneMaker.TestSupport` holds the fixtures both test projects use. There
+are no tests against `SceneMaker.App`: a test project cannot reference it without
+pulling in `Godot.NET.Sdk`, which is why anything worth testing belongs in Core
+or Editor.
+
+Two rules follow from this and are worth stating outright:
+
+- Editing operations are pure `SceneDocument -> SceneDocument` functions. They
+  assume a canonical document and produce one; full validation runs at the IO
+  boundaries only (`DocumentJson`, `SceneStore`, `SceneExport`). Do not add
+  `DocumentValidation.Validate` calls back into per-edit paths.
+- Input takes one path. `SceneCanvas` converts Godot events into coordinates and
+  hands them to `ToolInteraction`, which answers with exactly one `ToolOutcome`;
+  `SceneMakerMain.ExecuteSceneCommand` applies it, records undo and reports it.
+  New tools extend `ToolInteraction`; they do not add events to the canvas.
+
 ## Engineering
 
 Keep persisted models engine-neutral. Godot is UI and Canvas projection only.

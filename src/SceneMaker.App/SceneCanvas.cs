@@ -31,17 +31,9 @@ public sealed partial class SceneCanvas : Control
     private IReadOnlySet<TerrainCellCoordinate> _sceneTerrain = new HashSet<TerrainCellCoordinate>();
     private IReadOnlySet<TerrainCellCoordinate> _previewTerrain = new HashSet<TerrainCellCoordinate>();
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
+    private TerrainDisplayCatalog? _terrainAssets;
     private PropDisplayCatalog? _propAssets;
-    private EditorInteractionState _interactionState = new();
-    private string? _selectedPropInstanceId;
-    private string? _selectedTemplateAnchorId;
-    private string? _draggedTemplateAnchorId;
-    private (int X, int Y)? _draggedTemplateAnchorPosition;
-    private (int X, int Y)? _pointerAuthoringPosition;
-    private (int X, int Y)? _pointerTerrainPosition;
-    private (int X, int Y)? _lineStart;
-    private (int X, int Y)? _lineEnd;
-    private bool _terrainLineDragging;
+    private ToolInteraction _interaction = new();
     private bool _pointerOverCanvas;
 
     public SceneCanvas()
@@ -54,8 +46,7 @@ public sealed partial class SceneCanvas : Control
         MouseExited += () =>
         {
             _pointerOverCanvas = false;
-            _pointerAuthoringPosition = null;
-            _pointerTerrainPosition = null;
+            _interaction.PointerLeft();
             QueueRedraw();
         };
         MouseEntered += () => _pointerOverCanvas = true;
@@ -65,66 +56,56 @@ public sealed partial class SceneCanvas : Control
     public LoadedScene? Scene => _scene;
     public string? SelectedTerrainAssetKey { get; set; }
     public string? SelectedPropAssetKey { get; set; }
-    public EditorMode Mode => _interactionState.Mode;
-    public EditorTool ActiveTool => _interactionState.ActiveTool;
-    public bool EraserEnabled => _interactionState.EraserEnabled;
+    public EditorMode Mode => _interaction.Mode;
+    public EditorTool ActiveTool => _interaction.ActiveTool;
+    public bool EraserEnabled => _interaction.EraserEnabled;
+
+    /// <summary>Group number a newly placed Template Anchor receives.</summary>
+    public int TemplateAnchorGroupNumber { get; set; } = 1;
+
+    /// <summary>The Template Anchor the tools currently have selected, if any.</summary>
+    public string? SelectedTemplateAnchorId => _interaction.SelectedTemplateAnchorId;
+
     public event Action? ViewChanged;
-    public event Action<int, int>? TerrainPaintRequested;
-    public event Action<int, int>? TerrainEraseRequested;
-    public event Action<int, int>? TerrainFillEraseRequested;
-    public event Action<int, int>? TerrainFillRequested;
-    public event Action<int, int, int, int>? TerrainLineRequested;
-    public event Action<int, int, int, int>? TerrainLineEraseRequested;
-    public event Action<int, int>? PropRequested;
-    public event Action<int, int, int, int>? PropLineRequested;
-    public event Action<int, int, int, int>? PropLineEraseRequested;
-    public event Action<int, int>? PropEraseRequested;
-    public event Action<int, int>? PropSelectRequested;
-    public event Action<int, int>? TemplateAnchorPlaceRequested;
-    public event Action<int, int>? TemplateAnchorSelectRequested;
-    public event Action<string, int, int>? TemplateAnchorMoveRequested;
-    public event Action<string>? ToolStatusRequested;
+
+    /// <summary>
+    /// The single channel for everything the tools decide. Every pointer and key
+    /// event is answered with one outcome, which the editor applies or shows.
+    /// </summary>
+    public event Action<ToolOutcome>? OutcomeProduced;
+
     /// <summary>Raised when the primary pointer button is released, which ends
     /// a continuous edit stroke.</summary>
     public event Action? StrokeEnded;
 
-    public void ConfigureInteractionState(EditorInteractionState state)
+    public void ConfigureInteraction(ToolInteraction interaction)
     {
-        _interactionState = state ?? throw new ArgumentNullException(nameof(state));
-        ResetTransientInteraction();
+        _interaction = interaction ?? throw new ArgumentNullException(nameof(interaction));
+        QueueRedraw();
     }
 
     public void SelectMode(EditorMode mode)
     {
-        _interactionState.SelectMode(mode);
-        ResetTransientInteraction();
+        _interaction.SelectMode(mode);
+        QueueRedraw();
     }
 
     public void SelectTool(EditorTool tool)
     {
-        _interactionState.SelectTool(tool);
-        ResetTransientInteraction();
+        _interaction.SelectTool(tool);
+        QueueRedraw();
     }
 
     public void SetEraserEnabled(bool enabled)
     {
-        _interactionState.SetEraserEnabled(enabled);
-        QueueRedraw();
-    }
-
-    private void ResetTransientInteraction()
-    {
-        _lineStart = null;
-        _lineEnd = null;
-        _draggedTemplateAnchorId = null;
-        _draggedTemplateAnchorPosition = null;
-        _terrainLineDragging = false;
+        _interaction.SetEraserEnabled(enabled);
         QueueRedraw();
     }
 
     public void ConfigureTerrainAssets(TerrainDisplayCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
+        _terrainAssets = catalog;
         var colors = new Dictionary<string, Color>();
         foreach (var asset in catalog.Assets)
             colors.Add(asset.AssetKey, Color.FromHtml(asset.Color));
@@ -153,15 +134,7 @@ public sealed partial class SceneCanvas : Control
         _templatePreviewMasks = [];
         _previewTerrain = AuthoredTerrain(null);
         ViewState = new CanvasViewState();
-        _selectedPropInstanceId = null;
-        _selectedTemplateAnchorId = null;
-        _draggedTemplateAnchorId = null;
-        _draggedTemplateAnchorPosition = null;
-        _pointerAuthoringPosition = null;
-        _pointerTerrainPosition = null;
-        _lineStart = null;
-        _lineEnd = null;
-        _terrainLineDragging = false;
+        _interaction.ResetForScene();
         QueueRedraw();
         ViewChanged?.Invoke();
     }
@@ -190,48 +163,77 @@ public sealed partial class SceneCanvas : Control
 
     public void SelectProp(string? instanceId)
     {
-        _selectedPropInstanceId = instanceId;
+        _interaction.SelectProp(instanceId);
         QueueRedraw();
     }
 
     public void SelectTemplateAnchor(string? anchorId)
     {
-        _selectedTemplateAnchorId = anchorId;
+        _interaction.SelectTemplateAnchor(anchorId);
         QueueRedraw();
     }
 
-    public void CompleteLinePlacement()
+    /// <summary>
+    /// Keeps the tool selection honest after the document changed, whatever the
+    /// reason: an edit, an undo, or a freshly loaded Scene.
+    /// </summary>
+    public void NotifySceneChanged(SceneDocument? before, SceneDocument after)
     {
-        _lineStart = null;
-        _lineEnd = null;
-        _terrainLineDragging = false;
+        _interaction.SceneChanged(before, after);
         QueueRedraw();
+    }
+
+    /// <summary>The Scene, catalogs and pointer state the tools work against.</summary>
+    private ToolContext? CurrentContext()
+    {
+        if (_scene is null || _terrainAssets is null || _propAssets is null || _metrics is null)
+            return null;
+        return new ToolContext(
+            _scene.Document,
+            _terrainAssets,
+            _propAssets,
+            _metrics,
+            _sceneTerrain,
+            SelectedTerrainAssetKey,
+            SelectedPropAssetKey,
+            TemplateAnchorGroupNumber);
+    }
+
+    private void Publish(ToolOutcome outcome)
+    {
+        if (outcome is ToolOutcome.Idle) return;
+        OutcomeProduced?.Invoke(outcome);
     }
 
     public override void _GuiInput(InputEvent input)
     {
-        if (input is InputEventMouseButton mouseButton
-            && mouseButton.ButtonIndex == MouseButton.Left
-            && mouseButton.Pressed)
+        if (CurrentContext() is not { } context) return;
+        if (input is InputEventMouseButton { ButtonIndex: MouseButton.Left } button)
         {
-            GrabFocus();
-            UpdatePointer(mouseButton.Position);
-            BeginPrimaryAction(mouseButton.Position);
+            var authoring = AuthoringCoordinate(button.Position);
+            var cell = TerrainCoordinate(button.Position);
+            if (button.Pressed)
+            {
+                GrabFocus();
+                Publish(_interaction.PointerPressed(context, authoring, cell));
+            }
+            else
+            {
+                _interaction.PointerMoved(authoring, cell);
+                Publish(_interaction.PointerReleased(context));
+                StrokeEnded?.Invoke();
+            }
+            QueueRedraw();
         }
-        else if (input is InputEventMouseButton releasedMouseButton
-                 && releasedMouseButton.ButtonIndex == MouseButton.Left
-                 && !releasedMouseButton.Pressed)
+        else if (input is InputEventMouseMotion motion)
         {
-            UpdatePointer(releasedMouseButton.Position);
-            CompletePrimaryAction();
-            StrokeEnded?.Invoke();
-        }
-        else if (input is InputEventMouseMotion mouseMotion)
-        {
-            UpdatePointer(mouseMotion.Position);
-            ContinuePrimaryAction(
-                mouseMotion.Position,
-                (mouseMotion.ButtonMask & MouseButtonMask.Left) != 0);
+            var authoring = AuthoringCoordinate(motion.Position);
+            var cell = TerrainCoordinate(motion.Position);
+            if ((motion.ButtonMask & MouseButtonMask.Left) != 0)
+                Publish(_interaction.PointerDragged(context, authoring, cell));
+            else
+                _interaction.PointerMoved(authoring, cell);
+            QueueRedraw();
         }
     }
 
@@ -241,13 +243,17 @@ public sealed partial class SceneCanvas : Control
         // Command/Control shortcuts belong to the application, not the canvas.
         if (keyEvent.IsCommandOrControlPressed()) return;
 
-        if (keyEvent.Pressed
-            && Mode == EditorMode.Props
-            && ActiveTool == EditorTool.Line
-            && HandleLineKey(keyEvent.Keycode))
+        if (keyEvent.Pressed && ToolKeyFor(keyEvent.Keycode) is { } toolKey
+            && CurrentContext() is { } context)
         {
-            GetViewport().SetInputAsHandled();
-            return;
+            var outcome = _interaction.KeyPressed(context, toolKey);
+            if (outcome is not ToolOutcome.Idle)
+            {
+                Publish(outcome);
+                QueueRedraw();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
         }
 
         const double zoomFactor = 1.25;
@@ -300,65 +306,6 @@ public sealed partial class SceneCanvas : Control
         if (!ViewState.AdvanceKeyboardPan(inputX, inputY, delta)) return;
         QueueRedraw();
         ViewChanged?.Invoke();
-    }
-
-    private bool HandleLineKey(Key key)
-    {
-        if (key == Key.Escape)
-        {
-            if (_lineEnd is not null)
-            {
-                _lineEnd = null;
-                ToolStatusRequested?.Invoke(
-                    "Line Draw: end point released; choose a new end point.");
-            }
-            else if (_lineStart is not null)
-            {
-                _lineStart = null;
-                ToolStatusRequested?.Invoke(
-                    "Line Draw: start point released; choose a new start point.");
-            }
-            else
-            {
-                ToolStatusRequested?.Invoke("Line Draw: choose a start point.");
-            }
-            QueueRedraw();
-            return true;
-        }
-
-        if (key is not (Key.Enter or Key.KpEnter)) return false;
-        if (_lineStart is not { } start || _lineEnd is not { } end)
-        {
-            ToolStatusRequested?.Invoke(
-                _lineStart is null
-                    ? "Line Draw: choose a start point before confirming."
-                    : "Line Draw: choose and lock an end point before confirming.");
-            return true;
-        }
-
-        if (EraserEnabled)
-        {
-            PropLineEraseRequested?.Invoke(start.X, start.Y, end.X, end.Y);
-            return true;
-        }
-
-        var preview = PropLinePreview(start, end);
-        var invalidCount = ToolPreviewBuilder.CountOf(preview, PropPreviewKind.Blocked);
-        if (invalidCount > 0)
-        {
-            ToolStatusRequested?.Invoke(
-                $"Line Draw blocked: {invalidCount} of {preview.Count} Prop previews are invalid.");
-            return true;
-        }
-
-        PropLineRequested?.Invoke(start.X, start.Y, end.X, end.Y);
-        var warningCount = ToolPreviewBuilder.CountOf(preview, PropPreviewKind.MissingTerrain);
-        if (warningCount > 0)
-        {
-            ToolStatusRequested?.Invoke(
-                $"Line Draw authored {preview.Count} Props; {warningCount} lack complete Terrain and block export.");
-        }
-        return true;
     }
 
     public override void _Draw()
@@ -436,229 +383,24 @@ public sealed partial class SceneCanvas : Control
         ViewState.ZoomBy(factor, Size.X * 0.5, Size.Y * 0.5);
     }
 
-    private void BeginPrimaryAction(Vector2 screenPosition)
+    private TerrainCellCoordinate TerrainCoordinate(Vector2 screenPosition)
     {
-        if (_scene is null) return;
-        if (Mode == EditorMode.Terrain)
-        {
-            var (cellX, cellY) = TerrainCoordinate(screenPosition);
-            switch (ActiveTool)
-            {
-                case EditorTool.Pencil when EraserEnabled:
-                    TerrainEraseRequested?.Invoke(cellX, cellY);
-                    break;
-                case EditorTool.Pencil when SelectedTerrainAssetKey is not null:
-                    TerrainPaintRequested?.Invoke(cellX, cellY);
-                    break;
-                case EditorTool.Fill when EraserEnabled:
-                    TerrainFillEraseRequested?.Invoke(cellX, cellY);
-                    break;
-                case EditorTool.Fill when SelectedTerrainAssetKey is not null:
-                    TerrainFillRequested?.Invoke(cellX, cellY);
-                    break;
-                case EditorTool.Line:
-                    _lineStart = (cellX, cellY);
-                    _lineEnd = (cellX, cellY);
-                    _terrainLineDragging = true;
-                    ToolStatusRequested?.Invoke(
-                        $"Terrain Line: drag from cell ({cellX}, {cellY}) and release to apply.");
-                    QueueRedraw();
-                    break;
-            }
-        }
-        else if (Mode == EditorMode.Props && SelectedPropAssetKey is not null)
-        {
-            var coordinate = AuthoringCoordinate(screenPosition);
-            switch (ActiveTool)
-            {
-                case EditorTool.Selector:
-                    PropSelectRequested?.Invoke(coordinate.X, coordinate.Y);
-                    break;
-                case EditorTool.Pencil when EraserEnabled:
-                    PropEraseRequested?.Invoke(coordinate.X, coordinate.Y);
-                    break;
-                case EditorTool.Pencil:
-                    var validation = ValidateProp(coordinate);
-                    if (validation.IsValid)
-                    {
-                        PropRequested?.Invoke(coordinate.X, coordinate.Y);
-                        if (!validation.HasCompleteTerrain)
-                        {
-                            ToolStatusRequested?.Invoke(
-                                $"Prop authored with export warning: {validation.Warning}");
-                        }
-                    }
-                    else
-                    {
-                        ToolStatusRequested?.Invoke(
-                            $"Pencil Draw blocked: {validation.Reason}");
-                    }
-                    break;
-                case EditorTool.Line:
-                    if (_lineStart is null)
-                    {
-                        _lineStart = coordinate;
-                        ToolStatusRequested?.Invoke(
-                            $"Line Draw: start fixed at ({coordinate.X}, {coordinate.Y}); choose an end point.");
-                    }
-                    else if (_lineEnd is null)
-                    {
-                        _lineEnd = coordinate;
-                        var preview = PropLinePreview(_lineStart.Value, coordinate);
-                        var invalidCount = ToolPreviewBuilder.CountOf(preview, PropPreviewKind.Blocked);
-                        var warningCount = ToolPreviewBuilder.CountOf(preview, PropPreviewKind.MissingTerrain);
-                        ToolStatusRequested?.Invoke(invalidCount > 0
-                            ? $"Line Draw: end fixed; {invalidCount} of {preview.Count} previews are blocked. Press Escape to revise."
-                            : warningCount > 0
-                                ? $"Line Draw: end fixed; {warningCount} of {preview.Count} previews lack Terrain but may be authored. Enter confirms; Escape revises."
-                                : $"Line Draw: end fixed; {preview.Count} previews ready. Press Enter to confirm or Escape to revise.");
-                    }
-                    else
-                    {
-                        ToolStatusRequested?.Invoke(
-                            "Line Draw: end point is fixed. Press Enter to confirm or Escape to revise it.");
-                    }
-                    QueueRedraw();
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-        else if (Mode == EditorMode.Templates
-                 && _scene.Document.SceneKind == SceneKind.Instance)
-        {
-            var coordinate = AuthoringCoordinate(screenPosition);
-            switch (ActiveTool)
-            {
-                case EditorTool.AnchorPlace:
-                    TemplateAnchorPlaceRequested?.Invoke(coordinate.X, coordinate.Y);
-                    break;
-                case EditorTool.Selector:
-                    TemplateAnchorSelectRequested?.Invoke(coordinate.X, coordinate.Y);
-                    break;
-                case EditorTool.AnchorMove:
-                    var anchor = TemplateEditing.FindAnchorAt(
-                        _scene.Document,
-                        coordinate.X,
-                        coordinate.Y);
-                    if (anchor is null)
-                    {
-                        ToolStatusRequested?.Invoke("Move Anchor: no Template Anchor selected.");
-                        break;
-                    }
-                    _selectedTemplateAnchorId = anchor.AnchorId;
-                    _draggedTemplateAnchorId = anchor.AnchorId;
-                    _draggedTemplateAnchorPosition = (
-                        TemplateEditing.SnapToWorldGrid(coordinate.X, _metrics!.AuthoringPixelsPerTerrainCell),
-                        TemplateEditing.SnapToWorldGrid(coordinate.Y, _metrics!.AuthoringPixelsPerTerrainCell));
-                    TemplateAnchorSelectRequested?.Invoke(coordinate.X, coordinate.Y);
-                    QueueRedraw();
-                    break;
-            }
-        }
-    }
-
-    private void ContinuePrimaryAction(Vector2 screenPosition, bool leftButtonPressed)
-    {
-        if (_scene is null) return;
-        if (Mode == EditorMode.Terrain && leftButtonPressed)
-        {
-            var (cellX, cellY) = TerrainCoordinate(screenPosition);
-            if (ActiveTool == EditorTool.Line && _terrainLineDragging)
-            {
-                _lineEnd = (cellX, cellY);
-                QueueRedraw();
-            }
-            else if (ActiveTool == EditorTool.Pencil && EraserEnabled)
-                TerrainEraseRequested?.Invoke(cellX, cellY);
-            else if (ActiveTool == EditorTool.Pencil && SelectedTerrainAssetKey is not null)
-                TerrainPaintRequested?.Invoke(cellX, cellY);
-            else if (ActiveTool == EditorTool.Fill && EraserEnabled)
-                TerrainFillEraseRequested?.Invoke(cellX, cellY);
-        }
-        else if (Mode == EditorMode.Props)
-        {
-            var coordinate = AuthoringCoordinate(screenPosition);
-            if (ActiveTool == EditorTool.Pencil && EraserEnabled && leftButtonPressed)
-                PropEraseRequested?.Invoke(coordinate.X, coordinate.Y);
-        }
-        else if (Mode == EditorMode.Templates
-                 && ActiveTool == EditorTool.AnchorMove
-                 && leftButtonPressed
-                 && _draggedTemplateAnchorId is not null)
-        {
-            var coordinate = AuthoringCoordinate(screenPosition);
-            _draggedTemplateAnchorPosition = (
-                TemplateEditing.SnapToWorldGrid(coordinate.X, _metrics!.AuthoringPixelsPerTerrainCell),
-                TemplateEditing.SnapToWorldGrid(coordinate.Y, _metrics!.AuthoringPixelsPerTerrainCell));
-            QueueRedraw();
-        }
-    }
-
-    private void CompletePrimaryAction()
-    {
-        if (Mode == EditorMode.Terrain
-            && ActiveTool == EditorTool.Line
-            && _terrainLineDragging
-            && _lineStart is { } terrainStart
-            && (_pointerTerrainPosition ?? _lineEnd) is { } terrainEnd)
-        {
-            _terrainLineDragging = false;
-            if (EraserEnabled)
-            {
-                TerrainLineEraseRequested?.Invoke(
-                    terrainStart.X,
-                    terrainStart.Y,
-                    terrainEnd.X,
-                    terrainEnd.Y);
-            }
-            else
-            {
-                TerrainLineRequested?.Invoke(
-                    terrainStart.X,
-                    terrainStart.Y,
-                    terrainEnd.X,
-                    terrainEnd.Y);
-            }
-            return;
-        }
-
-        if (_draggedTemplateAnchorId is not { } anchorId
-            || _draggedTemplateAnchorPosition is not { } position)
-            return;
-        _draggedTemplateAnchorId = null;
-        _draggedTemplateAnchorPosition = null;
-        TemplateAnchorMoveRequested?.Invoke(anchorId, position.X, position.Y);
-        QueueRedraw();
-    }
-
-    private void UpdatePointer(Vector2 screenPosition)
-    {
-        if (_scene is null) return;
-        if (Mode == EditorMode.Terrain)
-        {
-            _pointerTerrainPosition = TerrainCoordinate(screenPosition);
-            _pointerAuthoringPosition = null;
-            QueueRedraw();
-            return;
-        }
-        _pointerTerrainPosition = null;
-        _pointerAuthoringPosition = AuthoringCoordinate(screenPosition);
-        QueueRedraw();
-    }
-
-    private (int X, int Y) TerrainCoordinate(Vector2 screenPosition) =>
-        ViewState.ScreenToTerrainCell(
+        var (x, y) = ViewState.ScreenToTerrainCell(
             screenPosition.X,
             screenPosition.Y,
             _scene!.Document.SizeCells.Height,
             _metrics!.AuthoringPixelsPerTerrainCell);
+        return new TerrainCellCoordinate(x, y);
+    }
 
-    private (int X, int Y) AuthoringCoordinate(Vector2 screenPosition) =>
-        ViewState.ScreenToAuthoringPixel(
+    private AuthoringPoint AuthoringCoordinate(Vector2 screenPosition)
+    {
+        var (x, y) = ViewState.ScreenToAuthoringPixel(
             screenPosition.X,
             screenPosition.Y,
             _metrics!.SceneHeightAuthoringPixels(_scene!.Document));
+        return new AuthoringPoint(x, y);
+    }
 
     private void DrawTerrain(
         SceneDocument document,
@@ -695,12 +437,8 @@ public sealed partial class SceneCanvas : Control
             document,
             ActiveTool,
             EraserEnabled,
-            _pointerTerrainPosition is { } pointer
-                ? new TerrainCellCoordinate(pointer.X, pointer.Y)
-                : null,
-            _terrainLineDragging && _lineStart is { } start
-                ? new TerrainCellCoordinate(start.X, start.Y)
-                : null);
+            _interaction.PointerCell,
+            _interaction.TerrainLineStart);
 
         var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
         var color = preview.Erasing ? InvalidPreviewColor : SelectionColor;
@@ -740,7 +478,7 @@ public sealed partial class SceneCanvas : Control
                 zoom,
                 sceneHeightAuthoringPixels);
             var color = Color.FromHtml(asset.Color);
-            var selected = highlighted && prop.InstanceId == _selectedPropInstanceId;
+            var selected = highlighted && prop.InstanceId == _interaction.SelectedPropInstanceId;
             var outline = highlighted
                 ? color
                 : new Color(color.R, color.G, color.B, 0.32f);
@@ -787,14 +525,14 @@ public sealed partial class SceneCanvas : Control
 
         foreach (var anchor in document.TemplateAnchors)
         {
-            var position = anchor.AnchorId == _draggedTemplateAnchorId
-                           && _draggedTemplateAnchorPosition is { } preview
+            var position = anchor.AnchorId == _interaction.DraggedAnchorId
+                           && _interaction.DraggedAnchorPosition is { } preview
                 ? new AuthoringPixelPosition { X = preview.X, Y = preview.Y }
                 : anchor.PositionAuthoringPx;
             DrawTemplateAnchor(
                 position,
                 anchor.GroupNumber.ToString(),
-                anchor.AnchorId == _selectedTemplateAnchorId,
+                anchor.AnchorId == _interaction.SelectedTemplateAnchorId,
                 pan,
                 zoom,
                 sceneHeightAuthoringPixels,
@@ -803,7 +541,7 @@ public sealed partial class SceneCanvas : Control
 
         if (highlighted
             && ActiveTool == EditorTool.AnchorPlace
-            && _pointerAuthoringPosition is { } pointer)
+            && _interaction.PointerAuthoring is { } pointer)
         {
             DrawTemplateAnchor(
                 new AuthoringPixelPosition
@@ -929,18 +667,9 @@ public sealed partial class SceneCanvas : Control
     private IReadOnlyList<PropPreview> CurrentPropPreviews() =>
         BuildPropPreviews(
             ActiveTool,
-            _pointerAuthoringPosition is { } pointer
-                ? new AuthoringPoint(pointer.X, pointer.Y)
-                : null,
-            _lineStart is { } start ? new AuthoringPoint(start.X, start.Y) : null,
-            _lineEnd is { } end ? new AuthoringPoint(end.X, end.Y) : null);
-
-    private IReadOnlyList<PropPreview> PropLinePreview((int X, int Y) start, (int X, int Y) end) =>
-        BuildPropPreviews(
-            EditorTool.Line,
-            pointer: null,
-            new AuthoringPoint(start.X, start.Y),
-            new AuthoringPoint(end.X, end.Y));
+            _interaction.PointerAuthoring,
+            _interaction.PropLineStart,
+            _interaction.PropLineEnd);
 
     private IReadOnlyList<PropPreview> BuildPropPreviews(
         EditorTool tool,
@@ -958,16 +687,14 @@ public sealed partial class SceneCanvas : Control
                 pointer,
                 lineStart,
                 lineEnd,
-                _interactionState.PropLineOffsetAuthoringPixels);
+                _interaction.State.PropLineOffsetAuthoringPixels);
 
-    private PropValidationResult ValidateProp((int X, int Y) coordinate) =>
-        PropEditing.ValidateCandidate(
-            _scene!.Document,
-            _propAssets!,
-            coordinate.X,
-            coordinate.Y,
-            SelectedPropAssetKey!,
-            _sceneTerrain);
+    private static ToolKey? ToolKeyFor(Key keycode) => keycode switch
+    {
+        Key.Escape => ToolKey.Escape,
+        Key.Enter or Key.KpEnter => ToolKey.Enter,
+        _ => null,
+    };
 
     private static Rect2 CanvasRectangle(
         PropBoundsAuthoringPixels bounds,

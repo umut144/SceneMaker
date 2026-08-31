@@ -18,12 +18,8 @@ public sealed partial class SceneMakerMain : Control
     private const int ExportSceneMenuId = 22;
     private const int ChunkHelperMenuId = 30;
     private const double AutosaveDelaySeconds = 1.5;
-    private const string TerrainPaintStroke = "terrain-paint";
-    private const string TerrainEraseStroke = "terrain-erase";
-    private const string TerrainRegionEraseStroke = "terrain-region-erase";
-    private const string PropEraseStroke = "prop-erase";
 
-    private readonly EditorInteractionState _interactionState = new();
+    private readonly ToolInteraction _interaction = new();
     private readonly SceneCanvas _canvas = new();
     private readonly Label _workspaceLabel = new();
     private readonly Label _sceneLabel = new();
@@ -100,7 +96,6 @@ public sealed partial class SceneMakerMain : Control
     private PropDisplayCatalog? _propAssets;
     private string? _pendingWorkspaceParentDirectory;
     private string? _recentSessionPath;
-    private string? _selectedTemplateAnchorId;
     private bool _updatingAnchorGroupEdit;
     private TemplateCompositionResult? _templatePreview;
 
@@ -295,7 +290,7 @@ public sealed partial class SceneMakerMain : Control
         _anchorGroupEdit.Value = 1;
         _anchorGroupEdit.CustomMinimumSize = new Vector2(44f, 0f);
         _anchorGroupEdit.TooltipText = "Group number for a new or selected Template Anchor";
-        _anchorGroupEdit.ValueChanged += SetSelectedTemplateAnchorGroup;
+        _anchorGroupEdit.ValueChanged += OnAnchorGroupChanged;
         toolColumn.AddChild(_anchorGroupEdit);
 
         _contextMenuBar.Name = "ContextMenu";
@@ -340,25 +335,11 @@ public sealed partial class SceneMakerMain : Control
         canvasColumn.AddChild(canvasRow);
 
         _canvas.Name = "Canvas";
-        _canvas.ConfigureInteractionState(_interactionState);
+        _canvas.ConfigureInteraction(_interaction);
         if (_terrainAssets is not null) _canvas.ConfigureTerrainAssets(_terrainAssets);
         if (_propAssets is not null) _canvas.ConfigurePropAssets(_propAssets);
         _canvas.ViewChanged += UpdateViewStatus;
-        _canvas.TerrainPaintRequested += PaintTerrainCell;
-        _canvas.TerrainEraseRequested += EraseTerrainCell;
-        _canvas.TerrainFillEraseRequested += EraseTerrainRegion;
-        _canvas.TerrainFillRequested += FillTerrainRegion;
-        _canvas.TerrainLineRequested += PaintTerrainLine;
-        _canvas.TerrainLineEraseRequested += EraseTerrainLine;
-        _canvas.PropRequested += PlaceProp;
-        _canvas.PropLineRequested += PlacePropLine;
-        _canvas.PropLineEraseRequested += ErasePropLine;
-        _canvas.PropEraseRequested += EraseProp;
-        _canvas.PropSelectRequested += SelectProp;
-        _canvas.TemplateAnchorPlaceRequested += PlaceTemplateAnchor;
-        _canvas.TemplateAnchorSelectRequested += SelectTemplateAnchor;
-        _canvas.TemplateAnchorMoveRequested += MoveTemplateAnchor;
-        _canvas.ToolStatusRequested += SetStatus;
+        _canvas.OutcomeProduced += HandleToolOutcome;
         _canvas.StrokeEnded += EndEditStroke;
         _canvas.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _canvas.SizeFlagsVertical = SizeFlags.ExpandFill;
@@ -422,7 +403,7 @@ public sealed partial class SceneMakerMain : Control
         };
         button.AddThemeConstantOverride("icon_max_width", 24);
         button.Pressed += () => SelectDrawingTool(definition.Tool);
-        button.ButtonPressed = definition.Tool == _interactionState.ActiveTool;
+        button.ButtonPressed = definition.Tool == _interaction.ActiveTool;
         _drawingToolControlsByTool.Add(definition.Tool, button);
         parent.AddChild(button);
     }
@@ -1102,7 +1083,6 @@ public sealed partial class SceneMakerMain : Control
             _propAssets = null;
             _scene = null;
             _history = null;
-            _selectedTemplateAnchorId = null;
             _templatePreview = null;
             _canvas.ShowScene(null);
             SaveRecentSession();
@@ -1172,7 +1152,6 @@ public sealed partial class SceneMakerMain : Control
             LoadWorkspaceAssets();
             _scene = null;
             _history = null;
-            _selectedTemplateAnchorId = null;
             _templatePreview = null;
             _canvas.ShowScene(null);
             SaveRecentSession();
@@ -1210,7 +1189,6 @@ public sealed partial class SceneMakerMain : Control
                 checked((int)_templateInsertionYEdit.Value));
             _history = new SceneEditHistory(_scene.Document);
             _canvas.ShowScene(_scene);
-            _selectedTemplateAnchorId = null;
             _templatePreview = null;
             SaveRecentSession();
             UpdateDocumentStatus();
@@ -1236,7 +1214,6 @@ public sealed partial class SceneMakerMain : Control
             _history = new SceneEditHistory(_scene.Document);
             _canvas.ShowScene(_scene);
             _templatePreview = null;
-            _selectedTemplateAnchorId = null;
             SaveRecentSession();
             UpdateDocumentStatus();
             SetStatus($"Loaded Scene '{_scene.Document.SceneId}'.");
@@ -1282,17 +1259,16 @@ public sealed partial class SceneMakerMain : Control
     private void ExtendMap(bool north)
     {
         if (_scene is null || _workspace is null) return;
-        TryDocumentAction(() =>
-        {
-            var cells = checked((int)_mapExtensionCellsEdit.Value);
-            var document = north
-                ? MapEditing.ExtendNorth(_scene.Document, cells)
-                : MapEditing.ExtendEast(_scene.Document, cells);
-            ApplyEdit(document);
-            UpdateDocumentStatus();
-            var direction = north ? "north" : "east";
-            SetStatus($"Extended Map {direction} by {cells} Cells without moving authored data.");
-        });
+        var cells = checked((int)_mapExtensionCellsEdit.Value);
+        var direction = north ? "north" : "east";
+        ExecuteSceneCommand(new ToolOutcome.Edit(
+            "Extend Map",
+            document => north
+                ? MapEditing.ExtendNorth(document, cells)
+                : MapEditing.ExtendEast(document, cells),
+            Describe: (_, _) =>
+                $"Extended Map {direction} by {cells} Cells without moving authored data."));
+        UpdateDocumentStatus();
     }
 
     private void SelectDrawingTool(EditorTool tool)
@@ -1312,17 +1288,17 @@ public sealed partial class SceneMakerMain : Control
     private void SetPropLineOffset(double value)
     {
         var offset = checked((int)value);
-        _interactionState.SetPropLineOffset(offset);
+        _interaction.State.SetPropLineOffset(offset);
         SetStatus($"Prop Line offset set to {offset} authoring px.");
     }
 
     private void UpdateToolContextLabel()
     {
         _toolContextLabel.Text =
-            $"{EditorToolRegistry.ModeDisplayName(_interactionState.Mode)}:"
-            + EditorToolRegistry.Resolve(_interactionState.ActiveTool).DisplayName;
-        var propLineActive = _interactionState.Mode == EditorMode.Props
-            && _interactionState.ActiveTool == EditorTool.Line;
+            $"{EditorToolRegistry.ModeDisplayName(_interaction.Mode)}:"
+            + EditorToolRegistry.Resolve(_interaction.ActiveTool).DisplayName;
+        var propLineActive = _interaction.Mode == EditorMode.Props
+            && _interaction.ActiveTool == EditorTool.Line;
         _toolContextSeparator.Visible = propLineActive;
         _propLineOffsetLabel.Visible = propLineActive;
         _propLineOffsetEdit.Visible = propLineActive;
@@ -1392,320 +1368,93 @@ public sealed partial class SceneMakerMain : Control
         _canvas.ShowTemplatePreview(null);
     }
 
-    private void PlaceTemplateAnchor(int authoringX, int authoringY)
-    {
-        if (_scene is null || _workspace is null) return;
-        TryEditAction("Place Anchor", () =>
-        {
-            var before = _scene.Document.TemplateAnchors
-                .Select(static anchor => anchor.AnchorId)
-                .ToHashSet(StringComparer.Ordinal);
-            var document = TemplateEditing.PlaceAnchor(
-                _scene.Document,
-                _workspaceConfiguration!.Metrics,
-                authoringX,
-                authoringY,
-                checked((int)_anchorGroupEdit.Value));
-            var added = document.TemplateAnchors.Single(anchor => !before.Contains(anchor.AnchorId));
-            ApplyEdit(document);
-            SelectTemplateAnchorById(added.AnchorId);
-            SetStatus(
-                $"Placed Template Anchor '{added.AnchorId}' for group {added.GroupNumber} at ({added.PositionAuthoringPx.X}, {added.PositionAuthoringPx.Y}).");
-        });
-    }
-
-    private void SelectTemplateAnchor(int authoringX, int authoringY)
-    {
-        if (_scene?.Document.SceneKind != SceneKind.Instance) return;
-        var anchor = TemplateEditing.FindAnchorAt(
-            _scene.Document,
-            authoringX,
-            authoringY);
-        SelectTemplateAnchorById(anchor?.AnchorId);
-        SetStatus(anchor is null
-            ? "No Template Anchor selected."
-            : $"Selected '{anchor.AnchorId}' · group {anchor.GroupNumber} · position ({anchor.PositionAuthoringPx.X}, {anchor.PositionAuthoringPx.Y}).");
-    }
-
-    private void SelectTemplateAnchorById(string? anchorId)
-    {
-        _selectedTemplateAnchorId = anchorId;
-        _canvas.SelectTemplateAnchor(anchorId);
-        if (anchorId is not null && _scene is not null)
-        {
-            var anchor = _scene.Document.TemplateAnchors.Single(value => value.AnchorId == anchorId);
-            _updatingAnchorGroupEdit = true;
-            _anchorGroupEdit.Value = anchor.GroupNumber;
-            _updatingAnchorGroupEdit = false;
-        }
-        UpdateTemplateControls();
-    }
-
-    private void MoveTemplateAnchor(string anchorId, int authoringX, int authoringY)
-    {
-        if (_scene is null || _workspace is null) return;
-        TryEditAction("Move Anchor", () =>
-        {
-            var document = TemplateEditing.MoveAnchor(
-                _scene.Document,
-                _workspaceConfiguration!.Metrics,
-                anchorId,
-                authoringX,
-                authoringY);
-            ApplyEdit(document);
-            SelectTemplateAnchorById(anchorId);
-            var moved = document.TemplateAnchors.Single(anchor => anchor.AnchorId == anchorId);
-            SetStatus(
-                $"Moved Template Anchor '{anchorId}' to ({moved.PositionAuthoringPx.X}, {moved.PositionAuthoringPx.Y}).");
-        });
-    }
-
-    private void SetSelectedTemplateAnchorGroup(double value)
-    {
-        if (_updatingAnchorGroupEdit
-            || _scene is null
-            || _workspace is null
-            || _selectedTemplateAnchorId is null)
-            return;
-        TryEditAction("Assign Anchor Group", () =>
-        {
-            var groupNumber = checked((int)value);
-            var document = TemplateEditing.SetAnchorGroup(
-                _scene.Document,
-                _selectedTemplateAnchorId,
-                groupNumber);
-            ApplyEdit(document);
-            SetStatus(
-                $"Assigned Template Anchor '{_selectedTemplateAnchorId}' to group {groupNumber}.");
-        });
-    }
-
-    private void PaintTerrainCell(int cellX, int cellY)
-    {
-        if (_workspace is null || _scene is null || _canvas.SelectedTerrainAssetKey is not { } assetKey)
-            return;
-
-        TryDocumentAction(() =>
-        {
-            var document = TerrainEditing.Paint(
-                _scene.Document,
-                _terrainAssets!,
-                cellX,
-                cellY,
-                assetKey);
-            ApplyEdit(document, TerrainPaintStroke);
-            var asset = _terrainAssets!.Resolve(assetKey);
-            SetStatus($"Painted {asset.Name} at Terrain cell ({cellX}, {cellY}).");
-        });
-    }
-
-    private void EraseTerrainCell(int cellX, int cellY)
-    {
-        if (_workspace is null || _scene is null) return;
-        TryDocumentAction(() =>
-        {
-            var document = TerrainEditing.Erase(_scene.Document, cellX, cellY);
-            if (ReferenceEquals(document, _scene.Document)) return;
-            ApplyEdit(document, TerrainEraseStroke);
-            SetStatus($"Erased Terrain at cell ({cellX}, {cellY}); uncovered spatial instances are export warnings.");
-        });
-    }
-
-    private void FillTerrainRegion(int cellX, int cellY)
-    {
-        if (_workspace is null || _scene is null || _canvas.SelectedTerrainAssetKey is not { } assetKey)
-            return;
-        TryDocumentAction(() =>
-        {
-            var document = TerrainEditing.Fill(
-                _scene.Document,
-                _terrainAssets!,
-                cellX,
-                cellY,
-                assetKey);
-            if (ReferenceEquals(document, _scene.Document))
-            {
-                SetStatus("Terrain Fill made no change because source and target Terrain are identical.");
-                return;
-            }
-            ApplyEdit(document);
-            var asset = _terrainAssets!.Resolve(assetKey);
-            SetStatus($"Filled the connected region at ({cellX}, {cellY}) with {asset.Name}.");
-        });
-    }
-
-    private void EraseTerrainRegion(int cellX, int cellY)
-    {
-        if (_workspace is null || _scene is null) return;
-        TryDocumentAction(() =>
-        {
-            var document = TerrainEditing.EraseFill(_scene.Document, cellX, cellY);
-            if (ReferenceEquals(document, _scene.Document))
-            {
-                SetStatus("Terrain Eraser Fill made no change because the region is already empty.");
-                return;
-            }
-            ApplyEdit(document, TerrainRegionEraseStroke);
-            SetStatus($"Erased the connected Terrain region at ({cellX}, {cellY}).");
-        });
-    }
-
-    private void PaintTerrainLine(int startX, int startY, int endX, int endY)
-    {
-        if (_workspace is null || _scene is null || _canvas.SelectedTerrainAssetKey is not { } assetKey)
-            return;
-        TryDocumentAction(() =>
-        {
-            var document = TerrainEditing.PaintLine(
-                _scene.Document,
-                _terrainAssets!,
-                startX,
-                startY,
-                endX,
-                endY,
-                assetKey);
-            ApplyEdit(document);
-            _canvas.CompleteLinePlacement();
-            var count = TerrainEditing.LineCells(startX, startY, endX, endY).Count;
-            var asset = _terrainAssets!.Resolve(assetKey);
-            SetStatus($"Line Draw painted {count} Terrain cells with {asset.Name}.");
-        });
-    }
-
-    private void EraseTerrainLine(int startX, int startY, int endX, int endY)
-    {
-        if (_workspace is null || _scene is null) return;
-        TryDocumentAction(() =>
-        {
-            var beforeCount = _scene.Document.TerrainCells.Count;
-            var document = TerrainEditing.EraseLine(
-                _scene.Document,
-                startX,
-                startY,
-                endX,
-                endY);
-            _canvas.CompleteLinePlacement();
-            if (ReferenceEquals(document, _scene.Document))
-            {
-                SetStatus("Line Eraser made no change because the selected Terrain cells are empty.");
-                return;
-            }
-            ApplyEdit(document);
-            var erased = beforeCount - document.TerrainCells.Count;
-            SetStatus($"Line Eraser removed {erased} Terrain cell{(erased == 1 ? string.Empty : "s")}.");
-        });
-    }
-
-    private void PlaceProp(int authoringX, int authoringY)
-    {
-        if (_workspace is null || _scene is null || _canvas.SelectedPropAssetKey is not { } assetKey)
-            return;
-
-        TryEditAction("Pencil Draw", () =>
-        {
-            var document = PropEditing.Place(
-                _scene.Document,
-                _propAssets!,
-                authoringX,
-                authoringY,
-                assetKey);
-            ApplyEdit(document);
-            var asset = _propAssets!.Resolve(assetKey);
-            SetStatus($"Placed {asset.Name} anchor at ({authoringX}, {authoringY}) authoring px.");
-        });
-    }
-
-    private void PlacePropLine(int startX, int startY, int endX, int endY)
-    {
-        if (_workspace is null || _scene is null || _canvas.SelectedPropAssetKey is not { } assetKey)
-            return;
-
-        TryEditAction("Line Draw", () =>
-        {
-            var beforeCount = _scene.Document.Props.Count;
-            var document = PropEditing.PlaceLine(
-                _scene.Document,
-                _propAssets!,
-                startX,
-                startY,
-                endX,
-                endY,
-                assetKey,
-                _interactionState.PropLineOffsetAuthoringPixels);
-            ApplyEdit(document);
-            _canvas.CompleteLinePlacement();
-            var added = document.Props.Count - beforeCount;
-            SetStatus($"Line Draw placed {added} Prop{(added == 1 ? string.Empty : "s")} with exact non-overlapping footprints.");
-        });
-    }
-
-    private void ErasePropLine(int startX, int startY, int endX, int endY)
-    {
-        if (_workspace is null || _scene is null || _canvas.SelectedPropAssetKey is not { } assetKey)
-            return;
-
-        TryEditAction("Line Eraser", () =>
-        {
-            var asset = _propAssets!.Resolve(assetKey);
-            var document = _scene.Document;
-            var beforeCount = document.Props.Count;
-            foreach (var anchor in PropEditing.LineAnchors(
-                         asset,
-                         startX,
-                         startY,
-                         endX,
-                         endY,
-                         _interactionState.PropLineOffsetAuthoringPixels))
-            {
-                document = PropEditing.EraseAt(
-                    document,
-                    _propAssets!,
-                    anchor.X,
-                    anchor.Y);
-            }
-            ApplyEdit(document);
-            _canvas.CompleteLinePlacement();
-            var erased = beforeCount - document.Props.Count;
-            SetStatus($"Line Eraser removed {erased} Prop{(erased == 1 ? string.Empty : "s")}.");
-        });
-    }
-
-    private void EraseProp(int authoringX, int authoringY)
-    {
-        if (_workspace is null || _scene is null) return;
-        TryEditAction("Eraser", () =>
-        {
-            var document = PropEditing.EraseAt(
-                _scene.Document,
-                _propAssets!,
-                authoringX,
-                authoringY);
-            if (ReferenceEquals(document, _scene.Document)) return;
-            ApplyEdit(document, PropEraseStroke);
-            _canvas.SelectProp(null);
-            SetStatus($"Erased Prop at ({authoringX}, {authoringY}) authoring px.");
-        });
-    }
-
-    private void SelectProp(int authoringX, int authoringY)
-    {
-        if (_scene is null) return;
-        var prop = PropEditing.FindAt(
-            _scene.Document,
-            _propAssets!,
-            authoringX,
-            authoringY);
-        _canvas.SelectProp(prop?.InstanceId);
-        SetStatus(prop is null
-            ? "No Prop selected."
-            : $"Selected '{prop.InstanceId}' · anchor ({prop.PositionAuthoringPx.X}, {prop.PositionAuthoringPx.Y}).");
-    }
-
     /// <summary>
     /// Records one edit in memory and schedules the Workspace write. Continuous
     /// input passes a stroke key so that a whole drag collapses into a single
     /// undo step.
     /// </summary>
+    /// <summary>
+    /// The single entry point for everything the tools decide. Input reaches the
+    /// editor as one outcome instead of one event per tool action.
+    /// </summary>
+    private void HandleToolOutcome(ToolOutcome outcome)
+    {
+        switch (outcome)
+        {
+            case ToolOutcome.Message message:
+                SetStatus(message.Text);
+                SyncSelectedAnchorGroup();
+                UpdateTemplateControls();
+                break;
+            case ToolOutcome.Edit edit:
+                ExecuteSceneCommand(edit);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Applies one edit, records it for undo and reports what happened. Every
+    /// document change in the editor goes through here.
+    /// </summary>
+    private void ExecuteSceneCommand(ToolOutcome.Edit edit)
+    {
+        if (_workspace is null || _scene is null || _history is null) return;
+        var before = _scene.Document;
+        SceneDocument after;
+        try
+        {
+            after = edit.Apply(before);
+        }
+        catch (Exception exception) when (exception is SceneMakerDocumentException
+                                          or OverflowException)
+        {
+            SetStatus($"{edit.Name} blocked: {exception.Message}");
+            return;
+        }
+
+        if (ReferenceEquals(after, before))
+        {
+            if (edit.NoChangeText is not null) SetStatus(edit.NoChangeText);
+            return;
+        }
+
+        ApplyEdit(after, edit.StrokeKey);
+        _canvas.NotifySceneChanged(before, after);
+        SyncSelectedAnchorGroup();
+        UpdateTemplateControls();
+        if (edit.Describe is not null) SetStatus(edit.Describe(before, after));
+    }
+
+    /// <summary>Shows the group of the Anchor the tools currently have selected.</summary>
+    private void SyncSelectedAnchorGroup()
+    {
+        if (_scene is null || _canvas.SelectedTemplateAnchorId is not { } anchorId) return;
+        var anchor = _scene.Document.TemplateAnchors
+            .FirstOrDefault(value => value.AnchorId == anchorId);
+        if (anchor is null) return;
+        _updatingAnchorGroupEdit = true;
+        _anchorGroupEdit.Value = anchor.GroupNumber;
+        _updatingAnchorGroupEdit = false;
+    }
+
+    private void OnAnchorGroupChanged(double value)
+    {
+        var groupNumber = checked((int)value);
+        _canvas.TemplateAnchorGroupNumber = groupNumber;
+        if (_updatingAnchorGroupEdit
+            || _scene is null
+            || _workspace is null
+            || _canvas.SelectedTemplateAnchorId is not { } anchorId)
+        {
+            return;
+        }
+        ExecuteSceneCommand(new ToolOutcome.Edit(
+            "Assign Anchor Group",
+            document => TemplateEditing.SetAnchorGroup(document, anchorId, groupNumber),
+            Describe: (_, _) =>
+                $"Assigned Template Anchor '{anchorId}' to group {groupNumber}."));
+    }
+
     private void ApplyEdit(SceneDocument document, string? strokeKey = null)
     {
         _history!.Push(document, strokeKey);
@@ -1768,7 +1517,6 @@ public sealed partial class SceneMakerMain : Control
     private void RestoreHistoryState(SceneDocument document)
     {
         _scene = new LoadedScene(_scene!.FilePath, document);
-        _selectedTemplateAnchorId = null;
         _canvas.SelectProp(null);
         _canvas.SelectTemplateAnchor(null);
         ClearTemplatePreview();
@@ -1850,14 +1598,14 @@ public sealed partial class SceneMakerMain : Control
 
     private void UpdateDrawingToolAvailability()
     {
-        var templateMode = _interactionState.Mode == EditorMode.Templates;
+        var templateMode = _interaction.Mode == EditorMode.Templates;
         var instanceActive = _scene?.Document.SceneKind == SceneKind.Instance;
         foreach (var (tool, control) in _drawingToolControlsByTool)
         {
-            control.Visible = EditorToolRegistry.Supports(_interactionState.Mode, tool);
+            control.Visible = EditorToolRegistry.Supports(_interaction.Mode, tool);
             control.Disabled = _scene is null
                 || templateMode && !instanceActive;
-            control.ButtonPressed = control.Visible && tool == _interactionState.ActiveTool;
+            control.ButtonPressed = control.Visible && tool == _interaction.ActiveTool;
         }
         _anchorGroupEdit.Visible = templateMode && instanceActive;
     }
@@ -1888,24 +1636,6 @@ public sealed partial class SceneMakerMain : Control
                                           or IOException
                                           or UnauthorizedAccessException
                                           or OverflowException)
-        {
-            ShowError(exception.Message);
-        }
-    }
-
-    private void TryEditAction(string operation, Action action)
-    {
-        try
-        {
-            action();
-        }
-        catch (Exception exception) when (exception is SceneMakerDocumentException
-                                          or OverflowException)
-        {
-            SetStatus($"{operation} blocked: {exception.Message}");
-        }
-        catch (Exception exception) when (exception is IOException
-                                          or UnauthorizedAccessException)
         {
             ShowError(exception.Message);
         }

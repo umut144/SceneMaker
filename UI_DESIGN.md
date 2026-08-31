@@ -107,6 +107,18 @@ Damit wird zwischen zwei unabhängigen Dimensionen unterschieden:
 Weitere Optionen können später in derselben Leiste ergänzt werden, ohne das
 primäre Werkzeugmodell zu verändern.
 
+## Eingabeverarbeitung
+
+Der Canvas entscheidet nichts Fachliches. Er rechnet Godot-Ereignisse in
+Koordinaten um und reicht sie an `ToolInteraction` weiter; die beantwortet jede
+Eingabe mit genau einem `ToolOutcome` — nichts, eine Meldung oder eine
+Bearbeitung. `SceneMakerMain` wendet sie an, zeichnet sie in der Historie auf und
+zeigt das Ergebnis in der Statuszeile.
+
+`ToolInteraction` hält dabei den flüchtigen Zustand: den festgelegten
+Linien-Startpunkt, den gerade gezogenen Template-Anchor, die aktuelle Auswahl.
+Ein neues Werkzeug wird dort ergänzt, nicht als weiteres Canvas-Ereignis.
+
 ## Bearbeiten, Rückgängig und Speichern
 
 Bearbeitungen wirken zunächst nur im Speicher. Die Szene wird in den Workspace
