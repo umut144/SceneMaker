@@ -103,6 +103,8 @@ public sealed partial class SceneCanvas : Control
     public event Action<int, int>? TerrainEraseRequested;
     public event Action<int, int>? TerrainFillEraseRequested;
     public event Action<int, int>? TerrainFillRequested;
+    public event Action<int, int, int, int>? TerrainLineRequested;
+    public event Action<int, int, int, int>? TerrainLineEraseRequested;
     public event Action<int, int>? PlacementRequested;
     public event Action<int, int, int, int>? PlacementLineRequested;
     public event Action<int, int, int, int>? PlacementLineEraseRequested;
@@ -244,7 +246,7 @@ public sealed partial class SceneCanvas : Control
         if (input is not InputEventKey keyEvent) return;
 
         if (keyEvent.Pressed
-            && (PerspectiveName is "Placements" or "Transitions")
+            && (PerspectiveName is "Terrain" or "Placements" or "Transitions")
             && ActiveTool == CanvasDrawingTool.Line
             && HandleLineKey(keyEvent.Keycode))
         {
@@ -333,6 +335,15 @@ public sealed partial class SceneCanvas : Control
                 _lineStart is null
                     ? "Line Draw: choose a start point before confirming."
                     : "Line Draw: choose and lock an end point before confirming.");
+            return true;
+        }
+
+        if (PerspectiveName == "Terrain")
+        {
+            if (EraserEnabled)
+                TerrainLineEraseRequested?.Invoke(start.X, start.Y, end.X, end.Y);
+            else
+                TerrainLineRequested?.Invoke(start.X, start.Y, end.X, end.Y);
             return true;
         }
 
@@ -501,6 +512,31 @@ public sealed partial class SceneCanvas : Control
                     break;
                 case CanvasDrawingTool.Fill when SelectedTerrainAssetKey is not null:
                     TerrainFillRequested?.Invoke(cellX, cellY);
+                    break;
+                case CanvasDrawingTool.Line:
+                    if (_lineStart is null)
+                    {
+                        _lineStart = (cellX, cellY);
+                        ToolStatusRequested?.Invoke(
+                            $"Line Draw: start fixed at Terrain cell ({cellX}, {cellY}); choose an end point.");
+                    }
+                    else if (_lineEnd is null)
+                    {
+                        _lineEnd = (cellX, cellY);
+                        var count = TerrainEditing.LineCells(
+                            _lineStart.Value.X,
+                            _lineStart.Value.Y,
+                            cellX,
+                            cellY).Count;
+                        ToolStatusRequested?.Invoke(
+                            $"Line Draw: end fixed; {count} Terrain cells ready. Enter confirms; Escape revises.");
+                    }
+                    else
+                    {
+                        ToolStatusRequested?.Invoke(
+                            "Line Draw: end point is fixed. Press Enter to confirm or Escape to revise it.");
+                    }
+                    QueueRedraw();
                     break;
             }
         }

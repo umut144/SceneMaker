@@ -40,6 +40,85 @@ public static class TerrainEditing
         return painted;
     }
 
+    public static SceneDocument PaintLine(
+        SceneDocument scene,
+        TerrainDisplayCatalog terrainAssets,
+        int startCellX,
+        int startCellY,
+        int endCellX,
+        int endCellY,
+        string assetKey)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(terrainAssets);
+        RequireInsideScene(scene, startCellX, startCellY);
+        RequireInsideScene(scene, endCellX, endCellY);
+
+        var painted = scene;
+        foreach (var cell in LineCells(startCellX, startCellY, endCellX, endCellY))
+            painted = Paint(painted, terrainAssets, cell.X, cell.Y, assetKey);
+        return painted;
+    }
+
+    public static SceneDocument EraseLine(
+        SceneDocument scene,
+        int startCellX,
+        int startCellY,
+        int endCellX,
+        int endCellY)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        DocumentValidation.Validate(scene);
+        RequireInsideScene(scene, startCellX, startCellY);
+        RequireInsideScene(scene, endCellX, endCellY);
+
+        var line = LineCells(startCellX, startCellY, endCellX, endCellY).ToHashSet();
+        var erased = scene with
+        {
+            TerrainCells = scene.TerrainCells
+                .Where(cell => !line.Contains(new TerrainCellCoordinate(cell.X, cell.Y)))
+                .ToList(),
+        };
+        if (erased.TerrainCells.Count == scene.TerrainCells.Count) return scene;
+        DocumentValidation.Validate(erased);
+        return erased;
+    }
+
+    public static IReadOnlyList<TerrainCellCoordinate> LineCells(
+        int startCellX,
+        int startCellY,
+        int endCellX,
+        int endCellY)
+    {
+        List<TerrainCellCoordinate> cells = [];
+        var x = startCellX;
+        var y = startCellY;
+        var deltaX = Math.Abs(endCellX - startCellX);
+        var stepX = startCellX < endCellX ? 1 : -1;
+        var deltaY = -Math.Abs(endCellY - startCellY);
+        var stepY = startCellY < endCellY ? 1 : -1;
+        var error = deltaX + deltaY;
+
+        while (true)
+        {
+            cells.Add(new TerrainCellCoordinate(x, y));
+            if (x == endCellX && y == endCellY) break;
+            var doubledError = 2 * error;
+            if (doubledError >= deltaY)
+            {
+                error += deltaY;
+                x += stepX;
+            }
+            if (doubledError <= deltaX)
+            {
+                error += deltaX;
+                y += stepY;
+            }
+        }
+
+        return cells;
+    }
+
     public static SceneDocument Erase(SceneDocument scene, int cellX, int cellY)
     {
         ArgumentNullException.ThrowIfNull(scene);

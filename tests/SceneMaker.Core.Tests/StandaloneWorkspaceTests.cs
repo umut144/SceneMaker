@@ -62,6 +62,35 @@ public sealed class StandaloneWorkspaceTests
     }
 
     [Fact]
+    public void TerrainLinesCanBePaintedAndErased()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "line01");
+        WriteConfig(directory.Path, "line01", 1m, 32m, 192m, """
+            { "asset_key": "grass", "color": "#99E550" }
+        """);
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+        var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
+        var terrain = TerrainDisplayCatalogLoader.Load(catalog, workspace);
+        var scene = TerrainEditing.PaintLine(
+            SceneDocument.Create("line", 5, 5),
+            terrain,
+            0,
+            0,
+            4,
+            4,
+            "grass");
+
+        Assert.Equal(5, scene.TerrainCells.Count);
+
+        scene = TerrainEditing.EraseLine(scene, 1, 1, 3, 3);
+
+        Assert.Equal(2, scene.TerrainCells.Count);
+        Assert.Contains(scene.TerrainCells, cell => cell.X == 0 && cell.Y == 0);
+        Assert.Contains(scene.TerrainCells, cell => cell.X == 4 && cell.Y == 4);
+    }
+
+    [Fact]
     public void PolyToolsPivotAndComponentHierarchyDetermineAuthoringBounds()
     {
         using var directory = TemporaryDirectory.Create();

@@ -276,6 +276,8 @@ public sealed partial class SceneMakerMain : Control
         _canvas.TerrainEraseRequested += EraseTerrainCell;
         _canvas.TerrainFillEraseRequested += EraseTerrainRegion;
         _canvas.TerrainFillRequested += FillTerrainRegion;
+        _canvas.TerrainLineRequested += PaintTerrainLine;
+        _canvas.TerrainLineEraseRequested += EraseTerrainLine;
         _canvas.PlacementRequested += PlaceAsset;
         _canvas.PlacementLineRequested += PlaceAssetLine;
         _canvas.PlacementLineEraseRequested += EraseAssetLine;
@@ -1541,6 +1543,52 @@ public sealed partial class SceneMakerMain : Control
             }
             SaveUpdatedScene(document);
             SetStatus($"Erased the connected Terrain region at ({cellX}, {cellY}).");
+        });
+    }
+
+    private void PaintTerrainLine(int startX, int startY, int endX, int endY)
+    {
+        if (_workspace is null || _scene is null || _canvas.SelectedTerrainAssetKey is not { } assetKey)
+            return;
+        TryDocumentAction(() =>
+        {
+            var document = TerrainEditing.PaintLine(
+                _scene.Document,
+                _terrainAssets!,
+                startX,
+                startY,
+                endX,
+                endY,
+                assetKey);
+            SaveUpdatedScene(document);
+            _canvas.CompleteLinePlacement();
+            var count = TerrainEditing.LineCells(startX, startY, endX, endY).Count;
+            var asset = _terrainAssets!.Resolve(assetKey);
+            SetStatus($"Line Draw painted {count} Terrain cells with {asset.Name}.");
+        });
+    }
+
+    private void EraseTerrainLine(int startX, int startY, int endX, int endY)
+    {
+        if (_workspace is null || _scene is null) return;
+        TryDocumentAction(() =>
+        {
+            var beforeCount = _scene.Document.TerrainCells.Count;
+            var document = TerrainEditing.EraseLine(
+                _scene.Document,
+                startX,
+                startY,
+                endX,
+                endY);
+            _canvas.CompleteLinePlacement();
+            if (ReferenceEquals(document, _scene.Document))
+            {
+                SetStatus("Line Eraser made no change because the selected Terrain cells are empty.");
+                return;
+            }
+            SaveUpdatedScene(document);
+            var erased = beforeCount - document.TerrainCells.Count;
+            SetStatus($"Line Eraser removed {erased} Terrain cell{(erased == 1 ? string.Empty : "s")}.");
         });
     }
 
