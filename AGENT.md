@@ -35,3 +35,14 @@ dotnet build src/SceneMaker.Cli/SceneMaker.Cli.csproj
 dotnet test tests/SceneMaker.Core.Tests/SceneMaker.Core.Tests.csproj
 /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . --editor --quit
 ```
+
+## Project documentation
+
+- `AI_CONTEXT.md` contains domain and architecture context.
+- `UI_DESIGN.md` contains UI layout and interaction conventions.
+
+## Version control
+
+After every completed change, create a Git commit automatically. Each commit
+must use a concise, descriptive commit message that explains the change. Do
+not push commits; pushing is handled separately by the project owner.
