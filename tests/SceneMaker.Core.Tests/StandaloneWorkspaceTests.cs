@@ -91,6 +91,32 @@ public sealed class StandaloneWorkspaceTests
     }
 
     [Fact]
+    public void PlacementLineOffsetAddsSpaceBetweenFootprints()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "offset01");
+        WriteConfig(directory.Path, "offset01", 1m, 32m, 192m, """
+            { "asset_key": "grass", "color": "#99E550" },
+            { "asset_key": "tree", "color": "#2E7D32" }
+        """);
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+        var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
+        var asset = PlacementDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
+
+        var withoutOffset = PlacementEditing.LineAnchors(asset, 100, 100, 300, 100);
+        var withOffset = PlacementEditing.LineAnchors(
+            asset,
+            100,
+            100,
+            300,
+            100,
+            placementOffsetAuthoringPixels: 10);
+
+        Assert.Equal([100, 166, 232, 298], withoutOffset.Select(static anchor => anchor.X));
+        Assert.Equal([100, 176, 252], withOffset.Select(static anchor => anchor.X));
+    }
+
+    [Fact]
     public void PolyToolsPivotAndComponentHierarchyDetermineAuthoringBounds()
     {
         using var directory = TemporaryDirectory.Create();

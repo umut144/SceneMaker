@@ -140,7 +140,8 @@ public static class TransitionEditing
             startAnchorX,
             startAnchorY,
             endAnchorX,
-            endAnchorY);
+            endAnchorY,
+            offsetAuthoringPixels: 0);
 
     public static TransitionDocument? FindAt(
         SceneDocument scene,
@@ -260,8 +261,11 @@ internal static class SpatialLineAnchors
         int startAnchorX,
         int startAnchorY,
         int endAnchorX,
-        int endAnchorY)
+        int endAnchorY,
+        int offsetAuthoringPixels)
     {
+        if (offsetAuthoringPixels < 0)
+            throw new ArgumentOutOfRangeException(nameof(offsetAuthoringPixels));
         var deltaX = (double)endAnchorX - startAnchorX;
         var deltaY = (double)endAnchorY - startAnchorY;
         var length = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
@@ -275,7 +279,8 @@ internal static class SpatialLineAnchors
         var verticalStep = Math.Abs(unitY) < double.Epsilon
             ? double.PositiveInfinity
             : footprintHeight / Math.Abs(unitY);
-        var stepLength = Math.Min(horizontalStep, verticalStep);
+        var stepLength = Math.Min(horizontalStep, verticalStep)
+            + offsetAuthoringPixels;
         var count = checked((int)Math.Floor(length / stepLength));
 
         List<(int X, int Y)> anchors = [(startAnchorX, startAnchorY)];

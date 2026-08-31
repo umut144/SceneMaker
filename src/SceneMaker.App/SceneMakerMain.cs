@@ -22,6 +22,8 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _workspaceLabel = new();
     private readonly Label _sceneLabel = new();
     private readonly Label _toolContextLabel = new();
+    private readonly Label _placementLineOffsetLabel = new();
+    private readonly SpinBox _placementLineOffsetEdit = new();
     private readonly Button _eraserToggle = new();
     private readonly Label _viewLabel = new();
     private readonly Label _statusLabel = new();
@@ -246,7 +248,21 @@ public sealed partial class SceneMakerMain : Control
         _toolContextLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _toolContextLabel.VerticalAlignment = VerticalAlignment.Center;
         _contextMenuBar.AddChild(_toolContextLabel);
-        _contextMenuBar.AddThemeConstantOverride("separation", 0);
+        _placementLineOffsetLabel.Name = "PlacementLineOffsetLabel";
+        _placementLineOffsetLabel.Text = "Placement Offset";
+        _placementLineOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_placementLineOffsetLabel);
+        _placementLineOffsetEdit.Name = "PlacementLineOffset";
+        _placementLineOffsetEdit.MinValue = 0;
+        _placementLineOffsetEdit.MaxValue = int.MaxValue;
+        _placementLineOffsetEdit.Step = 1;
+        _placementLineOffsetEdit.AllowGreater = false;
+        _placementLineOffsetEdit.AllowLesser = false;
+        _placementLineOffsetEdit.Suffix = " px";
+        _placementLineOffsetEdit.CustomMinimumSize = new Vector2(130f, 0f);
+        _placementLineOffsetEdit.ValueChanged += SetPlacementLineOffset;
+        _contextMenuBar.AddChild(_placementLineOffsetEdit);
+        _contextMenuBar.AddThemeConstantOverride("separation", 8);
 
         var canvasColumn = new VBoxContainer
         {
@@ -1286,11 +1302,22 @@ public sealed partial class SceneMakerMain : Control
         SetStatus(enabled ? "Eraser enabled." : "Eraser disabled.");
     }
 
+    private void SetPlacementLineOffset(double value)
+    {
+        var offset = checked((int)value);
+        _interactionState.SetPlacementLineOffset(offset);
+        SetStatus($"Placement Line offset set to {offset} authoring px.");
+    }
+
     private void UpdateToolContextLabel()
     {
         _toolContextLabel.Text =
             $"{EditorToolRegistry.ModeDisplayName(_interactionState.Mode)}:"
             + EditorToolRegistry.Resolve(_interactionState.ActiveTool).DisplayName;
+        var placementLineActive = _interactionState.Mode == EditorMode.Placements
+            && _interactionState.ActiveTool == EditorTool.Line;
+        _placementLineOffsetLabel.Visible = placementLineActive;
+        _placementLineOffsetEdit.Visible = placementLineActive;
     }
 
     private void SelectTerrainAsset(string assetKey)
@@ -1608,7 +1635,8 @@ public sealed partial class SceneMakerMain : Control
                 startY,
                 endX,
                 endY,
-                assetKey);
+                assetKey,
+                _interactionState.PlacementLineOffsetAuthoringPixels);
             SaveUpdatedScene(document);
             _canvas.CompleteLinePlacement();
             var added = document.Placements.Count - beforeCount;
@@ -1631,7 +1659,8 @@ public sealed partial class SceneMakerMain : Control
                          startX,
                          startY,
                          endX,
-                         endY))
+                         endY,
+                         _interactionState.PlacementLineOffsetAuthoringPixels))
             {
                 document = PlacementEditing.EraseAt(
                     document,

@@ -1222,7 +1222,13 @@ public sealed partial class SceneCanvas : Control
         (int X, int Y) end)
     {
         var asset = _placementAssets!.Resolve(SelectedPlacementAssetKey!);
-        return PlacementEditing.LineAnchors(asset, start.X, start.Y, end.X, end.Y)
+        return PlacementEditing.LineAnchors(
+                asset,
+                start.X,
+                start.Y,
+                end.X,
+                end.Y,
+                _interactionState.PlacementLineOffsetAuthoringPixels)
             .Select(anchor => (
                 anchor.X,
                 anchor.Y,

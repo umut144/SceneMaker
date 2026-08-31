@@ -70,6 +70,14 @@ Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
 Ein aktiver `Eraser` verwendet für Terrain-Highlights die Löschfarbe, damit die
 Auswirkung vor dem Ausführen sichtbar ist.
 
+### Placement:Line
+
+Das ContextMenu von `Placement:Line` enthält den ganzzahligen Wert
+`Placement Offset` in Authoring-Pixeln. Der Wert ist nicht negativ und wird zum
+berechneten Footprint-Abstand entlang der Linie addiert. `0` erzeugt das
+lückenlose Standardverhalten. Der Offset beeinflusst Vorschau, Platzierung und
+Line-Eraser und bleibt reiner Session-Zustand.
+
 ## ToolOptionsBar
 
 Die `ToolOptionsBar` ist eine feste, vertikale Optionsleiste rechts neben dem

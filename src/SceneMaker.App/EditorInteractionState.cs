@@ -99,6 +99,7 @@ public sealed class EditorInteractionState
         ? tool
         : EditorToolRegistry.DefaultTool(Mode);
     public bool EraserEnabled { get; private set; }
+    public int PlacementLineOffsetAuthoringPixels { get; private set; }
 
     public void SelectMode(EditorMode mode)
     {
@@ -118,4 +119,11 @@ public sealed class EditorInteractionState
     }
 
     public void SetEraserEnabled(bool enabled) => EraserEnabled = enabled;
+
+    public void SetPlacementLineOffset(int authoringPixels)
+    {
+        if (authoringPixels < 0)
+            throw new ArgumentOutOfRangeException(nameof(authoringPixels));
+        PlacementLineOffsetAuthoringPixels = authoringPixels;
+    }
 }

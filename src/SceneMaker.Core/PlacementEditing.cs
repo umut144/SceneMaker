@@ -130,7 +130,8 @@ public static class PlacementEditing
         int startAnchorY,
         int endAnchorX,
         int endAnchorY,
-        string assetKey)
+        string assetKey,
+        int placementOffsetAuthoringPixels = 0)
     {
         var asset = placementAssets.Resolve(assetKey);
         var result = scene;
@@ -139,7 +140,8 @@ public static class PlacementEditing
                      startAnchorX,
                      startAnchorY,
                      endAnchorX,
-                     endAnchorY))
+                     endAnchorY,
+                     placementOffsetAuthoringPixels))
         {
             result = Place(
                 result,
@@ -157,7 +159,8 @@ public static class PlacementEditing
         int startAnchorX,
         int startAnchorY,
         int endAnchorX,
-        int endAnchorY)
+        int endAnchorY,
+        int placementOffsetAuthoringPixels = 0)
     {
         return SpatialLineAnchors.Build(
             asset.FootprintWidthAuthoringPixels,
@@ -165,7 +168,8 @@ public static class PlacementEditing
             startAnchorX,
             startAnchorY,
             endAnchorX,
-            endAnchorY);
+            endAnchorY,
+            offsetAuthoringPixels: placementOffsetAuthoringPixels);
     }
 
     public static PlacementDocument? FindAt(
