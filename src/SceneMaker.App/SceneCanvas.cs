@@ -80,6 +80,9 @@ public sealed partial class SceneCanvas : Control
     public event Action<int, int>? TemplateAnchorSelectRequested;
     public event Action<string, int, int>? TemplateAnchorMoveRequested;
     public event Action<string>? ToolStatusRequested;
+    /// <summary>Raised when the primary pointer button is released, which ends
+    /// a continuous edit stroke.</summary>
+    public event Action? StrokeEnded;
 
     public void ConfigureInteractionState(EditorInteractionState state)
     {
@@ -208,6 +211,7 @@ public sealed partial class SceneCanvas : Control
         {
             UpdatePointer(releasedMouseButton.Position);
             CompletePrimaryAction();
+            StrokeEnded?.Invoke();
         }
         else if (input is InputEventMouseMotion mouseMotion)
         {
@@ -221,6 +225,8 @@ public sealed partial class SceneCanvas : Control
     public override void _UnhandledKeyInput(InputEvent input)
     {
         if (input is not InputEventKey keyEvent) return;
+        // Command/Control shortcuts belong to the application, not the canvas.
+        if (keyEvent.IsCommandOrControlPressed()) return;
 
         if (keyEvent.Pressed
             && Mode == EditorMode.Props
@@ -269,7 +275,9 @@ public sealed partial class SceneCanvas : Control
     {
         var inputX = 0.0;
         var inputY = 0.0;
-        if (_pointerOverCanvas)
+        if (_pointerOverCanvas
+            && !Input.IsKeyPressed(Key.Ctrl)
+            && !Input.IsKeyPressed(Key.Meta))
         {
             if (Input.IsKeyPressed(Key.A)) inputX += 1.0;
             if (Input.IsKeyPressed(Key.D)) inputX -= 1.0;

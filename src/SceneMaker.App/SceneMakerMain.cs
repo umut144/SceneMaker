@@ -17,6 +17,11 @@ public sealed partial class SceneMakerMain : Control
     private const int LoadSceneMenuId = 21;
     private const int ExportSceneMenuId = 22;
     private const int ChunkHelperMenuId = 30;
+    private const double AutosaveDelaySeconds = 1.5;
+    private const string TerrainPaintStroke = "terrain-paint";
+    private const string TerrainEraseStroke = "terrain-erase";
+    private const string TerrainRegionEraseStroke = "terrain-region-erase";
+    private const string PropEraseStroke = "prop-erase";
 
     private readonly EditorInteractionState _interactionState = new();
     private readonly SceneCanvas _canvas = new();
@@ -29,6 +34,10 @@ public sealed partial class SceneMakerMain : Control
     private readonly Button _eraserToggle = new();
     private readonly Label _viewLabel = new();
     private readonly Label _statusLabel = new();
+    private readonly Label _documentStateLabel = new();
+    private readonly Button _undoButton = new();
+    private readonly Button _redoButton = new();
+    private readonly Timer _autosaveTimer = new();
     private readonly MenuButton _settingsButton = new();
     private readonly ButtonGroup _terrainAssetButtons = new();
     private readonly ButtonGroup _propAssetButtons = new();
@@ -84,6 +93,7 @@ public sealed partial class SceneMakerMain : Control
 
     private LoadedWorkspace? _workspace;
     private LoadedScene? _scene;
+    private SceneEditHistory? _history;
     private PolyToolsCatalog? _catalog;
     private WorkspaceConfiguration? _workspaceConfiguration;
     private TerrainDisplayCatalog? _terrainAssets;
@@ -110,6 +120,53 @@ public sealed partial class SceneMakerMain : Control
         UpdateDocumentStatus();
         _canvas.CallDeferred(Control.MethodName.GrabFocus);
         GD.Print("SceneMaker standalone authoring tool ready");
+    }
+
+    public override void _UnhandledKeyInput(InputEvent input)
+    {
+        if (input is not InputEventKey { Pressed: true } keyEvent) return;
+        if (!keyEvent.IsCommandOrControlPressed()) return;
+        switch (keyEvent.Keycode)
+        {
+            case Key.Z when keyEvent.ShiftPressed:
+            case Key.Y:
+                RedoEdit();
+                break;
+            case Key.Z:
+                UndoEdit();
+                break;
+            case Key.S:
+                PersistScene();
+                SetStatus(_scene is null
+                    ? "No Scene to save."
+                    : $"Saved Scene '{_scene.Document.SceneId}'.");
+                break;
+            default:
+                return;
+        }
+        GetViewport().SetInputAsHandled();
+    }
+
+    /// <summary>
+    /// Writes out any pending edit before the editor goes away. Deliberately
+    /// does not go through PersistScene: during teardown the Timer and the
+    /// interface nodes it touches may already be on their way out.
+    /// </summary>
+    public override void _ExitTree()
+    {
+        if (_workspace is null || _scene is null || _history is null || !_history.IsDirty)
+            return;
+        try
+        {
+            SceneStore.Save(_workspace, _scene);
+            _history.MarkSaved();
+        }
+        catch (Exception exception) when (exception is SceneMakerDocumentException
+                                          or IOException
+                                          or UnauthorizedAccessException)
+        {
+            GD.PushWarning($"Could not save the Scene while closing: {exception.Message}");
+        }
     }
 
     private void BuildInterface()
@@ -194,6 +251,14 @@ public sealed partial class SceneMakerMain : Control
         _sceneLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         documentBar.AddChild(_workspaceLabel);
         documentBar.AddChild(_sceneLabel);
+        _documentStateLabel.Name = "DocumentState";
+        _documentStateLabel.VerticalAlignment = VerticalAlignment.Center;
+        _documentStateLabel.CustomMinimumSize = new Vector2(150f, 0f);
+        documentBar.AddChild(_documentStateLabel);
+        AddDocumentHistoryButton(documentBar, _undoButton, "Undo", UndoEdit,
+            "Undo the last edit (Cmd/Ctrl+Z)");
+        AddDocumentHistoryButton(documentBar, _redoButton, "Redo", RedoEdit,
+            "Redo the last undone edit (Cmd/Ctrl+Shift+Z)");
 
         var content = new HBoxContainer
         {
@@ -294,6 +359,7 @@ public sealed partial class SceneMakerMain : Control
         _canvas.TemplateAnchorSelectRequested += SelectTemplateAnchor;
         _canvas.TemplateAnchorMoveRequested += MoveTemplateAnchor;
         _canvas.ToolStatusRequested += SetStatus;
+        _canvas.StrokeEnded += EndEditStroke;
         _canvas.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _canvas.SizeFlagsVertical = SizeFlags.ExpandFill;
         canvasRow.AddChild(_canvas);
@@ -523,6 +589,7 @@ public sealed partial class SceneMakerMain : Control
             _templateRows.AddChild(new Label { Text = "No Workspace loaded." });
             return;
         }
+        PersistScene();
 
         try
         {
@@ -578,6 +645,7 @@ public sealed partial class SceneMakerMain : Control
     private void UpdateWorkspaceTemplateGroup(string filePath, int groupNumber)
     {
         if (_workspace is null) return;
+        PersistScene();
         TryDocumentAction(() =>
         {
             var loaded = SceneStore.Load(_workspace, filePath);
@@ -588,6 +656,7 @@ public sealed partial class SceneMakerMain : Control
             if (_scene?.FilePath == updated.FilePath)
             {
                 _scene = updated;
+                _history?.Reset(document);
                 _canvas.UpdateScene(updated);
                 UpdateDocumentStatus();
             }
@@ -725,6 +794,12 @@ public sealed partial class SceneMakerMain : Control
 
         _errorDialog.Title = "SceneMaker";
         AddChild(_errorDialog);
+
+        _autosaveTimer.Name = "Autosave";
+        _autosaveTimer.OneShot = true;
+        _autosaveTimer.WaitTime = AutosaveDelaySeconds;
+        _autosaveTimer.Timeout += PersistScene;
+        AddChild(_autosaveTimer);
     }
 
     private static void ConfigureSizeInput(SpinBox input)
@@ -918,6 +993,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void ExportCurrentScene()
     {
+        PersistScene();
         if (_workspace is null || _scene is null || _workspaceConfiguration is null
             || _terrainAssets is null || _propAssets is null)
         {
@@ -1025,6 +1101,7 @@ public sealed partial class SceneMakerMain : Control
             _terrainAssets = null;
             _propAssets = null;
             _scene = null;
+            _history = null;
             _selectedTemplateAnchorId = null;
             _templatePreview = null;
             _canvas.ShowScene(null);
@@ -1094,6 +1171,7 @@ public sealed partial class SceneMakerMain : Control
             _workspace = loadedWorkspace;
             LoadWorkspaceAssets();
             _scene = null;
+            _history = null;
             _selectedTemplateAnchorId = null;
             _templatePreview = null;
             _canvas.ShowScene(null);
@@ -1118,6 +1196,7 @@ public sealed partial class SceneMakerMain : Control
     private void CreateScene()
     {
         if (_workspace is null) return;
+        PersistScene();
         TryDocumentAction(() =>
         {
             _scene = SceneStore.Create(
@@ -1129,6 +1208,7 @@ public sealed partial class SceneMakerMain : Control
                 checked((int)_templateGroupEdit.Value),
                 checked((int)_templateInsertionXEdit.Value),
                 checked((int)_templateInsertionYEdit.Value));
+            _history = new SceneEditHistory(_scene.Document);
             _canvas.ShowScene(_scene);
             _selectedTemplateAnchorId = null;
             _templatePreview = null;
@@ -1148,10 +1228,12 @@ public sealed partial class SceneMakerMain : Control
         if (_workspace is null) return;
         TryDocumentAction(() =>
         {
+            PersistScene();
             _scene = SceneStore.Load(_workspace, ResolveFileSystemPath(filePath));
             DocumentValidation.ValidateGrid(_scene.Document, _workspaceConfiguration!.Metrics);
             TerrainEditing.ValidateAssetReferences(_scene.Document, _terrainAssets!);
             PropEditing.ValidateAssetReferences(_scene.Document, _propAssets!);
+            _history = new SceneEditHistory(_scene.Document);
             _canvas.ShowScene(_scene);
             _templatePreview = null;
             _selectedTemplateAnchorId = null;
@@ -1206,7 +1288,7 @@ public sealed partial class SceneMakerMain : Control
             var document = north
                 ? MapEditing.ExtendNorth(_scene.Document, cells)
                 : MapEditing.ExtendEast(_scene.Document, cells);
-            SaveUpdatedScene(document);
+            ApplyEdit(document);
             UpdateDocumentStatus();
             var direction = north ? "north" : "east";
             SetStatus($"Extended Map {direction} by {cells} Cells without moving authored data.");
@@ -1278,6 +1360,7 @@ public sealed partial class SceneMakerMain : Control
     private void GenerateTemplatePreview()
     {
         if (_workspace is null || _scene?.Document.SceneKind != SceneKind.Instance) return;
+        PersistScene();
         TryDocumentAction(() =>
         {
             var scenes = SceneStore
@@ -1324,7 +1407,7 @@ public sealed partial class SceneMakerMain : Control
                 authoringY,
                 checked((int)_anchorGroupEdit.Value));
             var added = document.TemplateAnchors.Single(anchor => !before.Contains(anchor.AnchorId));
-            SaveUpdatedScene(document);
+            ApplyEdit(document);
             SelectTemplateAnchorById(added.AnchorId);
             SetStatus(
                 $"Placed Template Anchor '{added.AnchorId}' for group {added.GroupNumber} at ({added.PositionAuthoringPx.X}, {added.PositionAuthoringPx.Y}).");
@@ -1369,7 +1452,7 @@ public sealed partial class SceneMakerMain : Control
                 anchorId,
                 authoringX,
                 authoringY);
-            SaveUpdatedScene(document);
+            ApplyEdit(document);
             SelectTemplateAnchorById(anchorId);
             var moved = document.TemplateAnchors.Single(anchor => anchor.AnchorId == anchorId);
             SetStatus(
@@ -1391,7 +1474,7 @@ public sealed partial class SceneMakerMain : Control
                 _scene.Document,
                 _selectedTemplateAnchorId,
                 groupNumber);
-            SaveUpdatedScene(document);
+            ApplyEdit(document);
             SetStatus(
                 $"Assigned Template Anchor '{_selectedTemplateAnchorId}' to group {groupNumber}.");
         });
@@ -1410,11 +1493,7 @@ public sealed partial class SceneMakerMain : Control
                 cellX,
                 cellY,
                 assetKey);
-            var updated = new LoadedScene(_scene.FilePath, document);
-            SceneStore.Save(_workspace, updated);
-            _scene = updated;
-            _canvas.UpdateScene(updated);
-            SaveRecentSession();
+            ApplyEdit(document, TerrainPaintStroke);
             var asset = _terrainAssets!.Resolve(assetKey);
             SetStatus($"Painted {asset.Name} at Terrain cell ({cellX}, {cellY}).");
         });
@@ -1427,7 +1506,7 @@ public sealed partial class SceneMakerMain : Control
         {
             var document = TerrainEditing.Erase(_scene.Document, cellX, cellY);
             if (ReferenceEquals(document, _scene.Document)) return;
-            SaveUpdatedScene(document);
+            ApplyEdit(document, TerrainEraseStroke);
             SetStatus($"Erased Terrain at cell ({cellX}, {cellY}); uncovered spatial instances are export warnings.");
         });
     }
@@ -1449,7 +1528,7 @@ public sealed partial class SceneMakerMain : Control
                 SetStatus("Terrain Fill made no change because source and target Terrain are identical.");
                 return;
             }
-            SaveUpdatedScene(document);
+            ApplyEdit(document);
             var asset = _terrainAssets!.Resolve(assetKey);
             SetStatus($"Filled the connected region at ({cellX}, {cellY}) with {asset.Name}.");
         });
@@ -1466,7 +1545,7 @@ public sealed partial class SceneMakerMain : Control
                 SetStatus("Terrain Eraser Fill made no change because the region is already empty.");
                 return;
             }
-            SaveUpdatedScene(document);
+            ApplyEdit(document, TerrainRegionEraseStroke);
             SetStatus($"Erased the connected Terrain region at ({cellX}, {cellY}).");
         });
     }
@@ -1485,7 +1564,7 @@ public sealed partial class SceneMakerMain : Control
                 endX,
                 endY,
                 assetKey);
-            SaveUpdatedScene(document);
+            ApplyEdit(document);
             _canvas.CompleteLinePlacement();
             var count = TerrainEditing.LineCells(startX, startY, endX, endY).Count;
             var asset = _terrainAssets!.Resolve(assetKey);
@@ -1511,7 +1590,7 @@ public sealed partial class SceneMakerMain : Control
                 SetStatus("Line Eraser made no change because the selected Terrain cells are empty.");
                 return;
             }
-            SaveUpdatedScene(document);
+            ApplyEdit(document);
             var erased = beforeCount - document.TerrainCells.Count;
             SetStatus($"Line Eraser removed {erased} Terrain cell{(erased == 1 ? string.Empty : "s")}.");
         });
@@ -1530,7 +1609,7 @@ public sealed partial class SceneMakerMain : Control
                 authoringX,
                 authoringY,
                 assetKey);
-            SaveUpdatedScene(document);
+            ApplyEdit(document);
             var asset = _propAssets!.Resolve(assetKey);
             SetStatus($"Placed {asset.Name} anchor at ({authoringX}, {authoringY}) authoring px.");
         });
@@ -1553,7 +1632,7 @@ public sealed partial class SceneMakerMain : Control
                 endY,
                 assetKey,
                 _interactionState.PropLineOffsetAuthoringPixels);
-            SaveUpdatedScene(document);
+            ApplyEdit(document);
             _canvas.CompleteLinePlacement();
             var added = document.Props.Count - beforeCount;
             SetStatus($"Line Draw placed {added} Prop{(added == 1 ? string.Empty : "s")} with exact non-overlapping footprints.");
@@ -1584,7 +1663,7 @@ public sealed partial class SceneMakerMain : Control
                     anchor.X,
                     anchor.Y);
             }
-            SaveUpdatedScene(document);
+            ApplyEdit(document);
             _canvas.CompleteLinePlacement();
             var erased = beforeCount - document.Props.Count;
             SetStatus($"Line Eraser removed {erased} Prop{(erased == 1 ? string.Empty : "s")}.");
@@ -1602,7 +1681,7 @@ public sealed partial class SceneMakerMain : Control
                 authoringX,
                 authoringY);
             if (ReferenceEquals(document, _scene.Document)) return;
-            SaveUpdatedScene(document);
+            ApplyEdit(document, PropEraseStroke);
             _canvas.SelectProp(null);
             SetStatus($"Erased Prop at ({authoringX}, {authoringY}) authoring px.");
         });
@@ -1622,14 +1701,105 @@ public sealed partial class SceneMakerMain : Control
             : $"Selected '{prop.InstanceId}' · anchor ({prop.PositionAuthoringPx.X}, {prop.PositionAuthoringPx.Y}).");
     }
 
-    private void SaveUpdatedScene(SceneDocument document)
+    /// <summary>
+    /// Records one edit in memory and schedules the Workspace write. Continuous
+    /// input passes a stroke key so that a whole drag collapses into a single
+    /// undo step.
+    /// </summary>
+    private void ApplyEdit(SceneDocument document, string? strokeKey = null)
     {
-        var updated = new LoadedScene(_scene!.FilePath, document);
-        SceneStore.Save(_workspace!, updated);
-        _scene = updated;
+        _history!.Push(document, strokeKey);
+        _scene = new LoadedScene(_scene!.FilePath, document);
         ClearTemplatePreview();
-        _canvas.UpdateScene(updated);
-        SaveRecentSession();
+        _canvas.UpdateScene(_scene);
+        _autosaveTimer.Start();
+        UpdateDocumentState();
+    }
+
+    private void EndEditStroke() => _history?.BreakStroke();
+
+    /// <summary>
+    /// Writes the Scene to its Workspace if it differs from the stored copy.
+    /// Safe to call at any time; it is a no-op when there is nothing to write.
+    /// </summary>
+    private void PersistScene()
+    {
+        _autosaveTimer.Stop();
+        if (_workspace is null || _scene is null || _history is null || !_history.IsDirty)
+            return;
+        try
+        {
+            SceneStore.Save(_workspace, _scene);
+            _history.MarkSaved();
+            UpdateDocumentState();
+        }
+        catch (Exception exception) when (exception is SceneMakerDocumentException
+                                          or IOException
+                                          or UnauthorizedAccessException)
+        {
+            SetStatus($"Save blocked: {exception.Message}");
+        }
+    }
+
+    private void UndoEdit()
+    {
+        if (_history is null || !_history.CanUndo)
+        {
+            SetStatus("Nothing to undo.");
+            return;
+        }
+        RestoreHistoryState(_history.Undo());
+        SetStatus($"Undo. {_history.UndoDepth} further step{Plural(_history.UndoDepth)} available.");
+    }
+
+    private void RedoEdit()
+    {
+        if (_history is null || !_history.CanRedo)
+        {
+            SetStatus("Nothing to redo.");
+            return;
+        }
+        RestoreHistoryState(_history.Redo());
+        SetStatus($"Redo. {_history.RedoDepth} further step{Plural(_history.RedoDepth)} available.");
+    }
+
+    private static string Plural(int count) => count == 1 ? string.Empty : "s";
+
+    private void RestoreHistoryState(SceneDocument document)
+    {
+        _scene = new LoadedScene(_scene!.FilePath, document);
+        _selectedTemplateAnchorId = null;
+        _canvas.SelectProp(null);
+        _canvas.SelectTemplateAnchor(null);
+        ClearTemplatePreview();
+        _canvas.UpdateScene(_scene);
+        _autosaveTimer.Start();
+        UpdateDocumentStatus();
+    }
+
+    private void UpdateDocumentState()
+    {
+        _undoButton.Disabled = _history is null || !_history.CanUndo;
+        _redoButton.Disabled = _history is null || !_history.CanRedo;
+        _documentStateLabel.Text = _history is null
+            ? string.Empty
+            : _history.IsDirty ? "unsaved" : "saved";
+    }
+
+    private static void AddDocumentHistoryButton(
+        Container parent,
+        Button button,
+        string text,
+        Action pressed,
+        string tooltip)
+    {
+        button.Name = text;
+        button.Text = text;
+        button.TooltipText = tooltip;
+        button.CustomMinimumSize = new Vector2(80f, 0f);
+        button.Disabled = true;
+        button.Pressed += pressed;
+        parent.AddChild(button);
     }
 
     private void UpdateDocumentStatus()
@@ -1650,6 +1820,7 @@ public sealed partial class SceneMakerMain : Control
         UpdateDrawingToolAvailability();
         UpdateTemplateControls();
         UpdateMapControls();
+        UpdateDocumentState();
         UpdateViewStatus();
     }
 
@@ -1821,6 +1992,7 @@ public sealed partial class SceneMakerMain : Control
                 TerrainEditing.ValidateAssetReferences(_scene.Document, _terrainAssets!);
                 PropEditing.ValidateAssetReferences(_scene.Document, _propAssets!);
             }
+            _history = _scene is null ? null : new SceneEditHistory(_scene.Document);
             _canvas.ShowScene(_scene);
             SetStatus(_scene is null
                 ? $"Restored Workspace '{_workspace.WorkspaceKey}'."
@@ -1833,6 +2005,7 @@ public sealed partial class SceneMakerMain : Control
             DiscardRecentSession();
             _workspace = null;
             _scene = null;
+            _history = null;
             _canvas.ShowScene(null);
             SetStatus("No compatible recent session was restored.");
         }

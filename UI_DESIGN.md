@@ -107,6 +107,24 @@ Damit wird zwischen zwei unabhängigen Dimensionen unterschieden:
 Weitere Optionen können später in derselben Leiste ergänzt werden, ohne das
 primäre Werkzeugmodell zu verändern.
 
+## Bearbeiten, Rückgängig und Speichern
+
+Bearbeitungen wirken zunächst nur im Speicher. Die Szene wird in den Workspace
+geschrieben, sobald 1,5 Sekunden lang nichts mehr bearbeitet wurde, außerdem vor
+jedem Wechsel von Szene oder Workspace, vor Export und Template-Vorschau, beim
+Beenden und auf `Cmd/Strg+S`. Die Dokumentleiste zeigt `unsaved` oder `saved`.
+
+Jede Bearbeitung landet in einer Historie unveränderlicher Scene-Dokumente:
+
+- `Cmd/Strg+Z` macht rückgängig, `Cmd/Strg+Shift+Z` beziehungsweise `Cmd/Strg+Y`
+  stellt wieder her. Dieselben Schritte liegen als Schaltflächen rechts in der
+  Dokument-Infoleiste.
+- Ein zusammenhängender Zug ist genau ein Schritt: Wer den Pencil über vierzig
+  Zellen zieht, nimmt ihn mit einem einzigen Rückgängig zurück. Der Zug endet
+  beim Loslassen der Maustaste.
+- Rückgängig verwirft die aktuelle Auswahl und eine erzeugte Template-Vorschau,
+  weil beide sich auf einen Zustand beziehen können, den es nicht mehr gibt.
+
 ## Aktueller Stand
 
 Das horizontale `ContextMenu` zeigt den Namen des aktuell ausgewählten primären
