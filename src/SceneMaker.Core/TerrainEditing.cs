@@ -1,5 +1,18 @@
 namespace SceneMaker.Core;
 
+/// <summary>
+/// Terrain editing over the canonically ordered cell list.
+///
+/// These operations take a canonical document and produce a canonical one, so
+/// they no longer validate the whole document on entry and exit. Full
+/// validation belongs to the IO boundaries — <see cref="DocumentJson"/>,
+/// <see cref="SceneStore"/> and <see cref="SceneExport"/> all still run it — and
+/// running it per edit made a single painted cell walk every cell in the Scene
+/// twice.
+///
+/// Because the list stays ordered by Y then X, a cell is located by binary
+/// search rather than by re-sorting the whole list after every change.
+/// </summary>
 public static class TerrainEditing
 {
     private static readonly TerrainCellCoordinate[] CardinalNeighbours =
@@ -19,25 +32,13 @@ public static class TerrainEditing
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
-        DocumentValidation.Validate(scene);
         _ = terrainAssets.Resolve(assetKey);
+        RequireInsideScene(scene, cellX, cellY);
 
-        if (cellX < 0 || cellX >= scene.SizeCells.Width
-            || cellY < 0 || cellY >= scene.SizeCells.Height)
-        {
-            throw new SceneMakerDocumentException(
-                $"Terrain cell ({cellX}, {cellY}) lies outside Scene '{scene.SceneId}'.");
-        }
-
-        var cells = scene.TerrainCells
-            .Where(cell => cell.X != cellX || cell.Y != cellY)
-            .Append(new TerrainCellDocument { X = cellX, Y = cellY, AssetKey = assetKey })
-            .OrderBy(static cell => cell.Y)
-            .ThenBy(static cell => cell.X)
-            .ToList();
-        var painted = scene with { TerrainCells = cells };
-        DocumentValidation.Validate(painted);
-        return painted;
+        var cells = new List<TerrainCellDocument>(scene.TerrainCells.Count + 1);
+        cells.AddRange(scene.TerrainCells);
+        SetCell(cells, cellX, cellY, assetKey);
+        return scene with { TerrainCells = cells };
     }
 
     public static SceneDocument PaintLine(
@@ -51,13 +52,18 @@ public static class TerrainEditing
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
+        _ = terrainAssets.Resolve(assetKey);
         RequireInsideScene(scene, startCellX, startCellY);
         RequireInsideScene(scene, endCellX, endCellY);
 
-        var painted = scene;
-        foreach (var cell in LineCells(startCellX, startCellY, endCellX, endCellY))
-            painted = Paint(painted, terrainAssets, cell.X, cell.Y, assetKey);
-        return painted;
+        // A straight line between two cells inside the Scene rectangle stays
+        // inside it, so the individual cells need no further bounds check.
+        var line = LineCells(startCellX, startCellY, endCellX, endCellY);
+        var cells = new List<TerrainCellDocument>(scene.TerrainCells.Count + line.Count);
+        cells.AddRange(scene.TerrainCells);
+        foreach (var cell in line)
+            SetCell(cells, cell.X, cell.Y, assetKey);
+        return scene with { TerrainCells = cells };
     }
 
     public static SceneDocument EraseLine(
@@ -68,20 +74,16 @@ public static class TerrainEditing
         int endCellY)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        DocumentValidation.Validate(scene);
         RequireInsideScene(scene, startCellX, startCellY);
         RequireInsideScene(scene, endCellX, endCellY);
 
         var line = LineCells(startCellX, startCellY, endCellX, endCellY).ToHashSet();
-        var erased = scene with
-        {
-            TerrainCells = scene.TerrainCells
-                .Where(cell => !line.Contains(new TerrainCellCoordinate(cell.X, cell.Y)))
-                .ToList(),
-        };
-        if (erased.TerrainCells.Count == scene.TerrainCells.Count) return scene;
-        DocumentValidation.Validate(erased);
-        return erased;
+        var cells = scene.TerrainCells
+            .Where(cell => !line.Contains(new TerrainCellCoordinate(cell.X, cell.Y)))
+            .ToList();
+        return cells.Count == scene.TerrainCells.Count
+            ? scene
+            : scene with { TerrainCells = cells };
     }
 
     public static IReadOnlyList<TerrainCellCoordinate> LineCells(
@@ -122,17 +124,13 @@ public static class TerrainEditing
     public static SceneDocument Erase(SceneDocument scene, int cellX, int cellY)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        DocumentValidation.Validate(scene);
         RequireInsideScene(scene, cellX, cellY);
-        var erased = scene with
-        {
-            TerrainCells = scene.TerrainCells
-                .Where(cell => cell.X != cellX || cell.Y != cellY)
-                .ToList(),
-        };
-        if (erased.TerrainCells.Count == scene.TerrainCells.Count) return scene;
-        DocumentValidation.Validate(erased);
-        return erased;
+
+        var index = FindCell(scene.TerrainCells, cellX, cellY);
+        if (index < 0) return scene;
+        var cells = new List<TerrainCellDocument>(scene.TerrainCells);
+        cells.RemoveAt(index);
+        return scene with { TerrainCells = cells };
     }
 
     public static SceneDocument Fill(
@@ -144,7 +142,6 @@ public static class TerrainEditing
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
-        DocumentValidation.Validate(scene);
         _ = terrainAssets.Resolve(assetKey);
         RequireInsideScene(scene, startCellX, startCellY);
 
@@ -155,6 +152,54 @@ public static class TerrainEditing
         string? sourceAssetKey = cells.TryGetValue(start, out var source) ? source : null;
         if (sourceAssetKey == assetKey) return scene;
 
+        var region = ConnectedRegion(scene, cells, start, sourceAssetKey);
+        foreach (var coordinate in region) cells[coordinate] = assetKey;
+        return scene with
+        {
+            TerrainCells = cells
+                .OrderBy(static pair => pair.Key.Y)
+                .ThenBy(static pair => pair.Key.X)
+                .Select(static pair => new TerrainCellDocument
+                {
+                    X = pair.Key.X,
+                    Y = pair.Key.Y,
+                    AssetKey = pair.Value,
+                })
+                .ToList(),
+        };
+    }
+
+    public static SceneDocument EraseFill(SceneDocument scene, int startCellX, int startCellY)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        RequireInsideScene(scene, startCellX, startCellY);
+
+        var cells = scene.TerrainCells.ToDictionary(
+            static cell => new TerrainCellCoordinate(cell.X, cell.Y),
+            static cell => cell.AssetKey);
+        var start = new TerrainCellCoordinate(startCellX, startCellY);
+        if (!cells.TryGetValue(start, out var sourceAssetKey)) return scene;
+
+        var region = ConnectedRegion(scene, cells, start, sourceAssetKey);
+        return scene with
+        {
+            TerrainCells = scene.TerrainCells
+                .Where(cell => !region.Contains(new TerrainCellCoordinate(cell.X, cell.Y)))
+                .ToList(),
+        };
+    }
+
+    /// <summary>
+    /// Cells reachable from <paramref name="start"/> over cardinal neighbours
+    /// that carry <paramref name="sourceAssetKey"/>. A null source key means
+    /// "no Terrain authored here", which is a region of its own.
+    /// </summary>
+    private static HashSet<TerrainCellCoordinate> ConnectedRegion(
+        SceneDocument scene,
+        IReadOnlyDictionary<TerrainCellCoordinate, string> cells,
+        TerrainCellCoordinate start,
+        string? sourceAssetKey)
+    {
         Queue<TerrainCellCoordinate> frontier = new();
         HashSet<TerrainCellCoordinate> region = [start];
         frontier.Enqueue(start);
@@ -179,71 +224,10 @@ public static class TerrainEditing
                 frontier.Enqueue(neighbour);
             }
         }
-
-        foreach (var coordinate in region) cells[coordinate] = assetKey;
-        var filled = scene with
-        {
-            TerrainCells = cells
-                .OrderBy(static pair => pair.Key.Y)
-                .ThenBy(static pair => pair.Key.X)
-                .Select(static pair => new TerrainCellDocument
-                {
-                    X = pair.Key.X,
-                    Y = pair.Key.Y,
-                    AssetKey = pair.Value,
-                })
-                .ToList(),
-        };
-        DocumentValidation.Validate(filled);
-        return filled;
+        return region;
     }
 
-    public static SceneDocument EraseFill(SceneDocument scene, int startCellX, int startCellY)
-    {
-        ArgumentNullException.ThrowIfNull(scene);
-        DocumentValidation.Validate(scene);
-        RequireInsideScene(scene, startCellX, startCellY);
-
-        var cells = scene.TerrainCells.ToDictionary(
-            static cell => new TerrainCellCoordinate(cell.X, cell.Y),
-            static cell => cell.AssetKey);
-        var start = new TerrainCellCoordinate(startCellX, startCellY);
-        if (!cells.ContainsKey(start)) return scene;
-
-        var sourceAssetKey = cells[start];
-        Queue<TerrainCellCoordinate> frontier = new();
-        HashSet<TerrainCellCoordinate> region = [start];
-        frontier.Enqueue(start);
-        while (frontier.TryDequeue(out var current))
-        {
-            foreach (var offset in CardinalNeighbours)
-            {
-                var neighbour = new TerrainCellCoordinate(
-                    current.X + offset.X,
-                    current.Y + offset.Y);
-                if (!IsInsideScene(scene, neighbour.X, neighbour.Y)
-                    || region.Contains(neighbour)
-                    || !cells.TryGetValue(neighbour, out var assetKey)
-                    || assetKey != sourceAssetKey)
-                {
-                    continue;
-                }
-
-                region.Add(neighbour);
-                frontier.Enqueue(neighbour);
-            }
-        }
-
-        var erased = scene with
-        {
-            TerrainCells = scene.TerrainCells
-                .Where(cell => !region.Contains(new TerrainCellCoordinate(cell.X, cell.Y)))
-                .ToList(),
-        };
-        DocumentValidation.Validate(erased);
-        return erased;
-    }
-
+    /// <summary>Runs at the IO boundary, so it validates the whole document.</summary>
     public static void ValidateAssetReferences(
         SceneDocument scene,
         TerrainDisplayCatalog terrainAssets)
@@ -253,6 +237,41 @@ public static class TerrainEditing
         DocumentValidation.Validate(scene);
         foreach (var cell in scene.TerrainCells)
             _ = terrainAssets.Resolve(cell.AssetKey);
+    }
+
+    /// <summary>Replaces or inserts one cell, keeping the list canonical.</summary>
+    private static void SetCell(
+        List<TerrainCellDocument> cells,
+        int cellX,
+        int cellY,
+        string assetKey)
+    {
+        var cell = new TerrainCellDocument { X = cellX, Y = cellY, AssetKey = assetKey };
+        var index = FindCell(cells, cellX, cellY);
+        if (index >= 0) cells[index] = cell;
+        else cells.Insert(~index, cell);
+    }
+
+    /// <summary>
+    /// Index of the cell in the canonically ordered list, or the bitwise
+    /// complement of the position it would take.
+    /// </summary>
+    private static int FindCell(IReadOnlyList<TerrainCellDocument> cells, int cellX, int cellY)
+    {
+        var low = 0;
+        var high = cells.Count - 1;
+        while (low <= high)
+        {
+            var middle = low + ((high - low) / 2);
+            var candidate = cells[middle];
+            var order = candidate.Y != cellY
+                ? candidate.Y.CompareTo(cellY)
+                : candidate.X.CompareTo(cellX);
+            if (order == 0) return middle;
+            if (order < 0) low = middle + 1;
+            else high = middle - 1;
+        }
+        return ~low;
     }
 
     private static void RequireInsideScene(SceneDocument scene, int cellX, int cellY)
@@ -295,25 +314,52 @@ public static class TerrainCoverage
         return cells;
     }
 
+    /// <summary>
+    /// The set of Terrain cells the Scene has authored. Callers that check many
+    /// footprints against the same Scene — the drawing path checks one per Prop
+    /// and one per line preview anchor, every frame — build this once instead of
+    /// letting every check walk the whole cell list.
+    /// </summary>
+    public static HashSet<TerrainCellCoordinate> AuthoredCells(SceneDocument scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        HashSet<TerrainCellCoordinate> authored = new(scene.TerrainCells.Count);
+        foreach (var cell in scene.TerrainCells)
+            authored.Add(new TerrainCellCoordinate(cell.X, cell.Y));
+        return authored;
+    }
+
     public static IReadOnlyList<TerrainCellCoordinate> MissingCells(
-        SceneDocument scene,
+        IReadOnlySet<TerrainCellCoordinate> authoredCells,
         PropBoundsAuthoringPixels bounds,
         WorkspaceMetrics metrics)
     {
-        ArgumentNullException.ThrowIfNull(scene);
-        var authored = scene.TerrainCells
-            .Select(static cell => new TerrainCellCoordinate(cell.X, cell.Y))
-            .ToHashSet();
+        ArgumentNullException.ThrowIfNull(authoredCells);
         return IntersectedCells(bounds, metrics)
-            .Where(cell => !authored.Contains(cell))
+            .Where(cell => !authoredCells.Contains(cell))
             .ToList();
+    }
+
+    public static IReadOnlyList<TerrainCellCoordinate> MissingCells(
+        SceneDocument scene,
+        PropBoundsAuthoringPixels bounds,
+        WorkspaceMetrics metrics) =>
+        MissingCells(AuthoredCells(scene), bounds, metrics);
+
+    public static bool IsComplete(
+        IReadOnlySet<TerrainCellCoordinate> authoredCells,
+        PropBoundsAuthoringPixels bounds,
+        WorkspaceMetrics metrics)
+    {
+        ArgumentNullException.ThrowIfNull(authoredCells);
+        return IntersectedCells(bounds, metrics).All(authoredCells.Contains);
     }
 
     public static bool IsComplete(
         SceneDocument scene,
         PropBoundsAuthoringPixels bounds,
         WorkspaceMetrics metrics) =>
-        MissingCells(scene, bounds, metrics).Count == 0;
+        IsComplete(AuthoredCells(scene), bounds, metrics);
 
     public static string FormatMissingCells(IReadOnlyList<TerrainCellCoordinate> cells)
     {

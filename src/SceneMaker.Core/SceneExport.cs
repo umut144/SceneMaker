@@ -90,10 +90,11 @@ public static class SceneExport
         DocumentValidation.ValidateGrid(scene, configuration.Metrics);
         TerrainEditing.ValidateAssetReferences(scene, terrainAssets);
         PropEditing.ValidateAssetReferences(scene, propAssets);
+        var authored = TerrainCoverage.AuthoredCells(scene);
         foreach (var prop in scene.Props)
         {
             var missing = TerrainCoverage.MissingCells(
-                scene,
+                authored,
                 PropEditing.BoundsFor(
                     propAssets.Resolve(prop.AssetKey),
                     prop.PositionAuthoringPx.X,

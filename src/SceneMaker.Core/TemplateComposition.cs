@@ -248,13 +248,14 @@ public static class TemplateComposition
         SceneDocument scene,
         PropDisplayCatalog propAssets)
     {
+        var authored = TerrainCoverage.AuthoredCells(scene);
         foreach (var prop in scene.Props)
         {
             var bounds = PropEditing.BoundsFor(
                 propAssets.Resolve(prop.AssetKey),
                 prop.PositionAuthoringPx.X,
                 prop.PositionAuthoringPx.Y);
-            var missing = TerrainCoverage.MissingCells(scene, bounds, propAssets.Metrics);
+            var missing = TerrainCoverage.MissingCells(authored, bounds, propAssets.Metrics);
             if (missing.Count == 0) continue;
             throw new SceneMakerDocumentException(
                 $"Composed Prop '{prop.InstanceId}' lacks Terrain at {TerrainCoverage.FormatMissingCells(missing)}.");

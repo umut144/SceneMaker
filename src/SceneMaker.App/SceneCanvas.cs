@@ -26,6 +26,10 @@ public sealed partial class SceneCanvas : Control
     private WorkspaceMetrics? _metrics;
     private SceneDocument? _templatePreview;
     private IReadOnlyList<TemplateTerrainMask> _templatePreviewMasks = [];
+    // Terrain coverage is checked once per Prop and once per line preview anchor
+    // on every frame. Both sets are rebuilt only when their document changes.
+    private IReadOnlySet<TerrainCellCoordinate> _sceneTerrain = new HashSet<TerrainCellCoordinate>();
+    private IReadOnlySet<TerrainCellCoordinate> _previewTerrain = new HashSet<TerrainCellCoordinate>();
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
     private PropDisplayCatalog? _propAssets;
     private EditorInteractionState _interactionState = new();
@@ -144,8 +148,10 @@ public sealed partial class SceneCanvas : Control
     public void ShowScene(LoadedScene? scene)
     {
         _scene = scene;
+        _sceneTerrain = AuthoredTerrain(scene?.Document);
         _templatePreview = null;
         _templatePreviewMasks = [];
+        _previewTerrain = AuthoredTerrain(null);
         ViewState = new CanvasViewState();
         _selectedPropInstanceId = null;
         _selectedTemplateAnchorId = null;
@@ -163,14 +169,21 @@ public sealed partial class SceneCanvas : Control
     public void UpdateScene(LoadedScene scene)
     {
         _scene = scene;
+        _sceneTerrain = AuthoredTerrain(scene.Document);
         QueueRedraw();
     }
+
+    private static IReadOnlySet<TerrainCellCoordinate> AuthoredTerrain(SceneDocument? document) =>
+        document is null
+            ? new HashSet<TerrainCellCoordinate>()
+            : TerrainCoverage.AuthoredCells(document);
 
     public void ShowTemplatePreview(
         SceneDocument? scene,
         IReadOnlyList<TemplateTerrainMask>? effectiveTerrainMasks = null)
     {
         _templatePreview = scene;
+        _previewTerrain = AuthoredTerrain(scene);
         _templatePreviewMasks = effectiveTerrainMasks ?? [];
         QueueRedraw();
     }
@@ -363,12 +376,14 @@ public sealed partial class SceneCanvas : Control
         var sceneRect = new Rect2(pan, sceneSize);
         DrawRect(sceneRect, SceneBackground);
 
+        var authoredTerrain = _templatePreview is null ? _sceneTerrain : _previewTerrain;
         DrawTerrain(document, pan, zoom, highlighted: Mode == EditorMode.Terrain);
         DrawProps(
             document,
             pan,
             zoom,
             heightAuthoringPixels,
+            authoredTerrain,
             highlighted: Mode == EditorMode.Props);
         if (Mode == EditorMode.Props)
             DrawPropToolPreview(pan, zoom, heightAuthoringPixels);
@@ -716,6 +731,7 @@ public sealed partial class SceneCanvas : Control
         Vector2 pan,
         float zoom,
         int sceneHeightAuthoringPixels,
+        IReadOnlySet<TerrainCellCoordinate> authoredTerrain,
         bool highlighted)
     {
         if (_propAssets is null) return;
@@ -744,7 +760,7 @@ public sealed partial class SceneCanvas : Control
                 selected ? SelectionColor : outline,
                 filled: false,
                 width: selected ? 3f : highlighted ? 2f : 1f);
-            if (!TerrainCoverage.IsComplete(document, bounds, _metrics!))
+            if (!TerrainCoverage.IsComplete(authoredTerrain, bounds, _metrics!))
                 DrawDashedRectangle(rectangle, InvalidPreviewColor, 2.5f);
             DrawAnchor(
                 prop.PositionAuthoringPx.X,
@@ -952,7 +968,8 @@ public sealed partial class SceneCanvas : Control
             _propAssets!,
             coordinate.X,
             coordinate.Y,
-            SelectedPropAssetKey!);
+            SelectedPropAssetKey!,
+            _sceneTerrain);
 
     private IReadOnlyList<(int X, int Y, PropValidationResult Validation)> PropLinePreview(
         (int X, int Y) start,

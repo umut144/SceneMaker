@@ -34,7 +34,6 @@ public static class PropEditing
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(propAssets);
-        DocumentValidation.ValidateGrid(scene, propAssets.Metrics);
         var asset = propAssets.Resolve(assetKey);
         var validation = ValidateCandidate(scene, propAssets, anchorX, anchorY, assetKey);
         if (!validation.IsValid)
@@ -53,7 +52,6 @@ public static class PropEditing
                 .OrderBy(static value => value.InstanceId, StringComparer.Ordinal)
                 .ToList(),
         };
-        DocumentValidation.ValidateGrid(placed, propAssets.Metrics);
         return placed;
     }
 
@@ -62,7 +60,8 @@ public static class PropEditing
         PropDisplayCatalog propAssets,
         int anchorX,
         int anchorY,
-        string assetKey)
+        string assetKey,
+        IReadOnlySet<TerrainCellCoordinate>? authoredTerrain = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(propAssets);
@@ -92,7 +91,10 @@ public static class PropEditing
                     false,
                     $"Prop footprint overlaps '{existing.InstanceId}'.");
         }
-        var missingTerrain = TerrainCoverage.MissingCells(scene, candidate, propAssets.Metrics);
+        var missingTerrain = TerrainCoverage.MissingCells(
+            authoredTerrain ?? TerrainCoverage.AuthoredCells(scene),
+            candidate,
+            propAssets.Metrics);
         return missingTerrain.Count == 0
             ? PropValidationResult.Valid
             : new PropValidationResult(
@@ -173,14 +175,12 @@ public static class PropEditing
     {
         var found = FindAt(scene, propAssets, authoringX, authoringY);
         if (found is null) return scene;
-        var erased = scene with
+        return scene with
         {
             Props = scene.Props
                 .Where(prop => prop.InstanceId != found.InstanceId)
                 .ToList(),
         };
-        DocumentValidation.ValidateGrid(erased, propAssets.Metrics);
-        return erased;
     }
 
     public static void ValidateAssetReferences(
