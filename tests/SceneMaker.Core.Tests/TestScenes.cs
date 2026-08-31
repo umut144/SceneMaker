@@ -46,6 +46,10 @@ internal static class TestScenes
             terrainAssetKey,
             sizeCells);
 
+    /// <summary>A square Scene Instance with no Terrain at all.</summary>
+    public static SceneDocument EmptyInstance(string sceneId = "base", int sizeCells = 6) =>
+        SceneDocument.Create(sceneId, sizeCells, sizeCells);
+
     private static SceneDocument FillTerrain(
         SceneDocument scene,
         TestWorkspace workspace,
