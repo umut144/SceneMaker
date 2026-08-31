@@ -9,7 +9,6 @@ namespace SceneMaker.App;
 public enum CanvasDrawingTool
 {
     Selector,
-    Eraser,
     Pencil,
     Line,
     Fill,
@@ -85,6 +84,7 @@ public sealed partial class SceneCanvas : Control
             QueueRedraw();
         }
     }
+    public bool EraserEnabled { get; private set; }
     public string PerspectiveName
     {
         get => _perspectiveName;
@@ -101,19 +101,28 @@ public sealed partial class SceneCanvas : Control
     public event Action? ViewChanged;
     public event Action<int, int>? TerrainPaintRequested;
     public event Action<int, int>? TerrainEraseRequested;
+    public event Action<int, int>? TerrainFillEraseRequested;
     public event Action<int, int>? TerrainFillRequested;
     public event Action<int, int>? PlacementRequested;
     public event Action<int, int, int, int>? PlacementLineRequested;
+    public event Action<int, int, int, int>? PlacementLineEraseRequested;
     public event Action<int, int>? PlacementEraseRequested;
     public event Action<int, int>? PlacementSelectRequested;
     public event Action<int, int>? TransitionRequested;
     public event Action<int, int, int, int>? TransitionLineRequested;
+    public event Action<int, int, int, int>? TransitionLineEraseRequested;
     public event Action<int, int>? TransitionEraseRequested;
     public event Action<int, int>? TransitionSelectRequested;
     public event Action<int, int>? TemplateAnchorPlaceRequested;
     public event Action<int, int>? TemplateAnchorSelectRequested;
     public event Action<string, int, int>? TemplateAnchorMoveRequested;
     public event Action<string>? ToolStatusRequested;
+
+    public void SetEraserEnabled(bool enabled)
+    {
+        EraserEnabled = enabled;
+        QueueRedraw();
+    }
 
     public void ConfigureTerrainAssets(TerrainDisplayCatalog catalog)
     {
@@ -327,6 +336,15 @@ public sealed partial class SceneCanvas : Control
             return true;
         }
 
+        if (EraserEnabled)
+        {
+            if (PerspectiveName == "Placements")
+                PlacementLineEraseRequested?.Invoke(start.X, start.Y, end.X, end.Y);
+            else
+                TransitionLineEraseRequested?.Invoke(start.X, start.Y, end.X, end.Y);
+            return true;
+        }
+
         var preview = CurrentLinePreview(start, end);
         var invalidCount = preview.Count(candidate => !candidate.Validation.IsValid);
         if (invalidCount > 0)
@@ -472,11 +490,14 @@ public sealed partial class SceneCanvas : Control
             var (cellX, cellY) = TerrainCoordinate(screenPosition);
             switch (ActiveTool)
             {
-                case CanvasDrawingTool.Eraser:
+                case CanvasDrawingTool.Pencil when EraserEnabled:
                     TerrainEraseRequested?.Invoke(cellX, cellY);
                     break;
                 case CanvasDrawingTool.Pencil when SelectedTerrainAssetKey is not null:
                     TerrainPaintRequested?.Invoke(cellX, cellY);
+                    break;
+                case CanvasDrawingTool.Fill when EraserEnabled:
+                    TerrainFillEraseRequested?.Invoke(cellX, cellY);
                     break;
                 case CanvasDrawingTool.Fill when SelectedTerrainAssetKey is not null:
                     TerrainFillRequested?.Invoke(cellX, cellY);
@@ -491,7 +512,7 @@ public sealed partial class SceneCanvas : Control
                 case CanvasDrawingTool.Selector:
                     PlacementSelectRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
-                case CanvasDrawingTool.Eraser:
+                case CanvasDrawingTool.Pencil when EraserEnabled:
                     PlacementEraseRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
                 case CanvasDrawingTool.Pencil:
@@ -550,7 +571,7 @@ public sealed partial class SceneCanvas : Control
                 case CanvasDrawingTool.Selector:
                     TransitionSelectRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
-                case CanvasDrawingTool.Eraser:
+                case CanvasDrawingTool.Pencil when EraserEnabled:
                     TransitionEraseRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
                 case CanvasDrawingTool.Pencil:
@@ -638,21 +659,23 @@ public sealed partial class SceneCanvas : Control
         if (PerspectiveName == "Terrain" && leftButtonPressed)
         {
             var (cellX, cellY) = TerrainCoordinate(screenPosition);
-            if (ActiveTool == CanvasDrawingTool.Pencil && SelectedTerrainAssetKey is not null)
-                TerrainPaintRequested?.Invoke(cellX, cellY);
-            else if (ActiveTool == CanvasDrawingTool.Eraser)
+            if (ActiveTool == CanvasDrawingTool.Pencil && EraserEnabled)
                 TerrainEraseRequested?.Invoke(cellX, cellY);
+            else if (ActiveTool == CanvasDrawingTool.Pencil && SelectedTerrainAssetKey is not null)
+                TerrainPaintRequested?.Invoke(cellX, cellY);
+            else if (ActiveTool == CanvasDrawingTool.Fill && EraserEnabled)
+                TerrainFillEraseRequested?.Invoke(cellX, cellY);
         }
         else if (PerspectiveName == "Placements")
         {
             var coordinate = AuthoringCoordinate(screenPosition);
-            if (ActiveTool == CanvasDrawingTool.Eraser && leftButtonPressed)
+            if (ActiveTool == CanvasDrawingTool.Pencil && EraserEnabled && leftButtonPressed)
                 PlacementEraseRequested?.Invoke(coordinate.X, coordinate.Y);
         }
         else if (PerspectiveName == "Transitions")
         {
             var coordinate = AuthoringCoordinate(screenPosition);
-            if (ActiveTool == CanvasDrawingTool.Eraser && leftButtonPressed)
+            if (ActiveTool == CanvasDrawingTool.Pencil && EraserEnabled && leftButtonPressed)
                 TransitionEraseRequested?.Invoke(coordinate.X, coordinate.Y);
         }
         else if (PerspectiveName == "Scene Templates"

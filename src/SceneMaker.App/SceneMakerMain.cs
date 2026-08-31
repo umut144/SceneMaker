@@ -21,6 +21,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _workspaceLabel = new();
     private readonly Label _sceneLabel = new();
     private readonly Label _toolContextLabel = new();
+    private readonly Button _eraserToggle = new();
     private readonly Label _viewLabel = new();
     private readonly Label _statusLabel = new();
     private readonly MenuButton _settingsButton = new();
@@ -226,7 +227,6 @@ public sealed partial class SceneMakerMain : Control
         toolColumn.AddThemeConstantOverride("separation", 6);
         toolMargin.AddChild(toolColumn);
         AddDrawingToolButton(toolColumn, CanvasDrawingTool.Selector, "select.svg", "Selector");
-        AddDrawingToolButton(toolColumn, CanvasDrawingTool.Eraser, "eraser.svg", "Eraser");
         AddDrawingToolButton(toolColumn, CanvasDrawingTool.Pencil, "pencil.svg", "Pencil Draw");
         AddDrawingToolButton(toolColumn, CanvasDrawingTool.Line, "line.svg", "Line Draw");
         AddDrawingToolButton(toolColumn, CanvasDrawingTool.Fill, "fill.svg", "Terrain Fill");
@@ -240,13 +240,20 @@ public sealed partial class SceneMakerMain : Control
         _anchorGroupEdit.ValueChanged += SetSelectedTemplateAnchorGroup;
         toolColumn.AddChild(_anchorGroupEdit);
 
-        _toolContextBar.Name = "ToolContextMenu";
+        _toolContextBar.Name = "ToolOptionsBar";
         _toolContextBar.CustomMinimumSize = new Vector2(0f, 38f);
         _toolContextBar.AddThemeFontSizeOverride("font_size", 14);
         _toolContextLabel.Name = "ActiveToolLabel";
         _toolContextLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _toolContextLabel.VerticalAlignment = VerticalAlignment.Center;
         _toolContextBar.AddChild(_toolContextLabel);
+        _eraserToggle.Name = "EraserToggle";
+        _eraserToggle.Text = "Eraser";
+        _eraserToggle.ToggleMode = true;
+        _eraserToggle.TooltipText = "Use the active drawing tool in erase mode";
+        _eraserToggle.CustomMinimumSize = new Vector2(96f, 0f);
+        _eraserToggle.Toggled += SetEraserEnabled;
+        _toolContextBar.AddChild(_eraserToggle);
         _toolContextBar.AddThemeConstantOverride("separation", 0);
 
         var canvasColumn = new VBoxContainer
@@ -265,13 +272,16 @@ public sealed partial class SceneMakerMain : Control
         _canvas.ViewChanged += UpdateViewStatus;
         _canvas.TerrainPaintRequested += PaintTerrainCell;
         _canvas.TerrainEraseRequested += EraseTerrainCell;
+        _canvas.TerrainFillEraseRequested += EraseTerrainRegion;
         _canvas.TerrainFillRequested += FillTerrainRegion;
         _canvas.PlacementRequested += PlaceAsset;
         _canvas.PlacementLineRequested += PlaceAssetLine;
+        _canvas.PlacementLineEraseRequested += EraseAssetLine;
         _canvas.PlacementEraseRequested += ErasePlacement;
         _canvas.PlacementSelectRequested += SelectPlacement;
         _canvas.TransitionRequested += PlaceTransition;
         _canvas.TransitionLineRequested += PlaceTransitionLine;
+        _canvas.TransitionLineEraseRequested += EraseTransitionLine;
         _canvas.TransitionEraseRequested += EraseTransition;
         _canvas.TransitionSelectRequested += SelectTransition;
         _canvas.TemplateAnchorPlaceRequested += PlaceTemplateAnchor;
@@ -1244,6 +1254,12 @@ public sealed partial class SceneMakerMain : Control
         SetStatus($"Selected {ToolDisplayName(tool)}.");
     }
 
+    private void SetEraserEnabled(bool enabled)
+    {
+        _canvas.SetEraserEnabled(enabled);
+        SetStatus(enabled ? "Eraser enabled." : "Eraser disabled.");
+    }
+
     private void UpdateToolContextLabel()
     {
         _toolContextLabel.Text = ToolDisplayName(_canvas.ActiveTool);
@@ -1254,7 +1270,6 @@ public sealed partial class SceneMakerMain : Control
         return tool switch
         {
             CanvasDrawingTool.Selector => "Selector",
-            CanvasDrawingTool.Eraser => "Eraser",
             CanvasDrawingTool.Pencil => "Pencil Draw",
             CanvasDrawingTool.Line => "Line Draw",
             CanvasDrawingTool.Fill => "Terrain Fill",
@@ -1481,6 +1496,22 @@ public sealed partial class SceneMakerMain : Control
         });
     }
 
+    private void EraseTerrainRegion(int cellX, int cellY)
+    {
+        if (_workspace is null || _scene is null) return;
+        TryDocumentAction(() =>
+        {
+            var document = TerrainEditing.EraseFill(_scene.Document, cellX, cellY);
+            if (ReferenceEquals(document, _scene.Document))
+            {
+                SetStatus("Terrain Eraser Fill made no change because the region is already empty.");
+                return;
+            }
+            SaveUpdatedScene(document);
+            SetStatus($"Erased the connected Terrain region at ({cellX}, {cellY}).");
+        });
+    }
+
     private void PlaceAsset(int authoringX, int authoringY)
     {
         if (_workspace is null || _scene is null || _canvas.SelectedPlacementAssetKey is not { } assetKey)
@@ -1525,6 +1556,36 @@ public sealed partial class SceneMakerMain : Control
         });
     }
 
+    private void EraseAssetLine(int startX, int startY, int endX, int endY)
+    {
+        if (_workspace is null || _scene is null || _canvas.SelectedPlacementAssetKey is not { } assetKey)
+            return;
+
+        TryPlacementAction("Line Eraser", () =>
+        {
+            var asset = _placementAssets!.Resolve(assetKey);
+            var document = _scene.Document;
+            var beforeCount = document.Placements.Count;
+            foreach (var anchor in PlacementEditing.LineAnchors(
+                         asset,
+                         startX,
+                         startY,
+                         endX,
+                         endY))
+            {
+                document = PlacementEditing.EraseAt(
+                    document,
+                    _placementAssets!,
+                    anchor.X,
+                    anchor.Y);
+            }
+            SaveUpdatedScene(document);
+            _canvas.CompleteLinePlacement();
+            var erased = beforeCount - document.Placements.Count;
+            SetStatus($"Line Eraser removed {erased} Placement{(erased == 1 ? string.Empty : "s")}.");
+        });
+    }
+
     private void PlaceTransition(int authoringX, int authoringY)
     {
         if (_workspace is null || _scene is null || _canvas.SelectedTransitionAssetKey is not { } assetKey)
@@ -1566,6 +1627,36 @@ public sealed partial class SceneMakerMain : Control
             _canvas.CompleteLinePlacement();
             var added = document.Transitions.Count - beforeCount;
             SetStatus($"Line Draw placed {added} Transition{(added == 1 ? string.Empty : "s")} with exact non-overlapping footprints.");
+        });
+    }
+
+    private void EraseTransitionLine(int startX, int startY, int endX, int endY)
+    {
+        if (_workspace is null || _scene is null || _canvas.SelectedTransitionAssetKey is not { } assetKey)
+            return;
+
+        TryPlacementAction("Line Eraser", () =>
+        {
+            var asset = _transitionAssets!.Resolve(assetKey);
+            var document = _scene.Document;
+            var beforeCount = document.Transitions.Count;
+            foreach (var anchor in TransitionEditing.LineAnchors(
+                         asset,
+                         startX,
+                         startY,
+                         endX,
+                         endY))
+            {
+                document = TransitionEditing.EraseAt(
+                    document,
+                    _transitionAssets!,
+                    anchor.X,
+                    anchor.Y);
+            }
+            SaveUpdatedScene(document);
+            _canvas.CompleteLinePlacement();
+            var erased = beforeCount - document.Transitions.Count;
+            SetStatus($"Line Eraser removed {erased} Transition{(erased == 1 ? string.Empty : "s")}.");
         });
     }
 

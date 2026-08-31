@@ -49,13 +49,18 @@ Die `ToolOptionsBar` ist eine feste Optionsleiste und kein dynamisches
 Typ oder Template-Modus. Sie enthält zusätzliche Bearbeitungsoptionen, die mit
 dem primären Werkzeug kombiniert werden können.
 
-Die erste Option ist der Toggle `Eraser`:
+Die erste Option ist der Toggle `Eraser`. Er ist ein unabhängiger
+Bearbeitungszustand und kein eigenes primäres Werkzeug:
 
 - `Pencil` + `Eraser` löscht einzelne Terrain-Zellen.
 - `Line` + `Eraser` löscht entlang einer Linie.
 - `Terrain Fill` + `Eraser` löscht einen zusammenhängenden Bereich.
 - Ohne aktivierten `Eraser` führen diese Werkzeuge ihre normale Zeichen- oder
   Platzierungsaktion aus.
+
+Der Toggle bleibt auch bei Werkzeugen sichtbar, für die er keine Wirkung hat,
+beispielsweise `Selector` oder Template-Werkzeuge. Die Optionsleiste bleibt
+dadurch statisch und vorhersehbar.
 
 Damit wird zwischen zwei unabhängigen Dimensionen unterschieden:
 
@@ -65,9 +70,8 @@ Damit wird zwischen zwei unabhängigen Dimensionen unterschieden:
 Weitere Optionen können später in derselben Leiste ergänzt werden, ohne das
 primäre Werkzeugmodell zu verändern.
 
-## Aktueller Prototyp
+## Aktueller Stand
 
-Die Leiste zeigt zunächst nur den Namen des aktuell ausgewählten primären
-Werkzeugs als Label. Dieses Label dient als sichtbare Funktionsprüfung und wird
-später durch die festen Tool-Optionen ergänzt.
-
+Die Leiste zeigt den Namen des aktuell ausgewählten primären Werkzeugs als Label
+und enthält den `Eraser`-Toggle. Weitere feste Optionen können später ergänzt
+werden, ohne das primäre Werkzeugmodell zu verändern.

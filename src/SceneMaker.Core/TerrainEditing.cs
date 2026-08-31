@@ -119,6 +119,52 @@ public static class TerrainEditing
         return filled;
     }
 
+    public static SceneDocument EraseFill(SceneDocument scene, int startCellX, int startCellY)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        DocumentValidation.Validate(scene);
+        RequireInsideScene(scene, startCellX, startCellY);
+
+        var cells = scene.TerrainCells.ToDictionary(
+            static cell => new TerrainCellCoordinate(cell.X, cell.Y),
+            static cell => cell.AssetKey);
+        var start = new TerrainCellCoordinate(startCellX, startCellY);
+        if (!cells.ContainsKey(start)) return scene;
+
+        var sourceAssetKey = cells[start];
+        Queue<TerrainCellCoordinate> frontier = new();
+        HashSet<TerrainCellCoordinate> region = [start];
+        frontier.Enqueue(start);
+        while (frontier.TryDequeue(out var current))
+        {
+            foreach (var offset in CardinalNeighbours)
+            {
+                var neighbour = new TerrainCellCoordinate(
+                    current.X + offset.X,
+                    current.Y + offset.Y);
+                if (!IsInsideScene(scene, neighbour.X, neighbour.Y)
+                    || region.Contains(neighbour)
+                    || !cells.TryGetValue(neighbour, out var assetKey)
+                    || assetKey != sourceAssetKey)
+                {
+                    continue;
+                }
+
+                region.Add(neighbour);
+                frontier.Enqueue(neighbour);
+            }
+        }
+
+        var erased = scene with
+        {
+            TerrainCells = scene.TerrainCells
+                .Where(cell => !region.Contains(new TerrainCellCoordinate(cell.X, cell.Y)))
+                .ToList(),
+        };
+        DocumentValidation.Validate(erased);
+        return erased;
+    }
+
     public static void ValidateAssetReferences(
         SceneDocument scene,
         TerrainDisplayCatalog terrainAssets)
