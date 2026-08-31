@@ -213,12 +213,43 @@ public sealed class StandaloneWorkspaceTests
     {
         using var parent = TemporaryDirectory.Create();
         var workspace = WorkspaceStore.Create(parent.Path, "game04");
-        WorkspaceConfigurationStore.CreateDefault(workspace.DirectoryPath, workspace.WorkspaceKey);
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             PolyToolsCatalogImporter.Load(workspace.DirectoryPath));
 
         Assert.Contains("synchronized PolyTools catalog", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CreatingAWorkspaceWritesEveryDirectoryAndTheDefaultConfiguration()
+    {
+        using var parent = TemporaryDirectory.Create();
+
+        var workspace = WorkspaceStore.Create(parent.Path, "game04b");
+
+        Assert.True(Directory.Exists(
+            Path.Combine(workspace.DirectoryPath, WorkspaceStore.ScenesDirectoryName)));
+        Assert.True(Directory.Exists(
+            Path.Combine(workspace.DirectoryPath, WorkspaceStore.TemplatesDirectoryName)));
+        Assert.True(Directory.Exists(Path.Combine(
+            workspace.DirectoryPath,
+            PolyToolsCatalogImporter.ImportDirectoryName,
+            PolyToolsCatalogImporter.PolyToolsDirectoryName)));
+        Assert.True(File.Exists(
+            Path.Combine(workspace.DirectoryPath, WorkspaceConfigurationStore.FileName)));
+    }
+
+    [Fact]
+    public void CreatingAWorkspaceOverAnExistingFileFailsWithoutTouchingIt()
+    {
+        using var parent = TemporaryDirectory.Create();
+        var occupied = Path.Combine(parent.Path, "game04c");
+        File.WriteAllText(occupied, "not a Workspace");
+
+        Assert.Throws<SceneMakerDocumentException>(() =>
+            WorkspaceStore.Create(parent.Path, "game04c"));
+
+        Assert.Equal("not a Workspace", File.ReadAllText(occupied));
     }
 
     [Fact]

@@ -62,6 +62,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly VBoxContainer _templateRows = new();
     private readonly SpinBox _anchorGroupEdit = new();
     private readonly Dictionary<EditorTool, Button> _drawingToolControlsByTool = [];
+    private readonly List<LoadedScene> _workspaceTemplates = [];
 
     private readonly FileDialog _workspaceDirectoryDialog = new();
     private readonly FileDialog _workspaceDirectoryLoadDialog = new();
@@ -98,6 +99,7 @@ public sealed partial class SceneMakerMain : Control
     /// <summary>Where the Workspace dialogs start looking.</summary>
     private string? _lastWorkspaceDirectory;
     private string? _recentSessionPath;
+    private string? _templateLoadError;
     private bool _updatingAnchorGroupEdit;
     private TemplateCompositionResult? _templatePreview;
 
@@ -500,7 +502,7 @@ public sealed partial class SceneMakerMain : Control
         popupMargin.AddChild(popupContent);
 
         _templateSearchEdit.PlaceholderText = "Search Template name";
-        _templateSearchEdit.TextChanged += _ => RebuildTemplateRows();
+        _templateSearchEdit.TextChanged += _ => RenderTemplateRows();
         popupContent.AddChild(_templateSearchEdit);
 
         var filterRow = new HBoxContainer();
@@ -510,7 +512,7 @@ public sealed partial class SceneMakerMain : Control
         _templateGroupFilter.Step = 1;
         _templateGroupFilter.Value = 0;
         _templateGroupFilter.TooltipText = "0 shows all Template groups";
-        _templateGroupFilter.ValueChanged += _ => RebuildTemplateRows();
+        _templateGroupFilter.ValueChanged += _ => RenderTemplateRows();
         filterRow.AddChild(_templateGroupFilter);
         filterRow.AddChild(new Label { Text = "0 = all" });
         popupContent.AddChild(filterRow);
@@ -559,11 +561,40 @@ public sealed partial class SceneMakerMain : Control
 
     private void ShowTemplatesPopup()
     {
-        RebuildTemplateRows();
+        ReloadWorkspaceTemplates();
+        RenderTemplateRows();
         _templatesPopup.PopupCentered(new Vector2I(500, 380));
     }
 
-    private void RebuildTemplateRows()
+    /// <summary>
+    /// Reads and validates every Scene Template in the Workspace once, when the
+    /// popup opens. Filtering works on this list afterwards: typing in the
+    /// search box must not re-read and re-validate the whole Workspace on every
+    /// keystroke.
+    /// </summary>
+    private void ReloadWorkspaceTemplates()
+    {
+        _workspaceTemplates.Clear();
+        _templateLoadError = null;
+        if (_session is not { } session) return;
+        PersistScene();
+        try
+        {
+            _workspaceTemplates.AddRange(SceneStore
+                .EnumeratePaths(session.Workspace)
+                .Select(path => SceneStore.Load(session.Workspace, path))
+                .Where(static scene => scene.Document.SceneKind == SceneKind.Template));
+        }
+        catch (Exception exception) when (exception is SceneMakerDocumentException
+                                          or IOException
+                                          or UnauthorizedAccessException)
+        {
+            _workspaceTemplates.Clear();
+            _templateLoadError = exception.Message;
+        }
+    }
+
+    private void RenderTemplateRows()
     {
         foreach (var child in _templateRows.GetChildren())
         {
@@ -571,61 +602,53 @@ public sealed partial class SceneMakerMain : Control
             child.QueueFree();
         }
 
-        if (_session is not { } session)
+        if (_session is null)
         {
             _templateRows.AddChild(new Label { Text = "No Workspace loaded." });
             return;
         }
-        PersistScene();
-
-        try
+        if (_templateLoadError is not null)
         {
-            var search = _templateSearchEdit.Text.Trim();
-            var groupFilter = checked((int)_templateGroupFilter.Value);
-            var templates = SceneStore
-                .EnumeratePaths(session.Workspace)
-                .Select(path => SceneStore.Load(session.Workspace, path))
-                .Where(static scene => scene.Document.SceneKind == SceneKind.Template)
-                .Where(scene => search.Length == 0
-                    || scene.Document.SceneId.Contains(search, StringComparison.OrdinalIgnoreCase))
-                .Where(scene => groupFilter == 0
-                    || scene.Document.TemplateDefinition!.GroupNumber == groupFilter)
-                .ToList();
-            if (templates.Count == 0)
-            {
-                _templateRows.AddChild(new Label { Text = "No matching Scene Templates." });
-                return;
-            }
-
-            foreach (var template in templates)
-            {
-                var row = new HBoxContainer();
-                var name = new Label
-                {
-                    Text = template.Document.SceneId,
-                    SizeFlagsHorizontal = SizeFlags.ExpandFill,
-                };
-                row.AddChild(name);
-                var group = new SpinBox
-                {
-                    MinValue = 1,
-                    MaxValue = int.MaxValue,
-                    Step = 1,
-                    Value = template.Document.TemplateDefinition!.GroupNumber,
-                    CustomMinimumSize = new Vector2(110f, 0f),
-                    TooltipText = $"Template group for {template.Document.SceneId}",
-                };
-                group.ValueChanged += value =>
-                    UpdateWorkspaceTemplateGroup(template.FilePath, checked((int)value));
-                row.AddChild(group);
-                _templateRows.AddChild(row);
-            }
+            _templateRows.AddChild(new Label { Text = _templateLoadError });
+            return;
         }
-        catch (Exception exception) when (exception is SceneMakerDocumentException
-                                          or IOException
-                                          or UnauthorizedAccessException)
+
+        var search = _templateSearchEdit.Text.Trim();
+        var groupFilter = checked((int)_templateGroupFilter.Value);
+        var templates = _workspaceTemplates
+            .Where(scene => search.Length == 0
+                || scene.Document.SceneId.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .Where(scene => groupFilter == 0
+                || scene.Document.TemplateDefinition!.GroupNumber == groupFilter)
+            .ToList();
+        if (templates.Count == 0)
         {
-            _templateRows.AddChild(new Label { Text = exception.Message });
+            _templateRows.AddChild(new Label { Text = "No matching Scene Templates." });
+            return;
+        }
+
+        foreach (var template in templates)
+        {
+            var row = new HBoxContainer();
+            var name = new Label
+            {
+                Text = template.Document.SceneId,
+                SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            };
+            row.AddChild(name);
+            var group = new SpinBox
+            {
+                MinValue = 1,
+                MaxValue = int.MaxValue,
+                Step = 1,
+                Value = template.Document.TemplateDefinition!.GroupNumber,
+                CustomMinimumSize = new Vector2(110f, 0f),
+                TooltipText = $"Template group for {template.Document.SceneId}",
+            };
+            group.ValueChanged += value =>
+                UpdateWorkspaceTemplateGroup(template.FilePath, checked((int)value));
+            row.AddChild(group);
+            _templateRows.AddChild(row);
         }
     }
 
@@ -639,6 +662,11 @@ public sealed partial class SceneMakerMain : Control
             var document = TemplateEditing.SetTemplateGroup(loaded.Document, groupNumber);
             var updated = new LoadedScene(loaded.FilePath, document);
             SceneStore.Save(session.Workspace, updated);
+            // The rows are not rebuilt here: one of them is the SpinBox that
+            // raised this. Only the cached document is brought up to date.
+            var cached = _workspaceTemplates.FindIndex(
+                entry => string.Equals(entry.FilePath, updated.FilePath, StringComparison.Ordinal));
+            if (cached >= 0) _workspaceTemplates[cached] = updated;
             ClearTemplatePreview();
             if (_scene?.FilePath == updated.FilePath)
             {
@@ -1079,9 +1107,6 @@ public sealed partial class SceneMakerMain : Control
             var created = WorkspaceStore.Create(
                 _pendingWorkspaceParentDirectory,
                 _workspaceIdEdit.Text.Trim());
-            WorkspaceConfigurationStore.CreateDefault(
-                created.DirectoryPath,
-                created.WorkspaceKey);
             // A new Workspace has no PolyTools import yet, so there is nothing
             // to open a session on. The editor stays closed until the import is
             // synchronized and the Workspace is loaded.

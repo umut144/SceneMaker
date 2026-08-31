@@ -7,6 +7,12 @@ public static class WorkspaceStore
     public const string ScenesDirectoryName = "scenes";
     public const string TemplatesDirectoryName = "templates";
 
+    /// <summary>
+    /// Creates a Workspace whole: both document directories, the PolyTools
+    /// import boundary and a default configuration. If any step fails the
+    /// directory is removed again, because a half-built Workspace would only
+    /// fail to load later without saying why.
+    /// </summary>
     public static LoadedWorkspace Create(string parentDirectoryPath, string workspaceId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(parentDirectoryPath);
@@ -20,12 +26,19 @@ public static class WorkspaceStore
                 $"Refusing to overwrite existing Workspace directory '{fullDirectory}'.");
         }
 
+        var complete = false;
         try
         {
             Directory.CreateDirectory(fullParentDirectory);
             Directory.CreateDirectory(fullDirectory);
             Directory.CreateDirectory(Path.Combine(fullDirectory, ScenesDirectoryName));
             Directory.CreateDirectory(Path.Combine(fullDirectory, TemplatesDirectoryName));
+            Directory.CreateDirectory(Path.Combine(
+                fullDirectory,
+                PolyToolsCatalogImporter.ImportDirectoryName,
+                PolyToolsCatalogImporter.PolyToolsDirectoryName));
+            WorkspaceConfigurationStore.CreateDefault(fullDirectory, workspaceId);
+            complete = true;
             return new LoadedWorkspace(fullDirectory, workspaceId);
         }
         catch (SceneMakerDocumentException)
@@ -36,6 +49,23 @@ public static class WorkspaceStore
         {
             throw new SceneMakerDocumentException(
                 $"Could not create Workspace '{fullDirectory}': {exception.Message}", exception);
+        }
+        finally
+        {
+            if (!complete) RemoveIncompleteWorkspace(fullDirectory);
+        }
+    }
+
+    private static void RemoveIncompleteWorkspace(string directory)
+    {
+        try
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The failure that got us here is the one worth reporting; leaving
+            // the directory behind is the lesser problem.
         }
     }
 

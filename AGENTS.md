@@ -51,6 +51,30 @@ Three rules follow from this and are worth stating outright:
   `EditorSession?`, never a set of correlated nullable fields, so a failed load
   cannot leave a half-opened Workspace behind.
 
+## Schema versions
+
+Six schemas, each versioned on its own. They are deliberately not tied
+together: the PolyTools schemas are owned by PolyTools, and the rest change for
+unrelated reasons.
+
+| Schema | Constant | Current |
+| --- | --- | --- |
+| Scene document | `SceneMakerSchemas.SceneVersion` | 6 |
+| Workspace config | `WorkspaceConfigurationStore.Version` | 3 |
+| Scene export | `SceneExport.Version` | 2 |
+| PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 1 |
+| PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 15, 14 still read |
+| Recent session | `RecentSessionStore.Version` | 3 |
+
+There is no migration code and none is planned. Every reader rejects a document
+whose version it does not know; the runtime manifest is the one exception,
+where the previous version is still accepted so a partly synchronized import
+does not block authoring. Bumping a version therefore means rewriting the
+affected files by hand — `workspaces/` is the only authored data — or
+re-exporting them, and updating the reader in `BevyProjects/world01` for the
+export. If that ever stops being practical, add migrations at the IO boundary,
+never inside the documents.
+
 ## Engineering
 
 Keep persisted models engine-neutral. Godot is UI and Canvas projection only.
