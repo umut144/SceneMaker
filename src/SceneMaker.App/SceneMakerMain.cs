@@ -36,7 +36,8 @@ public sealed partial class SceneMakerMain : Control
     private readonly HBoxContainer _mapBar = new();
     private readonly HBoxContainer _overviewNavigationBar = new();
     private readonly HBoxContainer _contextNavigationBar = new();
-    private readonly HBoxContainer _toolContextBar = new();
+    private readonly HBoxContainer _contextMenuBar = new();
+    private readonly VBoxContainer _toolOptionsBar = new();
     private readonly Button _returnNavigationButton = new();
     private readonly Button _mapNavigationButton = new();
     private readonly Label _mapDimensionsLabel = new();
@@ -240,21 +241,14 @@ public sealed partial class SceneMakerMain : Control
         _anchorGroupEdit.ValueChanged += SetSelectedTemplateAnchorGroup;
         toolColumn.AddChild(_anchorGroupEdit);
 
-        _toolContextBar.Name = "ToolOptionsBar";
-        _toolContextBar.CustomMinimumSize = new Vector2(0f, 38f);
-        _toolContextBar.AddThemeFontSizeOverride("font_size", 14);
+        _contextMenuBar.Name = "ContextMenu";
+        _contextMenuBar.CustomMinimumSize = new Vector2(0f, 38f);
+        _contextMenuBar.AddThemeFontSizeOverride("font_size", 14);
         _toolContextLabel.Name = "ActiveToolLabel";
         _toolContextLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _toolContextLabel.VerticalAlignment = VerticalAlignment.Center;
-        _toolContextBar.AddChild(_toolContextLabel);
-        _eraserToggle.Name = "EraserToggle";
-        _eraserToggle.Text = "Eraser";
-        _eraserToggle.ToggleMode = true;
-        _eraserToggle.TooltipText = "Use the active drawing tool in erase mode";
-        _eraserToggle.CustomMinimumSize = new Vector2(96f, 0f);
-        _eraserToggle.Toggled += SetEraserEnabled;
-        _toolContextBar.AddChild(_eraserToggle);
-        _toolContextBar.AddThemeConstantOverride("separation", 0);
+        _contextMenuBar.AddChild(_toolContextLabel);
+        _contextMenuBar.AddThemeConstantOverride("separation", 0);
 
         var canvasColumn = new VBoxContainer
         {
@@ -263,7 +257,15 @@ public sealed partial class SceneMakerMain : Control
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
         content.AddChild(canvasColumn);
-        canvasColumn.AddChild(_toolContextBar);
+        canvasColumn.AddChild(_contextMenuBar);
+
+        var canvasRow = new HBoxContainer
+        {
+            Name = "CanvasRow",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        canvasColumn.AddChild(canvasRow);
 
         _canvas.Name = "Canvas";
         if (_terrainAssets is not null) _canvas.ConfigureTerrainAssets(_terrainAssets);
@@ -290,7 +292,37 @@ public sealed partial class SceneMakerMain : Control
         _canvas.ToolStatusRequested += SetStatus;
         _canvas.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _canvas.SizeFlagsVertical = SizeFlags.ExpandFill;
-        canvasColumn.AddChild(_canvas);
+        canvasRow.AddChild(_canvas);
+
+        var toolOptionsPanel = new PanelContainer
+        {
+            Name = "ToolOptionsBar",
+            CustomMinimumSize = new Vector2(52f, 0f),
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        canvasRow.AddChild(toolOptionsPanel);
+        var toolOptionsMargin = new MarginContainer();
+        toolOptionsMargin.AddThemeConstantOverride("margin_left", 4);
+        toolOptionsMargin.AddThemeConstantOverride("margin_top", 6);
+        toolOptionsMargin.AddThemeConstantOverride("margin_right", 4);
+        toolOptionsMargin.AddThemeConstantOverride("margin_bottom", 6);
+        toolOptionsPanel.AddChild(toolOptionsMargin);
+        _toolOptionsBar.Name = "ToolOptions";
+        _toolOptionsBar.Alignment = BoxContainer.AlignmentMode.Begin;
+        _toolOptionsBar.AddThemeConstantOverride("separation", 6);
+        toolOptionsMargin.AddChild(_toolOptionsBar);
+
+        _eraserToggle.Name = "EraserToggle";
+        _eraserToggle.Text = string.Empty;
+        _eraserToggle.Icon = GD.Load<Texture2D>("res://assets/icons/eraser.svg");
+        _eraserToggle.ExpandIcon = false;
+        _eraserToggle.Alignment = HorizontalAlignment.Center;
+        _eraserToggle.ToggleMode = true;
+        _eraserToggle.TooltipText = "Use the active drawing tool in erase mode";
+        _eraserToggle.CustomMinimumSize = new Vector2(42f, 42f);
+        _eraserToggle.AddThemeConstantOverride("icon_max_width", 24);
+        _eraserToggle.Toggled += SetEraserEnabled;
+        _toolOptionsBar.AddChild(_eraserToggle);
         UpdateToolContextLabel();
 
         var footer = new HBoxContainer { Name = "Footer" };

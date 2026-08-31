@@ -14,7 +14,9 @@ Die Oberfläche ist vertikal aufgebaut:
 4. Statusleiste am unteren Rand.
 
 Im Arbeitsbereich liegt rechts neben der linken Werkzeugleiste der eigentliche
-Canvas-Bereich. Oberhalb des Canvas befindet sich die `ToolOptionsBar`.
+Canvas-Bereich. Oberhalb des Canvas befindet sich das horizontale `ContextMenu`.
+Unterhalb davon liegt die schmale, vertikale `ToolOptionsBar` rechts neben dem
+Canvas und damit gegenüber der linken `ToolBar`.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -22,10 +24,11 @@ Canvas-Bereich. Oberhalb des Canvas befindet sich die `ToolOptionsBar`.
 ├──────────────────────────────────────────────────────────────┤
 │ Workspace / Scene information                                │
 ├──────────────┬───────────────────────────────────────────────┤
-│              │ ToolOptionsBar                                │
-│ ToolBar      ├───────────────────────────────────────────────┤
-│              │ Canvas                                        │
-├──────────────┴───────────────────────────────────────────────┤
+│              │ ContextMenu                                   │
+│ ToolBar      ├───────────────────────────────────────┬───────┤
+│              │ Canvas                                │ Tool- │
+│              │                                       │Options│
+├──────────────┴───────────────────────────────────────┴───────┤
 │ Status                                                       │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -44,10 +47,10 @@ Das primäre Werkzeug beschreibt, welche Art von Aktion ausgeführt wird.
 
 ## ToolOptionsBar
 
-Die `ToolOptionsBar` ist eine feste Optionsleiste und kein dynamisches
-`ContextMenu`. Ihre Elemente wechseln nicht abhängig von Perspective, Scene-
-Typ oder Template-Modus. Sie enthält zusätzliche Bearbeitungsoptionen, die mit
-dem primären Werkzeug kombiniert werden können.
+Die `ToolOptionsBar` ist eine feste, vertikale Optionsleiste rechts neben dem
+Canvas und kein dynamisches `ContextMenu`. Ihre Elemente wechseln nicht
+abhängig von Perspective, Scene-Typ oder Template-Modus. Sie enthält zusätzliche
+Bearbeitungsoptionen, die mit dem primären Werkzeug kombiniert werden können.
 
 Die erste Option ist der Toggle `Eraser`. Er ist ein unabhängiger
 Bearbeitungszustand und kein eigenes primäres Werkzeug:
@@ -72,6 +75,7 @@ primäre Werkzeugmodell zu verändern.
 
 ## Aktueller Stand
 
-Die Leiste zeigt den Namen des aktuell ausgewählten primären Werkzeugs als Label
-und enthält den `Eraser`-Toggle. Weitere feste Optionen können später ergänzt
-werden, ohne das primäre Werkzeugmodell zu verändern.
+Das horizontale `ContextMenu` zeigt den Namen des aktuell ausgewählten primären
+Werkzeugs als Label. Die rechte `ToolOptionsBar` enthält den `Eraser` als
+Icon-Toggle. Weitere feste Optionen können dort später vertikal ergänzt werden,
+ohne das primäre Werkzeugmodell zu verändern.
