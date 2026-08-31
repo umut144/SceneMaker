@@ -4,22 +4,17 @@ using System.Text.Json.Serialization;
 
 namespace SceneMaker.Core;
 
-public enum AuthoringAssetRole
-{
-    Terrain,
-    Prop,
-    Transition,
-}
-
 public sealed record WorkspaceGridConfiguration(
     decimal TerrainCellMeters,
     decimal AuthoringPixelsPerMeter,
     decimal GamePixelsPerMeter);
 
-public sealed record WorkspaceAssetProfile(
-    string AssetKey,
-    string Color,
-    AuthoringAssetRole? AuthoringRole = null);
+/// <summary>
+/// SceneMaker owns only enablement and authoring color for an Asset. Whether an
+/// Asset is Terrain or a Prop is PolyTools catalog data and is never overridden
+/// here.
+/// </summary>
+public sealed record WorkspaceAssetProfile(string AssetKey, string Color);
 
 public sealed class WorkspaceConfiguration
 {
@@ -47,16 +42,6 @@ public sealed class WorkspaceConfiguration
             : throw new SceneMakerDocumentException(
                 $"Workspace '{WorkspaceKey}' does not enable asset_key '{assetKey}'.");
 
-    public AuthoringAssetRole EffectiveRole(
-        WorkspaceAssetProfile profile,
-        PolyToolsCatalogAsset asset) => profile.AuthoringRole ?? asset.AssetType switch
-    {
-        PolyToolsAssetType.Terrain => AuthoringAssetRole.Terrain,
-        PolyToolsAssetType.Prop => AuthoringAssetRole.Prop,
-        _ => throw new SceneMakerDocumentException(
-            $"PolyTools asset '{asset.AssetKey}' has no supported authoring role."),
-    };
-
     public WorkspaceConfiguration WithAssetProfiles(
         IEnumerable<WorkspaceAssetProfile> assetProfiles,
         PolyToolsCatalog catalog) =>
@@ -67,7 +52,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 2;
+    public const int Version = 3;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -127,7 +112,6 @@ public static class WorkspaceConfigurationStore
             {
                 AssetKey = profile.AssetKey,
                 Color = profile.Color,
-                AuthoringRole = profile.AuthoringRole,
             }).ToList(),
         };
         return Parse(document, catalog);
@@ -152,7 +136,6 @@ public static class WorkspaceConfigurationStore
             {
                 AssetKey = profile.AssetKey,
                 Color = profile.Color,
-                AuthoringRole = profile.AuthoringRole,
             }).OrderBy(static entry => entry.AssetKey, StringComparer.Ordinal).ToList(),
         };
         var path = Path.Combine(Path.GetFullPath(workspaceDirectory), FileName);
@@ -182,9 +165,7 @@ public static class WorkspaceConfigurationStore
         AtomicTextFile.WriteNew(path, document);
     }
 
-    private static void ValidateProfile(
-        AssetProfileDocument entry,
-        PolyToolsCatalogAsset asset)
+    private static void ValidateProfile(AssetProfileDocument entry)
     {
         if (string.IsNullOrWhiteSpace(entry.AssetKey)
             || string.IsNullOrWhiteSpace(entry.Color)
@@ -194,19 +175,6 @@ public static class WorkspaceConfigurationStore
         {
             throw new SceneMakerDocumentException(
                 "Every Workspace asset profile requires asset_key and a #RRGGBB color.");
-        }
-
-        if (asset.AssetType == PolyToolsAssetType.Terrain
-            && entry.AuthoringRole is not null and not AuthoringAssetRole.Terrain)
-        {
-            throw new SceneMakerDocumentException(
-                $"PolyTools terrain '{asset.AssetKey}' cannot be assigned a Prop or Transition role.");
-        }
-        if (asset.AssetType == PolyToolsAssetType.Prop
-            && entry.AuthoringRole == AuthoringAssetRole.Terrain)
-        {
-            throw new SceneMakerDocumentException(
-                $"PolyTools prop '{asset.AssetKey}' cannot be assigned a Terrain role.");
         }
     }
 
@@ -240,12 +208,9 @@ public static class WorkspaceConfigurationStore
         SortedDictionary<string, WorkspaceAssetProfile> profiles = new(StringComparer.Ordinal);
         foreach (var entry in document.Assets)
         {
-            var asset = catalog.Resolve(entry.AssetKey);
-            ValidateProfile(entry, asset);
-            var profile = new WorkspaceAssetProfile(
-                entry.AssetKey,
-                entry.Color,
-                entry.AuthoringRole);
+            _ = catalog.Resolve(entry.AssetKey);
+            ValidateProfile(entry);
+            var profile = new WorkspaceAssetProfile(entry.AssetKey, entry.Color);
             if (!profiles.TryAdd(entry.AssetKey, profile))
             {
                 throw new SceneMakerDocumentException(
@@ -275,6 +240,5 @@ public static class WorkspaceConfigurationStore
     {
         public required string AssetKey { get; init; }
         public required string Color { get; init; }
-        public AuthoringAssetRole? AuthoringRole { get; init; }
     }
 }

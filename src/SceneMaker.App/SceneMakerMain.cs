@@ -23,19 +23,17 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _sceneLabel = new();
     private readonly Label _toolContextLabel = new();
     private readonly VSeparator _toolContextSeparator = new();
-    private readonly Label _placementLineOffsetLabel = new();
-    private readonly SpinBox _placementLineOffsetEdit = new();
+    private readonly Label _propLineOffsetLabel = new();
+    private readonly SpinBox _propLineOffsetEdit = new();
     private readonly Button _eraserToggle = new();
     private readonly Label _viewLabel = new();
     private readonly Label _statusLabel = new();
     private readonly MenuButton _settingsButton = new();
     private readonly ButtonGroup _terrainAssetButtons = new();
-    private readonly ButtonGroup _placementAssetButtons = new();
-    private readonly ButtonGroup _transitionAssetButtons = new();
+    private readonly ButtonGroup _propAssetButtons = new();
     private readonly ButtonGroup _drawingToolButtons = new();
     private readonly HBoxContainer _terrainAssetBar = new();
-    private readonly HBoxContainer _placementAssetBar = new();
-    private readonly HBoxContainer _transitionAssetBar = new();
+    private readonly HBoxContainer _propAssetBar = new();
     private readonly HBoxContainer _templateBar = new();
     private readonly HBoxContainer _mapBar = new();
     private readonly HBoxContainer _overviewNavigationBar = new();
@@ -88,8 +86,7 @@ public sealed partial class SceneMakerMain : Control
     private PolyToolsCatalog? _catalog;
     private WorkspaceConfiguration? _workspaceConfiguration;
     private TerrainDisplayCatalog? _terrainAssets;
-    private PropDisplayCatalog? _placementAssets;
-    private TransitionDisplayCatalog? _transitionAssets;
+    private PropDisplayCatalog? _propAssets;
     private string? _pendingWorkspaceParentDirectory;
     private string? _recentSessionPath;
     private string? _selectedTemplateAnchorId;
@@ -99,8 +96,7 @@ public sealed partial class SceneMakerMain : Control
     private sealed record WorkspaceAssetEditorRow(
         PolyToolsCatalogAsset Asset,
         CheckBox Enabled,
-        LineEdit Color,
-        OptionButton Role);
+        LineEdit Color);
 
     public override void _Ready()
     {
@@ -131,8 +127,7 @@ public sealed partial class SceneMakerMain : Control
         _overviewNavigationBar.AddThemeFontSizeOverride("font_size", 14);
         root.AddChild(_overviewNavigationBar);
         AddPerspectiveButton(_overviewNavigationBar, "Terrain", available: true, "Terrain foundation view");
-        AddPerspectiveButton(_overviewNavigationBar, "Placements", available: true, "Placement foundation view");
-        AddPerspectiveButton(_overviewNavigationBar, "Transitions", available: true, "Transition authoring view");
+        AddPerspectiveButton(_overviewNavigationBar, "Props", available: true, "Prop authoring view");
         AddPerspectiveButton(
             _overviewNavigationBar,
             "Scene Templates",
@@ -176,15 +171,10 @@ public sealed partial class SceneMakerMain : Control
         _contextNavigationBar.AddChild(_terrainAssetBar);
         BuildTerrainAssetBar();
 
-        _placementAssetBar.Name = "PlacementAssets";
-        _placementAssetBar.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        _contextNavigationBar.AddChild(_placementAssetBar);
-        BuildPlacementAssetBar();
-
-        _transitionAssetBar.Name = "TransitionAssets";
-        _transitionAssetBar.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        _contextNavigationBar.AddChild(_transitionAssetBar);
-        BuildTransitionAssetBar();
+        _propAssetBar.Name = "PropAssets";
+        _propAssetBar.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _contextNavigationBar.AddChild(_propAssetBar);
+        BuildPropAssetBar();
 
         _templateBar.Name = "SceneTemplates";
         _templateBar.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -250,20 +240,20 @@ public sealed partial class SceneMakerMain : Control
         _contextMenuBar.AddChild(_toolContextLabel);
         _toolContextSeparator.Name = "ToolContextSeparator";
         _contextMenuBar.AddChild(_toolContextSeparator);
-        _placementLineOffsetLabel.Name = "PlacementLineOffsetLabel";
-        _placementLineOffsetLabel.Text = "Placement Offset";
-        _placementLineOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_placementLineOffsetLabel);
-        _placementLineOffsetEdit.Name = "PlacementLineOffset";
-        _placementLineOffsetEdit.MinValue = 0;
-        _placementLineOffsetEdit.MaxValue = int.MaxValue;
-        _placementLineOffsetEdit.Step = 1;
-        _placementLineOffsetEdit.AllowGreater = false;
-        _placementLineOffsetEdit.AllowLesser = false;
-        _placementLineOffsetEdit.Suffix = " px";
-        _placementLineOffsetEdit.CustomMinimumSize = new Vector2(130f, 0f);
-        _placementLineOffsetEdit.ValueChanged += SetPlacementLineOffset;
-        _contextMenuBar.AddChild(_placementLineOffsetEdit);
+        _propLineOffsetLabel.Name = "PropLineOffsetLabel";
+        _propLineOffsetLabel.Text = "Prop Offset";
+        _propLineOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_propLineOffsetLabel);
+        _propLineOffsetEdit.Name = "PropLineOffset";
+        _propLineOffsetEdit.MinValue = 0;
+        _propLineOffsetEdit.MaxValue = int.MaxValue;
+        _propLineOffsetEdit.Step = 1;
+        _propLineOffsetEdit.AllowGreater = false;
+        _propLineOffsetEdit.AllowLesser = false;
+        _propLineOffsetEdit.Suffix = " px";
+        _propLineOffsetEdit.CustomMinimumSize = new Vector2(130f, 0f);
+        _propLineOffsetEdit.ValueChanged += SetPropLineOffset;
+        _contextMenuBar.AddChild(_propLineOffsetEdit);
         _contextMenuBar.AddThemeConstantOverride("separation", 8);
 
         var canvasColumn = new VBoxContainer
@@ -286,8 +276,7 @@ public sealed partial class SceneMakerMain : Control
         _canvas.Name = "Canvas";
         _canvas.ConfigureInteractionState(_interactionState);
         if (_terrainAssets is not null) _canvas.ConfigureTerrainAssets(_terrainAssets);
-        if (_placementAssets is not null) _canvas.ConfigurePlacementAssets(_placementAssets);
-        if (_transitionAssets is not null) _canvas.ConfigureTransitionAssets(_transitionAssets);
+        if (_propAssets is not null) _canvas.ConfigurePropAssets(_propAssets);
         _canvas.ViewChanged += UpdateViewStatus;
         _canvas.TerrainPaintRequested += PaintTerrainCell;
         _canvas.TerrainEraseRequested += EraseTerrainCell;
@@ -295,16 +284,11 @@ public sealed partial class SceneMakerMain : Control
         _canvas.TerrainFillRequested += FillTerrainRegion;
         _canvas.TerrainLineRequested += PaintTerrainLine;
         _canvas.TerrainLineEraseRequested += EraseTerrainLine;
-        _canvas.PlacementRequested += PlaceAsset;
-        _canvas.PlacementLineRequested += PlaceAssetLine;
-        _canvas.PlacementLineEraseRequested += EraseAssetLine;
-        _canvas.PlacementEraseRequested += ErasePlacement;
-        _canvas.PlacementSelectRequested += SelectPlacement;
-        _canvas.TransitionRequested += PlaceTransition;
-        _canvas.TransitionLineRequested += PlaceTransitionLine;
-        _canvas.TransitionLineEraseRequested += EraseTransitionLine;
-        _canvas.TransitionEraseRequested += EraseTransition;
-        _canvas.TransitionSelectRequested += SelectTransition;
+        _canvas.PropRequested += PlaceProp;
+        _canvas.PropLineRequested += PlacePropLine;
+        _canvas.PropLineEraseRequested += ErasePropLine;
+        _canvas.PropEraseRequested += EraseProp;
+        _canvas.PropSelectRequested += SelectProp;
         _canvas.TemplateAnchorPlaceRequested += PlaceTemplateAnchor;
         _canvas.TemplateAnchorSelectRequested += SelectTemplateAnchor;
         _canvas.TemplateAnchorMoveRequested += MoveTemplateAnchor;
@@ -401,54 +385,29 @@ public sealed partial class SceneMakerMain : Control
         _terrainAssetBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
     }
 
-    private void BuildPlacementAssetBar()
+    private void BuildPropAssetBar()
     {
-        _placementAssetBar.AddChild(new Label { Text = "Placements  ›" });
-        foreach (var asset in _placementAssets?.Assets ?? [])
+        _propAssetBar.AddChild(new Label { Text = "Props  ›" });
+        foreach (var asset in _propAssets?.Assets ?? [])
         {
             var button = new Button
             {
                 Text = asset.Name,
                 ToggleMode = true,
-                ButtonGroup = _placementAssetButtons,
+                ButtonGroup = _propAssetButtons,
                 TooltipText = $"{asset.Name} · {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} authoring px · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels})",
                 CustomMinimumSize = new Vector2(160f, 0f),
             };
             button.AddThemeColorOverride("font_color", Color.FromHtml(asset.Color));
-            button.Pressed += () => SelectPlacementAsset(asset.AssetKey);
-            _placementAssetBar.AddChild(button);
-            if (_canvas.SelectedPlacementAssetKey is null)
+            button.Pressed += () => SelectPropAsset(asset.AssetKey);
+            _propAssetBar.AddChild(button);
+            if (_canvas.SelectedPropAssetKey is null)
             {
                 button.ButtonPressed = true;
-                SelectPlacementAsset(asset.AssetKey);
+                SelectPropAsset(asset.AssetKey);
             }
         }
-        _placementAssetBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
-    }
-
-    private void BuildTransitionAssetBar()
-    {
-        _transitionAssetBar.AddChild(new Label { Text = "Transitions  ›" });
-        foreach (var asset in _transitionAssets?.Assets ?? [])
-        {
-            var button = new Button
-            {
-                Text = asset.Name,
-                ToggleMode = true,
-                ButtonGroup = _transitionAssetButtons,
-                TooltipText = $"{asset.Name} · {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} authoring px · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels})",
-                CustomMinimumSize = new Vector2(160f, 0f),
-            };
-            button.AddThemeColorOverride("font_color", Color.FromHtml(asset.Color));
-            button.Pressed += () => SelectTransitionAsset(asset.AssetKey);
-            _transitionAssetBar.AddChild(button);
-            if (_canvas.SelectedTransitionAssetKey is null)
-            {
-                button.ButtonPressed = true;
-                SelectTransitionAsset(asset.AssetKey);
-            }
-        }
-        _transitionAssetBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
+        _propAssetBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
     }
 
     private void BuildTemplateBar()
@@ -879,8 +838,7 @@ public sealed partial class SceneMakerMain : Control
     private static EditorMode EditorModeForPerspective(string perspective) => perspective switch
     {
         "Terrain" => EditorMode.Terrain,
-        "Placements" => EditorMode.Placements,
-        "Transitions" => EditorMode.Transitions,
+        "Props" => EditorMode.Props,
         "Scene Templates" => EditorMode.Templates,
         _ => throw new ArgumentOutOfRangeException(nameof(perspective)),
     };
@@ -960,7 +918,7 @@ public sealed partial class SceneMakerMain : Control
     private void ExportCurrentScene()
     {
         if (_workspace is null || _scene is null || _workspaceConfiguration is null
-            || _terrainAssets is null || _placementAssets is null || _transitionAssets is null)
+            || _terrainAssets is null || _propAssets is null)
         {
             ShowError("Load a Scene before exporting.");
             return;
@@ -972,8 +930,7 @@ public sealed partial class SceneMakerMain : Control
                 _scene,
                 _workspaceConfiguration,
                 _terrainAssets,
-                _placementAssets,
-                _transitionAssets);
+                _propAssets);
             SetStatus($"Exported Scene snapshot to '{path}'.");
         });
     }
@@ -989,35 +946,23 @@ public sealed partial class SceneMakerMain : Control
         _workspaceAssetEditorRows.Clear();
         _workspaceAssetRows.AddChild(new Label
         {
-            Text = "Assets come from the synchronized PolyTools catalog. SceneMaker owns only enablement, authoring color, and an optional Prop or Transition role.",
+            Text = "Assets come from the synchronized PolyTools catalog. SceneMaker owns only enablement and authoring color; whether an Asset is Terrain or a Prop is PolyTools data.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         foreach (var asset in _catalog.Assets)
         {
             var profile = _workspaceConfiguration.AssetProfiles
                 .SingleOrDefault(value => value.AssetKey == asset.AssetKey);
-            var row = new GridContainer { Columns = 4 };
+            var row = new GridContainer { Columns = 3 };
             var enabled = new CheckBox { Text = asset.AssetKey, ButtonPressed = profile is not null };
             enabled.CustomMinimumSize = new Vector2(180f, 0f);
             var color = NewAssetField(profile?.Color ?? string.Empty, "#RRGGBB");
-            var role = new OptionButton();
-            role.AddItem("Terrain", (int)AuthoringAssetRole.Terrain);
-            role.AddItem("Prop", (int)AuthoringAssetRole.Prop);
-            role.AddItem("Transition", (int)AuthoringAssetRole.Transition);
-            var effectiveRole = profile is null
-                ? asset.AssetType == PolyToolsAssetType.Terrain
-                    ? AuthoringAssetRole.Terrain
-                    : AuthoringAssetRole.Prop
-                : _workspaceConfiguration.EffectiveRole(profile, asset);
-            role.Select(role.GetItemIndex((int)effectiveRole));
-            role.Disabled = asset.AssetType == PolyToolsAssetType.Terrain;
             row.AddChild(enabled);
             row.AddChild(new Label { Text = asset.AssetType.ToString() });
             row.AddChild(color);
-            row.AddChild(role);
             _workspaceAssetRows.AddChild(row);
             _workspaceAssetEditorRows.Add(asset.AssetKey,
-                new WorkspaceAssetEditorRow(asset, enabled, color, role));
+                new WorkspaceAssetEditorRow(asset, enabled, color));
         }
         _workspaceAssetsDialog.PopupCentered(new Vector2I(760, 520));
     }
@@ -1038,29 +983,18 @@ public sealed partial class SceneMakerMain : Control
             foreach (var row in _workspaceAssetEditorRows.Values)
             {
                 if (!row.Enabled.ButtonPressed) continue;
-                var color = row.Color.Text.Trim();
-                var selectedRole = (AuthoringAssetRole)row.Role.GetSelectedId();
-                AuthoringAssetRole? roleOverride = row.Asset.AssetType switch
-                {
-                    PolyToolsAssetType.Terrain => null,
-                    PolyToolsAssetType.Prop when selectedRole == AuthoringAssetRole.Prop => null,
-                    _ => selectedRole,
-                };
                 profiles.Add(new WorkspaceAssetProfile(
                     row.Asset.AssetKey,
-                    color,
-                    roleOverride));
+                    row.Color.Text.Trim()));
             }
             var candidate = _workspaceConfiguration.WithAssetProfiles(profiles, _catalog);
             var terrain = TerrainDisplayCatalogLoader.Load(_catalog, candidate);
-            var placements = PropDisplayCatalogLoader.Load(_catalog, candidate);
-            var transitions = TransitionDisplayCatalogLoader.Load(_catalog, candidate);
+            var props = PropDisplayCatalogLoader.Load(_catalog, candidate);
             if (_scene is not null)
             {
                 DocumentValidation.ValidateGrid(_scene.Document, candidate.Metrics);
                 TerrainEditing.ValidateAssetReferences(_scene.Document, terrain);
-                PropEditing.ValidateAssetReferences(_scene.Document, placements, transitions);
-                TransitionEditing.ValidateAssetReferences(_scene.Document, placements, transitions);
+                PropEditing.ValidateAssetReferences(_scene.Document, props);
             }
             WorkspaceConfigurationStore.Save(_workspace.DirectoryPath, candidate);
             LoadWorkspaceAssets();
@@ -1088,8 +1022,7 @@ public sealed partial class SceneMakerMain : Control
             _catalog = null;
             _workspaceConfiguration = null;
             _terrainAssets = null;
-            _placementAssets = null;
-            _transitionAssets = null;
+            _propAssets = null;
             _scene = null;
             _selectedTemplateAnchorId = null;
             _templatePreview = null;
@@ -1138,8 +1071,7 @@ public sealed partial class SceneMakerMain : Control
         var previousCatalog = _catalog;
         var previousConfiguration = _workspaceConfiguration;
         var previousTerrainAssets = _terrainAssets;
-        var previousPlacementAssets = _placementAssets;
-        var previousTransitionAssets = _transitionAssets;
+        var previousPropAssets = _propAssets;
         try
         {
             var fullConfigPath = ResolveFileSystemPath(configPath);
@@ -1177,8 +1109,7 @@ public sealed partial class SceneMakerMain : Control
             _catalog = previousCatalog;
             _workspaceConfiguration = previousConfiguration;
             _terrainAssets = previousTerrainAssets;
-            _placementAssets = previousPlacementAssets;
-            _transitionAssets = previousTransitionAssets;
+            _propAssets = previousPropAssets;
             SetStatus($"Workspace load blocked: {exception.Message}");
         }
     }
@@ -1219,14 +1150,7 @@ public sealed partial class SceneMakerMain : Control
             _scene = SceneStore.Load(_workspace, ResolveFileSystemPath(filePath));
             DocumentValidation.ValidateGrid(_scene.Document, _workspaceConfiguration!.Metrics);
             TerrainEditing.ValidateAssetReferences(_scene.Document, _terrainAssets!);
-            PropEditing.ValidateAssetReferences(
-                _scene.Document,
-                _placementAssets!,
-                _transitionAssets!);
-            TransitionEditing.ValidateAssetReferences(
-                _scene.Document,
-                _placementAssets!,
-                _transitionAssets!);
+            PropEditing.ValidateAssetReferences(_scene.Document, _propAssets!);
             _canvas.ShowScene(_scene);
             _templatePreview = null;
             _selectedTemplateAnchorId = null;
@@ -1242,8 +1166,7 @@ public sealed partial class SceneMakerMain : Control
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
         _terrainAssetBar.Visible = mode == EditorMode.Terrain;
-        _placementAssetBar.Visible = mode == EditorMode.Placements;
-        _transitionAssetBar.Visible = mode == EditorMode.Transitions;
+        _propAssetBar.Visible = mode == EditorMode.Props;
         _templateBar.Visible = mode == EditorMode.Templates;
         _mapBar.Visible = false;
         UpdateDrawingToolAvailability();
@@ -1257,8 +1180,7 @@ public sealed partial class SceneMakerMain : Control
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
         _terrainAssetBar.Visible = false;
-        _placementAssetBar.Visible = false;
-        _transitionAssetBar.Visible = false;
+        _propAssetBar.Visible = false;
         _templateBar.Visible = false;
         _mapBar.Visible = true;
         UpdateMapControls();
@@ -1304,11 +1226,11 @@ public sealed partial class SceneMakerMain : Control
         SetStatus(enabled ? "Eraser enabled." : "Eraser disabled.");
     }
 
-    private void SetPlacementLineOffset(double value)
+    private void SetPropLineOffset(double value)
     {
         var offset = checked((int)value);
-        _interactionState.SetPlacementLineOffset(offset);
-        SetStatus($"Placement Line offset set to {offset} authoring px.");
+        _interactionState.SetPropLineOffset(offset);
+        SetStatus($"Prop Line offset set to {offset} authoring px.");
     }
 
     private void UpdateToolContextLabel()
@@ -1316,11 +1238,11 @@ public sealed partial class SceneMakerMain : Control
         _toolContextLabel.Text =
             $"{EditorToolRegistry.ModeDisplayName(_interactionState.Mode)}:"
             + EditorToolRegistry.Resolve(_interactionState.ActiveTool).DisplayName;
-        var placementLineActive = _interactionState.Mode == EditorMode.Placements
+        var propLineActive = _interactionState.Mode == EditorMode.Props
             && _interactionState.ActiveTool == EditorTool.Line;
-        _toolContextSeparator.Visible = placementLineActive;
-        _placementLineOffsetLabel.Visible = placementLineActive;
-        _placementLineOffsetEdit.Visible = placementLineActive;
+        _toolContextSeparator.Visible = propLineActive;
+        _propLineOffsetLabel.Visible = propLineActive;
+        _propLineOffsetEdit.Visible = propLineActive;
     }
 
     private void SelectTerrainAsset(string assetKey)
@@ -1330,18 +1252,11 @@ public sealed partial class SceneMakerMain : Control
         SetStatus($"Selected Terrain '{asset.Name}' ({asset.AssetKey}).");
     }
 
-    private void SelectPlacementAsset(string assetKey)
+    private void SelectPropAsset(string assetKey)
     {
-        var asset = _placementAssets!.Resolve(assetKey);
-        _canvas.SelectedPlacementAssetKey = assetKey;
-        SetStatus($"Selected Placement '{asset.Name}' · footprint {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels}).");
-    }
-
-    private void SelectTransitionAsset(string assetKey)
-    {
-        var asset = _transitionAssets!.Resolve(assetKey);
-        _canvas.SelectedTransitionAssetKey = assetKey;
-        SetStatus($"Selected Transition '{asset.Name}' · footprint {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels}).");
+        var asset = _propAssets!.Resolve(assetKey);
+        _canvas.SelectedPropAssetKey = assetKey;
+        SetStatus($"Selected Prop '{asset.Name}' · footprint {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels}).");
     }
 
     private void BeginTemplateAnchorPlacement()
@@ -1372,8 +1287,7 @@ public sealed partial class SceneMakerMain : Control
             _templatePreview = TemplateComposition.Compose(
                 _scene.Document,
                 scenes,
-                _placementAssets!,
-                _transitionAssets!,
+                _propAssets!,
                 seed);
             _canvas.ShowTemplatePreview(
                 _templatePreview.ComposedScene,
@@ -1397,7 +1311,7 @@ public sealed partial class SceneMakerMain : Control
     private void PlaceTemplateAnchor(int authoringX, int authoringY)
     {
         if (_scene is null || _workspace is null) return;
-        TryPlacementAction("Place Anchor", () =>
+        TryEditAction("Place Anchor", () =>
         {
             var before = _scene.Document.TemplateAnchors
                 .Select(static anchor => anchor.AnchorId)
@@ -1446,7 +1360,7 @@ public sealed partial class SceneMakerMain : Control
     private void MoveTemplateAnchor(string anchorId, int authoringX, int authoringY)
     {
         if (_scene is null || _workspace is null) return;
-        TryPlacementAction("Move Anchor", () =>
+        TryEditAction("Move Anchor", () =>
         {
             var document = TemplateEditing.MoveAnchor(
                 _scene.Document,
@@ -1469,7 +1383,7 @@ public sealed partial class SceneMakerMain : Control
             || _workspace is null
             || _selectedTemplateAnchorId is null)
             return;
-        TryPlacementAction("Assign Anchor Group", () =>
+        TryEditAction("Assign Anchor Group", () =>
         {
             var groupNumber = checked((int)value);
             var document = TemplateEditing.SetAnchorGroup(
@@ -1602,216 +1516,109 @@ public sealed partial class SceneMakerMain : Control
         });
     }
 
-    private void PlaceAsset(int authoringX, int authoringY)
+    private void PlaceProp(int authoringX, int authoringY)
     {
-        if (_workspace is null || _scene is null || _canvas.SelectedPlacementAssetKey is not { } assetKey)
+        if (_workspace is null || _scene is null || _canvas.SelectedPropAssetKey is not { } assetKey)
             return;
 
-        TryPlacementAction("Pencil Draw", () =>
+        TryEditAction("Pencil Draw", () =>
         {
             var document = PropEditing.Place(
                 _scene.Document,
-                _placementAssets!,
-                _transitionAssets!,
+                _propAssets!,
                 authoringX,
                 authoringY,
                 assetKey);
             SaveUpdatedScene(document);
-            var asset = _placementAssets!.Resolve(assetKey);
+            var asset = _propAssets!.Resolve(assetKey);
             SetStatus($"Placed {asset.Name} anchor at ({authoringX}, {authoringY}) authoring px.");
         });
     }
 
-    private void PlaceAssetLine(int startX, int startY, int endX, int endY)
+    private void PlacePropLine(int startX, int startY, int endX, int endY)
     {
-        if (_workspace is null || _scene is null || _canvas.SelectedPlacementAssetKey is not { } assetKey)
+        if (_workspace is null || _scene is null || _canvas.SelectedPropAssetKey is not { } assetKey)
             return;
 
-        TryPlacementAction("Line Draw", () =>
+        TryEditAction("Line Draw", () =>
         {
-            var beforeCount = _scene.Document.Placements.Count;
+            var beforeCount = _scene.Document.Props.Count;
             var document = PropEditing.PlaceLine(
                 _scene.Document,
-                _placementAssets!,
-                _transitionAssets!,
+                _propAssets!,
                 startX,
                 startY,
                 endX,
                 endY,
                 assetKey,
-                _interactionState.PlacementLineOffsetAuthoringPixels);
+                _interactionState.PropLineOffsetAuthoringPixels);
             SaveUpdatedScene(document);
             _canvas.CompleteLinePlacement();
-            var added = document.Placements.Count - beforeCount;
-            SetStatus($"Line Draw placed {added} Placement{(added == 1 ? string.Empty : "s")} with exact non-overlapping footprints.");
+            var added = document.Props.Count - beforeCount;
+            SetStatus($"Line Draw placed {added} Prop{(added == 1 ? string.Empty : "s")} with exact non-overlapping footprints.");
         });
     }
 
-    private void EraseAssetLine(int startX, int startY, int endX, int endY)
+    private void ErasePropLine(int startX, int startY, int endX, int endY)
     {
-        if (_workspace is null || _scene is null || _canvas.SelectedPlacementAssetKey is not { } assetKey)
+        if (_workspace is null || _scene is null || _canvas.SelectedPropAssetKey is not { } assetKey)
             return;
 
-        TryPlacementAction("Line Eraser", () =>
+        TryEditAction("Line Eraser", () =>
         {
-            var asset = _placementAssets!.Resolve(assetKey);
+            var asset = _propAssets!.Resolve(assetKey);
             var document = _scene.Document;
-            var beforeCount = document.Placements.Count;
+            var beforeCount = document.Props.Count;
             foreach (var anchor in PropEditing.LineAnchors(
                          asset,
                          startX,
                          startY,
                          endX,
                          endY,
-                         _interactionState.PlacementLineOffsetAuthoringPixels))
+                         _interactionState.PropLineOffsetAuthoringPixels))
             {
                 document = PropEditing.EraseAt(
                     document,
-                    _placementAssets!,
+                    _propAssets!,
                     anchor.X,
                     anchor.Y);
             }
             SaveUpdatedScene(document);
             _canvas.CompleteLinePlacement();
-            var erased = beforeCount - document.Placements.Count;
-            SetStatus($"Line Eraser removed {erased} Placement{(erased == 1 ? string.Empty : "s")}.");
+            var erased = beforeCount - document.Props.Count;
+            SetStatus($"Line Eraser removed {erased} Prop{(erased == 1 ? string.Empty : "s")}.");
         });
     }
 
-    private void PlaceTransition(int authoringX, int authoringY)
-    {
-        if (_workspace is null || _scene is null || _canvas.SelectedTransitionAssetKey is not { } assetKey)
-            return;
-
-        TryPlacementAction("Pencil Draw", () =>
-        {
-            var document = TransitionEditing.Place(
-                _scene.Document,
-                _placementAssets!,
-                _transitionAssets!,
-                authoringX,
-                authoringY,
-                assetKey);
-            SaveUpdatedScene(document);
-            var asset = _transitionAssets!.Resolve(assetKey);
-            SetStatus($"Placed {asset.Name} anchor at ({authoringX}, {authoringY}) authoring px.");
-        });
-    }
-
-    private void PlaceTransitionLine(int startX, int startY, int endX, int endY)
-    {
-        if (_workspace is null || _scene is null || _canvas.SelectedTransitionAssetKey is not { } assetKey)
-            return;
-
-        TryPlacementAction("Line Draw", () =>
-        {
-            var beforeCount = _scene.Document.Transitions.Count;
-            var document = TransitionEditing.PlaceLine(
-                _scene.Document,
-                _placementAssets!,
-                _transitionAssets!,
-                startX,
-                startY,
-                endX,
-                endY,
-                assetKey);
-            SaveUpdatedScene(document);
-            _canvas.CompleteLinePlacement();
-            var added = document.Transitions.Count - beforeCount;
-            SetStatus($"Line Draw placed {added} Transition{(added == 1 ? string.Empty : "s")} with exact non-overlapping footprints.");
-        });
-    }
-
-    private void EraseTransitionLine(int startX, int startY, int endX, int endY)
-    {
-        if (_workspace is null || _scene is null || _canvas.SelectedTransitionAssetKey is not { } assetKey)
-            return;
-
-        TryPlacementAction("Line Eraser", () =>
-        {
-            var asset = _transitionAssets!.Resolve(assetKey);
-            var document = _scene.Document;
-            var beforeCount = document.Transitions.Count;
-            foreach (var anchor in TransitionEditing.LineAnchors(
-                         asset,
-                         startX,
-                         startY,
-                         endX,
-                         endY))
-            {
-                document = TransitionEditing.EraseAt(
-                    document,
-                    _transitionAssets!,
-                    anchor.X,
-                    anchor.Y);
-            }
-            SaveUpdatedScene(document);
-            _canvas.CompleteLinePlacement();
-            var erased = beforeCount - document.Transitions.Count;
-            SetStatus($"Line Eraser removed {erased} Transition{(erased == 1 ? string.Empty : "s")}.");
-        });
-    }
-
-    private void ErasePlacement(int authoringX, int authoringY)
+    private void EraseProp(int authoringX, int authoringY)
     {
         if (_workspace is null || _scene is null) return;
-        TryPlacementAction("Eraser", () =>
+        TryEditAction("Eraser", () =>
         {
             var document = PropEditing.EraseAt(
                 _scene.Document,
-                _placementAssets!,
+                _propAssets!,
                 authoringX,
                 authoringY);
             if (ReferenceEquals(document, _scene.Document)) return;
             SaveUpdatedScene(document);
-            _canvas.SelectPlacement(null);
-            SetStatus($"Erased Placement at ({authoringX}, {authoringY}) authoring px.");
+            _canvas.SelectProp(null);
+            SetStatus($"Erased Prop at ({authoringX}, {authoringY}) authoring px.");
         });
     }
 
-    private void SelectPlacement(int authoringX, int authoringY)
+    private void SelectProp(int authoringX, int authoringY)
     {
         if (_scene is null) return;
-        var placement = PropEditing.FindAt(
+        var prop = PropEditing.FindAt(
             _scene.Document,
-            _placementAssets!,
+            _propAssets!,
             authoringX,
             authoringY);
-        _canvas.SelectPlacement(placement?.InstanceId);
-        SetStatus(placement is null
-            ? "No Placement selected."
-            : $"Selected '{placement.InstanceId}' · anchor ({placement.PositionAuthoringPx.X}, {placement.PositionAuthoringPx.Y}).");
-    }
-
-    private void EraseTransition(int authoringX, int authoringY)
-    {
-        if (_workspace is null || _scene is null) return;
-        TryPlacementAction("Eraser", () =>
-        {
-            var document = TransitionEditing.EraseAt(
-                _scene.Document,
-                _transitionAssets!,
-                authoringX,
-                authoringY);
-            if (ReferenceEquals(document, _scene.Document)) return;
-            SaveUpdatedScene(document);
-            _canvas.SelectTransition(null);
-            SetStatus($"Erased Transition at ({authoringX}, {authoringY}) authoring px.");
-        });
-    }
-
-    private void SelectTransition(int authoringX, int authoringY)
-    {
-        if (_scene is null) return;
-        var transition = TransitionEditing.FindAt(
-            _scene.Document,
-            _transitionAssets!,
-            authoringX,
-            authoringY);
-        _canvas.SelectTransition(transition?.InstanceId);
-        SetStatus(transition is null
-            ? "No Transition selected."
-            : $"Selected '{transition.InstanceId}' · anchor ({transition.PositionAuthoringPx.X}, {transition.PositionAuthoringPx.Y}).");
+        _canvas.SelectProp(prop?.InstanceId);
+        SetStatus(prop is null
+            ? "No Prop selected."
+            : $"Selected '{prop.InstanceId}' · anchor ({prop.PositionAuthoringPx.X}, {prop.PositionAuthoringPx.Y}).");
     }
 
     private void SaveUpdatedScene(SceneDocument document)
@@ -1914,7 +1721,7 @@ public sealed partial class SceneMakerMain : Control
         }
     }
 
-    private void TryPlacementAction(string operation, Action action)
+    private void TryEditAction(string operation, Action action)
     {
         try
         {
@@ -1962,12 +1769,10 @@ public sealed partial class SceneMakerMain : Control
                 $"Workspace config key '{_workspaceConfiguration.WorkspaceKey}' must match workspace '{_workspace.WorkspaceKey}'.");
         }
         _terrainAssets = TerrainDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
-        _placementAssets = PropDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
-        _transitionAssets = TransitionDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
+        _propAssets = PropDisplayCatalogLoader.Load(_catalog, _workspaceConfiguration);
         _canvas.ConfigureMetrics(_workspaceConfiguration.Metrics);
         _canvas.ConfigureTerrainAssets(_terrainAssets);
-        _canvas.ConfigurePlacementAssets(_placementAssets);
-        _canvas.ConfigureTransitionAssets(_transitionAssets);
+        _canvas.ConfigurePropAssets(_propAssets);
         UpdateSceneSizeMetrics();
         RebuildAssetBars();
     }
@@ -1975,8 +1780,7 @@ public sealed partial class SceneMakerMain : Control
     private void RebuildAssetBars()
     {
         RebuildAssetBar(_terrainAssetBar, BuildTerrainAssetBar);
-        RebuildAssetBar(_placementAssetBar, BuildPlacementAssetBar);
-        RebuildAssetBar(_transitionAssetBar, BuildTransitionAssetBar);
+        RebuildAssetBar(_propAssetBar, BuildPropAssetBar);
     }
 
     private static void RebuildAssetBar(Container container, Action build)
@@ -2014,14 +1818,7 @@ public sealed partial class SceneMakerMain : Control
             {
                 DocumentValidation.ValidateGrid(_scene.Document, _workspaceConfiguration!.Metrics);
                 TerrainEditing.ValidateAssetReferences(_scene.Document, _terrainAssets!);
-                PropEditing.ValidateAssetReferences(
-                    _scene.Document,
-                    _placementAssets!,
-                    _transitionAssets!);
-                TransitionEditing.ValidateAssetReferences(
-                    _scene.Document,
-                    _placementAssets!,
-                    _transitionAssets!);
+                PropEditing.ValidateAssetReferences(_scene.Document, _propAssets!);
             }
             _canvas.ShowScene(_scene);
             SetStatus(_scene is null

@@ -11,11 +11,11 @@ supported for compatibility. SceneMaker never discovers packages by scanning
 directories and never reads a sibling PolyTools project at runtime.
 
 The workspace configuration supplies terrain-cell size, authoring/game pixel
-densities, enabled assets, editor colors, and optional Prop/Transition role
-overrides. Prop footprints and anchors are derived from transformed PolyTools
-visible geometry and rounded outward to whole authoring pixels. Scenes store
-only semantic terrain, placements, transitions, template anchors, and exact
-PolyTools `asset_key`s.
+densities, enabled assets, and editor colors; whether an Asset is Terrain or a
+Prop is PolyTools catalog data and is never overridden. Prop footprints and
+anchors are derived from transformed PolyTools visible geometry and rounded
+outward to whole authoring pixels. Scenes store only semantic terrain, props,
+template anchors, and exact PolyTools `asset_key`s.
 
 New workspace configurations explicitly start with 1 m terrain cells at 32
 authoring pixels and 192 game pixels per meter. These values remain authored

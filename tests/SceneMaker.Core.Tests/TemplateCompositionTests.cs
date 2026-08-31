@@ -3,13 +3,13 @@ using Xunit;
 namespace SceneMaker.Core.Tests;
 
 /// <summary>
-/// Characterization tests. These pin the behaviour of <see cref="TemplateComposition"/>
-/// as it stands before Placements and Transitions are merged into a single Prop
-/// concept, so the merge can be verified against a known baseline.
+/// Behaviour of <see cref="TemplateComposition"/>: deterministic Template
+/// selection, Terrain mask semantics and the composition rules.
 ///
-/// The test named with the PRE-MERGE marker describes behaviour that the merge
-/// removes on purpose (a Template Anchor may not overwrite a Transition) and is
-/// expected to be deleted together with the Transition concept.
+/// A Template replaces everything inside its Terrain mask, so every Prop of the
+/// base Scene whose footprint intersects the mask is dropped. Before Placements
+/// and Transitions were merged into Prop, a Transition under the mask was
+/// rejected instead; that exception no longer exists.
 /// </summary>
 public sealed class TemplateCompositionTests
 {
@@ -134,7 +134,7 @@ public sealed class TemplateCompositionTests
     }
 
     [Fact]
-    public void PlacementsUnderTheTemplateMaskAreRemoved()
+    public void PropsUnderTheTemplateMaskAreRemoved()
     {
         using var workspace = TestWorkspace.Create();
         var baseScene = TestScenes.Instance(workspace);
@@ -145,35 +145,10 @@ public sealed class TemplateCompositionTests
 
         var composed = Compose(baseScene, templates, workspace, seed: 5UL).ComposedScene;
 
-        Assert.Equal(2, baseScene.Placements.Count);
-        var remaining = Assert.Single(composed.Placements);
+        Assert.Equal(2, baseScene.Props.Count);
+        var remaining = Assert.Single(composed.Props);
         Assert.Equal("stone_0002", remaining.InstanceId);
         Assert.Equal(0, remaining.PositionAuthoringPx.X);
-    }
-
-    /// <summary>
-    /// PRE-MERGE: a Template Anchor must not overwrite a Transition. Merging
-    /// Placement and Transition into Prop drops this rule — Templates then
-    /// overwrite every Prop inside their Terrain mask — so this test is expected
-    /// to be removed with the Transition concept.
-    /// </summary>
-    [Fact]
-    public void TransitionsUnderTheTemplateMaskAreRejected()
-    {
-        using var workspace = TestWorkspace.Create();
-        var baseScene = TestScenes.Instance(workspace);
-        baseScene = TransitionEditing.Place(
-            baseScene, workspace.Placements, workspace.Transitions, 64, 64, "portal");
-        baseScene = WithAnchor(baseScene, workspace, 64, 64);
-        var templates = new[] { TestScenes.Template(workspace, "tpl_a", 1) };
-
-        var exception = Assert.Throws<SceneMakerDocumentException>(
-            () => Compose(baseScene, templates, workspace, seed: 5UL));
-
-        Assert.Contains(
-            "would overwrite Transition",
-            exception.Message,
-            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -186,10 +161,10 @@ public sealed class TemplateCompositionTests
         var composed = Compose(
             baseScene, new[] { template }, workspace, seed: 11UL).ComposedScene;
 
-        var placement = Assert.Single(composed.Placements);
-        Assert.Equal("template_anchor_001.tpl_a.stone_0001", placement.InstanceId);
-        Assert.Equal(64, placement.PositionAuthoringPx.X);
-        Assert.Equal(64, placement.PositionAuthoringPx.Y);
+        var prop = Assert.Single(composed.Props);
+        Assert.Equal("template_anchor_001.tpl_a.stone_0001", prop.InstanceId);
+        Assert.Equal(64, prop.PositionAuthoringPx.X);
+        Assert.Equal(64, prop.PositionAuthoringPx.Y);
     }
 
     [Fact]
@@ -256,7 +231,7 @@ public sealed class TemplateCompositionTests
         Assert.Empty(result.Selections);
         Assert.Empty(result.EffectiveTerrainMasks);
         Assert.Equal(TerrainSignature(baseScene), TerrainSignature(result.ComposedScene));
-        Assert.Equal("stone_0001", Assert.Single(result.ComposedScene.Placements).InstanceId);
+        Assert.Equal("stone_0001", Assert.Single(result.ComposedScene.Props).InstanceId);
     }
 
     [Fact]
@@ -272,7 +247,7 @@ public sealed class TemplateCompositionTests
         _ = Compose(baseScene, new[] { template }, workspace, seed: 23UL);
 
         Assert.Equal(baseTerrain, TerrainSignature(baseScene));
-        Assert.Equal("stone_0001", Assert.Single(baseScene.Placements).InstanceId);
+        Assert.Equal("stone_0001", Assert.Single(baseScene.Props).InstanceId);
         Assert.Equal(4, template.TerrainCells.Count);
     }
 
@@ -284,8 +259,7 @@ public sealed class TemplateCompositionTests
         TemplateComposition.Compose(
             baseScene,
             workspaceScenes,
-            workspace.Placements,
-            workspace.Transitions,
+            workspace.Props,
             seed);
 
     private static SceneDocument WithAnchor(
@@ -305,8 +279,7 @@ public sealed class TemplateCompositionTests
         string assetKey = "stone") =>
         PropEditing.Place(
             scene,
-            workspace.Placements,
-            workspace.Transitions,
+            workspace.Props,
             authoringX,
             authoringY,
             assetKey);

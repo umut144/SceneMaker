@@ -14,13 +14,14 @@ public sealed class StandaloneWorkspaceTests
         WriteConfig(directory.Path, "game01", 0.5m, 32m, 192m, """
             { "asset_key": "grass", "color": "#99E550" },
             { "asset_key": "tree", "color": "#2E7D32" },
-            { "asset_key": "portal", "color": "#8E6CFF", "authoring_role": "transition" }
+            { "asset_key": "portal", "color": "#8E6CFF" }
         """);
 
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
-        var tree = PropDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
-        var portal = TransitionDisplayCatalogLoader.Load(catalog, workspace).Resolve("portal");
+        var props = PropDisplayCatalogLoader.Load(catalog, workspace);
+        var tree = props.Resolve("tree");
+        var portal = props.Resolve("portal");
 
         Assert.Equal(66, tree.FootprintWidthAuthoringPixels);
         Assert.Equal(65, tree.FootprintHeightAuthoringPixels);
@@ -39,26 +40,26 @@ public sealed class StandaloneWorkspaceTests
         WriteConfig(directory.Path, "game01", 0.5m, 32m, 192m, """
             { "asset_key": "grass", "color": "#99E550" },
             { "asset_key": "tree", "color": "#2E7D32" },
-            { "asset_key": "portal", "color": "#8E6CFF", "authoring_role": "transition" }
+            { "asset_key": "portal", "color": "#8E6CFF" }
         """);
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
         var terrain = TerrainDisplayCatalogLoader.Load(catalog, workspace);
-        var placements = PropDisplayCatalogLoader.Load(catalog, workspace);
-        var transitions = TransitionDisplayCatalogLoader.Load(catalog, workspace);
+        var props = PropDisplayCatalogLoader.Load(catalog, workspace);
         var scene = SceneDocument.Create("test", 20, 20);
 
         scene = TerrainEditing.Paint(scene, terrain, 0, 0, "grass");
-        scene = PropEditing.Place(scene, placements, transitions, 33, 0, "tree");
-        scene = TransitionEditing.Place(scene, placements, transitions, 160, 32, "portal");
+        scene = PropEditing.Place(scene, props, 33, 0, "tree");
+        scene = PropEditing.Place(scene, props, 160, 32, "portal");
         var serialized = DocumentJson.Serialize(scene);
         var restored = DocumentJson.DeserializeScene(serialized);
 
         Assert.Contains("\"asset_key\": \"tree\"", serialized, StringComparison.Ordinal);
         Assert.DoesNotContain("prop.tree", serialized, StringComparison.Ordinal);
         Assert.Equal("grass", restored.TerrainCells.Single().AssetKey);
-        Assert.Equal("tree", restored.Placements.Single().AssetKey);
-        Assert.Equal("portal", restored.Transitions.Single().AssetKey);
+        Assert.Equal(
+            new[] { "portal", "tree" },
+            restored.Props.Select(static prop => prop.AssetKey).ToArray());
     }
 
     [Fact]
@@ -91,7 +92,7 @@ public sealed class StandaloneWorkspaceTests
     }
 
     [Fact]
-    public void PlacementLineOffsetAddsSpaceBetweenFootprints()
+    public void PropLineOffsetAddsSpaceBetweenFootprints()
     {
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "offset01");
@@ -110,7 +111,7 @@ public sealed class StandaloneWorkspaceTests
             100,
             300,
             100,
-            placementOffsetAuthoringPixels: 10);
+            offsetAuthoringPixels: 10);
 
         Assert.Equal([100, 166, 232, 298], withoutOffset.Select(static anchor => anchor.X));
         Assert.Equal([100, 176, 252], withOffset.Select(static anchor => anchor.X));
@@ -183,7 +184,7 @@ public sealed class StandaloneWorkspaceTests
     }
 
     [Fact]
-    public void WorkspaceProfilesSaveOnlySceneMakerOwnedOverrides()
+    public void WorkspaceProfilesSaveOnlyEnablementAndColor()
     {
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "game03");
@@ -193,7 +194,7 @@ public sealed class StandaloneWorkspaceTests
             new WorkspaceGridConfiguration(1m, 10m, 40m),
             [
                 new WorkspaceAssetProfile("grass", "#99E550"),
-                new WorkspaceAssetProfile("portal", "#8E6CFF", AuthoringAssetRole.Transition),
+                new WorkspaceAssetProfile("portal", "#8E6CFF"),
             ],
             catalog);
 
@@ -201,9 +202,10 @@ public sealed class StandaloneWorkspaceTests
         var json = File.ReadAllText(Path.Combine(directory.Path, "config.json"));
         var restored = WorkspaceConfigurationStore.Load(directory.Path, catalog);
 
-        Assert.Equal(AuthoringAssetRole.Transition, restored.ResolveAssetProfile("portal").AuthoringRole);
+        Assert.Equal("#8E6CFF", restored.ResolveAssetProfile("portal").Color);
         Assert.DoesNotContain("footprint", json, StringComparison.Ordinal);
         Assert.DoesNotContain("anchor", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("authoring_role", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -231,8 +233,7 @@ public sealed class StandaloneWorkspaceTests
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var configuration = WorkspaceConfigurationStore.Load(directory.Path, catalog);
         var terrain = TerrainDisplayCatalogLoader.Load(catalog, configuration);
-        var placements = PropDisplayCatalogLoader.Load(catalog, configuration);
-        var transitions = TransitionDisplayCatalogLoader.Load(catalog, configuration);
+        var props = PropDisplayCatalogLoader.Load(catalog, configuration);
         var scene = TerrainEditing.Paint(
             SceneDocument.Create("field", 1, 1), terrain, 0, 0, "grass");
         var workspace = new LoadedWorkspace(directory.Path, "game05");
@@ -241,8 +242,7 @@ public sealed class StandaloneWorkspaceTests
             new LoadedScene(Path.Combine(directory.Path, "scenes", "field.scene.json"), scene),
             configuration,
             terrain,
-            placements,
-            transitions);
+            props);
         var json = File.ReadAllText(path);
 
         Assert.Contains("\"asset_key\": \"grass\"", json, StringComparison.Ordinal);
@@ -284,7 +284,7 @@ public sealed class StandaloneWorkspaceTests
         File.WriteAllText(Path.Combine(directory, WorkspaceConfigurationStore.FileName), $$"""
         {
           "format": "scene_maker_workspace",
-          "version": 2,
+          "version": 3,
           "workspace_key": "{{workspaceKey}}",
           "grid": {
             "terrain_cell_meters": {{terrainCellMeters.ToString(CultureInfo.InvariantCulture)}},

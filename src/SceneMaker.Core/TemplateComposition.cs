@@ -25,21 +25,22 @@ public sealed record TemplateCompositionResult(
 /// Produces an ephemeral Scene Instance from an unchanged authored base Scene
 /// and a deterministic selection of Scene Templates. It never persists or
 /// mutates either source document.
+///
+/// A Template replaces everything inside its Terrain mask: Props of the base
+/// Scene whose footprint intersects the mask are dropped from the composition.
 /// </summary>
 public static class TemplateComposition
 {
     public static TemplateCompositionResult Compose(
         SceneDocument baseScene,
         IEnumerable<SceneDocument> workspaceScenes,
-        PropDisplayCatalog placementAssets,
-        TransitionDisplayCatalog transitionAssets,
+        PropDisplayCatalog propAssets,
         ulong seed)
     {
         ArgumentNullException.ThrowIfNull(baseScene);
         ArgumentNullException.ThrowIfNull(workspaceScenes);
-        ArgumentNullException.ThrowIfNull(placementAssets);
-        ArgumentNullException.ThrowIfNull(transitionAssets);
-        DocumentValidation.ValidateGrid(baseScene, placementAssets.Metrics);
+        ArgumentNullException.ThrowIfNull(propAssets);
+        DocumentValidation.ValidateGrid(baseScene, propAssets.Metrics);
         if (baseScene.SceneKind != SceneKind.Instance)
             throw new SceneMakerDocumentException(
                 "Only a Scene Instance can receive Scene Templates.");
@@ -48,7 +49,7 @@ public static class TemplateComposition
             .Where(static scene => scene is not null)
             .Select(scene =>
             {
-                DocumentValidation.ValidateGrid(scene, placementAssets.Metrics);
+                DocumentValidation.ValidateGrid(scene, propAssets.Metrics);
                 return scene;
             })
             .Where(static scene => scene.SceneKind == SceneKind.Template)
@@ -57,51 +58,34 @@ public static class TemplateComposition
         var selected = Select(baseScene.TemplateAnchors, templates, seed);
 
         var terrain = baseScene.TerrainCells.ToDictionary(
-            static cell => (cell.X, cell.Y),
+            static cell => new TerrainCellCoordinate(cell.X, cell.Y),
             static cell => cell.AssetKey);
-        var placements = baseScene.Placements.ToList();
-        var transitions = baseScene.Transitions.ToList();
-        List<(SelectedTemplate Candidate, HashSet<(int X, int Y)> Mask)> masks = [];
+        var props = baseScene.Props.ToList();
+        List<(SelectedTemplate Candidate, HashSet<TerrainCellCoordinate> Mask)> masks = [];
         foreach (var candidate in selected)
         {
-            var translation = Translation(candidate.Anchor, candidate.Template, placementAssets.Metrics);
+            var translation = Translation(candidate.Anchor, candidate.Template, propAssets.Metrics);
             var mask = TranslateTerrainMask(baseScene, candidate.Template, translation);
             masks.Add((candidate, mask));
-            RejectTransitionMaskIntersection(
-                transitions,
-                transitionAssets,
-                mask,
-                candidate.Anchor.AnchorId);
 
             foreach (var cell in candidate.Template.TerrainCells)
             {
-                terrain[(checked(cell.X + translation.CellX), checked(cell.Y + translation.CellY))] =
-                    cell.AssetKey;
+                terrain[new TerrainCellCoordinate(
+                    checked(cell.X + translation.CellX),
+                    checked(cell.Y + translation.CellY))] = cell.AssetKey;
             }
 
-            placements = placements
-                .Where(placement => !FootprintIntersectsMask(
+            props = props
+                .Where(prop => !FootprintIntersectsMask(
                     PropEditing.BoundsFor(
-                        placementAssets.Resolve(placement.AssetKey),
-                        placement.PositionAuthoringPx.X,
-                        placement.PositionAuthoringPx.Y),
+                        propAssets.Resolve(prop.AssetKey),
+                        prop.PositionAuthoringPx.X,
+                        prop.PositionAuthoringPx.Y),
                     mask,
-                    placementAssets.Metrics))
+                    propAssets.Metrics))
                 .ToList();
-            transitions = transitions
-                .Where(transition => !FootprintIntersectsMask(
-                    TransitionEditing.BoundsFor(
-                        transitionAssets.Resolve(transition.AssetKey),
-                        transition.PositionAuthoringPx.X,
-                        transition.PositionAuthoringPx.Y),
-                    mask,
-                    transitionAssets.Metrics))
-                .ToList();
-
-            placements.AddRange(candidate.Template.Placements.Select(placement =>
-                TranslatePlacement(candidate.Anchor, candidate.Template, placement, translation)));
-            transitions.AddRange(candidate.Template.Transitions.Select(transition =>
-                TranslateTransition(candidate.Anchor, candidate.Template, transition, translation)));
+            props.AddRange(candidate.Template.Props.Select(prop =>
+                TranslateProp(candidate.Anchor, candidate.Template, prop, translation)));
         }
 
         var composed = baseScene with
@@ -116,17 +100,13 @@ public static class TemplateComposition
                     AssetKey = value.Value,
                 })
                 .ToList(),
-            Placements = placements
-                .OrderBy(static value => value.InstanceId, StringComparer.Ordinal)
-                .ToList(),
-            Transitions = transitions
+            Props = props
                 .OrderBy(static value => value.InstanceId, StringComparer.Ordinal)
                 .ToList(),
         };
-        DocumentValidation.ValidateGrid(composed, placementAssets.Metrics);
-        PropEditing.ValidateAssetReferences(composed, placementAssets, transitionAssets);
-        TransitionEditing.ValidateAssetReferences(composed, placementAssets, transitionAssets);
-        ValidateTerrainCoverage(composed, placementAssets, transitionAssets);
+        DocumentValidation.ValidateGrid(composed, propAssets.Metrics);
+        PropEditing.ValidateAssetReferences(composed, propAssets);
+        ValidateTerrainCoverage(composed, propAssets);
         return new TemplateCompositionResult(
             composed,
             selected.Select(static value => new TemplateSelection(
@@ -137,9 +117,9 @@ public static class TemplateComposition
     }
 
     private static IReadOnlyList<TemplateTerrainMask> EffectiveTerrainMasks(
-        IReadOnlyList<(SelectedTemplate Candidate, HashSet<(int X, int Y)> Mask)> masks)
+        IReadOnlyList<(SelectedTemplate Candidate, HashSet<TerrainCellCoordinate> Mask)> masks)
     {
-        HashSet<(int X, int Y)> claimedByLaterTemplate = [];
+        HashSet<TerrainCellCoordinate> claimedByLaterTemplate = [];
         List<TemplateTerrainMask> result = [];
         for (var index = masks.Count - 1; index >= 0; index--)
         {
@@ -200,6 +180,10 @@ public static class TemplateComposition
     private static ulong MixSeed(ulong seed, int groupNumber) =>
         seed ^ (unchecked((ulong)(uint)groupNumber) * 0x9E3779B97F4A7C15UL);
 
+    /// <summary>
+    /// Anchor positions and Template insertion anchors are both validated to sit
+    /// on the WorldGrid, so their difference is always a whole number of cells.
+    /// </summary>
     private static TemplateTranslation Translation(
         TemplateAnchorDocument anchor,
         SceneDocument template,
@@ -209,20 +193,15 @@ public static class TemplateComposition
         var authoringX = checked(anchor.PositionAuthoringPx.X - insertion.X);
         var authoringY = checked(anchor.PositionAuthoringPx.Y - insertion.Y);
         var step = metrics.AuthoringPixelsPerTerrainCell;
-        if (authoringX % step != 0 || authoringY % step != 0)
-        {
-            throw new SceneMakerDocumentException(
-                $"Template Anchor '{anchor.AnchorId}' and Template '{template.SceneId}' must produce a WorldGrid-aligned Terrain translation.");
-        }
         return new TemplateTranslation(authoringX, authoringY, authoringX / step, authoringY / step);
     }
 
-    private static HashSet<(int X, int Y)> TranslateTerrainMask(
+    private static HashSet<TerrainCellCoordinate> TranslateTerrainMask(
         SceneDocument baseScene,
         SceneDocument template,
         TemplateTranslation translation)
     {
-        HashSet<(int X, int Y)> mask = [];
+        HashSet<TerrainCellCoordinate> mask = [];
         foreach (var cell in template.TerrainCells)
         {
             var x = checked(cell.X + translation.CellX);
@@ -233,38 +212,23 @@ public static class TemplateComposition
                 throw new SceneMakerDocumentException(
                     $"Template '{template.SceneId}' Terrain at ({cell.X}, {cell.Y}) lies outside Scene Instance '{baseScene.SceneId}' after placement.");
             }
-            mask.Add((x, y));
+            mask.Add(new TerrainCellCoordinate(x, y));
         }
         return mask;
     }
 
-    private static PropDocument TranslatePlacement(
+    private static PropDocument TranslateProp(
         TemplateAnchorDocument anchor,
         SceneDocument template,
-        PropDocument placement,
+        PropDocument prop,
         TemplateTranslation translation) => new()
     {
-        InstanceId = DerivedInstanceId(anchor, template, placement.InstanceId),
-        AssetKey = placement.AssetKey,
+        InstanceId = DerivedInstanceId(anchor, template, prop.InstanceId),
+        AssetKey = prop.AssetKey,
         PositionAuthoringPx = new AuthoringPixelPosition
         {
-            X = checked(placement.PositionAuthoringPx.X + translation.AuthoringX),
-            Y = checked(placement.PositionAuthoringPx.Y + translation.AuthoringY),
-        },
-    };
-
-    private static TransitionDocument TranslateTransition(
-        TemplateAnchorDocument anchor,
-        SceneDocument template,
-        TransitionDocument transition,
-        TemplateTranslation translation) => new()
-    {
-        InstanceId = DerivedInstanceId(anchor, template, transition.InstanceId),
-        AssetKey = transition.AssetKey,
-        PositionAuthoringPx = new AuthoringPixelPosition
-        {
-            X = checked(transition.PositionAuthoringPx.X + translation.AuthoringX),
-            Y = checked(transition.PositionAuthoringPx.Y + translation.AuthoringY),
+            X = checked(prop.PositionAuthoringPx.X + translation.AuthoringX),
+            Y = checked(prop.PositionAuthoringPx.Y + translation.AuthoringY),
         },
     };
 
@@ -276,79 +240,25 @@ public static class TemplateComposition
 
     private static bool FootprintIntersectsMask(
         PropBoundsAuthoringPixels bounds,
-        IReadOnlySet<(int X, int Y)> mask,
-        WorkspaceMetrics metrics)
-    {
-        var step = metrics.AuthoringPixelsPerTerrainCell;
-        var firstX = bounds.Left / step;
-        var lastX = checked(bounds.Right - 1) / step;
-        var firstY = bounds.Bottom / step;
-        var lastY = checked(bounds.Top - 1) / step;
-        for (var y = firstY; y <= lastY; y++)
-        {
-            for (var x = firstX; x <= lastX; x++)
-            {
-                if (mask.Contains((x, y))) return true;
-            }
-        }
-        return false;
-    }
-
-    private static void RejectTransitionMaskIntersection(
-        IEnumerable<TransitionDocument> transitions,
-        TransitionDisplayCatalog assets,
-        IReadOnlySet<(int X, int Y)> mask,
-        string anchorId)
-    {
-        foreach (var transition in transitions)
-        {
-            var asset = assets.Resolve(transition.AssetKey);
-            var bounds = TransitionEditing.BoundsFor(
-                asset,
-                transition.PositionAuthoringPx.X,
-                transition.PositionAuthoringPx.Y);
-            if (FootprintIntersectsMask(bounds, mask, assets.Metrics))
-            {
-                throw new SceneMakerDocumentException(
-                    $"Template Anchor '{anchorId}' would overwrite Transition '{transition.InstanceId}'. Transitions remain authored only on the Scene Instance.");
-            }
-        }
-    }
+        IReadOnlySet<TerrainCellCoordinate> mask,
+        WorkspaceMetrics metrics) =>
+        TerrainCoverage.IntersectedCells(bounds, metrics).Any(mask.Contains);
 
     private static void ValidateTerrainCoverage(
         SceneDocument scene,
-        PropDisplayCatalog placements,
-        TransitionDisplayCatalog transitions)
+        PropDisplayCatalog propAssets)
     {
-        foreach (var placement in scene.Placements)
+        foreach (var prop in scene.Props)
         {
             var bounds = PropEditing.BoundsFor(
-                placements.Resolve(placement.AssetKey),
-                placement.PositionAuthoringPx.X,
-                placement.PositionAuthoringPx.Y);
-            ThrowIfMissingTerrain(scene, bounds, "Placement", placement.InstanceId, placements.Metrics);
+                propAssets.Resolve(prop.AssetKey),
+                prop.PositionAuthoringPx.X,
+                prop.PositionAuthoringPx.Y);
+            var missing = TerrainCoverage.MissingCells(scene, bounds, propAssets.Metrics);
+            if (missing.Count == 0) continue;
+            throw new SceneMakerDocumentException(
+                $"Composed Prop '{prop.InstanceId}' lacks Terrain at {TerrainCoverage.FormatMissingCells(missing)}.");
         }
-        foreach (var transition in scene.Transitions)
-        {
-            var bounds = TransitionEditing.BoundsFor(
-                transitions.Resolve(transition.AssetKey),
-                transition.PositionAuthoringPx.X,
-                transition.PositionAuthoringPx.Y);
-            ThrowIfMissingTerrain(scene, bounds, "Transition", transition.InstanceId, transitions.Metrics);
-        }
-    }
-
-    private static void ThrowIfMissingTerrain(
-        SceneDocument scene,
-        PropBoundsAuthoringPixels bounds,
-        string label,
-        string instanceId,
-        WorkspaceMetrics metrics)
-    {
-        var missing = TerrainCoverage.MissingCells(scene, bounds, metrics);
-        if (missing.Count == 0) return;
-        throw new SceneMakerDocumentException(
-            $"Composed {label} '{instanceId}' lacks Terrain at {TerrainCoverage.FormatMissingCells(missing)}.");
     }
 
     private sealed record SelectedTemplate(

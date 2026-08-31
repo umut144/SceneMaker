@@ -10,7 +10,7 @@ namespace SceneMaker.Core;
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 1;
+    public const int Version = 2;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -28,13 +28,12 @@ public static class SceneExport
         LoadedScene scene,
         WorkspaceConfiguration configuration,
         TerrainDisplayCatalog terrainAssets,
-        PropDisplayCatalog placementAssets,
-        TransitionDisplayCatalog transitionAssets)
+        PropDisplayCatalog propAssets)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(configuration);
-        Validate(scene.Document, configuration, terrainAssets, placementAssets, transitionAssets);
+        Validate(scene.Document, configuration, terrainAssets, propAssets);
         var document = new ExportDocument
         {
             Format = Format,
@@ -46,8 +45,7 @@ public static class SceneExport
                 AuthoringPixelsPerMeter = configuration.Grid.AuthoringPixelsPerMeter,
                 GamePixelsPerMeter = configuration.Grid.GamePixelsPerMeter,
             },
-            AssetProfiles = ExportProfiles(
-                configuration, placementAssets, transitionAssets),
+            AssetProfiles = ExportProfiles(configuration, propAssets),
             Scene = scene.Document,
         };
         var directory = Path.Combine(workspace.DirectoryPath, DirectoryName);
@@ -58,95 +56,53 @@ public static class SceneExport
 
     private static List<ExportAssetProfileDocument> ExportProfiles(
         WorkspaceConfiguration configuration,
-        PropDisplayCatalog placementAssets,
-        TransitionDisplayCatalog transitionAssets)
+        PropDisplayCatalog propAssets)
     {
-        var placements = placementAssets.Assets.ToDictionary(
-            static asset => asset.AssetKey, StringComparer.Ordinal);
-        var transitions = transitionAssets.Assets.ToDictionary(
+        var props = propAssets.Assets.ToDictionary(
             static asset => asset.AssetKey, StringComparer.Ordinal);
         return configuration.AssetProfiles
             .OrderBy(static profile => profile.AssetKey, StringComparer.Ordinal)
-            .Select(profile =>
-            {
-                if (placements.TryGetValue(profile.AssetKey, out var placement))
+            .Select(profile => props.TryGetValue(profile.AssetKey, out var prop)
+                ? new ExportAssetProfileDocument
                 {
-                    return SpatialProfile(
-                        placement.AssetKey,
-                        placement.WidthMeters,
-                        placement.HeightMeters,
-                        placement.AnchorXMeters,
-                        placement.AnchorYMeters);
+                    AssetKey = prop.AssetKey,
+                    FootprintMeters = new ExportSizeDocument
+                    {
+                        Width = prop.WidthMeters,
+                        Height = prop.HeightMeters,
+                    },
+                    AnchorMeters = new ExportPointDocument
+                    {
+                        X = prop.AnchorXMeters,
+                        Y = prop.AnchorYMeters,
+                    },
                 }
-                if (transitions.TryGetValue(profile.AssetKey, out var transition))
-                {
-                    return SpatialProfile(
-                        transition.AssetKey,
-                        transition.WidthMeters,
-                        transition.HeightMeters,
-                        transition.AnchorXMeters,
-                        transition.AnchorYMeters);
-                }
-                return new ExportAssetProfileDocument { AssetKey = profile.AssetKey };
-            })
+                : new ExportAssetProfileDocument { AssetKey = profile.AssetKey })
             .ToList();
     }
-
-    private static ExportAssetProfileDocument SpatialProfile(
-        string assetKey,
-        decimal width,
-        decimal height,
-        decimal anchorX,
-        decimal anchorY) => new()
-    {
-        AssetKey = assetKey,
-        FootprintMeters = new ExportSizeDocument { Width = width, Height = height },
-        AnchorMeters = new ExportPointDocument { X = anchorX, Y = anchorY },
-    };
 
     private static void Validate(
         SceneDocument scene,
         WorkspaceConfiguration configuration,
         TerrainDisplayCatalog terrainAssets,
-        PropDisplayCatalog placementAssets,
-        TransitionDisplayCatalog transitionAssets)
+        PropDisplayCatalog propAssets)
     {
         DocumentValidation.ValidateGrid(scene, configuration.Metrics);
         TerrainEditing.ValidateAssetReferences(scene, terrainAssets);
-        PropEditing.ValidateAssetReferences(scene, placementAssets, transitionAssets);
-        TransitionEditing.ValidateAssetReferences(scene, placementAssets, transitionAssets);
-        foreach (var placement in scene.Placements)
+        PropEditing.ValidateAssetReferences(scene, propAssets);
+        foreach (var prop in scene.Props)
         {
             var missing = TerrainCoverage.MissingCells(
                 scene,
                 PropEditing.BoundsFor(
-                    placementAssets.Resolve(placement.AssetKey),
-                    placement.PositionAuthoringPx.X,
-                    placement.PositionAuthoringPx.Y),
+                    propAssets.Resolve(prop.AssetKey),
+                    prop.PositionAuthoringPx.X,
+                    prop.PositionAuthoringPx.Y),
                 configuration.Metrics);
-            RequireTerrainCoverage("Placement", placement.InstanceId, missing);
+            if (missing.Count == 0) continue;
+            throw new SceneMakerDocumentException(
+                $"Cannot export Prop '{prop.InstanceId}': Terrain is missing at {TerrainCoverage.FormatMissingCells(missing)}.");
         }
-        foreach (var transition in scene.Transitions)
-        {
-            var missing = TerrainCoverage.MissingCells(
-                scene,
-                TransitionEditing.BoundsFor(
-                    transitionAssets.Resolve(transition.AssetKey),
-                    transition.PositionAuthoringPx.X,
-                    transition.PositionAuthoringPx.Y),
-                configuration.Metrics);
-            RequireTerrainCoverage("Transition", transition.InstanceId, missing);
-        }
-    }
-
-    private static void RequireTerrainCoverage(
-        string label,
-        string instanceId,
-        IReadOnlyList<TerrainCellCoordinate> missing)
-    {
-        if (missing.Count == 0) return;
-        throw new SceneMakerDocumentException(
-            $"Cannot export {label} '{instanceId}': Terrain is missing at {TerrainCoverage.FormatMissingCells(missing)}.");
     }
 
     private sealed record ExportDocument

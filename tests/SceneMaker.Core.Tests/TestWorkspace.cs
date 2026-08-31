@@ -12,9 +12,8 @@ namespace SceneMaker.Core.Tests;
 /// therefore covers exactly one Terrain cell, which keeps coordinate assertions
 /// readable: an anchor at (64, 64) occupies Terrain cell (2, 2).
 ///
-/// Assets: <c>grass</c> and <c>sand</c> are PolyTools terrain, <c>stone</c> is a
-/// PolyTools prop, and <c>portal</c> is a PolyTools prop that this Workspace
-/// overrides into the Transition role.
+/// Assets: <c>grass</c> and <c>sand</c> are PolyTools terrain, <c>stone</c> and
+/// <c>portal</c> are PolyTools props.
 /// </summary>
 internal sealed class TestWorkspace : IDisposable
 {
@@ -25,23 +24,20 @@ internal sealed class TestWorkspace : IDisposable
         PolyToolsCatalog catalog,
         WorkspaceConfiguration configuration,
         TerrainDisplayCatalog terrain,
-        PropDisplayCatalog placements,
-        TransitionDisplayCatalog transitions)
+        PropDisplayCatalog props)
     {
         RootPath = rootPath;
         Catalog = catalog;
         Configuration = configuration;
         Terrain = terrain;
-        Placements = placements;
-        Transitions = transitions;
+        Props = props;
     }
 
     public string RootPath { get; }
     public PolyToolsCatalog Catalog { get; }
     public WorkspaceConfiguration Configuration { get; }
     public TerrainDisplayCatalog Terrain { get; }
-    public PropDisplayCatalog Placements { get; }
-    public TransitionDisplayCatalog Transitions { get; }
+    public PropDisplayCatalog Props { get; }
     public WorkspaceMetrics Metrics => Configuration.Metrics;
 
     public static TestWorkspace Create(string worldKey = "test_world")
@@ -59,8 +55,7 @@ internal sealed class TestWorkspace : IDisposable
             catalog,
             configuration,
             TerrainDisplayCatalogLoader.Load(catalog, configuration),
-            PropDisplayCatalogLoader.Load(catalog, configuration),
-            TransitionDisplayCatalogLoader.Load(catalog, configuration));
+            PropDisplayCatalogLoader.Load(catalog, configuration));
     }
 
     public void Dispose() => Directory.Delete(RootPath, recursive: true);
@@ -72,7 +67,7 @@ internal sealed class TestWorkspace : IDisposable
             $$"""
             {
               "format": "scene_maker_workspace",
-              "version": 2,
+              "version": 3,
               "workspace_key": "{{worldKey}}",
               "grid": {
                 "terrain_cell_meters": 1.0,
@@ -81,7 +76,7 @@ internal sealed class TestWorkspace : IDisposable
               },
               "assets": [
                 { "asset_key": "grass", "color": "#99E550" },
-                { "asset_key": "portal", "color": "#8E6CFF", "authoring_role": "transition" },
+                { "asset_key": "portal", "color": "#8E6CFF" },
                 { "asset_key": "sand", "color": "#E5C07B" },
                 { "asset_key": "stone", "color": "#808080" }
               ]

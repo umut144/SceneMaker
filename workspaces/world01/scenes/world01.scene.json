@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 5,
+  "version": 6,
   "scene_id": "world01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -49805,7 +49805,7 @@
       "asset_key": "grass"
     }
   ],
-  "placements": [
+  "props": [
     {
       "instance_id": "ankh_0001",
       "asset_key": "ankh",
@@ -49831,7 +49831,6 @@
       }
     }
   ],
-  "transitions": [],
   "template_definition": null,
   "template_anchors": []
 }

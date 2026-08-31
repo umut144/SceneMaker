@@ -26,11 +26,9 @@ public sealed partial class SceneCanvas : Control
     private SceneDocument? _templatePreview;
     private IReadOnlyList<TemplateTerrainMask> _templatePreviewMasks = [];
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
-    private PropDisplayCatalog? _placementAssets;
-    private TransitionDisplayCatalog? _transitionAssets;
+    private PropDisplayCatalog? _propAssets;
     private EditorInteractionState _interactionState = new();
-    private string? _selectedPlacementInstanceId;
-    private string? _selectedTransitionInstanceId;
+    private string? _selectedPropInstanceId;
     private string? _selectedTemplateAnchorId;
     private string? _draggedTemplateAnchorId;
     private (int X, int Y)? _draggedTemplateAnchorPosition;
@@ -61,8 +59,7 @@ public sealed partial class SceneCanvas : Control
     public CanvasViewState ViewState { get; private set; } = new();
     public LoadedScene? Scene => _scene;
     public string? SelectedTerrainAssetKey { get; set; }
-    public string? SelectedPlacementAssetKey { get; set; }
-    public string? SelectedTransitionAssetKey { get; set; }
+    public string? SelectedPropAssetKey { get; set; }
     public EditorMode Mode => _interactionState.Mode;
     public EditorTool ActiveTool => _interactionState.ActiveTool;
     public bool EraserEnabled => _interactionState.EraserEnabled;
@@ -73,16 +70,11 @@ public sealed partial class SceneCanvas : Control
     public event Action<int, int>? TerrainFillRequested;
     public event Action<int, int, int, int>? TerrainLineRequested;
     public event Action<int, int, int, int>? TerrainLineEraseRequested;
-    public event Action<int, int>? PlacementRequested;
-    public event Action<int, int, int, int>? PlacementLineRequested;
-    public event Action<int, int, int, int>? PlacementLineEraseRequested;
-    public event Action<int, int>? PlacementEraseRequested;
-    public event Action<int, int>? PlacementSelectRequested;
-    public event Action<int, int>? TransitionRequested;
-    public event Action<int, int, int, int>? TransitionLineRequested;
-    public event Action<int, int, int, int>? TransitionLineEraseRequested;
-    public event Action<int, int>? TransitionEraseRequested;
-    public event Action<int, int>? TransitionSelectRequested;
+    public event Action<int, int>? PropRequested;
+    public event Action<int, int, int, int>? PropLineRequested;
+    public event Action<int, int, int, int>? PropLineEraseRequested;
+    public event Action<int, int>? PropEraseRequested;
+    public event Action<int, int>? PropSelectRequested;
     public event Action<int, int>? TemplateAnchorPlaceRequested;
     public event Action<int, int>? TemplateAnchorSelectRequested;
     public event Action<string, int, int>? TemplateAnchorMoveRequested;
@@ -138,17 +130,10 @@ public sealed partial class SceneCanvas : Control
         QueueRedraw();
     }
 
-    public void ConfigurePlacementAssets(PropDisplayCatalog catalog)
+    public void ConfigurePropAssets(PropDisplayCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        _placementAssets = catalog;
-        QueueRedraw();
-    }
-
-    public void ConfigureTransitionAssets(TransitionDisplayCatalog catalog)
-    {
-        ArgumentNullException.ThrowIfNull(catalog);
-        _transitionAssets = catalog;
+        _propAssets = catalog;
         QueueRedraw();
     }
 
@@ -158,8 +143,7 @@ public sealed partial class SceneCanvas : Control
         _templatePreview = null;
         _templatePreviewMasks = [];
         ViewState = new CanvasViewState();
-        _selectedPlacementInstanceId = null;
-        _selectedTransitionInstanceId = null;
+        _selectedPropInstanceId = null;
         _selectedTemplateAnchorId = null;
         _draggedTemplateAnchorId = null;
         _draggedTemplateAnchorPosition = null;
@@ -187,15 +171,9 @@ public sealed partial class SceneCanvas : Control
         QueueRedraw();
     }
 
-    public void SelectPlacement(string? instanceId)
+    public void SelectProp(string? instanceId)
     {
-        _selectedPlacementInstanceId = instanceId;
-        QueueRedraw();
-    }
-
-    public void SelectTransition(string? instanceId)
-    {
-        _selectedTransitionInstanceId = instanceId;
+        _selectedPropInstanceId = instanceId;
         QueueRedraw();
     }
 
@@ -244,7 +222,7 @@ public sealed partial class SceneCanvas : Control
         if (input is not InputEventKey keyEvent) return;
 
         if (keyEvent.Pressed
-            && (Mode is EditorMode.Placements or EditorMode.Transitions)
+            && Mode == EditorMode.Props
             && ActiveTool == EditorTool.Line
             && HandleLineKey(keyEvent.Keycode))
         {
@@ -338,32 +316,26 @@ public sealed partial class SceneCanvas : Control
 
         if (EraserEnabled)
         {
-            if (Mode == EditorMode.Placements)
-                PlacementLineEraseRequested?.Invoke(start.X, start.Y, end.X, end.Y);
-            else
-                TransitionLineEraseRequested?.Invoke(start.X, start.Y, end.X, end.Y);
+            PropLineEraseRequested?.Invoke(start.X, start.Y, end.X, end.Y);
             return true;
         }
 
-        var preview = CurrentLinePreview(start, end);
+        var preview = PropLinePreview(start, end);
         var invalidCount = preview.Count(candidate => !candidate.Validation.IsValid);
         if (invalidCount > 0)
         {
             ToolStatusRequested?.Invoke(
-                $"Line Draw blocked: {invalidCount} of {preview.Count} {EditorToolRegistry.ModeDisplayName(Mode)} previews are invalid.");
+                $"Line Draw blocked: {invalidCount} of {preview.Count} Prop previews are invalid.");
             return true;
         }
 
-        if (Mode == EditorMode.Placements)
-            PlacementLineRequested?.Invoke(start.X, start.Y, end.X, end.Y);
-        else
-            TransitionLineRequested?.Invoke(start.X, start.Y, end.X, end.Y);
+        PropLineRequested?.Invoke(start.X, start.Y, end.X, end.Y);
         var warningCount = preview.Count(candidate =>
             candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain);
         if (warningCount > 0)
         {
             ToolStatusRequested?.Invoke(
-                $"Line Draw authored {preview.Count} {EditorToolRegistry.ModeDisplayName(Mode)} items; {warningCount} lack complete Terrain and block export.");
+                $"Line Draw authored {preview.Count} Props; {warningCount} lack complete Terrain and block export.");
         }
         return true;
     }
@@ -382,59 +354,16 @@ public sealed partial class SceneCanvas : Control
         var sceneRect = new Rect2(pan, sceneSize);
         DrawRect(sceneRect, SceneBackground);
 
-        DrawTerrain(
+        DrawTerrain(document, pan, zoom, highlighted: Mode == EditorMode.Terrain);
+        DrawProps(
             document,
             pan,
             zoom,
-            highlighted: Mode == EditorMode.Terrain);
-        if (Mode == EditorMode.Placements)
-        {
-            DrawTransitions(
-                document,
-                pan,
-                zoom,
-                heightAuthoringPixels,
-                highlighted: false);
-            DrawPlacements(
-                document,
-                pan,
-                zoom,
-                heightAuthoringPixels,
-                highlighted: true);
-            DrawPlacementToolPreview(pan, zoom, heightAuthoringPixels);
-        }
-        else if (Mode == EditorMode.Transitions)
-        {
-            DrawPlacements(
-                document,
-                pan,
-                zoom,
-                heightAuthoringPixels,
-                highlighted: false);
-            DrawTransitions(
-                document,
-                pan,
-                zoom,
-                heightAuthoringPixels,
-                highlighted: true);
-            DrawTransitionToolPreview(pan, zoom, heightAuthoringPixels);
-        }
-        else
-        {
-            DrawPlacements(
-                document,
-                pan,
-                zoom,
-                heightAuthoringPixels,
-                highlighted: false);
-            DrawTransitions(
-                document,
-                pan,
-                zoom,
-                heightAuthoringPixels,
-                highlighted: false);
-        }
-        if (Mode == EditorMode.Terrain)
+            heightAuthoringPixels,
+            highlighted: Mode == EditorMode.Props);
+        if (Mode == EditorMode.Props)
+            DrawPropToolPreview(pan, zoom, heightAuthoringPixels);
+        else if (Mode == EditorMode.Terrain)
             DrawTerrainToolPreview(document, pan, zoom);
 
         var visible = new Rect2(Vector2.Zero, Size).Intersection(sceneRect);
@@ -514,26 +443,26 @@ public sealed partial class SceneCanvas : Control
                     break;
             }
         }
-        else if (Mode == EditorMode.Placements && SelectedPlacementAssetKey is not null)
+        else if (Mode == EditorMode.Props && SelectedPropAssetKey is not null)
         {
             var coordinate = AuthoringCoordinate(screenPosition);
             switch (ActiveTool)
             {
                 case EditorTool.Selector:
-                    PlacementSelectRequested?.Invoke(coordinate.X, coordinate.Y);
+                    PropSelectRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
                 case EditorTool.Pencil when EraserEnabled:
-                    PlacementEraseRequested?.Invoke(coordinate.X, coordinate.Y);
+                    PropEraseRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
                 case EditorTool.Pencil:
-                    var validation = ValidatePlacement(coordinate);
+                    var validation = ValidateProp(coordinate);
                     if (validation.IsValid)
                     {
-                        PlacementRequested?.Invoke(coordinate.X, coordinate.Y);
+                        PropRequested?.Invoke(coordinate.X, coordinate.Y);
                         if (!validation.HasCompleteTerrain)
                         {
                             ToolStatusRequested?.Invoke(
-                                $"Placement authored with export warning: {validation.Warning}");
+                                $"Prop authored with export warning: {validation.Warning}");
                         }
                     }
                     else
@@ -552,63 +481,7 @@ public sealed partial class SceneCanvas : Control
                     else if (_lineEnd is null)
                     {
                         _lineEnd = coordinate;
-                        var preview = CurrentLinePreview(_lineStart.Value, coordinate);
-                        var invalidCount = preview.Count(candidate => !candidate.Validation.IsValid);
-                        var warningCount = preview.Count(candidate =>
-                            candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain);
-                        ToolStatusRequested?.Invoke(invalidCount > 0
-                            ? $"Line Draw: end fixed; {invalidCount} of {preview.Count} previews are blocked. Press Escape to revise."
-                            : warningCount > 0
-                                ? $"Line Draw: end fixed; {warningCount} of {preview.Count} previews lack Terrain but may be authored. Enter confirms; Escape revises."
-                                : $"Line Draw: end fixed; {preview.Count} previews ready. Press Enter to confirm or Escape to revise.");
-                    }
-                    else
-                    {
-                        ToolStatusRequested?.Invoke(
-                            "Line Draw: end point is fixed. Press Enter to confirm or Escape to revise it.");
-                    }
-                    QueueRedraw();
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-        else if (Mode == EditorMode.Transitions && SelectedTransitionAssetKey is not null)
-        {
-            var coordinate = AuthoringCoordinate(screenPosition);
-            switch (ActiveTool)
-            {
-                case EditorTool.Selector:
-                    TransitionSelectRequested?.Invoke(coordinate.X, coordinate.Y);
-                    break;
-                case EditorTool.Pencil when EraserEnabled:
-                    TransitionEraseRequested?.Invoke(coordinate.X, coordinate.Y);
-                    break;
-                case EditorTool.Pencil:
-                    var validation = ValidateTransition(coordinate);
-                    if (validation.IsValid)
-                    {
-                        TransitionRequested?.Invoke(coordinate.X, coordinate.Y);
-                        if (!validation.HasCompleteTerrain)
-                        {
-                            ToolStatusRequested?.Invoke(
-                                $"Transition authored with export warning: {validation.Warning}");
-                        }
-                    }
-                    else
-                        ToolStatusRequested?.Invoke($"Pencil Draw blocked: {validation.Reason}");
-                    break;
-                case EditorTool.Line:
-                    if (_lineStart is null)
-                    {
-                        _lineStart = coordinate;
-                        ToolStatusRequested?.Invoke(
-                            $"Line Draw: start fixed at ({coordinate.X}, {coordinate.Y}); choose an end point.");
-                    }
-                    else if (_lineEnd is null)
-                    {
-                        _lineEnd = coordinate;
-                        var preview = CurrentLinePreview(_lineStart.Value, coordinate);
+                        var preview = PropLinePreview(_lineStart.Value, coordinate);
                         var invalidCount = preview.Count(candidate => !candidate.Validation.IsValid);
                         var warningCount = preview.Count(candidate =>
                             candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain);
@@ -681,17 +554,11 @@ public sealed partial class SceneCanvas : Control
             else if (ActiveTool == EditorTool.Fill && EraserEnabled)
                 TerrainFillEraseRequested?.Invoke(cellX, cellY);
         }
-        else if (Mode == EditorMode.Placements)
+        else if (Mode == EditorMode.Props)
         {
             var coordinate = AuthoringCoordinate(screenPosition);
             if (ActiveTool == EditorTool.Pencil && EraserEnabled && leftButtonPressed)
-                PlacementEraseRequested?.Invoke(coordinate.X, coordinate.Y);
-        }
-        else if (Mode == EditorMode.Transitions)
-        {
-            var coordinate = AuthoringCoordinate(screenPosition);
-            if (ActiveTool == EditorTool.Pencil && EraserEnabled && leftButtonPressed)
-                TransitionEraseRequested?.Invoke(coordinate.X, coordinate.Y);
+                PropEraseRequested?.Invoke(coordinate.X, coordinate.Y);
         }
         else if (Mode == EditorMode.Templates
                  && ActiveTool == EditorTool.AnchorMove
@@ -753,8 +620,6 @@ public sealed partial class SceneCanvas : Control
             QueueRedraw();
             return;
         }
-        if (Mode is not (EditorMode.Placements or EditorMode.Transitions or EditorMode.Templates))
-            return;
         _pointerTerrainPosition = null;
         _pointerAuthoringPosition = AuthoringCoordinate(screenPosition);
         QueueRedraw();
@@ -837,78 +702,28 @@ public sealed partial class SceneCanvas : Control
         }
     }
 
-    private void DrawPlacements(
+    private void DrawProps(
         SceneDocument document,
         Vector2 pan,
         float zoom,
         int sceneHeightAuthoringPixels,
         bool highlighted)
     {
-        if (_placementAssets is null) return;
-        foreach (var placement in document.Placements)
+        if (_propAssets is null) return;
+        foreach (var prop in document.Props)
         {
-            var asset = _placementAssets.Resolve(placement.AssetKey);
+            var asset = _propAssets.Resolve(prop.AssetKey);
             var bounds = PropEditing.BoundsFor(
                 asset,
-                placement.PositionAuthoringPx.X,
-                placement.PositionAuthoringPx.Y);
-            var rectangle = new Rect2(
-                pan + new Vector2(
-                    bounds.Left * zoom,
-                    (sceneHeightAuthoringPixels - bounds.Top) * zoom),
-                new Vector2(bounds.Width, bounds.Height) * zoom);
-            var color = Color.FromHtml(asset.Color);
-            var outline = highlighted
-                ? color
-                : new Color(color.R, color.G, color.B, 0.32f);
-            DrawRect(
-                rectangle,
-                new Color(color.R, color.G, color.B, highlighted ? 0.38f : 0.10f));
-            DrawRect(
-                rectangle,
-                highlighted && placement.InstanceId == _selectedPlacementInstanceId
-                    ? SelectionColor
-                    : outline,
-                filled: false,
-                width: highlighted && placement.InstanceId == _selectedPlacementInstanceId
-                    ? 3f
-                    : highlighted ? 2f : 1f);
-            if (!TerrainCoverage.IsComplete(document, bounds, _metrics!))
-                DrawDashedRectangle(rectangle, InvalidPreviewColor, 2.5f);
-
-            var anchorSize = Math.Max(3f, zoom);
-            var anchor = pan + new Vector2(
-                placement.PositionAuthoringPx.X * zoom,
-                (sceneHeightAuthoringPixels - placement.PositionAuthoringPx.Y) * zoom);
-            DrawRect(
-                new Rect2(
-                    anchor - new Vector2(anchorSize * 0.5f, anchorSize * 0.5f),
-                    new Vector2(anchorSize, anchorSize)),
-                outline);
-        }
-    }
-
-    private void DrawTransitions(
-        SceneDocument document,
-        Vector2 pan,
-        float zoom,
-        int sceneHeightAuthoringPixels,
-        bool highlighted)
-    {
-        if (_transitionAssets is null) return;
-        foreach (var transition in document.Transitions)
-        {
-            var asset = _transitionAssets.Resolve(transition.AssetKey);
-            var bounds = TransitionEditing.BoundsFor(
-                asset,
-                transition.PositionAuthoringPx.X,
-                transition.PositionAuthoringPx.Y);
+                prop.PositionAuthoringPx.X,
+                prop.PositionAuthoringPx.Y);
             var rectangle = CanvasRectangle(
                 bounds,
                 pan,
                 zoom,
                 sceneHeightAuthoringPixels);
             var color = Color.FromHtml(asset.Color);
+            var selected = highlighted && prop.InstanceId == _selectedPropInstanceId;
             var outline = highlighted
                 ? color
                 : new Color(color.R, color.G, color.B, 0.32f);
@@ -917,18 +732,14 @@ public sealed partial class SceneCanvas : Control
                 new Color(color.R, color.G, color.B, highlighted ? 0.38f : 0.10f));
             DrawRect(
                 rectangle,
-                highlighted && transition.InstanceId == _selectedTransitionInstanceId
-                    ? SelectionColor
-                    : outline,
+                selected ? SelectionColor : outline,
                 filled: false,
-                width: highlighted && transition.InstanceId == _selectedTransitionInstanceId
-                    ? 3f
-                    : highlighted ? 2f : 1f);
+                width: selected ? 3f : highlighted ? 2f : 1f);
             if (!TerrainCoverage.IsComplete(document, bounds, _metrics!))
                 DrawDashedRectangle(rectangle, InvalidPreviewColor, 2.5f);
             DrawAnchor(
-                transition.PositionAuthoringPx.X,
-                transition.PositionAuthoringPx.Y,
+                prop.PositionAuthoringPx.X,
+                prop.PositionAuthoringPx.Y,
                 pan,
                 zoom,
                 sceneHeightAuthoringPixels,
@@ -1064,34 +875,32 @@ public sealed partial class SceneCanvas : Control
         DrawString(font, baseline, label, HorizontalAlignment.Left, -1f, fontSize, textColor);
     }
 
-    private void DrawPlacementToolPreview(
+    private void DrawPropToolPreview(
         Vector2 pan,
         float zoom,
         int sceneHeightAuthoringPixels)
     {
-        if (_placementAssets is null
-            || SelectedPlacementAssetKey is not { } assetKey)
-            return;
+        if (_propAssets is null || SelectedPropAssetKey is not { } assetKey) return;
 
-        var asset = _placementAssets.Resolve(assetKey);
+        var asset = _propAssets.Resolve(assetKey);
         IReadOnlyList<(int X, int Y, PropValidationResult Validation)> preview;
         if (ActiveTool == EditorTool.Pencil)
         {
             if (_pointerAuthoringPosition is not { } pointer) return;
-            preview = [(pointer.X, pointer.Y, ValidatePlacement(pointer))];
+            preview = [(pointer.X, pointer.Y, ValidateProp(pointer))];
         }
         else if (ActiveTool == EditorTool.Line)
         {
             if (_lineStart is not { } start)
             {
                 if (_pointerAuthoringPosition is not { } pointer) return;
-                preview = [(pointer.X, pointer.Y, ValidatePlacement(pointer))];
+                preview = [(pointer.X, pointer.Y, ValidateProp(pointer))];
             }
             else
             {
                 var endpoint = _lineEnd ?? _pointerAuthoringPosition;
                 if (endpoint is null) return;
-                preview = PlacementLinePreview(start, endpoint.Value);
+                preview = PropLinePreview(start, endpoint.Value);
             }
         }
         else
@@ -1102,84 +911,13 @@ public sealed partial class SceneCanvas : Control
         foreach (var candidate in preview)
         {
             var bounds = PropEditing.BoundsFor(asset, candidate.X, candidate.Y);
-            var rectangle = new Rect2(
-                pan + new Vector2(
-                    bounds.Left * zoom,
-                    (sceneHeightAuthoringPixels - bounds.Top) * zoom),
-                new Vector2(bounds.Width, bounds.Height) * zoom);
-            var color = candidate.Validation.IsValid
-                ? candidate.Validation.HasCompleteTerrain
-                    ? ValidPreviewColor
-                    : InvalidPreviewColor
-                : InvalidPreviewColor;
-            DrawRect(
-                rectangle,
-                new Color(color.R, color.G, color.B,
-                    candidate.Validation.HasCompleteTerrain ? 0.22f : 0.08f));
-            if (candidate.Validation.IsValid && !candidate.Validation.HasCompleteTerrain)
-                DrawDashedRectangle(rectangle, color, 2f);
-            else
-                DrawRect(rectangle, color, filled: false, width: 2f);
-
-            var anchorSize = Math.Max(3f, zoom);
-            var anchor = pan + new Vector2(
-                candidate.X * zoom,
-                (sceneHeightAuthoringPixels - candidate.Y) * zoom);
-            DrawRect(
-                new Rect2(
-                    anchor - new Vector2(anchorSize * 0.5f, anchorSize * 0.5f),
-                    new Vector2(anchorSize, anchorSize)),
-                color);
-        }
-    }
-
-    private void DrawTransitionToolPreview(
-        Vector2 pan,
-        float zoom,
-        int sceneHeightAuthoringPixels)
-    {
-        if (_transitionAssets is null
-            || SelectedTransitionAssetKey is not { } assetKey)
-            return;
-
-        var asset = _transitionAssets.Resolve(assetKey);
-        IReadOnlyList<(int X, int Y, PropValidationResult Validation)> preview;
-        if (ActiveTool == EditorTool.Pencil)
-        {
-            if (_pointerAuthoringPosition is not { } pointer) return;
-            preview = [(pointer.X, pointer.Y, ValidateTransition(pointer))];
-        }
-        else if (ActiveTool == EditorTool.Line)
-        {
-            if (_lineStart is not { } start)
-            {
-                if (_pointerAuthoringPosition is not { } pointer) return;
-                preview = [(pointer.X, pointer.Y, ValidateTransition(pointer))];
-            }
-            else
-            {
-                var endpoint = _lineEnd ?? _pointerAuthoringPosition;
-                if (endpoint is null) return;
-                preview = TransitionLinePreview(start, endpoint.Value);
-            }
-        }
-        else
-        {
-            return;
-        }
-
-        foreach (var candidate in preview)
-        {
-            var bounds = TransitionEditing.BoundsFor(asset, candidate.X, candidate.Y);
             var rectangle = CanvasRectangle(
                 bounds,
                 pan,
                 zoom,
                 sceneHeightAuthoringPixels);
-            var color = candidate.Validation.IsValid
-                ? candidate.Validation.HasCompleteTerrain
-                    ? ValidPreviewColor
-                    : InvalidPreviewColor
+            var color = candidate.Validation.IsValid && candidate.Validation.HasCompleteTerrain
+                ? ValidPreviewColor
                 : InvalidPreviewColor;
             DrawRect(
                 rectangle,
@@ -1199,61 +937,32 @@ public sealed partial class SceneCanvas : Control
         }
     }
 
-    private PropValidationResult ValidatePlacement((int X, int Y) coordinate) =>
+    private PropValidationResult ValidateProp((int X, int Y) coordinate) =>
         PropEditing.ValidateCandidate(
             _scene!.Document,
-            _placementAssets!,
-            _transitionAssets!,
+            _propAssets!,
             coordinate.X,
             coordinate.Y,
-            SelectedPlacementAssetKey!);
+            SelectedPropAssetKey!);
 
-    private PropValidationResult ValidateTransition((int X, int Y) coordinate) =>
-        TransitionEditing.ValidateCandidate(
-            _scene!.Document,
-            _placementAssets!,
-            _transitionAssets!,
-            coordinate.X,
-            coordinate.Y,
-            SelectedTransitionAssetKey!);
-
-    private IReadOnlyList<(int X, int Y, PropValidationResult Validation)> PlacementLinePreview(
+    private IReadOnlyList<(int X, int Y, PropValidationResult Validation)> PropLinePreview(
         (int X, int Y) start,
         (int X, int Y) end)
     {
-        var asset = _placementAssets!.Resolve(SelectedPlacementAssetKey!);
+        var asset = _propAssets!.Resolve(SelectedPropAssetKey!);
         return PropEditing.LineAnchors(
                 asset,
                 start.X,
                 start.Y,
                 end.X,
                 end.Y,
-                _interactionState.PlacementLineOffsetAuthoringPixels)
+                _interactionState.PropLineOffsetAuthoringPixels)
             .Select(anchor => (
                 anchor.X,
                 anchor.Y,
-                ValidatePlacement(anchor)))
+                ValidateProp(anchor)))
             .ToList();
     }
-
-    private IReadOnlyList<(int X, int Y, PropValidationResult Validation)> TransitionLinePreview(
-        (int X, int Y) start,
-        (int X, int Y) end)
-    {
-        var asset = _transitionAssets!.Resolve(SelectedTransitionAssetKey!);
-        return TransitionEditing.LineAnchors(asset, start.X, start.Y, end.X, end.Y)
-            .Select(anchor => (
-                anchor.X,
-                anchor.Y,
-                ValidateTransition(anchor)))
-            .ToList();
-    }
-
-    private IReadOnlyList<(int X, int Y, PropValidationResult Validation)> CurrentLinePreview(
-        (int X, int Y) start,
-        (int X, int Y) end) => Mode == EditorMode.Placements
-            ? PlacementLinePreview(start, end)
-            : TransitionLinePreview(start, end);
 
     private static Rect2 CanvasRectangle(
         PropBoundsAuthoringPixels bounds,

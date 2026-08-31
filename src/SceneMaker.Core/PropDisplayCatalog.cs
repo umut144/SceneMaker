@@ -34,7 +34,7 @@ public sealed class PropDisplayCatalog
         _byKey.TryGetValue(assetKey, out var asset)
             ? asset
             : throw new SceneMakerDocumentException(
-                $"Placement asset_key '{assetKey}' is not enabled in this Workspace.");
+                $"Prop asset_key '{assetKey}' is not enabled in this Workspace.");
 }
 
 public static class PropDisplayCatalogLoader
@@ -45,8 +45,7 @@ public static class PropDisplayCatalogLoader
         foreach (var profile in workspace.AssetProfiles)
         {
             var catalogAsset = catalog.Resolve(profile.AssetKey);
-            if (workspace.EffectiveRole(profile, catalogAsset) != AuthoringAssetRole.Prop)
-                continue;
+            if (catalogAsset.AssetType != PolyToolsAssetType.Prop) continue;
             assets.Add(profile.AssetKey, Create(
                 profile, catalogAsset, workspace.Grid.AuthoringPixelsPerMeter));
         }

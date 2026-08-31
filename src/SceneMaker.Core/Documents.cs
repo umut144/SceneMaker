@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 5;
+    public const int SceneVersion = 6;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -32,14 +32,12 @@ public sealed record AuthoringPixelPosition
     public required int Y { get; init; }
 }
 
+/// <summary>
+/// One authored instance of a PolyTools Prop. SceneMaker knows exactly one
+/// spatial instance kind; the synchronized PolyTools catalog decides which
+/// Assets are Props.
+/// </summary>
 public sealed record PropDocument
-{
-    public required string InstanceId { get; init; }
-    public required string AssetKey { get; init; }
-    public required AuthoringPixelPosition PositionAuthoringPx { get; init; }
-}
-
-public sealed record TransitionDocument
 {
     public required string InstanceId { get; init; }
     public required string AssetKey { get; init; }
@@ -68,8 +66,7 @@ public sealed record SceneDocument
     public required string CoordinateSpace { get; init; }
     public required SceneSizeCells SizeCells { get; init; }
     public required List<TerrainCellDocument> TerrainCells { get; init; }
-    public required List<PropDocument> Placements { get; init; }
-    public required List<TransitionDocument> Transitions { get; init; }
+    public required List<PropDocument> Props { get; init; }
     public required TemplateDefinitionDocument? TemplateDefinition { get; init; }
     public required List<TemplateAnchorDocument> TemplateAnchors { get; init; }
 
@@ -89,8 +86,7 @@ public sealed record SceneDocument
         CoordinateSpace = SceneMakerSchemas.CoordinateSpace,
         SizeCells = new SceneSizeCells { Width = widthCells, Height = heightCells },
         TerrainCells = [],
-        Placements = [],
-        Transitions = [],
+        Props = [],
         TemplateDefinition = sceneKind == SceneKind.Template
             ? new TemplateDefinitionDocument
             {

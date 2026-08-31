@@ -37,7 +37,8 @@ Canvas und damit gegenüber der linken `ToolBar`.
 
 Die Werkzeugauswahl besteht aus zwei unabhängigen, typisierten Dimensionen:
 
-- `EditorMode` bestimmt den bearbeiteten Inhaltsbereich.
+- `EditorMode` bestimmt den bearbeiteten Inhaltsbereich: `Terrain`, `Props`
+  oder `Templates`.
 - `EditorTool` bestimmt das primäre Werkzeug innerhalb dieses Modus.
 
 Die linke Werkzeugleiste ist mode-aware und zeigt nur die Werkzeuge des aktiven
@@ -55,7 +56,7 @@ getrennte Konzepte.
 
 Der aktive Tool-Kontext ist immer die Kombination aus Modus und Werkzeug. Das
 horizontale `ContextMenu` zeigt diese Kombination beispielsweise als
-`Terrain:Line` oder `Placement:Line`. Jeder Modus merkt sich sein zuletzt
+`Terrain:Line` oder `Prop:Line`. Jeder Modus merkt sich sein zuletzt
 ausgewähltes Werkzeug.
 
 Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
@@ -64,16 +65,16 @@ Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
   beziehungsweise löscht direkt.
 - `Terrain:Line` beginnt beim Drücken der linken Maustaste, zeigt während des
   Ziehens alle betroffenen Tiles und führt die Linie beim Loslassen aus.
-- `Placement:Line` und `Transition:Line` behalten Startpunkt, Endpunkt und die
-  Bestätigung mit Enter als getrennte Schritte.
+- `Prop:Line` behält Startpunkt, Endpunkt und die Bestätigung mit Enter als
+  getrennte Schritte.
 
 Ein aktiver `Eraser` verwendet für Terrain-Highlights die Löschfarbe, damit die
 Auswirkung vor dem Ausführen sichtbar ist.
 
-### Placement:Line
+### Prop:Line
 
-Das ContextMenu von `Placement:Line` enthält den ganzzahligen Wert
-`Placement Offset` in Authoring-Pixeln. Der Wert ist nicht negativ und wird zum
+Das ContextMenu von `Prop:Line` enthält den ganzzahligen Wert
+`Prop Offset` in Authoring-Pixeln. Der Wert ist nicht negativ und wird zum
 berechneten Footprint-Abstand entlang der Linie addiert. `0` erzeugt das
 lückenlose Standardverhalten. Der Offset beeinflusst Vorschau, Platzierung und
 Line-Eraser und bleibt reiner Session-Zustand.

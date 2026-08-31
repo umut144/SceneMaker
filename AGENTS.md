@@ -11,8 +11,9 @@ Runtime Export and copy it into a Workspace-local import boundary.
   available Asset identity, type, name, and Runtime package references. It and
   the referenced Manifests are synchronized copies, never live sibling reads.
 - A workspace represents one PolyTools World/game. Its `config.json` owns grid
-  metrics, enabled assets, editor colors, and optional Prop/Transition role
-  overrides. PolyTools geometry owns footprints and anchors.
+  metrics, enabled assets, and editor colors. The PolyTools catalog decides
+  whether an Asset is Terrain or a Prop; PolyTools geometry owns footprints and
+  anchors. SceneMaker never overrides an Asset's kind.
 - Scenes and templates are workspace data. Their documents use `asset_key`s,
   never numeric IDs.
 - No hidden metric defaults, directory-discovered Assets, or game-specific

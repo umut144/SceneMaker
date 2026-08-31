@@ -28,8 +28,7 @@ public static class TerrainDisplayCatalogLoader
         foreach (var profile in workspace.AssetProfiles)
         {
             var catalogAsset = catalog.Resolve(profile.AssetKey);
-            if (workspace.EffectiveRole(profile, catalogAsset) != AuthoringAssetRole.Terrain)
-                continue;
+            if (catalogAsset.AssetType != PolyToolsAssetType.Terrain) continue;
             assets.Add(profile.AssetKey, new TerrainDisplayAsset(
                 profile.AssetKey, catalogAsset.Name, profile.Color));
         }

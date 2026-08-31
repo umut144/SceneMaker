@@ -7,8 +7,7 @@ namespace SceneMaker.App;
 public enum EditorMode
 {
     Terrain,
-    Placements,
-    Transitions,
+    Props,
     Templates,
 }
 
@@ -34,11 +33,11 @@ public static class EditorToolRegistry
     private static readonly IReadOnlyList<EditorToolDefinition> Definitions =
     [
         Define(EditorTool.Selector, "Selector", "select.svg",
-            EditorMode.Placements, EditorMode.Transitions, EditorMode.Templates),
+            EditorMode.Props, EditorMode.Templates),
         Define(EditorTool.Pencil, "Pencil", "pencil.svg",
-            EditorMode.Terrain, EditorMode.Placements, EditorMode.Transitions),
+            EditorMode.Terrain, EditorMode.Props),
         Define(EditorTool.Line, "Line", "line.svg",
-            EditorMode.Terrain, EditorMode.Placements, EditorMode.Transitions),
+            EditorMode.Terrain, EditorMode.Props),
         Define(EditorTool.Fill, "Fill", "fill.svg", EditorMode.Terrain),
         Define(EditorTool.AnchorMove, "Move Anchor", "move.svg", EditorMode.Templates),
         Define(EditorTool.AnchorPlace, "Place Anchor", string.Empty,
@@ -59,8 +58,7 @@ public static class EditorToolRegistry
     public static EditorTool DefaultTool(EditorMode mode) => mode switch
     {
         EditorMode.Terrain => EditorTool.Pencil,
-        EditorMode.Placements => EditorTool.Pencil,
-        EditorMode.Transitions => EditorTool.Pencil,
+        EditorMode.Props => EditorTool.Pencil,
         EditorMode.Templates => EditorTool.Selector,
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
@@ -68,8 +66,7 @@ public static class EditorToolRegistry
     public static string ModeDisplayName(EditorMode mode) => mode switch
     {
         EditorMode.Terrain => "Terrain",
-        EditorMode.Placements => "Placement",
-        EditorMode.Transitions => "Transition",
+        EditorMode.Props => "Prop",
         EditorMode.Templates => "Template",
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
@@ -99,7 +96,7 @@ public sealed class EditorInteractionState
         ? tool
         : EditorToolRegistry.DefaultTool(Mode);
     public bool EraserEnabled { get; private set; }
-    public int PlacementLineOffsetAuthoringPixels { get; private set; }
+    public int PropLineOffsetAuthoringPixels { get; private set; }
 
     public void SelectMode(EditorMode mode)
     {
@@ -120,10 +117,10 @@ public sealed class EditorInteractionState
 
     public void SetEraserEnabled(bool enabled) => EraserEnabled = enabled;
 
-    public void SetPlacementLineOffset(int authoringPixels)
+    public void SetPropLineOffset(int authoringPixels)
     {
         if (authoringPixels < 0)
             throw new ArgumentOutOfRangeException(nameof(authoringPixels));
-        PlacementLineOffsetAuthoringPixels = authoringPixels;
+        PropLineOffsetAuthoringPixels = authoringPixels;
     }
 }

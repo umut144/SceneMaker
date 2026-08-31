@@ -54,44 +54,23 @@ public static partial class DocumentValidation
             }
             previous = cell;
         }
-        if (document.Placements is null)
-            throw new SceneMakerDocumentException("Scene requires placements.");
+        if (document.Props is null)
+            throw new SceneMakerDocumentException("Scene requires props.");
 
         string? previousInstanceId = null;
-        foreach (var placement in document.Placements)
+        foreach (var prop in document.Props)
         {
-            ValidateStableId("placement instance_id", placement.InstanceId);
+            ValidateStableId("prop instance_id", prop.InstanceId);
             if (previousInstanceId is not null
-                && string.CompareOrdinal(placement.InstanceId, previousInstanceId) <= 0)
+                && string.CompareOrdinal(prop.InstanceId, previousInstanceId) <= 0)
             {
                 throw new SceneMakerDocumentException(
-                    "Placements must have unique instance IDs in canonical ordinal order.");
+                    "Props must have unique instance IDs in canonical ordinal order.");
             }
-            if (placement.PositionAuthoringPx is null)
+            if (prop.PositionAuthoringPx is null)
                 throw new SceneMakerDocumentException(
-                    $"Placement '{placement.InstanceId}' requires position_authoring_px.");
-            previousInstanceId = placement.InstanceId;
-        }
-
-        if (document.Transitions is null)
-            throw new SceneMakerDocumentException("Scene requires transitions.");
-
-        string? previousTransitionInstanceId = null;
-        foreach (var transition in document.Transitions)
-        {
-            ValidateStableId("transition instance_id", transition.InstanceId);
-            if (previousTransitionInstanceId is not null
-                && string.CompareOrdinal(
-                    transition.InstanceId,
-                    previousTransitionInstanceId) <= 0)
-            {
-                throw new SceneMakerDocumentException(
-                    "Transitions must have unique instance IDs in canonical ordinal order.");
-            }
-            if (transition.PositionAuthoringPx is null)
-                throw new SceneMakerDocumentException(
-                    $"Transition '{transition.InstanceId}' requires position_authoring_px.");
-            previousTransitionInstanceId = transition.InstanceId;
+                    $"Prop '{prop.InstanceId}' requires position_authoring_px.");
+            previousInstanceId = prop.InstanceId;
         }
 
         if (document.TemplateAnchors is null)
