@@ -22,6 +22,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _workspaceLabel = new();
     private readonly Label _sceneLabel = new();
     private readonly Label _toolContextLabel = new();
+    private readonly VSeparator _toolContextSeparator = new();
     private readonly Label _placementLineOffsetLabel = new();
     private readonly SpinBox _placementLineOffsetEdit = new();
     private readonly Button _eraserToggle = new();
@@ -245,9 +246,10 @@ public sealed partial class SceneMakerMain : Control
         _contextMenuBar.CustomMinimumSize = new Vector2(0f, 38f);
         _contextMenuBar.AddThemeFontSizeOverride("font_size", 14);
         _toolContextLabel.Name = "ActiveToolLabel";
-        _toolContextLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _toolContextLabel.VerticalAlignment = VerticalAlignment.Center;
         _contextMenuBar.AddChild(_toolContextLabel);
+        _toolContextSeparator.Name = "ToolContextSeparator";
+        _contextMenuBar.AddChild(_toolContextSeparator);
         _placementLineOffsetLabel.Name = "PlacementLineOffsetLabel";
         _placementLineOffsetLabel.Text = "Placement Offset";
         _placementLineOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -1316,6 +1318,7 @@ public sealed partial class SceneMakerMain : Control
             + EditorToolRegistry.Resolve(_interactionState.ActiveTool).DisplayName;
         var placementLineActive = _interactionState.Mode == EditorMode.Placements
             && _interactionState.ActiveTool == EditorTool.Line;
+        _toolContextSeparator.Visible = placementLineActive;
         _placementLineOffsetLabel.Visible = placementLineActive;
         _placementLineOffsetEdit.Visible = placementLineActive;
     }
