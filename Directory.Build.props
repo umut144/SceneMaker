@@ -1,0 +1,18 @@
+<Project>
+  <!--
+    Settings that every project in this repository shares. Anything that is not
+    identical everywhere stays in the project file that needs it.
+
+    ImplicitUsings deliberately does not live here: the Godot application
+    project does not enable it, because System.Threading.Timer would then
+    collide with Godot.Timer.
+
+    SceneMaker.csproj repeats TargetFramework because the Godot editor writes
+    that file itself and expects to find it there.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>
