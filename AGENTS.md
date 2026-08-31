@@ -34,6 +34,7 @@ Run for relevant changes:
 dotnet build SceneMaker.csproj
 dotnet build src/SceneMaker.Cli/SceneMaker.Cli.csproj
 dotnet test tests/SceneMaker.Core.Tests/SceneMaker.Core.Tests.csproj
+dotnet test tests/SceneMaker.Editor.Tests/SceneMaker.Editor.Tests.csproj
 /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . --editor --quit
 ```
 

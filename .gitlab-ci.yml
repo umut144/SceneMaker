@@ -34,11 +34,17 @@ core:
   script:
     - dotnet restore src/SceneMaker.Cli/SceneMaker.Cli.csproj
     - dotnet restore tests/SceneMaker.Core.Tests/SceneMaker.Core.Tests.csproj
+    - dotnet restore tests/SceneMaker.Editor.Tests/SceneMaker.Editor.Tests.csproj
     - dotnet build src/SceneMaker.Cli/SceneMaker.Cli.csproj --configuration Release --no-restore
     - >-
       dotnet test tests/SceneMaker.Core.Tests/SceneMaker.Core.Tests.csproj
       --configuration Release --no-restore
       --logger "trx;LogFileName=core-tests.trx"
+      --results-directory "$CI_PROJECT_DIR/test-results"
+    - >-
+      dotnet test tests/SceneMaker.Editor.Tests/SceneMaker.Editor.Tests.csproj
+      --configuration Release --no-restore
+      --logger "trx;LogFileName=editor-tests.trx"
       --results-directory "$CI_PROJECT_DIR/test-results"
   artifacts:
     when: always
