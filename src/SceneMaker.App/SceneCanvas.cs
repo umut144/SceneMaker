@@ -6,16 +6,6 @@ using SceneMaker.Core;
 
 namespace SceneMaker.App;
 
-public enum CanvasDrawingTool
-{
-    Selector,
-    Pencil,
-    Line,
-    Fill,
-    AnchorPlace,
-    AnchorMove,
-}
-
 public sealed partial class SceneCanvas : Control
 {
     private static readonly Color CanvasBackground = Color.FromHtml("#101722");
@@ -38,8 +28,7 @@ public sealed partial class SceneCanvas : Control
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
     private PlacementDisplayCatalog? _placementAssets;
     private TransitionDisplayCatalog? _transitionAssets;
-    private string _perspectiveName = "Terrain";
-    private CanvasDrawingTool _activeTool = CanvasDrawingTool.Pencil;
+    private EditorInteractionState _interactionState = new();
     private string? _selectedPlacementInstanceId;
     private string? _selectedTransitionInstanceId;
     private string? _selectedTemplateAnchorId;
@@ -71,33 +60,9 @@ public sealed partial class SceneCanvas : Control
     public string? SelectedTerrainAssetKey { get; set; }
     public string? SelectedPlacementAssetKey { get; set; }
     public string? SelectedTransitionAssetKey { get; set; }
-    public CanvasDrawingTool ActiveTool
-    {
-        get => _activeTool;
-        set
-        {
-            _activeTool = value;
-            _lineStart = null;
-            _lineEnd = null;
-            _draggedTemplateAnchorId = null;
-            _draggedTemplateAnchorPosition = null;
-            QueueRedraw();
-        }
-    }
-    public bool EraserEnabled { get; private set; }
-    public string PerspectiveName
-    {
-        get => _perspectiveName;
-        set
-        {
-            _perspectiveName = value;
-            _lineStart = null;
-            _lineEnd = null;
-            _draggedTemplateAnchorId = null;
-            _draggedTemplateAnchorPosition = null;
-            QueueRedraw();
-        }
-    }
+    public EditorMode Mode => _interactionState.Mode;
+    public EditorTool ActiveTool => _interactionState.ActiveTool;
+    public bool EraserEnabled => _interactionState.EraserEnabled;
     public event Action? ViewChanged;
     public event Action<int, int>? TerrainPaintRequested;
     public event Action<int, int>? TerrainEraseRequested;
@@ -120,9 +85,36 @@ public sealed partial class SceneCanvas : Control
     public event Action<string, int, int>? TemplateAnchorMoveRequested;
     public event Action<string>? ToolStatusRequested;
 
+    public void ConfigureInteractionState(EditorInteractionState state)
+    {
+        _interactionState = state ?? throw new ArgumentNullException(nameof(state));
+        ResetTransientInteraction();
+    }
+
+    public void SelectMode(EditorMode mode)
+    {
+        _interactionState.SelectMode(mode);
+        ResetTransientInteraction();
+    }
+
+    public void SelectTool(EditorTool tool)
+    {
+        _interactionState.SelectTool(tool);
+        ResetTransientInteraction();
+    }
+
     public void SetEraserEnabled(bool enabled)
     {
-        EraserEnabled = enabled;
+        _interactionState.SetEraserEnabled(enabled);
+        QueueRedraw();
+    }
+
+    private void ResetTransientInteraction()
+    {
+        _lineStart = null;
+        _lineEnd = null;
+        _draggedTemplateAnchorId = null;
+        _draggedTemplateAnchorPosition = null;
         QueueRedraw();
     }
 
@@ -246,8 +238,8 @@ public sealed partial class SceneCanvas : Control
         if (input is not InputEventKey keyEvent) return;
 
         if (keyEvent.Pressed
-            && (PerspectiveName is "Terrain" or "Placements" or "Transitions")
-            && ActiveTool == CanvasDrawingTool.Line
+            && (Mode is EditorMode.Terrain or EditorMode.Placements or EditorMode.Transitions)
+            && ActiveTool == EditorTool.Line
             && HandleLineKey(keyEvent.Keycode))
         {
             GetViewport().SetInputAsHandled();
@@ -338,7 +330,7 @@ public sealed partial class SceneCanvas : Control
             return true;
         }
 
-        if (PerspectiveName == "Terrain")
+        if (Mode == EditorMode.Terrain)
         {
             if (EraserEnabled)
                 TerrainLineEraseRequested?.Invoke(start.X, start.Y, end.X, end.Y);
@@ -349,7 +341,7 @@ public sealed partial class SceneCanvas : Control
 
         if (EraserEnabled)
         {
-            if (PerspectiveName == "Placements")
+            if (Mode == EditorMode.Placements)
                 PlacementLineEraseRequested?.Invoke(start.X, start.Y, end.X, end.Y);
             else
                 TransitionLineEraseRequested?.Invoke(start.X, start.Y, end.X, end.Y);
@@ -361,11 +353,11 @@ public sealed partial class SceneCanvas : Control
         if (invalidCount > 0)
         {
             ToolStatusRequested?.Invoke(
-                $"Line Draw blocked: {invalidCount} of {preview.Count} {PerspectiveName} previews are invalid.");
+                $"Line Draw blocked: {invalidCount} of {preview.Count} {EditorToolRegistry.ModeDisplayName(Mode)} previews are invalid.");
             return true;
         }
 
-        if (PerspectiveName == "Placements")
+        if (Mode == EditorMode.Placements)
             PlacementLineRequested?.Invoke(start.X, start.Y, end.X, end.Y);
         else
             TransitionLineRequested?.Invoke(start.X, start.Y, end.X, end.Y);
@@ -374,7 +366,7 @@ public sealed partial class SceneCanvas : Control
         if (warningCount > 0)
         {
             ToolStatusRequested?.Invoke(
-                $"Line Draw authored {preview.Count} {PerspectiveName}; {warningCount} lack complete Terrain and block export.");
+                $"Line Draw authored {preview.Count} {EditorToolRegistry.ModeDisplayName(Mode)} items; {warningCount} lack complete Terrain and block export.");
         }
         return true;
     }
@@ -397,8 +389,8 @@ public sealed partial class SceneCanvas : Control
             document,
             pan,
             zoom,
-            highlighted: PerspectiveName == "Terrain");
-        if (PerspectiveName == "Placements")
+            highlighted: Mode == EditorMode.Terrain);
+        if (Mode == EditorMode.Placements)
         {
             DrawTransitions(
                 document,
@@ -414,7 +406,7 @@ public sealed partial class SceneCanvas : Control
                 highlighted: true);
             DrawPlacementToolPreview(pan, zoom, heightAuthoringPixels);
         }
-        else if (PerspectiveName == "Transitions")
+        else if (Mode == EditorMode.Transitions)
         {
             DrawPlacements(
                 document,
@@ -483,7 +475,7 @@ public sealed partial class SceneCanvas : Control
             pan,
             zoom,
             heightAuthoringPixels,
-            highlighted: PerspectiveName == "Scene Templates");
+            highlighted: Mode == EditorMode.Templates);
 
         DrawRect(sceneRect, SceneBorder, filled: false, width: 2.0f);
     }
@@ -496,24 +488,24 @@ public sealed partial class SceneCanvas : Control
     private void BeginPrimaryAction(Vector2 screenPosition)
     {
         if (_scene is null) return;
-        if (PerspectiveName == "Terrain")
+        if (Mode == EditorMode.Terrain)
         {
             var (cellX, cellY) = TerrainCoordinate(screenPosition);
             switch (ActiveTool)
             {
-                case CanvasDrawingTool.Pencil when EraserEnabled:
+                case EditorTool.Pencil when EraserEnabled:
                     TerrainEraseRequested?.Invoke(cellX, cellY);
                     break;
-                case CanvasDrawingTool.Pencil when SelectedTerrainAssetKey is not null:
+                case EditorTool.Pencil when SelectedTerrainAssetKey is not null:
                     TerrainPaintRequested?.Invoke(cellX, cellY);
                     break;
-                case CanvasDrawingTool.Fill when EraserEnabled:
+                case EditorTool.Fill when EraserEnabled:
                     TerrainFillEraseRequested?.Invoke(cellX, cellY);
                     break;
-                case CanvasDrawingTool.Fill when SelectedTerrainAssetKey is not null:
+                case EditorTool.Fill when SelectedTerrainAssetKey is not null:
                     TerrainFillRequested?.Invoke(cellX, cellY);
                     break;
-                case CanvasDrawingTool.Line:
+                case EditorTool.Line:
                     if (_lineStart is null)
                     {
                         _lineStart = (cellX, cellY);
@@ -540,18 +532,18 @@ public sealed partial class SceneCanvas : Control
                     break;
             }
         }
-        else if (PerspectiveName == "Placements" && SelectedPlacementAssetKey is not null)
+        else if (Mode == EditorMode.Placements && SelectedPlacementAssetKey is not null)
         {
             var coordinate = AuthoringCoordinate(screenPosition);
             switch (ActiveTool)
             {
-                case CanvasDrawingTool.Selector:
+                case EditorTool.Selector:
                     PlacementSelectRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
-                case CanvasDrawingTool.Pencil when EraserEnabled:
+                case EditorTool.Pencil when EraserEnabled:
                     PlacementEraseRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
-                case CanvasDrawingTool.Pencil:
+                case EditorTool.Pencil:
                     var validation = ValidatePlacement(coordinate);
                     if (validation.IsValid)
                     {
@@ -568,7 +560,7 @@ public sealed partial class SceneCanvas : Control
                             $"Pencil Draw blocked: {validation.Reason}");
                     }
                     break;
-                case CanvasDrawingTool.Line:
+                case EditorTool.Line:
                     if (_lineStart is null)
                     {
                         _lineStart = coordinate;
@@ -599,18 +591,18 @@ public sealed partial class SceneCanvas : Control
                     throw new ArgumentOutOfRangeException();
             }
         }
-        else if (PerspectiveName == "Transitions" && SelectedTransitionAssetKey is not null)
+        else if (Mode == EditorMode.Transitions && SelectedTransitionAssetKey is not null)
         {
             var coordinate = AuthoringCoordinate(screenPosition);
             switch (ActiveTool)
             {
-                case CanvasDrawingTool.Selector:
+                case EditorTool.Selector:
                     TransitionSelectRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
-                case CanvasDrawingTool.Pencil when EraserEnabled:
+                case EditorTool.Pencil when EraserEnabled:
                     TransitionEraseRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
-                case CanvasDrawingTool.Pencil:
+                case EditorTool.Pencil:
                     var validation = ValidateTransition(coordinate);
                     if (validation.IsValid)
                     {
@@ -624,7 +616,7 @@ public sealed partial class SceneCanvas : Control
                     else
                         ToolStatusRequested?.Invoke($"Pencil Draw blocked: {validation.Reason}");
                     break;
-                case CanvasDrawingTool.Line:
+                case EditorTool.Line:
                     if (_lineStart is null)
                     {
                         _lineStart = coordinate;
@@ -655,19 +647,19 @@ public sealed partial class SceneCanvas : Control
                     throw new ArgumentOutOfRangeException();
             }
         }
-        else if (PerspectiveName == "Scene Templates"
+        else if (Mode == EditorMode.Templates
                  && _scene.Document.SceneKind == SceneKind.Instance)
         {
             var coordinate = AuthoringCoordinate(screenPosition);
             switch (ActiveTool)
             {
-                case CanvasDrawingTool.AnchorPlace:
+                case EditorTool.AnchorPlace:
                     TemplateAnchorPlaceRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
-                case CanvasDrawingTool.Selector:
+                case EditorTool.Selector:
                     TemplateAnchorSelectRequested?.Invoke(coordinate.X, coordinate.Y);
                     break;
-                case CanvasDrawingTool.AnchorMove:
+                case EditorTool.AnchorMove:
                     var anchor = TemplateEditing.FindAnchorAt(
                         _scene.Document,
                         coordinate.X,
@@ -692,30 +684,30 @@ public sealed partial class SceneCanvas : Control
     private void ContinuePrimaryAction(Vector2 screenPosition, bool leftButtonPressed)
     {
         if (_scene is null) return;
-        if (PerspectiveName == "Terrain" && leftButtonPressed)
+        if (Mode == EditorMode.Terrain && leftButtonPressed)
         {
             var (cellX, cellY) = TerrainCoordinate(screenPosition);
-            if (ActiveTool == CanvasDrawingTool.Pencil && EraserEnabled)
+            if (ActiveTool == EditorTool.Pencil && EraserEnabled)
                 TerrainEraseRequested?.Invoke(cellX, cellY);
-            else if (ActiveTool == CanvasDrawingTool.Pencil && SelectedTerrainAssetKey is not null)
+            else if (ActiveTool == EditorTool.Pencil && SelectedTerrainAssetKey is not null)
                 TerrainPaintRequested?.Invoke(cellX, cellY);
-            else if (ActiveTool == CanvasDrawingTool.Fill && EraserEnabled)
+            else if (ActiveTool == EditorTool.Fill && EraserEnabled)
                 TerrainFillEraseRequested?.Invoke(cellX, cellY);
         }
-        else if (PerspectiveName == "Placements")
+        else if (Mode == EditorMode.Placements)
         {
             var coordinate = AuthoringCoordinate(screenPosition);
-            if (ActiveTool == CanvasDrawingTool.Pencil && EraserEnabled && leftButtonPressed)
+            if (ActiveTool == EditorTool.Pencil && EraserEnabled && leftButtonPressed)
                 PlacementEraseRequested?.Invoke(coordinate.X, coordinate.Y);
         }
-        else if (PerspectiveName == "Transitions")
+        else if (Mode == EditorMode.Transitions)
         {
             var coordinate = AuthoringCoordinate(screenPosition);
-            if (ActiveTool == CanvasDrawingTool.Pencil && EraserEnabled && leftButtonPressed)
+            if (ActiveTool == EditorTool.Pencil && EraserEnabled && leftButtonPressed)
                 TransitionEraseRequested?.Invoke(coordinate.X, coordinate.Y);
         }
-        else if (PerspectiveName == "Scene Templates"
-                 && ActiveTool == CanvasDrawingTool.AnchorMove
+        else if (Mode == EditorMode.Templates
+                 && ActiveTool == EditorTool.AnchorMove
                  && leftButtonPressed
                  && _draggedTemplateAnchorId is not null)
         {
@@ -741,7 +733,7 @@ public sealed partial class SceneCanvas : Control
     private void UpdatePointer(Vector2 screenPosition)
     {
         if (_scene is null
-            || PerspectiveName is not ("Placements" or "Transitions" or "Scene Templates"))
+            || Mode is not (EditorMode.Placements or EditorMode.Transitions or EditorMode.Templates))
             return;
         _pointerAuthoringPosition = AuthoringCoordinate(screenPosition);
         QueueRedraw();
@@ -923,7 +915,7 @@ public sealed partial class SceneCanvas : Control
         }
 
         if (highlighted
-            && ActiveTool == CanvasDrawingTool.AnchorPlace
+            && ActiveTool == EditorTool.AnchorPlace
             && _pointerAuthoringPosition is { } pointer)
         {
             DrawTemplateAnchor(
@@ -1024,12 +1016,12 @@ public sealed partial class SceneCanvas : Control
 
         var asset = _placementAssets.Resolve(assetKey);
         IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> preview;
-        if (ActiveTool == CanvasDrawingTool.Pencil)
+        if (ActiveTool == EditorTool.Pencil)
         {
             if (_pointerAuthoringPosition is not { } pointer) return;
             preview = [(pointer.X, pointer.Y, ValidatePlacement(pointer))];
         }
-        else if (ActiveTool == CanvasDrawingTool.Line)
+        else if (ActiveTool == EditorTool.Line)
         {
             if (_lineStart is not { } start)
             {
@@ -1093,12 +1085,12 @@ public sealed partial class SceneCanvas : Control
 
         var asset = _transitionAssets.Resolve(assetKey);
         IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> preview;
-        if (ActiveTool == CanvasDrawingTool.Pencil)
+        if (ActiveTool == EditorTool.Pencil)
         {
             if (_pointerAuthoringPosition is not { } pointer) return;
             preview = [(pointer.X, pointer.Y, ValidateTransition(pointer))];
         }
-        else if (ActiveTool == CanvasDrawingTool.Line)
+        else if (ActiveTool == EditorTool.Line)
         {
             if (_lineStart is not { } start)
             {
@@ -1194,7 +1186,7 @@ public sealed partial class SceneCanvas : Control
 
     private IReadOnlyList<(int X, int Y, PlacementValidationResult Validation)> CurrentLinePreview(
         (int X, int Y) start,
-        (int X, int Y) end) => PerspectiveName == "Placements"
+        (int X, int Y) end) => Mode == EditorMode.Placements
             ? PlacementLinePreview(start, end)
             : TransitionLinePreview(start, end);
 

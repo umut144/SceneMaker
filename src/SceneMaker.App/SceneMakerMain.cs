@@ -17,6 +17,7 @@ public sealed partial class SceneMakerMain : Control
     private const int ExportSceneMenuId = 22;
     private const int ChunkHelperMenuId = 30;
 
+    private readonly EditorInteractionState _interactionState = new();
     private readonly SceneCanvas _canvas = new();
     private readonly Label _workspaceLabel = new();
     private readonly Label _sceneLabel = new();
@@ -53,7 +54,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _templateGroupFilter = new();
     private readonly VBoxContainer _templateRows = new();
     private readonly SpinBox _anchorGroupEdit = new();
-    private readonly Dictionary<CanvasDrawingTool, Button> _drawingToolControlsByTool = [];
+    private readonly Dictionary<EditorTool, Button> _drawingToolControlsByTool = [];
 
     private readonly FileDialog _workspaceDirectoryDialog = new();
     private readonly FileDialog _workspaceDirectoryLoadDialog = new();
@@ -227,11 +228,8 @@ public sealed partial class SceneMakerMain : Control
         };
         toolColumn.AddThemeConstantOverride("separation", 6);
         toolMargin.AddChild(toolColumn);
-        AddDrawingToolButton(toolColumn, CanvasDrawingTool.Selector, "select.svg", "Selector");
-        AddDrawingToolButton(toolColumn, CanvasDrawingTool.Pencil, "pencil.svg", "Pencil Draw");
-        AddDrawingToolButton(toolColumn, CanvasDrawingTool.Line, "line.svg", "Line Draw");
-        AddDrawingToolButton(toolColumn, CanvasDrawingTool.Fill, "fill.svg", "Terrain Fill");
-        AddDrawingToolButton(toolColumn, CanvasDrawingTool.AnchorMove, "move.svg", "Move Template Anchor");
+        foreach (var definition in EditorToolRegistry.ToolBarDefinitions)
+            AddDrawingToolButton(toolColumn, definition);
         _anchorGroupEdit.MinValue = 1;
         _anchorGroupEdit.MaxValue = int.MaxValue;
         _anchorGroupEdit.Step = 1;
@@ -268,6 +266,7 @@ public sealed partial class SceneMakerMain : Control
         canvasColumn.AddChild(canvasRow);
 
         _canvas.Name = "Canvas";
+        _canvas.ConfigureInteractionState(_interactionState);
         if (_terrainAssets is not null) _canvas.ConfigureTerrainAssets(_terrainAssets);
         if (_placementAssets is not null) _canvas.ConfigurePlacementAssets(_placementAssets);
         if (_transitionAssets is not null) _canvas.ConfigureTransitionAssets(_transitionAssets);
@@ -337,31 +336,25 @@ public sealed partial class SceneMakerMain : Control
 
     private void AddDrawingToolButton(
         Container parent,
-        CanvasDrawingTool tool,
-        string iconFileName,
-        string tooltip)
+        EditorToolDefinition definition)
     {
         var button = new Button
         {
-            Name = tool.ToString(),
+            Name = definition.Tool.ToString(),
             Text = string.Empty,
-            Icon = GD.Load<Texture2D>($"res://assets/icons/{iconFileName}"),
+            Icon = GD.Load<Texture2D>($"res://assets/icons/{definition.IconFileName}"),
             ExpandIcon = false,
             Alignment = HorizontalAlignment.Center,
             ToggleMode = true,
             ButtonGroup = _drawingToolButtons,
-            TooltipText = tooltip,
+            TooltipText = definition.DisplayName,
             CustomMinimumSize = new Vector2(42f, 42f),
             Disabled = true,
         };
         button.AddThemeConstantOverride("icon_max_width", 24);
-        button.Pressed += () => SelectDrawingTool(tool);
-        if (tool == CanvasDrawingTool.Pencil)
-        {
-            button.ButtonPressed = true;
-            _canvas.ActiveTool = tool;
-        }
-        _drawingToolControlsByTool.Add(tool, button);
+        button.Pressed += () => SelectDrawingTool(definition.Tool);
+        button.ButtonPressed = definition.Tool == _interactionState.ActiveTool;
+        _drawingToolControlsByTool.Add(definition.Tool, button);
         parent.AddChild(button);
     }
 
@@ -861,9 +854,18 @@ public sealed partial class SceneMakerMain : Control
             TooltipText = tooltip,
             CustomMinimumSize = new Vector2(name == "Scene Templates" ? 150f : 110f, 0f),
         };
-        if (available) button.Pressed += () => SelectPerspective(name);
+        if (available) button.Pressed += () => SelectPerspective(EditorModeForPerspective(name), name);
         parent.AddChild(button);
     }
+
+    private static EditorMode EditorModeForPerspective(string perspective) => perspective switch
+    {
+        "Terrain" => EditorMode.Terrain,
+        "Placements" => EditorMode.Placements,
+        "Transitions" => EditorMode.Transitions,
+        "Scene Templates" => EditorMode.Templates,
+        _ => throw new ArgumentOutOfRangeException(nameof(perspective)),
+    };
 
     private void HandleSettingsMenu(long id)
     {
@@ -1216,29 +1218,18 @@ public sealed partial class SceneMakerMain : Control
         });
     }
 
-    private void SelectPerspective(string perspective)
+    private void SelectPerspective(EditorMode mode, string perspective)
     {
-        if (perspective != "Terrain" && _canvas.ActiveTool == CanvasDrawingTool.Fill)
-        {
-            _drawingToolControlsByTool[CanvasDrawingTool.Pencil].ButtonPressed = true;
-            _canvas.ActiveTool = CanvasDrawingTool.Pencil;
-            UpdateToolContextLabel();
-        }
-        _canvas.PerspectiveName = perspective;
+        _canvas.SelectMode(mode);
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
-        _terrainAssetBar.Visible = perspective == "Terrain";
-        _placementAssetBar.Visible = perspective == "Placements";
-        _transitionAssetBar.Visible = perspective == "Transitions";
-        _templateBar.Visible = perspective == "Scene Templates";
+        _terrainAssetBar.Visible = mode == EditorMode.Terrain;
+        _placementAssetBar.Visible = mode == EditorMode.Placements;
+        _transitionAssetBar.Visible = mode == EditorMode.Transitions;
+        _templateBar.Visible = mode == EditorMode.Templates;
         _mapBar.Visible = false;
-        if (perspective == "Scene Templates")
-        {
-            _drawingToolControlsByTool[CanvasDrawingTool.Selector].ButtonPressed = true;
-            _canvas.ActiveTool = CanvasDrawingTool.Selector;
-            UpdateToolContextLabel();
-        }
         UpdateDrawingToolAvailability();
+        UpdateToolContextLabel();
         UpdateTemplateControls();
         SetStatus($"Selected {perspective} perspective.");
     }
@@ -1281,11 +1272,12 @@ public sealed partial class SceneMakerMain : Control
         });
     }
 
-    private void SelectDrawingTool(CanvasDrawingTool tool)
+    private void SelectDrawingTool(EditorTool tool)
     {
-        _canvas.ActiveTool = tool;
+        _canvas.SelectTool(tool);
+        UpdateDrawingToolAvailability();
         UpdateToolContextLabel();
-        SetStatus($"Selected {ToolDisplayName(tool)}.");
+        SetStatus($"Selected {EditorToolRegistry.Resolve(tool).DisplayName}.");
     }
 
     private void SetEraserEnabled(bool enabled)
@@ -1296,21 +1288,9 @@ public sealed partial class SceneMakerMain : Control
 
     private void UpdateToolContextLabel()
     {
-        _toolContextLabel.Text = ToolDisplayName(_canvas.ActiveTool);
-    }
-
-    private static string ToolDisplayName(CanvasDrawingTool tool)
-    {
-        return tool switch
-        {
-            CanvasDrawingTool.Selector => "Selector",
-            CanvasDrawingTool.Pencil => "Pencil Draw",
-            CanvasDrawingTool.Line => "Line Draw",
-            CanvasDrawingTool.Fill => "Terrain Fill",
-            CanvasDrawingTool.AnchorPlace => "Place Template Anchor",
-            CanvasDrawingTool.AnchorMove => "Move Template Anchor",
-            _ => throw new ArgumentOutOfRangeException(nameof(tool)),
-        };
+        _toolContextLabel.Text =
+            $"{EditorToolRegistry.ModeDisplayName(_interactionState.Mode)}:"
+            + EditorToolRegistry.Resolve(_interactionState.ActiveTool).DisplayName;
     }
 
     private void SelectTerrainAsset(string assetKey)
@@ -1343,7 +1323,7 @@ public sealed partial class SceneMakerMain : Control
         }
         foreach (var control in _drawingToolControlsByTool.Values)
             control.ButtonPressed = false;
-        _canvas.ActiveTool = CanvasDrawingTool.AnchorPlace;
+        _canvas.SelectTool(EditorTool.AnchorPlace);
         UpdateToolContextLabel();
         SetStatus(
             $"Place Anchor: click a WorldGrid intersection for group {(int)_anchorGroupEdit.Value}.");
@@ -1859,19 +1839,16 @@ public sealed partial class SceneMakerMain : Control
 
     private void UpdateDrawingToolAvailability()
     {
-        var templatePerspective = _canvas.PerspectiveName == "Scene Templates";
+        var templateMode = _interactionState.Mode == EditorMode.Templates;
         var instanceActive = _scene?.Document.SceneKind == SceneKind.Instance;
         foreach (var (tool, control) in _drawingToolControlsByTool)
         {
-            var templateTool = tool == CanvasDrawingTool.AnchorMove;
-            control.Visible = templatePerspective
-                ? tool is CanvasDrawingTool.Selector or CanvasDrawingTool.AnchorMove
-                : !templateTool;
+            control.Visible = EditorToolRegistry.Supports(_interactionState.Mode, tool);
             control.Disabled = _scene is null
-                || templatePerspective && !instanceActive
-                || tool == CanvasDrawingTool.Fill && _canvas.PerspectiveName != "Terrain";
+                || templateMode && !instanceActive;
+            control.ButtonPressed = control.Visible && tool == _interactionState.ActiveTool;
         }
-        _anchorGroupEdit.Visible = templatePerspective && instanceActive;
+        _anchorGroupEdit.Visible = templateMode && instanceActive;
     }
 
     private void UpdateTemplateControls()

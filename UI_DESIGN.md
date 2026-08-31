@@ -35,7 +35,13 @@ Canvas und damit gegenüber der linken `ToolBar`.
 
 ## Werkzeugmodell
 
-Die linke Werkzeugleiste wählt das primäre Werkzeug aus. Beispiele sind:
+Die Werkzeugauswahl besteht aus zwei unabhängigen, typisierten Dimensionen:
+
+- `EditorMode` bestimmt den bearbeiteten Inhaltsbereich.
+- `EditorTool` bestimmt das primäre Werkzeug innerhalb dieses Modus.
+
+Die linke Werkzeugleiste ist mode-aware und zeigt nur die Werkzeuge des aktiven
+Modus. Beispiele sind:
 
 - `Selector`
 - `Pencil`
@@ -44,6 +50,13 @@ Die linke Werkzeugleiste wählt das primäre Werkzeug aus. Beispiele sind:
 - Template-bezogene Werkzeuge wie `Anchor Move`
 
 Das primäre Werkzeug beschreibt, welche Art von Aktion ausgeführt wird.
+Scene-Typ (`Instance` oder `Template`) und Editor-Modus bleiben voneinander
+getrennte Konzepte.
+
+Der aktive Tool-Kontext ist immer die Kombination aus Modus und Werkzeug. Das
+horizontale `ContextMenu` zeigt diese Kombination beispielsweise als
+`Terrain:Line` oder `Placement:Line`. Jeder Modus merkt sich sein zuletzt
+ausgewähltes Werkzeug.
 
 ## ToolOptionsBar
 
