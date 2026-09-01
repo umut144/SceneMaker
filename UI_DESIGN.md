@@ -93,6 +93,21 @@ Line-Eraser und bleibt reiner Session-Zustand.
 
 ## ToolOptionsBar
 
+Die rechte Leiste trennt zwei Sorten Schalter durch einen Separator. Oberhalb
+steht, was die Werkzeuge *anders arbeiten* lässt — derzeit der `Eraser`.
+Unterhalb steht, was die Karte *anders aussehen* lässt.
+
+Dort sitzt die Höhenansicht (`m`). Sie färbt Terrain und Props nach ihrer Höhe
+statt nach ihrem Asset, mit einem einzigen Blauton von dunkel nach hell: tiefer
+Grund tritt zum Hintergrund zurück, hoher Grund hebt sich ab. Die Skala spannt
+sich über die tatsächlich vorkommenden Höhen der Scene, und eine Legende oben
+rechts auf der Canvas nennt die beiden Enden — ohne sie wären die Farben
+bedeutungslos. Eine Scene mit nur einer Höhe sagt das statt eine Spanne zu
+zeigen.
+
+Die Höhenansicht ist eine Sicht, kein Modus: Zeichnen, Platzieren, Radieren und
+Auswählen funktionieren unverändert weiter.
+
 Die `ToolOptionsBar` ist eine feste, vertikale Optionsleiste rechts neben dem
 Canvas und kein dynamisches `ContextMenu`. Ihre Elemente wechseln nicht
 abhängig von Perspective, Scene-Typ oder Template-Modus. Sie enthält zusätzliche

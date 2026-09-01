@@ -22,6 +22,31 @@ public sealed partial class SceneCanvas : Control
     private static readonly Color TemplateAnchorText = Color.FromHtml("#252A31");
     private static readonly Color TemplatePreviewOutline = Color.FromHtml("#FFFFFF");
 
+    /// <summary>
+    /// One hue, dark to light, for reading height as magnitude. It is anchored
+    /// dark because the canvas is dark: low ground recedes toward the surface
+    /// and high ground stands out. The darkest step still clears the background,
+    /// so a low cell stays visible rather than disappearing into it.
+    /// </summary>
+    private static readonly Color[] ElevationRamp =
+    [
+        Color.FromHtml("#184F95"),
+        Color.FromHtml("#1C5CAB"),
+        Color.FromHtml("#256ABF"),
+        Color.FromHtml("#2A78D6"),
+        Color.FromHtml("#3987E5"),
+        Color.FromHtml("#5598E7"),
+        Color.FromHtml("#6DA7EC"),
+        Color.FromHtml("#86B6EF"),
+        Color.FromHtml("#9EC5F4"),
+        Color.FromHtml("#B7D3F6"),
+        Color.FromHtml("#CDE2FB"),
+    ];
+
+    private static readonly Color LegendInk = Color.FromHtml("#E4E9F0");
+    private static readonly Color LegendMutedInk = Color.FromHtml("#96A1B2");
+    private static readonly Color LegendSurface = Color.FromHtml("#0F1520");
+
     private LoadedScene? _scene;
     private WorkspaceMetrics? _metrics;
     private SceneDocument? _templatePreview;
@@ -35,6 +60,7 @@ public sealed partial class SceneCanvas : Control
     private PropDisplayCatalog? _propAssets;
     private ToolInteraction _interaction = new();
     private bool _pointerOverCanvas;
+    private bool _heatmapEnabled;
 
     public SceneCanvas()
     {
@@ -68,6 +94,21 @@ public sealed partial class SceneCanvas : Control
     /// when a Scene opens, then adjustable per stroke in the context bar.
     /// </summary>
     public decimal ElevationMeters { get; set; } = SceneDocument.GroundElevationMeters;
+
+    /// <summary>
+    /// Draws Terrain and Props by their height instead of by their Asset. It is
+    /// a way of looking, not a mode of working: every tool keeps working while
+    /// it is on.
+    /// </summary>
+    public bool HeatmapEnabled
+    {
+        get => _heatmapEnabled;
+        set
+        {
+            _heatmapEnabled = value;
+            QueueRedraw();
+        }
+    }
 
     /// <summary>The Template Anchor the tools currently have selected, if any.</summary>
     public string? SelectedTemplateAnchorId => _interaction.SelectedTemplateAnchorId;
@@ -383,6 +424,82 @@ public sealed partial class SceneCanvas : Control
             highlighted: Mode == EditorMode.Templates);
 
         DrawRect(sceneRect, SceneBorder, filled: false, width: 2.0f);
+        if (_heatmapEnabled) DrawElevationLegend(document);
+    }
+
+    /// <summary>
+    /// Without a scale the colours mean nothing, so the heat map carries its
+    /// own: the ramp it actually uses, with the two heights it is stretched
+    /// between. A Scene at one height says so instead of showing a range.
+    /// </summary>
+    private void DrawElevationLegend(SceneDocument document)
+    {
+        if (ElevationRange(document) is not { } range) return;
+        var font = ThemeDB.FallbackFont;
+        const int FontSize = 12;
+        const float BarWidth = 132f;
+        const float BarHeight = 10f;
+        const float Padding = 8f;
+
+        var panel = new Rect2(
+            new Vector2(Size.X - BarWidth - (Padding * 2f), Padding),
+            new Vector2(BarWidth + (Padding * 2f), BarHeight + 34f));
+        DrawRect(panel, new Color(LegendSurface.R, LegendSurface.G, LegendSurface.B, 0.88f));
+        DrawRect(panel, new Color(LegendMutedInk.R, LegendMutedInk.G, LegendMutedInk.B, 0.45f),
+            filled: false, width: 1f);
+
+        DrawString(
+            font,
+            panel.Position + new Vector2(Padding, 14f),
+            "Height (m)",
+            HorizontalAlignment.Left,
+            width: -1f,
+            fontSize: FontSize,
+            modulate: LegendMutedInk);
+
+        var barTop = panel.Position.Y + 20f;
+        // One rectangle per ramp step is enough at this size and avoids a
+        // gradient texture the canvas would otherwise have to own.
+        var stepWidth = BarWidth / ElevationRamp.Length;
+        for (var step = 0; step < ElevationRamp.Length; step++)
+        {
+            DrawRect(
+                new Rect2(
+                    new Vector2(panel.Position.X + Padding + (step * stepWidth), barTop),
+                    new Vector2(stepWidth + 1f, BarHeight)),
+                ElevationRamp[step]);
+        }
+
+        var baseline = barTop + BarHeight + 13f;
+        if (range.Low == range.High)
+        {
+            DrawString(
+                font,
+                new Vector2(panel.Position.X + Padding, baseline),
+                $"all at {range.High:0.###}",
+                HorizontalAlignment.Left,
+                width: -1f,
+                fontSize: FontSize,
+                modulate: LegendInk);
+            return;
+        }
+
+        DrawString(
+            font,
+            new Vector2(panel.Position.X + Padding, baseline),
+            $"{range.Low:0.###}",
+            HorizontalAlignment.Left,
+            width: -1f,
+            fontSize: FontSize,
+            modulate: LegendInk);
+        DrawString(
+            font,
+            new Vector2(panel.Position.X + Padding, baseline),
+            $"{range.High:0.###}",
+            HorizontalAlignment.Right,
+            width: BarWidth,
+            fontSize: FontSize,
+            modulate: LegendInk);
     }
 
     private void ZoomAtCenter(double factor)
@@ -409,6 +526,34 @@ public sealed partial class SceneCanvas : Control
         return new AuthoringPoint(x, y);
     }
 
+    /// <summary>
+    /// The lowest and highest authored height in the Scene, or null when it has
+    /// no Terrain and no Props. A Scene at one height gets a zero-width range,
+    /// which the ramp reads as its top step.
+    /// </summary>
+    private static (decimal Low, decimal High)? ElevationRange(SceneDocument document)
+    {
+        decimal? low = null;
+        decimal? high = null;
+        foreach (var elevation in document.TerrainCells.Select(static cell => cell.ElevationMeters)
+                     .Concat(document.Props.Select(static prop => prop.ElevationMeters)))
+        {
+            low = low is null || elevation < low ? elevation : low;
+            high = high is null || elevation > high ? elevation : high;
+        }
+        return low is null || high is null ? null : (low.Value, high.Value);
+    }
+
+    private static Color ElevationColor(decimal elevation, (decimal Low, decimal High) range)
+    {
+        var span = range.High - range.Low;
+        var position = span == 0m ? 1f : (float)((elevation - range.Low) / span);
+        var scaled = Math.Clamp(position, 0f, 1f) * (ElevationRamp.Length - 1);
+        var lower = (int)scaled;
+        if (lower >= ElevationRamp.Length - 1) return ElevationRamp[^1];
+        return ElevationRamp[lower].Lerp(ElevationRamp[lower + 1], scaled - lower);
+    }
+
     private void DrawTerrain(
         SceneDocument document,
         Vector2 pan,
@@ -416,9 +561,12 @@ public sealed partial class SceneCanvas : Control
         bool highlighted)
     {
         var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
+        var range = _heatmapEnabled ? ElevationRange(document) : null;
         foreach (var cell in document.TerrainCells)
         {
-            if (!_terrainColors.TryGetValue(cell.AssetKey, out var color)) continue;
+            Color color;
+            if (range is { } span) color = ElevationColor(cell.ElevationMeters, span);
+            else if (!_terrainColors.TryGetValue(cell.AssetKey, out color)) continue;
             var rectangle = new Rect2(
                 pan + new Vector2(
                     cell.X * cellSize,
@@ -429,7 +577,7 @@ public sealed partial class SceneCanvas : Control
                 continue;
             DrawRect(
                 rectangle,
-                highlighted
+                highlighted || _heatmapEnabled
                     ? color
                     : new Color(color.R, color.G, color.B, 0.24f));
         }
@@ -472,6 +620,7 @@ public sealed partial class SceneCanvas : Control
         bool highlighted)
     {
         if (_propAssets is null) return;
+        var propRange = _heatmapEnabled ? ElevationRange(document) : null;
         foreach (var prop in document.Props)
         {
             var asset = _propAssets.Resolve(prop.AssetKey);
@@ -484,7 +633,9 @@ public sealed partial class SceneCanvas : Control
                 pan,
                 zoom,
                 sceneHeightAuthoringPixels);
-            var color = Color.FromHtml(asset.Color);
+            var color = propRange is { } propSpan
+                ? ElevationColor(prop.ElevationMeters, propSpan)
+                : Color.FromHtml(asset.Color);
             var selected = highlighted && prop.InstanceId == _interaction.SelectedPropInstanceId;
             var outline = highlighted
                 ? color

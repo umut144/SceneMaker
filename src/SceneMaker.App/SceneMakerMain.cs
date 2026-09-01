@@ -37,6 +37,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _propLineOffsetLabel = new();
     private readonly SpinBox _propLineOffsetEdit = new();
     private readonly Button _eraserToggle = new();
+    private readonly Button _heatmapToggle = new();
     private readonly Label _viewLabel = new();
     private readonly Label _statusLabel = new();
     private readonly Label _documentStateLabel = new();
@@ -388,6 +389,19 @@ public sealed partial class SceneMakerMain : Control
         _eraserToggle.AddThemeConstantOverride("icon_max_width", 24);
         _eraserToggle.Toggled += SetEraserEnabled;
         _toolOptionsBar.AddChild(_eraserToggle);
+
+        // A separator, because what follows is a way of looking rather than a
+        // way of working: the tools keep doing what they did.
+        _toolOptionsBar.AddChild(new HSeparator());
+
+        _heatmapToggle.Name = "HeatmapToggle";
+        _heatmapToggle.Text = "m";
+        _heatmapToggle.Alignment = HorizontalAlignment.Center;
+        _heatmapToggle.ToggleMode = true;
+        _heatmapToggle.TooltipText = "Show Terrain and Props by height instead of by Asset";
+        _heatmapToggle.CustomMinimumSize = new Vector2(42f, 42f);
+        _heatmapToggle.Toggled += SetHeatmapEnabled;
+        _toolOptionsBar.AddChild(_heatmapToggle);
         UpdateToolContextLabel();
 
         var footer = new HBoxContainer { Name = "Footer" };
@@ -1073,11 +1087,12 @@ public sealed partial class SceneMakerMain : Control
 
     /// <summary>
     /// Godot counts in doubles, the documents in decimals. Going through the
-    /// shortest three-decimal form keeps 1.1 as 1.1 rather than 1.100 or
-    /// 1.1000000000000001, so repainting a Scene does not churn its file.
+    /// shortest form that keeps one decimal writes 1.1 as 1.1 and 2 as 2.0,
+    /// rather than 1.1000000000000001 and a bare 2. Heights then read the same
+    /// everywhere and repainting a Scene does not churn its file.
     /// </summary>
     private static decimal ElevationOf(double value) => decimal.Parse(
-        value.ToString("0.###", CultureInfo.InvariantCulture),
+        value.ToString("0.0##", CultureInfo.InvariantCulture),
         CultureInfo.InvariantCulture);
 
     /// <summary>
@@ -1281,6 +1296,14 @@ public sealed partial class SceneMakerMain : Control
     {
         _canvas.SetEraserEnabled(enabled);
         SetStatus(enabled ? "Eraser enabled." : "Eraser disabled.");
+    }
+
+    private void SetHeatmapEnabled(bool enabled)
+    {
+        _canvas.HeatmapEnabled = enabled;
+        SetStatus(enabled
+            ? "Height view on. Drawing and placing work as usual."
+            : "Height view off.");
     }
 
     private void SetPropLineOffset(double value)
