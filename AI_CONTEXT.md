@@ -21,6 +21,26 @@ New workspace configurations explicitly start with 1 m terrain cells at 32
 authoring pixels and 192 game pixels per meter. These values remain authored
 workspace data rather than an implicit reader or export fallback.
 
+## Template Anchors and groups
+
+The authored Scene Instance is the fixed part of a map. Template Anchors are
+the parts that are allowed to vary: an Anchor names a group, and every Scene
+Template in that group is an equally acceptable thing to place there. Selection
+within a group is therefore deliberately arbitrary. It is not a ranking, and it
+is not a bug to be fixed with a priority rule - a Template that does not belong
+at a given Anchor belongs in a different group.
+
+This is what makes the result hybrid rather than procedural. The main map is
+authored by hand and stays where it is; the Anchors and their groups add
+variation on top of it. A Scene Template is a small finished Scene used as
+seasoning, not a tile in a generator.
+
+Composition is reproducible rather than fixed. `TemplateComposition.Compose`
+selects deterministically from a seed, so the same seed always yields the same
+map. The editor's preview draws a fresh seed every time on purpose: seeing a
+different arrangement each press is the point, because all of them are valid.
+The preview is transient and is never written into a document.
+
 SceneMaker has no runtime dependency on PolyTools or the source game project.
 Later consumers receive a small generic JSON export; they resolve the same
 `asset_key`s in their own PolyTools content boundaries. Each export is a
