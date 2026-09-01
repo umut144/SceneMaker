@@ -19,7 +19,7 @@ public static class TestScenes
         int sizeCells = 6,
         string terrainAssetKey = "grass") =>
         FillTerrain(
-            SceneDocument.Create(sceneId, sizeCells, sizeCells),
+            SceneDocument.CreateInstance(sceneId, sizeCells, sizeCells),
             workspace,
             terrainAssetKey,
             sizeCells);
@@ -36,11 +36,10 @@ public static class TestScenes
         int sizeCells = 2,
         string terrainAssetKey = "sand") =>
         FillTerrain(
-            SceneDocument.Create(
+            SceneDocument.CreateTemplate(
                 sceneId,
                 sizeCells,
                 sizeCells,
-                SceneKind.Template,
                 groupNumber,
                 insertionAnchorX: 0,
                 insertionAnchorY: 0),
@@ -50,7 +49,7 @@ public static class TestScenes
 
     /// <summary>A square Scene Instance with no Terrain at all.</summary>
     public static SceneDocument EmptyInstance(string sceneId = "base", int sizeCells = 6) =>
-        SceneDocument.Create(sceneId, sizeCells, sizeCells);
+        SceneDocument.CreateInstance(sceneId, sizeCells, sizeCells);
 
     private static SceneDocument FillTerrain(
         SceneDocument scene,

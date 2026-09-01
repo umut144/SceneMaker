@@ -192,5 +192,5 @@ public sealed class SceneEditHistoryTests
     }
 
     private static SceneDocument Scene(int widthCells) =>
-        SceneDocument.Create("scene", widthCells, 1);
+        SceneDocument.CreateInstance("scene", widthCells, 1);
 }

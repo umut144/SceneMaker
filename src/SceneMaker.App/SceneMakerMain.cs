@@ -1201,15 +1201,19 @@ public sealed partial class SceneMakerMain : Control
         PersistScene();
         TryDocumentAction(() =>
         {
-            _scene = SceneStore.Create(
-                session.Workspace,
-                _sceneIdEdit.Text.Trim(),
-                checked((int)_sceneWidthEdit.Value),
-                checked((int)_sceneHeightEdit.Value),
-                SelectedSceneKind(),
-                checked((int)_templateGroupEdit.Value),
-                checked((int)_templateInsertionXEdit.Value),
-                checked((int)_templateInsertionYEdit.Value));
+            var sceneId = _sceneIdEdit.Text.Trim();
+            var widthCells = checked((int)_sceneWidthEdit.Value);
+            var heightCells = checked((int)_sceneHeightEdit.Value);
+            _scene = SelectedSceneKind() == SceneKind.Template
+                ? SceneStore.CreateTemplate(
+                    session.Workspace,
+                    sceneId,
+                    widthCells,
+                    heightCells,
+                    checked((int)_templateGroupEdit.Value),
+                    checked((int)_templateInsertionXEdit.Value),
+                    checked((int)_templateInsertionYEdit.Value))
+                : SceneStore.CreateInstance(session.Workspace, sceneId, widthCells, heightCells);
             _history = new SceneEditHistory(_scene.Document);
             _canvas.ShowScene(_scene);
             _templatePreview = null;

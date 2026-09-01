@@ -46,7 +46,7 @@ public sealed class StandaloneWorkspaceTests
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
         var terrain = TerrainDisplayCatalogLoader.Load(catalog, workspace);
         var props = PropDisplayCatalogLoader.Load(catalog, workspace);
-        var scene = SceneDocument.Create("test", 20, 20);
+        var scene = SceneDocument.CreateInstance("test", 20, 20);
 
         scene = TerrainEditing.Paint(scene, terrain, 0, 0, "grass");
         scene = PropEditing.Place(scene, props, 33, 0, "tree");
@@ -74,7 +74,7 @@ public sealed class StandaloneWorkspaceTests
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
         var terrain = TerrainDisplayCatalogLoader.Load(catalog, workspace);
         var scene = TerrainEditing.PaintLine(
-            SceneDocument.Create("line", 5, 5),
+            SceneDocument.CreateInstance("line", 5, 5),
             terrain,
             0,
             0,
@@ -266,7 +266,7 @@ public sealed class StandaloneWorkspaceTests
         var terrain = TerrainDisplayCatalogLoader.Load(catalog, configuration);
         var props = PropDisplayCatalogLoader.Load(catalog, configuration);
         var scene = TerrainEditing.Paint(
-            SceneDocument.Create("field", 1, 1), terrain, 0, 0, "grass");
+            SceneDocument.CreateInstance("field", 1, 1), terrain, 0, 0, "grass");
         var workspace = new LoadedWorkspace(directory.Path, "game05");
         var path = SceneExport.Write(
             workspace,

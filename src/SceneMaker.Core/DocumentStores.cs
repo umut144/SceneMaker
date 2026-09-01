@@ -127,31 +127,41 @@ public static class SceneStore
                 SearchOption.TopDirectoryOnly))
             .OrderBy(static path => path, StringComparer.Ordinal);
 
-    public static LoadedScene Create(
+    public static LoadedScene CreateInstance(
+        LoadedWorkspace workspace,
+        string sceneId,
+        int widthCells,
+        int heightCells) =>
+        WriteNewScene(workspace, SceneDocument.CreateInstance(sceneId, widthCells, heightCells));
+
+    public static LoadedScene CreateTemplate(
         LoadedWorkspace workspace,
         string sceneId,
         int widthCells,
         int heightCells,
-        SceneKind sceneKind = SceneKind.Instance,
-        int templateGroupNumber = 1,
-        int insertionAnchorX = 0,
-        int insertionAnchorY = 0)
-    {
-        ArgumentNullException.ThrowIfNull(workspace);
-        var document = SceneDocument.Create(
+        int groupNumber,
+        int insertionAnchorX,
+        int insertionAnchorY) =>
+        WriteNewScene(workspace, SceneDocument.CreateTemplate(
             sceneId,
             widthCells,
             heightCells,
-            sceneKind,
-            templateGroupNumber,
+            groupNumber,
             insertionAnchorX,
-            insertionAnchorY);
+            insertionAnchorY));
+
+    private static LoadedScene WriteNewScene(LoadedWorkspace workspace, SceneDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
         DocumentValidation.Validate(document);
-        var directory = DirectoryFor(workspace, sceneKind);
+        var directory = DirectoryFor(workspace, document.SceneKind);
         Directory.CreateDirectory(directory);
-        var filePath = Path.Combine(directory, sceneId + FileSuffix);
+        var filePath = Path.Combine(directory, document.SceneId + FileSuffix);
         if (File.Exists(filePath))
-            throw new SceneMakerDocumentException($"Scene '{sceneId}' already exists in this Workspace.");
+        {
+            throw new SceneMakerDocumentException(
+                $"Scene '{document.SceneId}' already exists in this Workspace.");
+        }
 
         AtomicTextFile.WriteNew(filePath, DocumentJson.Serialize(document));
         return new LoadedScene(filePath, document);

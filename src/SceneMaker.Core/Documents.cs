@@ -70,14 +70,43 @@ public sealed record SceneDocument
     public required TemplateDefinitionDocument? TemplateDefinition { get; init; }
     public required List<TemplateAnchorDocument> TemplateAnchors { get; init; }
 
-    public static SceneDocument Create(
+    /// <summary>An empty Scene Instance.</summary>
+    public static SceneDocument CreateInstance(string sceneId, int widthCells, int heightCells) =>
+        Empty(sceneId, SceneKind.Instance, widthCells, heightCells, templateDefinition: null);
+
+    /// <summary>
+    /// An empty Scene Template. Only a Template carries a group number and an
+    /// insertion anchor, which is why the Instance factory has no room for
+    /// them: passing them there used to be accepted and silently dropped.
+    /// </summary>
+    public static SceneDocument CreateTemplate(
         string sceneId,
         int widthCells,
         int heightCells,
-        SceneKind sceneKind = SceneKind.Instance,
-        int templateGroupNumber = 1,
-        int insertionAnchorX = 0,
-        int insertionAnchorY = 0) => new()
+        int groupNumber,
+        int insertionAnchorX,
+        int insertionAnchorY) =>
+        Empty(
+            sceneId,
+            SceneKind.Template,
+            widthCells,
+            heightCells,
+            new TemplateDefinitionDocument
+            {
+                GroupNumber = groupNumber,
+                InsertionAnchorAuthoringPx = new AuthoringPixelPosition
+                {
+                    X = insertionAnchorX,
+                    Y = insertionAnchorY,
+                },
+            });
+
+    private static SceneDocument Empty(
+        string sceneId,
+        SceneKind sceneKind,
+        int widthCells,
+        int heightCells,
+        TemplateDefinitionDocument? templateDefinition) => new()
     {
         Schema = SceneMakerSchemas.Scene,
         Version = SceneMakerSchemas.SceneVersion,
@@ -87,17 +116,7 @@ public sealed record SceneDocument
         SizeCells = new SceneSizeCells { Width = widthCells, Height = heightCells },
         TerrainCells = [],
         Props = [],
-        TemplateDefinition = sceneKind == SceneKind.Template
-            ? new TemplateDefinitionDocument
-            {
-                GroupNumber = templateGroupNumber,
-                InsertionAnchorAuthoringPx = new AuthoringPixelPosition
-                {
-                    X = insertionAnchorX,
-                    Y = insertionAnchorY,
-                },
-            }
-            : null,
+        TemplateDefinition = templateDefinition,
         TemplateAnchors = [],
     };
 }
