@@ -62,7 +62,7 @@ purpose.
   "scene": {
     "schema": "srt.scene_maker_scene",
     "version": 7,
-    "scene_id": "world01",
+    "scene_id": "overworld01",   // names the map, not the Workspace
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
     "size_cells": { "width": 100, "height": 100 },

@@ -74,6 +74,11 @@ whole Workspace; the CLI can export a single Scene by id for a surgical swap.
 
 For the included workspace, run `scripts/sync_polytools_world.sh` after a
 successful PolyTools Runtime Export. Run `scripts/export_scene.sh` to validate
-and export `world01/scenes/world01.scene.json`; the default output is
-`world01/exports/world01.scene_export.json`. The current authored scene is a
-100 × 100 Grass map with one Tree and one Ankh.
+and export every Scene of `world01`; the default output goes to
+`world01/exports/`. The Workspace currently holds two Scene Instances -
+`overworld01`, a 100 x 100 Grass map, and `cave01` - plus two Scene Templates.
+
+The Workspace key `world01` and the Scene id `overworld01` are different names
+for different things: the key is bound to the PolyTools world it imports from
+and must equal the directory it lives in, while a Scene id names one map inside
+that Workspace.
