@@ -23,6 +23,18 @@ public static class SceneExport
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
     };
 
+    /// <summary>Exports <paramref name="scene"/> out of its open Workspace.</summary>
+    public static string Write(WorkspaceSession session, LoadedScene scene)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return Write(
+            session.Workspace,
+            scene,
+            session.Configuration,
+            session.TerrainAssets,
+            session.PropAssets);
+    }
+
     public static string Write(
         LoadedWorkspace workspace,
         LoadedScene scene,

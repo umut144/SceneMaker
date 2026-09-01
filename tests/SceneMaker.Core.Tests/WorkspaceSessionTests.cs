@@ -1,21 +1,20 @@
-using SceneMaker.Core;
 using SceneMaker.TestSupport;
 using Xunit;
 
-namespace SceneMaker.Editor.Tests;
+namespace SceneMaker.Core.Tests;
 
 /// <summary>
 /// The session is what makes a half-opened Workspace unrepresentable: it either
 /// loads completely or throws, and it never mutates itself in place.
 /// </summary>
-public sealed class EditorSessionTests
+public sealed class WorkspaceSessionTests
 {
     [Fact]
     public void LoadingAWorkspaceDerivesEveryCatalogFromTheSameConfiguration()
     {
         using var workspace = TestWorkspace.Create();
 
-        var session = EditorSession.Load(workspace.RootPath);
+        var session = WorkspaceSession.Load(workspace.RootPath);
 
         Assert.Equal("test_world", session.WorkspaceKey);
         Assert.Equal(Path.GetFullPath(workspace.RootPath), session.DirectoryPath);
@@ -37,7 +36,7 @@ public sealed class EditorSessionTests
             Path.Combine(workspace.RootPath, PolyToolsCatalogImporter.ImportDirectoryName),
             recursive: true);
 
-        Assert.Throws<SceneMakerDocumentException>(() => EditorSession.Load(workspace.RootPath));
+        Assert.Throws<SceneMakerDocumentException>(() => WorkspaceSession.Load(workspace.RootPath));
     }
 
     [Fact]
@@ -46,7 +45,7 @@ public sealed class EditorSessionTests
         using var workspace = TestWorkspace.Create();
         File.Delete(Path.Combine(workspace.RootPath, WorkspaceConfigurationStore.FileName));
 
-        Assert.Throws<SceneMakerDocumentException>(() => EditorSession.Load(workspace.RootPath));
+        Assert.Throws<SceneMakerDocumentException>(() => WorkspaceSession.Load(workspace.RootPath));
     }
 
     [Fact]
@@ -55,14 +54,14 @@ public sealed class EditorSessionTests
         using var workspace = TestWorkspace.Create();
         Directory.Delete(Path.Combine(workspace.RootPath, WorkspaceStore.ScenesDirectoryName));
 
-        Assert.Throws<SceneMakerDocumentException>(() => EditorSession.Load(workspace.RootPath));
+        Assert.Throws<SceneMakerDocumentException>(() => WorkspaceSession.Load(workspace.RootPath));
     }
 
     [Fact]
     public void NarrowingTheAssetProfilesDerivesANewSessionAndLeavesTheOldOneIntact()
     {
         using var workspace = TestWorkspace.Create();
-        var session = EditorSession.Load(workspace.RootPath);
+        var session = WorkspaceSession.Load(workspace.RootPath);
 
         var narrowed = session.WithAssetProfiles(
             [new WorkspaceAssetProfile("grass", "#99E550"), new WorkspaceAssetProfile("stone", "#808080")]);
@@ -79,7 +78,7 @@ public sealed class EditorSessionTests
         using var workspace = TestWorkspace.Create();
         var configPath = Path.Combine(workspace.RootPath, WorkspaceConfigurationStore.FileName);
         var stored = File.ReadAllText(configPath);
-        var session = EditorSession.Load(workspace.RootPath);
+        var session = WorkspaceSession.Load(workspace.RootPath);
 
         _ = session.WithAssetProfiles([new WorkspaceAssetProfile("grass", "#99E550")]);
 
@@ -90,7 +89,7 @@ public sealed class EditorSessionTests
     public void DerivingRejectsAnAssetTheCatalogDoesNotKnow()
     {
         using var workspace = TestWorkspace.Create();
-        var session = EditorSession.Load(workspace.RootPath);
+        var session = WorkspaceSession.Load(workspace.RootPath);
 
         Assert.Throws<SceneMakerDocumentException>(() =>
             session.WithAssetProfiles([new WorkspaceAssetProfile("nowhere", "#FFFFFF")]));

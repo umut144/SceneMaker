@@ -8,19 +8,11 @@ if (args is not [var workspaceArgument, var sceneId])
 
 try
 {
-    var workspaceDirectory = Path.GetFullPath(workspaceArgument);
-    var catalog = PolyToolsCatalogImporter.Load(workspaceDirectory);
-    var configuration = WorkspaceConfigurationStore.Load(workspaceDirectory, catalog);
-    var workspace = WorkspaceStore.Load(workspaceDirectory, catalog);
+    var session = WorkspaceSession.Load(Path.GetFullPath(workspaceArgument));
     var scene = SceneStore.Load(
-        workspace,
-        Path.Combine(workspace.ScenesDirectoryPath, sceneId + SceneStore.FileSuffix));
-    var output = SceneExport.Write(
-        workspace,
-        scene,
-        configuration,
-        TerrainDisplayCatalogLoader.Load(catalog, configuration),
-        PropDisplayCatalogLoader.Load(catalog, configuration));
+        session.Workspace,
+        Path.Combine(session.Workspace.ScenesDirectoryPath, sceneId + SceneStore.FileSuffix));
+    var output = SceneExport.Write(session, scene);
     Console.WriteLine(output);
     return 0;
 }

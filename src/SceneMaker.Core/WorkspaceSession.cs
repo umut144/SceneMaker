@@ -1,18 +1,19 @@
-using SceneMaker.Core;
-
-namespace SceneMaker.Editor;
+namespace SceneMaker.Core;
 
 /// <summary>
-/// Everything the editor needs in order to work inside one Workspace, held as a
-/// single value. A session either exists completely or not at all: there is no
-/// state in which a Workspace is open but its PolyTools catalog, its
-/// configuration or its display catalogs are missing.
+/// One open Workspace with everything derived from it, held as a single value.
+/// A session either exists completely or not at all: there is no state in which
+/// a Workspace is open but its PolyTools catalog, its configuration or its
+/// display catalogs are missing.
+///
+/// This lives in Core, not in the editor: opening a Workspace is not an editor
+/// concern, and the headless exporter does exactly the same thing.
 ///
 /// Loading builds the whole session before anything is handed out, so a failed
 /// load cannot leave a half-opened Workspace behind. Callers keep one nullable
 /// reference and swap it as a unit instead of assigning correlated fields.
 /// </summary>
-public sealed record EditorSession(
+public sealed record WorkspaceSession(
     LoadedWorkspace Workspace,
     PolyToolsCatalog Catalog,
     WorkspaceConfiguration Configuration,
@@ -28,7 +29,7 @@ public sealed record EditorSession(
     /// <see cref="SceneMakerDocumentException"/> when the Workspace, its
     /// synchronized PolyTools import or its configuration cannot be read.
     /// </summary>
-    public static EditorSession Load(string workspaceDirectory)
+    public static WorkspaceSession Load(string workspaceDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
         var catalog = PolyToolsCatalogImporter.Load(workspaceDirectory);
@@ -44,10 +45,10 @@ public sealed record EditorSession(
     /// Nothing is written and this session is left untouched, so the caller can
     /// validate the candidate before persisting and adopting it.
     /// </summary>
-    public EditorSession WithAssetProfiles(IEnumerable<WorkspaceAssetProfile> assetProfiles) =>
+    public WorkspaceSession WithAssetProfiles(IEnumerable<WorkspaceAssetProfile> assetProfiles) =>
         Derive(Workspace, Catalog, Configuration.WithAssetProfiles(assetProfiles, Catalog));
 
-    private static EditorSession Derive(
+    private static WorkspaceSession Derive(
         LoadedWorkspace workspace,
         PolyToolsCatalog catalog,
         WorkspaceConfiguration configuration) =>

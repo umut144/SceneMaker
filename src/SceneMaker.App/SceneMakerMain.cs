@@ -100,7 +100,7 @@ public sealed partial class SceneMakerMain : Control
     /// The open Workspace together with everything derived from it. Null means
     /// no Workspace is open; there is no state in between.
     /// </summary>
-    private EditorSession? _session;
+    private WorkspaceSession? _session;
     private LoadedScene? _scene;
     private SceneEditHistory? _history;
     private string? _pendingWorkspaceParentDirectory;
@@ -1037,12 +1037,7 @@ public sealed partial class SceneMakerMain : Control
         }
         TryDocumentAction(() =>
         {
-            var path = SceneExport.Write(
-                session.Workspace,
-                scene,
-                session.Configuration,
-                session.TerrainAssets,
-                session.PropAssets);
+            var path = SceneExport.Write(session, scene);
             SetStatus($"Exported Scene snapshot to '{path}'.");
         });
     }
@@ -1193,7 +1188,7 @@ public sealed partial class SceneMakerMain : Control
                 ?? throw new SceneMakerDocumentException("Workspace config requires a parent directory.");
             // The session is built completely before it is adopted, so a load
             // that fails leaves the Workspace currently open untouched.
-            var session = EditorSession.Load(workspaceDirectory);
+            var session = WorkspaceSession.Load(workspaceDirectory);
             AdoptSession(session);
             _scene = null;
             _history = null;
@@ -1705,7 +1700,7 @@ public sealed partial class SceneMakerMain : Control
     /// Takes a fully built session into use. Nothing is adopted piecemeal: the
     /// editor swaps one complete session for another.
     /// </summary>
-    private void AdoptSession(EditorSession session)
+    private void AdoptSession(WorkspaceSession session)
     {
         _session = session;
         _lastWorkspaceDirectory = session.DirectoryPath;
@@ -1744,7 +1739,7 @@ public sealed partial class SceneMakerMain : Control
         {
             var recent = RecentSessionStore.Load(_recentSessionPath!);
             if (recent is null) return;
-            var session = EditorSession.Load(recent.WorkspaceDirectoryPath);
+            var session = WorkspaceSession.Load(recent.WorkspaceDirectoryPath);
             AdoptSession(session);
             _templatePreview = null;
             _scene = recent.SceneRelativePath is null

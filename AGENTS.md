@@ -45,11 +45,13 @@ Three rules follow from this and are worth stating outright:
   hands them to `ToolInteraction`, which answers with exactly one `ToolOutcome`;
   `SceneMakerMain.ExecuteSceneCommand` applies it, records undo and reports it.
   New tools extend `ToolInteraction`; they do not add events to the canvas.
-- An open Workspace is one value. `EditorSession` bundles the Workspace, its
+- An open Workspace is one value. `WorkspaceSession` bundles the Workspace, its
   PolyTools catalog, its configuration and both display catalogs; it is built in
   full before it is adopted and swapped as a unit. `SceneMakerMain` keeps one
-  `EditorSession?`, never a set of correlated nullable fields, so a failed load
-  cannot leave a half-opened Workspace behind.
+  `WorkspaceSession?`, never a set of correlated nullable fields, so a failed
+  load cannot leave a half-opened Workspace behind. Opening a Workspace is not
+  an editor concern, which is why it sits in Core and the headless exporter
+  uses the same path.
 
 ## Schema versions
 
