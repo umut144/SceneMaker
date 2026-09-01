@@ -104,6 +104,11 @@ dotnet test tests/SceneMaker.Editor.Tests/SceneMaker.Editor.Tests.csproj
 /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . --editor --quit
 ```
 
+CI (`.github/workflows/verify.yml`) runs everything above except the last line:
+the Godot SDK comes from NuGet, so the application assembly compiles on a plain
+runner, but starting the editor needs the Godot binary. Booting it headless
+stays a manual step, as does looking at the canvas.
+
 ## Project documentation
 
 - `AI_CONTEXT.md` contains domain and architecture context.

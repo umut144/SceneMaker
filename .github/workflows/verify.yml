@@ -1,0 +1,96 @@
+name: verify
+
+# Covers everything that builds without a Godot editor installed. Godot itself
+# comes from NuGet (Godot.NET.Sdk), so the application assembly is compiled here
+# too - in its own job, because that is the part that has never run in CI before.
+#
+# Still not covered, and still the manual step from AGENTS.md:
+#
+#   /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . --editor --quit
+#   tests/test_headless_start.sh
+#
+# Those need the Godot binary rather than only its SDK.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  core:
+    name: Core, Editor and the headless exporter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: |
+          dotnet restore src/SceneMaker.Cli/SceneMaker.Cli.csproj
+          dotnet restore tests/SceneMaker.Core.Tests/SceneMaker.Core.Tests.csproj
+          dotnet restore tests/SceneMaker.Editor.Tests/SceneMaker.Editor.Tests.csproj
+
+      # TreatWarningsAsErrors is set for every project, so one warning fails this.
+      - name: Build the headless exporter
+        run: >-
+          dotnet build src/SceneMaker.Cli/SceneMaker.Cli.csproj
+          --configuration Release --no-restore
+
+      - name: Core tests
+        run: >-
+          dotnet test tests/SceneMaker.Core.Tests/SceneMaker.Core.Tests.csproj
+          --configuration Release --no-restore
+          --logger "trx;LogFileName=core-tests.trx"
+          --results-directory test-results
+
+      - name: Editor tests
+        run: >-
+          dotnet test tests/SceneMaker.Editor.Tests/SceneMaker.Editor.Tests.csproj
+          --configuration Release --no-restore
+          --logger "trx;LogFileName=editor-tests.trx"
+          --results-directory test-results
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 14
+
+  app:
+    name: Godot application assembly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Godot.NET.Sdk and GodotSharp come from NuGet, so compiling the assembly
+      # needs no Godot installation. Running the editor still would.
+      - name: Build SceneMaker.csproj
+        run: dotnet build SceneMaker.csproj --configuration Release
