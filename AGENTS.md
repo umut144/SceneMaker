@@ -98,6 +98,9 @@ dotnet test tests/SceneMaker.Editor.Tests/SceneMaker.Editor.Tests.csproj
 
 - `AI_CONTEXT.md` contains domain and architecture context.
 - `UI_DESIGN.md` contains UI layout and interaction conventions.
+- `TASKS.md` lists known rough edges that were deliberately left alone, with
+  what each one costs. Check it before "fixing" something that looks odd, and
+  add to it rather than leaving a finding undocumented.
 
 ## Version control
 
