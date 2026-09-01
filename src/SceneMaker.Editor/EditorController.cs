@@ -41,6 +41,7 @@ public sealed record SceneEdit(EditorReport Report, SceneDocument? Before, Scene
 /// </summary>
 public sealed class EditorController
 {
+    private readonly List<LoadedScene> _templates = [];
     private SceneEditHistory? _history;
 
     /// <summary>The open Workspace, or null when none is open.</summary>
@@ -50,6 +51,19 @@ public sealed class EditorController
     public LoadedScene? Scene { get; private set; }
 
     public SceneDocument? Document => Scene?.Document;
+
+    /// <summary>
+    /// The transient Template Preview, or null when there is none. It is not
+    /// part of any document and never written; any edit throws it away, because
+    /// it was composed from a Scene that no longer exists.
+    /// </summary>
+    public TemplateCompositionResult? TemplatePreview { get; private set; }
+
+    /// <summary>
+    /// Every Scene Template in the open Workspace, as of the last
+    /// <see cref="ReloadTemplates"/>. Empty when no Workspace is open.
+    /// </summary>
+    public IReadOnlyList<LoadedScene> Templates => _templates;
     public bool CanUndo => _history?.CanUndo ?? false;
     public bool CanRedo => _history?.CanRedo ?? false;
 
@@ -181,7 +195,11 @@ public sealed class EditorController
     {
         Scene = null;
         _history = null;
+        TemplatePreview = null;
     }
+
+    /// <summary>Throws the transient Template Preview away.</summary>
+    public void ClearTemplatePreview() => TemplatePreview = null;
 
     /// <summary>Creates a Scene Instance in the open Workspace and opens it.</summary>
     public EditorReport CreateInstance(string sceneId, int widthCells, int heightCells) =>
@@ -283,6 +301,7 @@ public sealed class EditorController
 
         _history.Push(after, edit.StrokeKey);
         Scene = scene with { Document = after };
+        TemplatePreview = null;
         var message = edit.Describe is null ? EditorReport.Silent : EditorReport.Ok(edit.Describe(before, after));
         return new SceneEdit(message, before, after);
     }
@@ -300,6 +319,7 @@ public sealed class EditorController
         if (_history is null || Scene is not { } scene || (undo ? !_history.CanUndo : !_history.CanRedo))
             return EditorReport.Failed($"Nothing to {name}.");
         Scene = scene with { Document = undo ? _history.Undo() : _history.Redo() };
+        TemplatePreview = null;
         var depth = undo ? _history.UndoDepth : _history.RedoDepth;
         return EditorReport.Ok(
             $"{char.ToUpperInvariant(name[0])}{name[1..]}. {depth} further step{(depth == 1 ? string.Empty : "s")} available.");
@@ -388,6 +408,118 @@ public sealed class EditorController
     {
         Scene = scene;
         _history = new SceneEditHistory(scene.Document);
+        TemplatePreview = null;
+    }
+
+    /// <summary>
+    /// Composes a Template Preview for the open Scene Instance out of every
+    /// Scene Template in the Workspace. Pass a <paramref name="seed"/> to get a
+    /// reproducible selection; the editor leaves it out and gets a new one.
+    /// </summary>
+    public EditorReport GenerateTemplatePreview(ulong? seed = null)
+    {
+        if (Session is not { } session || Document is not { SceneKind: SceneKind.Instance } instance)
+            return EditorReport.Failed("Template Previews need an open Scene Instance.");
+        var pending = SaveScene();
+        if (!pending.Succeeded) return pending;
+        try
+        {
+            var scenes = SceneStore
+                .EnumeratePaths(session.Workspace)
+                .Select(path => SceneStore.Load(session.Workspace, path).Document)
+                .ToList();
+            var preview = TemplateComposition.Compose(
+                instance,
+                scenes,
+                session.PropAssets,
+                seed ?? unchecked((ulong)Random.Shared.NextInt64()));
+            TemplatePreview = preview;
+            var selections = preview.Selections.Count == 0
+                ? "no Template Anchors"
+                : string.Join(
+                    ", ",
+                    preview.Selections.Select(selection =>
+                        $"{selection.AnchorId} → {selection.TemplateSceneId}"));
+            return EditorReport.Ok($"Generated transient Template Preview: {selections}.");
+        }
+        catch (Exception exception) when (IsDocumentFailure(exception))
+        {
+            return EditorReport.Failed(exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Reads and validates every Scene Template in the Workspace. The Templates
+    /// popup filters this list rather than re-reading the Workspace per
+    /// keystroke.
+    /// </summary>
+    public EditorReport ReloadTemplates()
+    {
+        _templates.Clear();
+        if (Session is not { } session) return EditorReport.Silent;
+        var pending = SaveScene();
+        if (!pending.Succeeded) return pending;
+        try
+        {
+            _templates.AddRange(SceneStore
+                .EnumeratePaths(session.Workspace)
+                .Select(path => SceneStore.Load(session.Workspace, path))
+                .Where(static scene => scene.Document.SceneKind == SceneKind.Template));
+            return EditorReport.Silent;
+        }
+        catch (Exception exception) when (IsDocumentFailure(exception))
+        {
+            _templates.Clear();
+            return EditorReport.Failed(exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Moves one Scene Template into another group, in place on disk. The
+    /// cached listing and, when it is the open Scene, the editor itself are
+    /// brought up to date.
+    /// </summary>
+    public EditorReport SetTemplateGroup(string filePath, int groupNumber)
+    {
+        if (Session is not { } session) return EditorReport.Failed("No Workspace is open.");
+        var pending = SaveScene();
+        if (!pending.Succeeded) return pending;
+        try
+        {
+            var loaded = SceneStore.Load(session.Workspace, filePath);
+            var updated = new LoadedScene(
+                loaded.FilePath,
+                TemplateEditing.SetTemplateGroup(loaded.Document, groupNumber));
+            SceneStore.Save(session.Workspace, updated);
+            var cached = _templates.FindIndex(
+                entry => string.Equals(entry.FilePath, updated.FilePath, StringComparison.Ordinal));
+            if (cached >= 0) _templates[cached] = updated;
+            TemplatePreview = null;
+            AdoptStoredScene(updated);
+            return EditorReport.Ok(
+                $"Assigned Scene Template '{updated.Document.SceneId}' to group {groupNumber}.");
+        }
+        catch (Exception exception) when (IsDocumentFailure(exception))
+        {
+            return EditorReport.Failed(exception.Message);
+        }
+    }
+
+    /// <summary>Writes the engine-neutral snapshot of the open Scene.</summary>
+    public EditorReport ExportScene()
+    {
+        var pending = SaveScene();
+        if (!pending.Succeeded) return pending;
+        if (Session is not { } session || Scene is not { } scene)
+            return EditorReport.Failed("Load a Scene before exporting.");
+        try
+        {
+            return EditorReport.Ok($"Exported Scene snapshot to '{SceneExport.Write(session, scene)}'.");
+        }
+        catch (Exception exception) when (IsDocumentFailure(exception))
+        {
+            return EditorReport.Failed(exception.Message);
+        }
     }
 
     private static EditorReport Blocked(string reason) =>

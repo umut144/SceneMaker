@@ -52,11 +52,14 @@ Four rules follow from this and are worth stating outright:
   load cannot leave a half-opened Workspace behind. Opening a Workspace is not
   an editor concern, which is why it sits in Core and the headless exporter
   uses the same path.
-- Lifecycle decisions live in `EditorController`, not in the Godot node.
-  Commands take plain paths, change state only when they succeed, and answer
-  with an `EditorReport` instead of touching the interface; whether a failure
-  belongs in the status line or in a dialog is the caller's decision.
-  `SceneMakerMain` reads `_controller.Session` and never keeps its own copy.
+- Lifecycle decisions live in `EditorController`, not in the Godot node. It
+  owns the open Workspace, the open Scene, the edit history, the Template
+  listing and the transient Template Preview. Commands take plain paths, change
+  state only when they succeed, and answer with an `EditorReport` instead of
+  touching the interface; whether a failure belongs in the status line or in a
+  dialog is the caller's decision. `SceneMakerMain` reads the controller and
+  never keeps its own copy of any of it - what stays there is drawing, layout,
+  dialogs and the autosave timer.
 
 ## Schema versions
 

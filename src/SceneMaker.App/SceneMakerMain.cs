@@ -70,7 +70,6 @@ public sealed partial class SceneMakerMain : Control
     private readonly VBoxContainer _templateRows = new();
     private readonly SpinBox _anchorGroupEdit = new();
     private readonly Dictionary<EditorTool, Button> _drawingToolControlsByTool = [];
-    private readonly List<LoadedScene> _workspaceTemplates = [];
 
     private readonly FileDialog _workspaceDirectoryDialog = new();
     private readonly FileDialog _workspaceDirectoryLoadDialog = new();
@@ -101,7 +100,6 @@ public sealed partial class SceneMakerMain : Control
     private string? _recentSessionPath;
     private string? _templateLoadError;
     private bool _updatingAnchorGroupEdit;
-    private TemplateCompositionResult? _templatePreview;
 
     private sealed record WorkspaceAssetEditorRow(
         PolyToolsCatalogAsset Asset,
@@ -568,24 +566,10 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     private void ReloadWorkspaceTemplates()
     {
-        _workspaceTemplates.Clear();
-        _templateLoadError = null;
-        if (_controller.Session is not { } session) return;
-        PersistScene();
-        try
-        {
-            _workspaceTemplates.AddRange(SceneStore
-                .EnumeratePaths(session.Workspace)
-                .Select(path => SceneStore.Load(session.Workspace, path))
-                .Where(static scene => scene.Document.SceneKind == SceneKind.Template));
-        }
-        catch (Exception exception) when (exception is SceneMakerDocumentException
-                                          or IOException
-                                          or UnauthorizedAccessException)
-        {
-            _workspaceTemplates.Clear();
-            _templateLoadError = exception.Message;
-        }
+        _autosaveTimer.Stop();
+        var report = _controller.ReloadTemplates();
+        UpdateDocumentState();
+        _templateLoadError = report.Succeeded ? null : report.Message;
     }
 
     private void RenderTemplateRows()
@@ -609,7 +593,7 @@ public sealed partial class SceneMakerMain : Control
 
         var search = _templateSearchEdit.Text.Trim();
         var groupFilter = checked((int)_templateGroupFilter.Value);
-        var templates = _workspaceTemplates
+        var templates = _controller.Templates
             .Where(scene => search.Length == 0
                 || scene.Document.SceneId.Contains(search, StringComparison.OrdinalIgnoreCase))
             .Where(scene => groupFilter == 0
@@ -648,27 +632,19 @@ public sealed partial class SceneMakerMain : Control
 
     private void UpdateWorkspaceTemplateGroup(string filePath, int groupNumber)
     {
-        if (_controller.Session is not { } session) return;
-        PersistScene();
-        TryDocumentAction(() =>
+        _autosaveTimer.Stop();
+        var report = _controller.SetTemplateGroup(filePath, groupNumber);
+        if (!report.Succeeded)
         {
-            var loaded = SceneStore.Load(session.Workspace, filePath);
-            var document = TemplateEditing.SetTemplateGroup(loaded.Document, groupNumber);
-            var updated = new LoadedScene(loaded.FilePath, document);
-            SceneStore.Save(session.Workspace, updated);
-            // The rows are not rebuilt here: one of them is the SpinBox that
-            // raised this. Only the cached document is brought up to date.
-            var cached = _workspaceTemplates.FindIndex(
-                entry => string.Equals(entry.FilePath, updated.FilePath, StringComparison.Ordinal));
-            if (cached >= 0) _workspaceTemplates[cached] = updated;
-            ClearTemplatePreview();
-            if (_controller.AdoptStoredScene(updated))
-            {
-                _canvas.UpdateScene(updated);
-                UpdateDocumentStatus();
-            }
-            SetStatus($"Assigned Scene Template '{document.SceneId}' to group {groupNumber}.");
-        });
+            ShowError(report.Message);
+            return;
+        }
+        // The rows are deliberately not rebuilt: one of them is the SpinBox
+        // that raised this. The controller has brought its listing up to date.
+        ShowTemplatePreview();
+        if (_controller.Scene is { } open) _canvas.UpdateScene(open);
+        UpdateDocumentStatus();
+        SetStatus(report.Message);
     }
 
     private void BuildSettingsMenu()
@@ -1013,17 +989,11 @@ public sealed partial class SceneMakerMain : Control
 
     private void ExportCurrentScene()
     {
-        PersistScene();
-        if (_controller.Session is not { } session || _controller.Scene is not { } scene)
-        {
-            ShowError("Load a Scene before exporting.");
-            return;
-        }
-        TryDocumentAction(() =>
-        {
-            var path = SceneExport.Write(session, scene);
-            SetStatus($"Exported Scene snapshot to '{path}'.");
-        });
+        _autosaveTimer.Stop();
+        var report = _controller.ExportScene();
+        UpdateDocumentState();
+        if (report.Succeeded) SetStatus(report.Message);
+        else ShowError(report.Message);
     }
 
     private void ShowWorkspaceAssetsDialog()
@@ -1126,7 +1096,7 @@ public sealed partial class SceneMakerMain : Control
     private void CloseOpenScene()
     {
         _controller.CloseScene();
-        _templatePreview = null;
+        ClearTemplatePreview();
         _canvas.ShowScene(null);
     }
 
@@ -1160,7 +1130,7 @@ public sealed partial class SceneMakerMain : Control
             ShowError(report.Message);
             return;
         }
-        _templatePreview = null;
+        ClearTemplatePreview();
         _canvas.ShowScene(_controller.Scene);
         SaveRecentSession();
         UpdateDocumentStatus();
@@ -1282,40 +1252,29 @@ public sealed partial class SceneMakerMain : Control
 
     private void GenerateTemplatePreview()
     {
-        if (_controller.Session is not { } session
-            || _controller.Document?.SceneKind != SceneKind.Instance)
+        if (_controller.Document?.SceneKind != SceneKind.Instance) return;
+        _autosaveTimer.Stop();
+        var report = _controller.GenerateTemplatePreview();
+        UpdateDocumentState();
+        ShowTemplatePreview();
+        if (report.Succeeded) SetStatus(report.Message);
+        else ShowError(report.Message);
+    }
+
+    /// <summary>Shows the Template Preview the controller holds, if it holds one.</summary>
+    private void ShowTemplatePreview()
+    {
+        if (_controller.TemplatePreview is { } preview)
         {
+            _canvas.ShowTemplatePreview(preview.ComposedScene, preview.EffectiveTerrainMasks);
             return;
         }
-        PersistScene();
-        TryDocumentAction(() =>
-        {
-            var scenes = SceneStore
-                .EnumeratePaths(session.Workspace)
-                .Select(path => SceneStore.Load(session.Workspace, path).Document)
-                .ToList();
-            var seed = unchecked((ulong)Random.Shared.NextInt64());
-            _templatePreview = TemplateComposition.Compose(
-                _controller.Document!,
-                scenes,
-                session.PropAssets,
-                seed);
-            _canvas.ShowTemplatePreview(
-                _templatePreview.ComposedScene,
-                _templatePreview.EffectiveTerrainMasks);
-            var selections = _templatePreview.Selections.Count == 0
-                ? "no Template Anchors"
-                : string.Join(
-                    ", ",
-                    _templatePreview.Selections.Select(selection =>
-                        $"{selection.AnchorId} → {selection.TemplateSceneId}"));
-            SetStatus($"Generated transient Template Preview: {selections}.");
-        });
+        _canvas.ShowTemplatePreview(null);
     }
 
     private void ClearTemplatePreview()
     {
-        _templatePreview = null;
+        _controller.ClearTemplatePreview();
         _canvas.ShowTemplatePreview(null);
     }
 
@@ -1614,7 +1573,7 @@ public sealed partial class SceneMakerMain : Control
         var report = _controller.RestoreRecentSession(_recentSessionPath!);
         if (!report.Succeeded) DiscardRecentSession();
         ShowSession();
-        _templatePreview = null;
+        ClearTemplatePreview();
         _canvas.ShowScene(_controller.Scene);
         Report(report);
     }
