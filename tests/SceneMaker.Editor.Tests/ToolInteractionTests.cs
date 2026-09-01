@@ -261,7 +261,8 @@ public sealed class ToolInteractionTests
         TerrainCoverage.AuthoredCells(scene),
         SelectedTerrainAssetKey: "grass",
         SelectedPropAssetKey: "stone",
-        TemplateAnchorGroupNumber: 1);
+        TemplateAnchorGroupNumber: 1,
+        ElevationMeters: scene.DefaultElevationMeters);
 
     private static AuthoringPoint Point(int x, int y) => new(x, y);
 

@@ -71,6 +71,18 @@ Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
 Ein aktiver `Eraser` verwendet für Terrain-Highlights die Löschfarbe, damit die
 Auswirkung vor dem Ausführen sichtbar ist.
 
+### Höhe
+
+Das ContextMenu enthält durchgehend `Height` in Metern, in Schritten von 0,1 m.
+Der Wert gilt für Terrain und Props gleichermaßen: gemalte Zellen und gesetzte
+Props entstehen auf dieser Höhe.
+
+Er ist Session-Zustand, kein Dokumentfeld. Beim Öffnen einer Scene startet er
+auf deren `default_elevation_meters` — dem Wert, den der Autor beim Anlegen im
+Feld `Ground height` gesetzt hat. Damit findet man die Vorgabe der Scene immer
+wieder vor, kann aber pro Strich davon abweichen, ohne dass das Dokument sich
+ändert.
+
 ### Prop:Line
 
 Das ContextMenu von `Prop:Line` enthält den ganzzahligen Wert

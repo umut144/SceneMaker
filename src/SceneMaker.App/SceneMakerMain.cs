@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Godot;
@@ -89,6 +90,9 @@ public sealed partial class SceneMakerMain : Control
     private readonly OptionButton _sceneKindEdit = new();
     private readonly GridContainer _templateCreationFields = new() { Columns = 2 };
     private readonly SpinBox _templateGroupEdit = new();
+    private readonly SpinBox _sceneElevationEdit = new();
+    private readonly Label _elevationLabel = new();
+    private readonly SpinBox _elevationEdit = new();
     private readonly SpinBox _templateInsertionXEdit = new();
     private readonly SpinBox _templateInsertionYEdit = new();
     private readonly CheckBox _templatePivotCenterToggle = new();
@@ -298,6 +302,15 @@ public sealed partial class SceneMakerMain : Control
         _contextMenuBar.AddChild(_toolContextLabel);
         _toolContextSeparator.Name = "ToolContextSeparator";
         _contextMenuBar.AddChild(_toolContextSeparator);
+        _elevationLabel.Name = "ElevationLabel";
+        _elevationLabel.Text = "Height";
+        _elevationLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_elevationLabel);
+        _elevationEdit.Name = "Elevation";
+        ConfigureElevationInput(_elevationEdit);
+        _elevationEdit.TooltipText = "The height the drawing tools author at.";
+        _elevationEdit.ValueChanged += SetAuthoringElevation;
+        _contextMenuBar.AddChild(_elevationEdit);
         _propLineOffsetLabel.Name = "PropLineOffsetLabel";
         _propLineOffsetLabel.Text = "Prop Offset";
         _propLineOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -752,6 +765,12 @@ public sealed partial class SceneMakerMain : Control
         sceneFields.AddChild(_sceneHeightEdit);
         ConfigureMetricsLabel(_sceneHeightMetricsLabel);
         sceneFields.AddChild(_sceneHeightMetricsLabel);
+        sceneFields.AddChild(new Label { Text = "Ground height" });
+        ConfigureElevationInput(_sceneElevationEdit);
+        _sceneElevationEdit.TooltipText =
+            "The height a newly authored cell or Prop takes in this Scene.";
+        sceneFields.AddChild(_sceneElevationEdit);
+        sceneFields.AddChild(new Control());
         _templateCreationFields.AddChild(new Label { Text = "Template group" });
         ConfigurePositiveIntegerInput(_templateGroupEdit, 1);
         _templateCreationFields.AddChild(_templateGroupEdit);
@@ -1039,6 +1058,48 @@ public sealed partial class SceneMakerMain : Control
     /// <summary>What a Terrain Asset presents unless the author says otherwise.</summary>
     private const string DefaultSurface = "land";
 
+    /// <summary>A height in metres, in the tenth-of-a-metre steps ramps use.</summary>
+    private static void ConfigureElevationInput(SpinBox input)
+    {
+        input.MinValue = -1000;
+        input.MaxValue = 1000;
+        input.Step = 0.1;
+        input.AllowGreater = false;
+        input.AllowLesser = false;
+        input.Suffix = " m";
+        input.CustomMinimumSize = new Vector2(130f, 0f);
+        input.Value = (double)SceneDocument.GroundElevationMeters;
+    }
+
+    /// <summary>
+    /// Godot counts in doubles, the documents in decimals. Going through the
+    /// shortest three-decimal form keeps 1.1 as 1.1 rather than 1.100 or
+    /// 1.1000000000000001, so repainting a Scene does not churn its file.
+    /// </summary>
+    private static decimal ElevationOf(double value) => decimal.Parse(
+        value.ToString("0.###", CultureInfo.InvariantCulture),
+        CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// A Scene opens at its own ground height. What the author set when the
+    /// Scene was created is therefore where the context bar starts, every time
+    /// it is opened.
+    /// </summary>
+    private void ShowAuthoringElevation()
+    {
+        var elevation = _controller.Document?.DefaultElevationMeters
+            ?? SceneDocument.GroundElevationMeters;
+        _canvas.ElevationMeters = elevation;
+        _elevationEdit.SetValueNoSignal((double)elevation);
+    }
+
+    private void SetAuthoringElevation(double value)
+    {
+        var elevation = ElevationOf(value);
+        _canvas.ElevationMeters = elevation;
+        SetStatus($"Drawing at {elevation:0.###} m.");
+    }
+
     private static LineEdit NewAssetField(string value, string placeholder) => new()
     {
         Text = value,
@@ -1122,6 +1183,7 @@ public sealed partial class SceneMakerMain : Control
         var sceneId = _sceneIdEdit.Text.Trim();
         var widthCells = checked((int)_sceneWidthEdit.Value);
         var heightCells = checked((int)_sceneHeightEdit.Value);
+        var groundHeight = ElevationOf(_sceneElevationEdit.Value);
         var report = SelectedSceneKind() == SceneKind.Template
             ? _controller.CreateTemplate(
                 sceneId,
@@ -1129,8 +1191,9 @@ public sealed partial class SceneMakerMain : Control
                 heightCells,
                 checked((int)_templateGroupEdit.Value),
                 checked((int)_templateInsertionXEdit.Value),
-                checked((int)_templateInsertionYEdit.Value))
-            : _controller.CreateInstance(sceneId, widthCells, heightCells);
+                checked((int)_templateInsertionYEdit.Value),
+                groundHeight)
+            : _controller.CreateInstance(sceneId, widthCells, heightCells, groundHeight);
         ShowOpenedScene(report);
     }
 
@@ -1148,6 +1211,7 @@ public sealed partial class SceneMakerMain : Control
             return;
         }
         ClearTemplatePreview();
+        ShowAuthoringElevation();
         _canvas.ShowScene(_controller.Scene);
         SaveRecentSession();
         UpdateDocumentStatus();
@@ -1591,6 +1655,7 @@ public sealed partial class SceneMakerMain : Control
         if (!report.Succeeded) DiscardRecentSession();
         ShowSession();
         ClearTemplatePreview();
+        ShowAuthoringElevation();
         _canvas.ShowScene(_controller.Scene);
         Report(report);
     }

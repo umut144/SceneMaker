@@ -22,7 +22,8 @@ public sealed record ToolContext(
     IReadOnlySet<TerrainCellCoordinate> AuthoredTerrain,
     string? SelectedTerrainAssetKey,
     string? SelectedPropAssetKey,
-    int TemplateAnchorGroupNumber);
+    int TemplateAnchorGroupNumber,
+    decimal ElevationMeters);
 
 /// <summary>
 /// The single answer a tool gives to an input event. Closed hierarchy: an input

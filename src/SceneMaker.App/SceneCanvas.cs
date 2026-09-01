@@ -63,6 +63,12 @@ public sealed partial class SceneCanvas : Control
     /// <summary>Group number a newly placed Template Anchor receives.</summary>
     public int TemplateAnchorGroupNumber { get; set; } = 1;
 
+    /// <summary>
+    /// The height the drawing tools author at. Set from the Scene's own default
+    /// when a Scene opens, then adjustable per stroke in the context bar.
+    /// </summary>
+    public decimal ElevationMeters { get; set; } = SceneDocument.GroundElevationMeters;
+
     /// <summary>The Template Anchor the tools currently have selected, if any.</summary>
     public string? SelectedTemplateAnchorId => _interaction.SelectedTemplateAnchorId;
 
@@ -196,7 +202,8 @@ public sealed partial class SceneCanvas : Control
             _sceneTerrain,
             SelectedTerrainAssetKey,
             SelectedPropAssetKey,
-            TemplateAnchorGroupNumber);
+            TemplateAnchorGroupNumber,
+            ElevationMeters);
     }
 
     private void Publish(ToolOutcome outcome)

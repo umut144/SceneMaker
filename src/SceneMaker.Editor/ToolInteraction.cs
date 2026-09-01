@@ -237,7 +237,15 @@ public sealed class ToolInteraction
         return new ToolOutcome.Edit(
             "Line Draw",
             document => PropEditing.PlaceLine(
-                document, context.PropAssets, start.X, start.Y, end.X, end.Y, assetKey, offset),
+                document,
+                context.PropAssets,
+                start.X,
+                start.Y,
+                end.X,
+                end.Y,
+                assetKey,
+                context.ElevationMeters,
+                offset),
             Describe: (before, after) =>
             {
                 var added = after.Props.Count - before.Props.Count;
@@ -282,7 +290,8 @@ public sealed class ToolInteraction
                 var assetName = context.PropAssets.Resolve(assetKey).Name;
                 return new ToolOutcome.Edit(
                     "Pencil Draw",
-                    document => PropEditing.Place(document, context.PropAssets, point.X, point.Y, assetKey),
+                    document => PropEditing.Place(
+                        document, context.PropAssets, point.X, point.Y, assetKey, context.ElevationMeters),
                     Describe: (_, _) => warning
                         ?? $"Placed {assetName} anchor at ({point.X}, {point.Y}) authoring px.");
 
@@ -379,7 +388,8 @@ public sealed class ToolInteraction
         var assetName = context.TerrainAssets.Resolve(assetKey).Name;
         return new ToolOutcome.Edit(
             "Pencil Draw",
-            document => TerrainEditing.Paint(document, context.TerrainAssets, cell.X, cell.Y, assetKey),
+            document => TerrainEditing.Paint(
+                document, context.TerrainAssets, cell.X, cell.Y, assetKey, context.ElevationMeters),
             strokeKey,
             Describe: (_, _) => $"Painted {assetName} at Terrain cell ({cell.X}, {cell.Y}).");
     }
@@ -398,7 +408,8 @@ public sealed class ToolInteraction
         var assetName = context.TerrainAssets.Resolve(assetKey).Name;
         return new ToolOutcome.Edit(
             "Terrain Fill",
-            document => TerrainEditing.Fill(document, context.TerrainAssets, cell.X, cell.Y, assetKey),
+            document => TerrainEditing.Fill(
+                document, context.TerrainAssets, cell.X, cell.Y, assetKey, context.ElevationMeters),
             Describe: (_, _) => $"Filled the connected region at ({cell.X}, {cell.Y}) with {assetName}.",
             NoChangeText: "Terrain Fill made no change because source and target Terrain are identical.");
     }
@@ -422,7 +433,14 @@ public sealed class ToolInteraction
         return new ToolOutcome.Edit(
             "Line Draw",
             document => TerrainEditing.PaintLine(
-                document, context.TerrainAssets, start.X, start.Y, end.X, end.Y, assetKey),
+                document,
+                context.TerrainAssets,
+                start.X,
+                start.Y,
+                end.X,
+                end.Y,
+                assetKey,
+                context.ElevationMeters),
             Describe: (_, _) => $"Line Draw painted {count} Terrain cells with {assetName}.");
     }
 
