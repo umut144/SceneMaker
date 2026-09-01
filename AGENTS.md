@@ -35,7 +35,7 @@ are no tests against `SceneMaker.App`: a test project cannot reference it withou
 pulling in `Godot.NET.Sdk`, which is why anything worth testing belongs in Core
 or Editor.
 
-Three rules follow from this and are worth stating outright:
+Four rules follow from this and are worth stating outright:
 
 - Editing operations are pure `SceneDocument -> SceneDocument` functions. They
   assume a canonical document and produce one; full validation runs at the IO
@@ -52,6 +52,11 @@ Three rules follow from this and are worth stating outright:
   load cannot leave a half-opened Workspace behind. Opening a Workspace is not
   an editor concern, which is why it sits in Core and the headless exporter
   uses the same path.
+- Lifecycle decisions live in `EditorController`, not in the Godot node.
+  Commands take plain paths, change state only when they succeed, and answer
+  with an `EditorReport` instead of touching the interface; whether a failure
+  belongs in the status line or in a dialog is the caller's decision.
+  `SceneMakerMain` reads `_controller.Session` and never keeps its own copy.
 
 ## Schema versions
 
