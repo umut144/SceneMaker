@@ -26,8 +26,15 @@ public sealed record TemplateCompositionResult(
 /// and a deterministic selection of Scene Templates. It never persists or
 /// mutates either source document.
 ///
+/// This is look development for the editor: it shows how a map *can* look once
+/// Templates sit at its Anchors. It is not what a consumer does. In the game an
+/// Anchor is an event slot the server decides about and swaps during a session,
+/// so nothing here - the selection, the seed, the replacement rules below - is
+/// part of the export contract. Only the geometry of placing a Template is.
+///
 /// A Template replaces everything inside its Terrain mask: Props of the base
 /// Scene whose footprint intersects the mask are dropped from the composition.
+/// That rule is this preview's policy, not a consumer's obligation.
 /// </summary>
 public static class TemplateComposition
 {
@@ -153,13 +160,12 @@ public static class TemplateComposition
                 .ToList();
             var orderedAnchors = group.OrderBy(static anchor => anchor.AnchorId, StringComparer.Ordinal)
                 .ToList();
-            if (pool.Count < orderedAnchors.Count)
-            {
-                throw new SceneMakerDocumentException(
-                    $"Template group {group.Key} has {pool.Count} Template{(pool.Count == 1 ? string.Empty : "s")} for {orderedAnchors.Count} Anchors; selection without replacement requires at least one Template per Anchor.");
-            }
             Shuffle(pool, MixSeed(seed, group.Key));
-            for (var index = 0; index < orderedAnchors.Count; index++)
+            // An Anchor with no Template left is simply not filled. In the game
+            // an Anchor is an event slot the server decides about, so an empty
+            // one is the ordinary case, not an authoring mistake - and this
+            // preview must not claim otherwise by refusing to draw.
+            for (var index = 0; index < Math.Min(pool.Count, orderedAnchors.Count); index++)
                 result.Add(new SelectedTemplate(orderedAnchors[index], pool[index]));
         }
         return result.OrderBy(static value => value.Anchor.AnchorId, StringComparer.Ordinal).ToList();

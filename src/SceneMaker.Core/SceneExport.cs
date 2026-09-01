@@ -10,7 +10,7 @@ namespace SceneMaker.Core;
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 4;
+    public const int Version = 5;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -58,7 +58,6 @@ public static class SceneExport
                 GamePixelsPerMeter = configuration.Grid.GamePixelsPerMeter,
             },
             AssetProfiles = ExportProfiles(configuration, propAssets),
-            RequiredTemplateGroups = RequiredTemplateGroups(scene.Document),
             Scene = scene.Document,
         };
         var directory = Path.Combine(workspace.DirectoryPath, DirectoryName);
@@ -75,22 +74,26 @@ public static class SceneExport
     public static IReadOnlyList<string> WriteWorkspace(WorkspaceSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        return SceneStore
+        var scenes = SceneStore
             .EnumeratePaths(session.Workspace)
-            .Select(path => Write(session, SceneStore.Load(session.Workspace, path)))
+            .Select(path => SceneStore.Load(session.Workspace, path))
             .ToList();
-    }
 
-    /// <summary>
-    /// The Template groups this Scene's Anchors ask for, so a consumer can tell
-    /// on load that a group it needs has no Template left - the failure a
-    /// seasonal Template swap invites.
-    /// </summary>
-    private static List<int> RequiredTemplateGroups(SceneDocument scene) =>
-        [.. scene.TemplateAnchors
-            .Select(static anchor => anchor.GroupNumber)
-            .Distinct()
-            .Order()];
+        // Exports are named by Scene id in one flat directory, so two Scenes
+        // sharing an id would silently overwrite one another and a consumer
+        // would load a Workspace with a map missing. Creating such a pair is
+        // already refused; this catches a Workspace edited by hand.
+        var duplicate = scenes
+            .GroupBy(static scene => scene.Document.SceneId, StringComparer.Ordinal)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicate is not null)
+        {
+            throw new SceneMakerDocumentException(
+                $"Scene id '{duplicate.Key}' names {duplicate.Count()} Scenes in this Workspace; ids must be unique before exporting.");
+        }
+
+        return scenes.Select(scene => Write(session, scene)).ToList();
+    }
 
     private static List<ExportAssetProfileDocument> ExportProfiles(
         WorkspaceConfiguration configuration,
@@ -156,7 +159,6 @@ public static class SceneExport
         public required string WorkspaceKey { get; init; }
         public required ExportGridDocument Grid { get; init; }
         public required List<ExportAssetProfileDocument> AssetProfiles { get; init; }
-        public required List<int> RequiredTemplateGroups { get; init; }
         public required SceneDocument Scene { get; init; }
     }
 

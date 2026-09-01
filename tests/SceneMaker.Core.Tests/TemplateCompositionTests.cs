@@ -82,7 +82,7 @@ public sealed class TemplateCompositionTests
     }
 
     [Fact]
-    public void GroupWithTooFewTemplatesIsRejected()
+    public void AnAnchorWithNoTemplateLeftStaysEmpty()
     {
         using var workspace = TestWorkspace.Create();
         var baseScene = TestScenes.Instance(workspace);
@@ -90,30 +90,27 @@ public sealed class TemplateCompositionTests
         baseScene = WithAnchor(baseScene, workspace, 128, 128);
         var templates = new[] { TestScenes.Template(workspace, "tpl_a", 1) };
 
-        var exception = Assert.Throws<SceneMakerDocumentException>(
-            () => Compose(baseScene, templates, workspace, seed: 1UL));
+        var selections = Compose(baseScene, templates, workspace, seed: 1UL).Selections;
 
-        Assert.Contains(
-            "selection without replacement",
-            exception.Message,
-            StringComparison.Ordinal);
+        // One Anchor is filled, the other is not. In the game an Anchor is an
+        // event slot the server decides about, so an empty one is ordinary.
+        Assert.Equal("tpl_a", Assert.Single(selections).TemplateSceneId);
     }
 
     [Fact]
-    public void GroupWithoutAnyTemplateIsRejected()
+    public void AGroupWithoutAnyTemplateFillsNothing()
     {
         using var workspace = TestWorkspace.Create();
         var baseScene = WithAnchor(
             TestScenes.Instance(workspace), workspace, 64, 64, groupNumber: 2);
         var templates = new[] { TestScenes.Template(workspace, "tpl_a", 1) };
 
-        var exception = Assert.Throws<SceneMakerDocumentException>(
-            () => Compose(baseScene, templates, workspace, seed: 1UL));
+        var composed = Compose(baseScene, templates, workspace, seed: 1UL);
 
-        Assert.Contains(
-            "Template group 2 has 0 Templates for 1 Anchors",
-            exception.Message,
-            StringComparison.Ordinal);
+        Assert.Empty(composed.Selections);
+        Assert.Empty(composed.EffectiveTerrainMasks);
+        // The base Scene comes through untouched rather than being refused.
+        Assert.Equal(baseScene.TerrainCells.Count, composed.ComposedScene.TerrainCells.Count);
     }
 
     [Fact]

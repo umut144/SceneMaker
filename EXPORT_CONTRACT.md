@@ -5,7 +5,7 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 4**, embedded **scene 7**. A reader must reject any
+Current schemas: **export 5**, embedded **scene 7**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
 
@@ -14,6 +14,13 @@ direction; see the schema section of `AGENTS.md` for why.
 `workspaces/<key>/exports/` holds one file per Scene, named
 `<scene_id>.scene_export.json`. Exporting from the editor writes all of them at
 once; `scripts/export_scene.sh <workspace> <scene-id>` rewrites a single one.
+
+There is no index. The directory is the list, and every file says what it is —
+so a consumer finds the Templates by reading `exports/` and keeping the files
+whose `scene.scene_kind` is `"template"`. An index was considered and rejected:
+the single-Scene export exists precisely for a seasonal swap, and it would leave
+an index stale, which is worse than none. Copy the directory rather than named
+files and completeness follows by construction.
 
 Every file has the same shape. `scene.scene_kind` tells the two kinds apart:
 
@@ -31,7 +38,7 @@ purpose.
 ```jsonc
 {
   "format": "scene_maker_scene_export",
-  "version": 4,
+  "version": 5,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,        // edge length of one Terrain cell
@@ -52,7 +59,6 @@ purpose.
       "anchor_meters":    { "x": 0.53125, "y": 0.3125 }
     }
   ],
-  "required_template_groups": [1, 3],  // groups this map's Anchors ask for
   "scene": {
     "schema": "srt.scene_maker_scene",
     "version": 7,
@@ -180,6 +186,11 @@ treat a violation as a corrupt file rather than a case to handle:
   Asset has none.
 - Every Terrain cell and every Prop carries `elevation_meters`. There is no
   cell without a height and no Prop without one.
+- A `scene_id` names one Scene in the whole Workspace — never an Instance and a
+  Template at once — and it does not change over the life of that Scene. The
+  editor refuses to create a second Scene under an existing id, and an export
+  refuses a Workspace whose ids collide rather than overwriting a file. A
+  consumer may use it as a stable name across a reconnect.
 - Every Terrain cell lies inside `size_cells`; no two cells share a coordinate.
 - Every Prop footprint is fully covered by Terrain. A Prop never floats over a
   hole.
@@ -192,79 +203,63 @@ treat a violation as a corrupt file rather than a case to handle:
 `asset_key` values are resolved by the consumer in its own PolyTools content
 boundary. SceneMaker exports the key and nothing about how it looks.
 
-## Composing an Instance with its Templates
+## Placing a Template at an Anchor
 
-An Anchor names a group; every Template of that group is an equally acceptable
-thing to place there. The selection is therefore deliberately arbitrary — it is
-not a ranking — but it must be *reproducible*, so it is driven by a seed the
-caller chooses. The same seed and the same set of Templates always give the
-same map.
+An Anchor is a slot a Template can be placed into. **Which** Template goes into
+which Anchor is not described here and is not SceneMaker's business: in the game
+an Anchor is an event slot the server decides about and swaps during a session —
+a dragon attack leaves lava, a dungeon entrance appears, a chest is gone. That is
+a decision, not a draw.
 
-Selection is **without replacement within a group**: two Anchors of one group
-never receive the same Template. A group with *n* Anchors therefore needs at
-least *n* Templates, and fewer is an error, not a fallback. `required_template_groups`
-names the groups; the count comes from `template_anchors`.
+SceneMaker's own preview does make a choice, seeded so it is reproducible, but
+that is look development for the editor: it shows how a map *can* look. It is not
+a specification, a consumer is not expected to reproduce it, and a map composed
+differently is not a divergence.
 
-The algorithm, which a consumer must follow exactly to agree with SceneMaker's
-own preview:
-
-1. Take every Template file of the Workspace. Sort by `scene_id`, ordinal.
-2. Group the Instance's `template_anchors` by `group_number`, ascending.
-3. Per group: take the Templates of that group as the pool, sort the group's
-   Anchors by `anchor_id` ordinal, and refuse if `pool.len() < anchors.len()`.
-   Shuffle the pool (Fisher-Yates, below) with the group's seed, then assign
-   `pool[i]` to `anchors[i]`.
-4. Sort all selections by `anchor_id`, ordinal. **Apply them in that order** —
-   later Templates overwrite earlier ones where they overlap.
-5. Per selection:
-   - `translation_px = anchor.position_authoring_px − template.insertion_anchor_authoring_px`
-   - `translation_cells = translation_px / authoring_px_per_cell` — exact, because
-     both positions are validated to sit on the cell grid.
-   - The Template's Terrain cells, translated, form its **mask**. Every masked
-     cell must lie inside the Instance; outside is an error.
-   - Write the Template's Terrain over the Instance's, cell by cell.
-   - Drop every Instance Prop whose footprint intersects any masked cell. A
-     Template replaces what is under it.
-   - Add the Template's Props, translated by `translation_px`, each renamed to
-     `{anchor_id}.{template_scene_id}.{source_instance_id}`.
-6. Re-sort the result: Terrain by `y` then `x`, Props by `instance_id` ordinal.
-
-The per-group seed and the shuffle:
+What this contract does specify is the **geometry**: given an Anchor and a
+Template, where exactly the Template lands.
 
 ```
-group_seed = seed XOR (group_number as u32 as u64 × 0x9E3779B97F4A7C15)
+translation_px    = anchor.position_authoring_px
+                  − template.template_definition.insertion_anchor_authoring_px
 
-// SplitMix64, wrapping u64 arithmetic throughout
-next(state):
-    state += 0x9E3779B97F4A7C15
-    z = state
-    z = (z XOR (z >> 30)) × 0xBF58476D1CE4E5B9
-    z = (z XOR (z >> 27)) × 0x94D049BB133111EB
-    return z XOR (z >> 31)
-
-// Fisher-Yates, descending
-for i from pool.len() - 1 down to 1:
-    j = next() % (i + 1)
-    swap pool[i], pool[j]
+translation_cells = translation_px / authoring_px_per_cell
 ```
 
-The composed map satisfies the same guarantees as an authored one, including
-Terrain coverage under every Prop — SceneMaker checks that after composing, and
-a consumer that reaches a different result has diverged from this algorithm
-somewhere.
+The division is exact: both positions are validated to sit on the cell grid, so
+their difference is always a whole number of cells.
+
+From that:
+
+- The Template's Terrain cells, each moved by `translation_cells`, are the cells
+  the Template covers — its **mask**. Every masked cell must lie inside the
+  Instance; a Template that would hang over the edge at that Anchor does not fit
+  there.
+- The Template's Props are moved by `translation_px`.
+- Cell heights and Prop heights travel unchanged. An Anchor places a Template in
+  x and y only; it never raises or lowers what it places, and it carries no
+  height of its own.
+
+**What happens to what was already there is policy, and policy belongs to the
+consumer.** SceneMaker's preview lets Template Terrain overwrite the Instance's
+and drops Instance Props whose footprint meets the mask, because for a preview
+that is the simplest thing that looks right. A consumer is free to restrict this
+further — world01 ranks what is placeable and keeps the higher rank, so a
+Template tree does not replace a dungeon entrance and Template Terrain does not
+erase a river. Such a rule is game meaning; the preview does not model it, and
+the difference between the two is expected rather than a bug.
+
+An Anchor with nothing placed at it is the ordinary case, not an authoring
+error. The preview leaves it empty and composes the rest.
 
 ## Seasons
 
 Templates are separate files so that one can be added, replaced or removed
-without rewriting the map that uses it. Two things follow for a consumer:
+without rewriting the map that uses it. Removing the last Template of a group
+leaves that group's Anchors unfilled, which is a state the game is expected to
+handle rather than a failure.
 
-- Check on load that every group in `required_template_groups` has at least as
-  many Templates as the Instance has Anchors in that group. Removing the last
-  Template of a group is the failure this is here to catch, and it is silent
-  otherwise.
-- A Template's `scene_id` appears inside composed Prop ids. Reusing an id for
-  different content changes what those ids mean.
-
-`world01` currently sits exactly on the limit: two Anchors in group 1 and two
-Templates in that group. Adding a third Anchor to group 1 makes composition
-fail until a third Template exists.
+A Template's `scene_id` is how a consumer names it — world01 replicates an
+occupancy as "Template X at Anchor Y" and that name has to survive a reconnect.
+Reusing an id for different content therefore changes what an existing name
+means. Add a Template under a new id instead of repurposing one.

@@ -136,10 +136,7 @@ public static class SceneStore
     {
         ArgumentNullException.ThrowIfNull(workspace);
         DocumentValidation.ValidateStableId("scene_id", sceneId);
-        var candidates = new[] { workspace.ScenesDirectoryPath, workspace.TemplatesDirectoryPath }
-            .Select(directory => Path.Combine(directory, sceneId + FileSuffix))
-            .Where(File.Exists)
-            .ToList();
+        var candidates = ExistingPaths(workspace, sceneId);
         return candidates.Count switch
         {
             1 => candidates[0],
@@ -149,6 +146,13 @@ public static class SceneStore
                 $"Scene id '{sceneId}' names both a Scene Instance and a Scene Template."),
         };
     }
+
+    /// <summary>Every file in the Workspace that carries this Scene id.</summary>
+    private static List<string> ExistingPaths(LoadedWorkspace workspace, string sceneId) =>
+        new[] { workspace.ScenesDirectoryPath, workspace.TemplatesDirectoryPath }
+            .Select(directory => Path.Combine(directory, sceneId + FileSuffix))
+            .Where(File.Exists)
+            .ToList();
 
     public static LoadedScene CreateInstance(
         LoadedWorkspace workspace,
@@ -181,14 +185,17 @@ public static class SceneStore
     {
         ArgumentNullException.ThrowIfNull(workspace);
         DocumentValidation.Validate(document);
-        var directory = DirectoryFor(workspace, document.SceneKind);
-        Directory.CreateDirectory(directory);
-        var filePath = Path.Combine(directory, document.SceneId + FileSuffix);
-        if (File.Exists(filePath))
+        // A Scene id names one Scene in the whole Workspace, not one per
+        // directory: the exports live in a single flat directory named by id,
+        // and consumers name a Template by that id across a reconnect.
+        if (ExistingPaths(workspace, document.SceneId).Count > 0)
         {
             throw new SceneMakerDocumentException(
                 $"Scene '{document.SceneId}' already exists in this Workspace.");
         }
+        var directory = DirectoryFor(workspace, document.SceneKind);
+        Directory.CreateDirectory(directory);
+        var filePath = Path.Combine(directory, document.SceneId + FileSuffix);
 
         AtomicTextFile.WriteNew(filePath, DocumentJson.Serialize(document));
         return new LoadedScene(filePath, document);

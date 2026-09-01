@@ -44,6 +44,14 @@ map. The editor's preview draws a fresh seed every time on purpose: seeing a
 different arrangement each press is the point, because all of them are valid.
 The preview is transient and is never written into a document.
 
+The preview is look development, not a specification. In the game an Anchor is
+an event slot a server decides about and swaps during a session, so no consumer
+runs this selection and none is expected to reproduce it. What the export
+contract fixes is only the geometry of placing a Template at an Anchor; which
+Template goes where, and what it is allowed to replace, is the consumer's. An
+Anchor with nothing at it is ordinary rather than an authoring error, which is
+why fewer Templates than Anchors composes partially instead of failing.
+
 `EXPORT_CONTRACT.md` is the consumer-facing description of that export: field
 meanings, units, the coordinate space, what the export guarantees, and the
 composition algorithm a runtime has to follow to agree with SceneMaker's own
