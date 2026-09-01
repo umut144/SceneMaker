@@ -22,7 +22,7 @@ public sealed partial class SceneMakerMain : Control
         WorkspaceAssets,
         CreateScene,
         LoadScene,
-        ExportScene,
+        ExportWorkspace,
         ChunkHelper,
     }
     private const double AutosaveDelaySeconds = 1.5;
@@ -657,7 +657,7 @@ public sealed partial class SceneMakerMain : Control
         menu.AddSeparator("Scenes");
         AddSettingsItem(menu, "Create Scene", SettingsMenuItem.CreateScene);
         AddSettingsItem(menu, "Load Scene", SettingsMenuItem.LoadScene);
-        AddSettingsItem(menu, "Export Scene", SettingsMenuItem.ExportScene);
+        AddSettingsItem(menu, "Export Workspace", SettingsMenuItem.ExportWorkspace);
         menu.AddSeparator("Canvas Helpers");
         AddSettingsItem(menu, "Chunk Helper: not applicable", SettingsMenuItem.ChunkHelper);
         SetSettingsItemDisabled(SettingsMenuItem.ChunkHelper, true);
@@ -949,8 +949,8 @@ public sealed partial class SceneMakerMain : Control
                 _sceneFileDialog.CurrentDir = _controller.Session.DirectoryPath;
                 _sceneFileDialog.PopupCenteredRatio(0.75f);
                 break;
-            case SettingsMenuItem.ExportScene:
-                ExportCurrentScene();
+            case SettingsMenuItem.ExportWorkspace:
+                ExportWorkspace();
                 break;
         }
     }
@@ -987,10 +987,10 @@ public sealed partial class SceneMakerMain : Control
         LoadWorkspaceSelection(paths[0]);
     }
 
-    private void ExportCurrentScene()
+    private void ExportWorkspace()
     {
         _autosaveTimer.Stop();
-        var report = _controller.ExportScene();
+        var report = _controller.ExportWorkspace();
         UpdateDocumentState();
         if (report.Succeeded) SetStatus(report.Message);
         else ShowError(report.Message);
@@ -1438,7 +1438,7 @@ public sealed partial class SceneMakerMain : Control
         SetSettingsItemDisabled(SettingsMenuItem.WorkspaceAssets, !sceneActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.CreateScene, !sceneActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.LoadScene, !sceneActionsAvailable);
-        SetSettingsItemDisabled(SettingsMenuItem.ExportScene, _controller.Scene is null);
+        SetSettingsItemDisabled(SettingsMenuItem.ExportWorkspace, _controller.Session is null);
         UpdateDrawingToolAvailability();
         UpdateTemplateControls();
         UpdateMapControls();

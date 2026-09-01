@@ -114,36 +114,40 @@ public sealed class EditorControllerTemplateTests
     }
 
     [Fact]
-    public void ExportingWritesTheSnapshotBesideTheWorkspace()
+    public void ExportingWritesEverySceneAndEveryTemplate()
     {
         using var workspace = TestWorkspace.Create();
         var controller = Opened(workspace);
+        controller.CreateTemplate("grove", 1, 1, 1, 0, 0);
+        controller.Apply(Paint(workspace));
         controller.CreateInstance("base", 1, 1);
         controller.Apply(Paint(workspace));
 
-        var report = controller.ExportScene();
+        var report = controller.ExportWorkspace();
 
         Assert.True(report.Succeeded);
-        Assert.True(File.Exists(Path.Combine(
-            workspace.RootPath, SceneExport.DirectoryName, "base" + SceneExport.FileSuffix)));
-        // Exporting writes the Scene out first, so the two never disagree.
+        Assert.Contains("Exported 2 Scenes", report.Message, StringComparison.Ordinal);
+        var exports = Path.Combine(workspace.RootPath, SceneExport.DirectoryName);
+        Assert.True(File.Exists(Path.Combine(exports, "base" + SceneExport.FileSuffix)));
+        Assert.True(File.Exists(Path.Combine(exports, "grove" + SceneExport.FileSuffix)));
+        // Exporting writes the open Scene out first, so the two never disagree.
         Assert.False(controller.IsDirty);
     }
 
     [Fact]
-    public void ExportingWithoutASceneIsRefused()
+    public void ExportingAWorkspaceWithoutScenesIsRefused()
     {
         using var workspace = TestWorkspace.Create();
         var controller = Opened(workspace);
 
-        var report = controller.ExportScene();
+        var report = controller.ExportWorkspace();
 
         Assert.False(report.Succeeded);
-        Assert.Equal("Load a Scene before exporting.", report.Message);
+        Assert.Equal("This Workspace has no Scene to export.", report.Message);
     }
 
     [Fact]
-    public void ExportingASceneWithUncoveredPropsIsRefused()
+    public void ExportingStopsAtASceneWithUncoveredProps()
     {
         using var workspace = TestWorkspace.Create();
         var controller = Opened(workspace);
@@ -153,7 +157,7 @@ public sealed class EditorControllerTemplateTests
             "Place",
             document => PropEditing.Place(document, workspace.Props, 0, 0, "stone")));
 
-        var report = controller.ExportScene();
+        var report = controller.ExportWorkspace();
 
         Assert.False(report.Succeeded);
         Assert.Contains("Terrain is missing", report.Message, StringComparison.Ordinal);

@@ -20,10 +20,13 @@ public sealed class SceneExportContractTests
         var root = Export(workspace);
 
         Assert.Equal(
-            ["format", "version", "workspace_key", "grid", "asset_profiles", "scene"],
+            [
+                "format", "version", "workspace_key", "grid", "asset_profiles",
+                "required_template_groups", "scene",
+            ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(2, root.GetProperty("version").GetInt32());
+        Assert.Equal(3, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             ["terrain_cell_meters", "authoring_pixels_per_meter", "game_pixels_per_meter"],
@@ -88,6 +91,38 @@ public sealed class SceneExportContractTests
         // Authoring colours belong to SceneMaker, never to the runtime.
         Assert.DoesNotContain("#99E550", json, StringComparison.Ordinal);
         Assert.DoesNotContain("color", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TheRequiredTemplateGroupsAreTheOnesTheAnchorsAskFor()
+    {
+        using var workspace = TestWorkspace.Create();
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        var scene = TestScenes.Instance(workspace);
+        scene = TemplateEditing.PlaceAnchor(scene, workspace.Metrics, 32, 32, 4);
+        scene = TemplateEditing.PlaceAnchor(scene, workspace.Metrics, 64, 64, 2);
+        scene = TemplateEditing.PlaceAnchor(scene, workspace.Metrics, 96, 96, 4);
+
+        var path = SceneExport.Write(
+            session,
+            new LoadedScene(
+                Path.Combine(session.Workspace.ScenesDirectoryPath, "base.scene.json"),
+                scene));
+
+        using var parsed = JsonDocument.Parse(File.ReadAllText(path));
+        Assert.Equal(
+            [2, 4],
+            parsed.RootElement.GetProperty("required_template_groups")
+                .EnumerateArray()
+                .Select(value => value.GetInt32()));
+    }
+
+    [Fact]
+    public void ASceneWithoutAnchorsRequiresNoTemplateGroups()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        Assert.Empty(Export(workspace).GetProperty("required_template_groups").EnumerateArray());
     }
 
     private static IEnumerable<string> Keys(JsonElement element) =>

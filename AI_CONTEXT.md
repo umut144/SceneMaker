@@ -44,8 +44,17 @@ The preview is transient and is never written into a document.
 SceneMaker has no runtime dependency on PolyTools or the source game project.
 Later consumers receive a small generic JSON export; they resolve the same
 `asset_key`s in their own PolyTools content boundaries. Each export is a
-versioned snapshot of the Scene, Workspace grid, and derived enabled asset
+versioned snapshot of one Scene, the Workspace grid, and derived enabled asset
 profiles; editor colors and raw PolyTools documents are not exported.
+
+Scene Templates are exported as their own files rather than embedded in the map
+that uses them, so that a Template can be added, replaced or removed between
+seasons without rewriting the map. A consumer collects Templates by the group
+number each one carries and places them at Anchors of that group. Because a
+missing group would leave an Anchor silently empty, an Instance export also
+lists `required_template_groups`: the groups its own Anchors ask for, so the
+consumer can check its set on load. Exporting from the editor always writes the
+whole Workspace; the CLI can export a single Scene by id for a surgical swap.
 
 For the included workspace, run `scripts/sync_polytools_world.sh` after a
 successful PolyTools Runtime Export. Run `scripts/export_scene.sh` to validate

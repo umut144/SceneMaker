@@ -505,16 +505,22 @@ public sealed class EditorController
         }
     }
 
-    /// <summary>Writes the engine-neutral snapshot of the open Scene.</summary>
-    public EditorReport ExportScene()
+    /// <summary>
+    /// Writes the engine-neutral snapshot of every Scene in the Workspace,
+    /// Scene Templates included. A consumer needs both: an Anchor is worthless
+    /// without a Template of its group to put there.
+    /// </summary>
+    public EditorReport ExportWorkspace()
     {
         var pending = SaveScene();
         if (!pending.Succeeded) return pending;
-        if (Session is not { } session || Scene is not { } scene)
-            return EditorReport.Failed("Load a Scene before exporting.");
+        if (Session is not { } session) return EditorReport.Failed("No Workspace is open.");
         try
         {
-            return EditorReport.Ok($"Exported Scene snapshot to '{SceneExport.Write(session, scene)}'.");
+            var written = SceneExport.WriteWorkspace(session);
+            if (written.Count == 0) return EditorReport.Failed("This Workspace has no Scene to export.");
+            return EditorReport.Ok(
+                $"Exported {written.Count} Scene{(written.Count == 1 ? string.Empty : "s")} to '{Path.Combine(session.DirectoryPath, SceneExport.DirectoryName)}'.");
         }
         catch (Exception exception) when (IsDocumentFailure(exception))
         {

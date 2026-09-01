@@ -127,6 +127,29 @@ public static class SceneStore
                 SearchOption.TopDirectoryOnly))
             .OrderBy(static path => path, StringComparer.Ordinal);
 
+    /// <summary>
+    /// Finds the file of <paramref name="sceneId"/> in the Workspace, whether it
+    /// is a Scene Instance or a Scene Template. A Scene id names one Scene, so
+    /// the same id in both directories is an error rather than a preference.
+    /// </summary>
+    public static string ResolvePath(LoadedWorkspace workspace, string sceneId)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        DocumentValidation.ValidateStableId("scene_id", sceneId);
+        var candidates = new[] { workspace.ScenesDirectoryPath, workspace.TemplatesDirectoryPath }
+            .Select(directory => Path.Combine(directory, sceneId + FileSuffix))
+            .Where(File.Exists)
+            .ToList();
+        return candidates.Count switch
+        {
+            1 => candidates[0],
+            0 => throw new SceneMakerDocumentException(
+                $"Workspace '{workspace.WorkspaceKey}' has no Scene '{sceneId}'."),
+            _ => throw new SceneMakerDocumentException(
+                $"Scene id '{sceneId}' names both a Scene Instance and a Scene Template."),
+        };
+    }
+
     public static LoadedScene CreateInstance(
         LoadedWorkspace workspace,
         string sceneId,

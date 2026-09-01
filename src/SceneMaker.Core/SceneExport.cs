@@ -10,7 +10,7 @@ namespace SceneMaker.Core;
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 2;
+    public const int Version = 3;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -58,6 +58,7 @@ public static class SceneExport
                 GamePixelsPerMeter = configuration.Grid.GamePixelsPerMeter,
             },
             AssetProfiles = ExportProfiles(configuration, propAssets),
+            RequiredTemplateGroups = RequiredTemplateGroups(scene.Document),
             Scene = scene.Document,
         };
         var directory = Path.Combine(workspace.DirectoryPath, DirectoryName);
@@ -65,6 +66,31 @@ public static class SceneExport
         AtomicTextFile.Write(path, JsonSerializer.Serialize(document, JsonOptions) + "\n");
         return path;
     }
+
+    /// <summary>
+    /// Exports every Scene of the Workspace, Instances and Templates alike.
+    /// Templates ship as their own files so that one of them can be replaced
+    /// between seasons without rewriting the map that uses it.
+    /// </summary>
+    public static IReadOnlyList<string> WriteWorkspace(WorkspaceSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return SceneStore
+            .EnumeratePaths(session.Workspace)
+            .Select(path => Write(session, SceneStore.Load(session.Workspace, path)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// The Template groups this Scene's Anchors ask for, so a consumer can tell
+    /// on load that a group it needs has no Template left - the failure a
+    /// seasonal Template swap invites.
+    /// </summary>
+    private static List<int> RequiredTemplateGroups(SceneDocument scene) =>
+        [.. scene.TemplateAnchors
+            .Select(static anchor => anchor.GroupNumber)
+            .Distinct()
+            .Order()];
 
     private static List<ExportAssetProfileDocument> ExportProfiles(
         WorkspaceConfiguration configuration,
@@ -125,6 +151,7 @@ public static class SceneExport
         public required string WorkspaceKey { get; init; }
         public required ExportGridDocument Grid { get; init; }
         public required List<ExportAssetProfileDocument> AssetProfiles { get; init; }
+        public required List<int> RequiredTemplateGroups { get; init; }
         public required SceneDocument Scene { get; init; }
     }
 
