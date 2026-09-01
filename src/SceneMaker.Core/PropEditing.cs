@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace SceneMaker.Core;
 
 public readonly record struct PropBoundsAuthoringPixels(
@@ -232,15 +234,34 @@ public static class PropEditing
             && bounds.Right <= width && bounds.Top <= height;
     }
 
+    /// <summary>
+    /// The lowest index this Asset has free, so that erasing a Prop and placing
+    /// a new one reuses the gap rather than counting on. Only this Asset's own
+    /// IDs are read, and the probe compares numbers: formatting a candidate
+    /// string per attempt made placing the n-th Prop allocate n strings.
+    /// </summary>
     private static string NextInstanceId(SceneDocument scene, string assetKey)
     {
-        var existing = scene.Props
-            .Select(static prop => prop.InstanceId)
-            .ToHashSet(StringComparer.Ordinal);
+        var prefix = assetKey + "_";
+        HashSet<int> used = [];
+        foreach (var prop in scene.Props)
+        {
+            if (!prop.InstanceId.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            // A different Asset whose key starts with this one ('stone' and
+            // 'stone_big') fails to parse here and is correctly ignored.
+            if (int.TryParse(
+                    prop.InstanceId.AsSpan(prefix.Length),
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var index))
+            {
+                used.Add(index);
+            }
+        }
+
         for (var index = 1; index < int.MaxValue; index++)
         {
-            var candidate = $"{assetKey}_{index:0000}";
-            if (!existing.Contains(candidate)) return candidate;
+            if (used.Add(index)) return $"{assetKey}_{index:0000}";
         }
         throw new SceneMakerDocumentException(
             $"Scene has exhausted stable instance IDs for '{assetKey}'.");
