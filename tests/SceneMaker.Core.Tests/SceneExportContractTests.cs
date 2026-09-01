@@ -26,7 +26,7 @@ public sealed class SceneExportContractTests
             ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(3, root.GetProperty("version").GetInt32());
+        Assert.Equal(4, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             ["terrain_cell_meters", "authoring_pixels_per_meter", "game_pixels_per_meter"],
@@ -71,15 +71,22 @@ public sealed class SceneExportContractTests
             ["grass", "portal", "sand", "stone"],
             profiles.Select(profile => profile.GetProperty("asset_key").GetString()));
         foreach (var profile in profiles)
-            Assert.Equal(["asset_key", "footprint_meters", "anchor_meters"], Keys(profile));
+            Assert.Equal(["asset_key", "surface", "footprint_meters", "anchor_meters"], Keys(profile));
 
         var stone = profiles.Single(profile => profile.GetProperty("asset_key").GetString() == "stone");
         Assert.Equal(["width", "height"], Keys(stone.GetProperty("footprint_meters")));
         Assert.Equal(["x", "y"], Keys(stone.GetProperty("anchor_meters")));
+        // A Prop has no surface: only Terrain presents one.
+        Assert.Equal(JsonValueKind.Null, stone.GetProperty("surface").ValueKind);
 
         var grass = profiles.Single(profile => profile.GetProperty("asset_key").GetString() == "grass");
+        Assert.Equal("land", grass.GetProperty("surface").GetString());
         Assert.Equal(JsonValueKind.Null, grass.GetProperty("footprint_meters").ValueKind);
         Assert.Equal(JsonValueKind.Null, grass.GetProperty("anchor_meters").ValueKind);
+        Assert.Equal(
+            "sand",
+            profiles.Single(profile => profile.GetProperty("asset_key").GetString() == "sand")
+                .GetProperty("surface").GetString());
     }
 
     [Fact]

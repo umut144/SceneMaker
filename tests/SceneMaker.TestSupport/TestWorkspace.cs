@@ -14,8 +14,9 @@ namespace SceneMaker.TestSupport;
 /// therefore covers exactly one Terrain cell, which keeps coordinate assertions
 /// readable: an anchor at (64, 64) occupies Terrain cell (2, 2).
 ///
-/// Assets: <c>grass</c> and <c>sand</c> are PolyTools terrain, <c>stone</c> and
-/// <c>portal</c> are PolyTools props.
+/// Assets: <c>grass</c> and <c>sand</c> are PolyTools terrain with the surfaces
+/// <c>land</c> and <c>sand</c>; <c>stone</c> and <c>portal</c> are PolyTools
+/// props and therefore carry no surface.
 ///
 /// The Workspace directory is named after its key and carries the empty
 /// <c>scenes</c> and <c>templates</c> directories, so it satisfies everything
@@ -82,7 +83,7 @@ public sealed class TestWorkspace : IDisposable
             $$"""
             {
               "format": "scene_maker_workspace",
-              "version": 3,
+              "version": 4,
               "workspace_key": "{{worldKey}}",
               "grid": {
                 "terrain_cell_meters": 1.0,
@@ -90,9 +91,9 @@ public sealed class TestWorkspace : IDisposable
                 "game_pixels_per_meter": 192
               },
               "assets": [
-                { "asset_key": "grass", "color": "#99E550" },
+                { "asset_key": "grass", "color": "#99E550", "surface": "land" },
                 { "asset_key": "portal", "color": "#8E6CFF" },
-                { "asset_key": "sand", "color": "#E5C07B" },
+                { "asset_key": "sand", "color": "#E5C07B", "surface": "sand" },
                 { "asset_key": "stone", "color": "#808080" }
               ]
             }

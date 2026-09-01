@@ -104,7 +104,8 @@ public sealed partial class SceneMakerMain : Control
     private sealed record WorkspaceAssetEditorRow(
         PolyToolsCatalogAsset Asset,
         CheckBox Enabled,
-        LineEdit Color);
+        LineEdit Color,
+        LineEdit Surface);
 
     public override void _Ready()
     {
@@ -1007,26 +1008,36 @@ public sealed partial class SceneMakerMain : Control
         _workspaceAssetEditorRows.Clear();
         _workspaceAssetRows.AddChild(new Label
         {
-            Text = "Assets come from the synchronized PolyTools catalog. SceneMaker owns only enablement and authoring color; whether an Asset is Terrain or a Prop is PolyTools data.",
+            Text = "Assets come from the synchronized PolyTools catalog. SceneMaker owns enablement, authoring color, and the surface a Terrain Asset presents to the game; whether an Asset is Terrain or a Prop is PolyTools data.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         foreach (var asset in _controller.Session.Catalog.Assets)
         {
             var profile = _controller.Session.Configuration.AssetProfiles
                 .SingleOrDefault(value => value.AssetKey == asset.AssetKey);
-            var row = new GridContainer { Columns = 3 };
+            var isTerrain = asset.AssetType == PolyToolsAssetType.Terrain;
+            var row = new GridContainer { Columns = 4 };
             var enabled = new CheckBox { Text = asset.AssetKey, ButtonPressed = profile is not null };
             enabled.CustomMinimumSize = new Vector2(180f, 0f);
             var color = NewAssetField(profile?.Color ?? string.Empty, "#RRGGBB");
+            // Only Terrain presents a surface, and only Terrain may carry one.
+            var surface = NewAssetField(
+                profile?.Surface ?? (isTerrain ? DefaultSurface : string.Empty),
+                isTerrain ? "land" : string.Empty);
+            surface.Editable = isTerrain;
             row.AddChild(enabled);
             row.AddChild(new Label { Text = asset.AssetType.ToString() });
             row.AddChild(color);
+            row.AddChild(surface);
             _workspaceAssetRows.AddChild(row);
             _workspaceAssetEditorRows.Add(asset.AssetKey,
-                new WorkspaceAssetEditorRow(asset, enabled, color));
+                new WorkspaceAssetEditorRow(asset, enabled, color, surface));
         }
         _workspaceAssetsDialog.PopupCentered(new Vector2I(760, 520));
     }
+
+    /// <summary>What a Terrain Asset presents unless the author says otherwise.</summary>
+    private const string DefaultSurface = "land";
 
     private static LineEdit NewAssetField(string value, string placeholder) => new()
     {
@@ -1042,7 +1053,13 @@ public sealed partial class SceneMakerMain : Control
         foreach (var row in _workspaceAssetEditorRows.Values)
         {
             if (!row.Enabled.ButtonPressed) continue;
-            profiles.Add(new WorkspaceAssetProfile(row.Asset.AssetKey, row.Color.Text.Trim()));
+            var surface = row.Asset.AssetType == PolyToolsAssetType.Terrain
+                ? row.Surface.Text.Trim()
+                : null;
+            profiles.Add(new WorkspaceAssetProfile(
+                row.Asset.AssetKey,
+                row.Color.Text.Trim(),
+                surface));
         }
 
         var report = _controller.SaveAssetProfiles(profiles);

@@ -10,7 +10,7 @@ namespace SceneMaker.Core;
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 3;
+    public const int Version = 4;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -104,6 +104,7 @@ public static class SceneExport
                 ? new ExportAssetProfileDocument
                 {
                     AssetKey = prop.AssetKey,
+                    Surface = profile.Surface,
                     FootprintMeters = new ExportSizeDocument
                     {
                         Width = prop.WidthMeters,
@@ -115,7 +116,11 @@ public static class SceneExport
                         Y = prop.AnchorYMeters,
                     },
                 }
-                : new ExportAssetProfileDocument { AssetKey = profile.AssetKey })
+                : new ExportAssetProfileDocument
+                {
+                    AssetKey = profile.AssetKey,
+                    Surface = profile.Surface,
+                })
             .ToList();
     }
 
@@ -165,6 +170,16 @@ public static class SceneExport
     private sealed record ExportAssetProfileDocument
     {
         public required string AssetKey { get; init; }
+
+        /// <summary>
+        /// The domain this Terrain presents to a simulation - "land", "water",
+        /// and whatever a consumer adds later. Null for everything that is not
+        /// Terrain. It sits here rather than on every cell so that one Asset
+        /// cannot contradict itself, and so a consumer joins it through the
+        /// asset_key it reads for the cell anyway.
+        /// </summary>
+        public string? Surface { get; init; }
+
         public ExportSizeDocument? FootprintMeters { get; init; }
         public ExportPointDocument? AnchorMeters { get; init; }
     }

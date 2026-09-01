@@ -5,7 +5,7 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 3**, embedded **scene 6**. A reader must reject any
+Current schemas: **export 4**, embedded **scene 6**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
 
@@ -31,7 +31,7 @@ purpose.
 ```jsonc
 {
   "format": "scene_maker_scene_export",
-  "version": 3,
+  "version": 4,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,        // edge length of one Terrain cell
@@ -41,11 +41,13 @@ purpose.
   "asset_profiles": [                  // every Asset the Workspace enables
     {
       "asset_key": "grass",
+      "surface": "land",               // Terrain only
       "footprint_meters": null,        // null for Terrain Assets
       "anchor_meters": null
     },
     {
       "asset_key": "ankh",
+      "surface": null,                 // null for everything that is not Terrain
       "footprint_meters": { "width": 1.0625, "height": 1.71875 },
       "anchor_meters":    { "x": 0.53125, "y": 0.3125 }
     }
@@ -86,6 +88,26 @@ A Template file differs only in `scene_kind`, an empty `template_anchors`, and:
   "insertion_anchor_authoring_px": { "x": 0, "y": 0 }
 }
 ```
+
+## Surfaces
+
+`surface` is the domain a simulation reasons about: `"land"`, `"water"`, and
+whatever a consumer adds later. It is an open lower_snake_case token, not an
+enumeration, so a new surface never breaks the schema. SceneMaker checks the
+shape of the token and never its meaning.
+
+It sits on the Asset, not on the cell. A consumer already reads `asset_key` for
+every Terrain cell, so it joins the surface through that key — one entry instead
+of one per cell, and a Terrain Asset that presents land in one place and water
+in another is structurally impossible.
+
+`surface` is present and non-null for every Terrain Asset and null for every
+other kind. A cell whose Asset has no surface cannot occur: only Terrain Assets
+may be painted as Terrain.
+
+Passability is not in the export and is not SceneMaker's business. The Actor
+brings its domains, the cell brings its surface, and the simulation intersects
+them.
 
 ## Coordinates and units
 
@@ -129,6 +151,8 @@ Validated before the file is written, so a reader may rely on it and should
 treat a violation as a corrupt file rather than a case to handle:
 
 - Every `asset_key` appears in `asset_profiles`.
+- Every Terrain Asset in `asset_profiles` has a non-null `surface`; every other
+  Asset has none.
 - Every Terrain cell lies inside `size_cells`; no two cells share a coordinate.
 - Every Prop footprint is fully covered by Terrain. A Prop never floats over a
   hole.

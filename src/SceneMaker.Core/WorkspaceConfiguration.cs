@@ -10,11 +10,17 @@ public sealed record WorkspaceGridConfiguration(
     decimal GamePixelsPerMeter);
 
 /// <summary>
-/// SceneMaker owns only enablement and authoring color for an Asset. Whether an
-/// Asset is Terrain or a Prop is PolyTools catalog data and is never overridden
-/// here.
+/// SceneMaker owns enablement, authoring color and, for Terrain, the surface an
+/// Asset presents. Whether an Asset is Terrain or a Prop is PolyTools catalog
+/// data and is never overridden here.
+///
+/// <para><see cref="Surface"/> is the domain a consumer's simulation reasons
+/// about - "land", "water", and whatever comes later. It is an open token on
+/// purpose: a new surface must not break the schema. It sits on the Asset
+/// rather than on the cell, so a Terrain Asset cannot contradict itself from
+/// one cell to the next. Null for everything that is not Terrain.</para>
 /// </summary>
-public sealed record WorkspaceAssetProfile(string AssetKey, string Color);
+public sealed record WorkspaceAssetProfile(string AssetKey, string Color, string? Surface = null);
 
 public sealed class WorkspaceConfiguration
 {
@@ -52,7 +58,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 3;
+    public const int Version = 4;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -112,6 +118,7 @@ public static class WorkspaceConfigurationStore
             {
                 AssetKey = profile.AssetKey,
                 Color = profile.Color,
+                Surface = profile.Surface,
             }).ToList(),
         };
         return Parse(document, catalog);
@@ -136,6 +143,7 @@ public static class WorkspaceConfigurationStore
             {
                 AssetKey = profile.AssetKey,
                 Color = profile.Color,
+                Surface = profile.Surface,
             }).OrderBy(static entry => entry.AssetKey, StringComparer.Ordinal).ToList(),
         };
         var path = Path.Combine(Path.GetFullPath(workspaceDirectory), FileName);
@@ -165,7 +173,7 @@ public static class WorkspaceConfigurationStore
         AtomicTextFile.WriteNew(path, document);
     }
 
-    private static void ValidateProfile(AssetProfileDocument entry)
+    private static void ValidateProfile(AssetProfileDocument entry, PolyToolsCatalogAsset catalogAsset)
     {
         if (string.IsNullOrWhiteSpace(entry.AssetKey)
             || string.IsNullOrWhiteSpace(entry.Color)
@@ -176,7 +184,35 @@ public static class WorkspaceConfigurationStore
             throw new SceneMakerDocumentException(
                 "Every Workspace asset profile requires asset_key and a #RRGGBB color.");
         }
+
+        var isTerrain = catalogAsset.AssetType == PolyToolsAssetType.Terrain;
+        if (isTerrain && entry.Surface is null)
+        {
+            throw new SceneMakerDocumentException(
+                $"Terrain Asset '{entry.AssetKey}' requires a surface.");
+        }
+        if (!isTerrain && entry.Surface is not null)
+        {
+            throw new SceneMakerDocumentException(
+                $"Asset '{entry.AssetKey}' is not Terrain and must not declare a surface.");
+        }
+        if (entry.Surface is { } surface && !IsSurfaceToken(surface))
+        {
+            throw new SceneMakerDocumentException(
+                $"Surface '{surface}' must be a lower_snake_case token such as 'land' or 'water'.");
+        }
     }
+
+    /// <summary>
+    /// The set of surfaces stays open - a consumer adds "lava" without a schema
+    /// change - so only the shape of the token is checked, never its value.
+    /// </summary>
+    private static bool IsSurfaceToken(string value) =>
+        value.Length > 0
+        && value[0] is >= 'a' and <= 'z'
+        && value[^1] is >= 'a' and <= 'z'
+        && value.All(static character => character is (>= 'a' and <= 'z') or '_')
+        && !value.Contains("__", StringComparison.Ordinal);
 
     private static WorkspaceConfiguration Parse(
         ConfigurationDocument document,
@@ -208,9 +244,9 @@ public static class WorkspaceConfigurationStore
         SortedDictionary<string, WorkspaceAssetProfile> profiles = new(StringComparer.Ordinal);
         foreach (var entry in document.Assets)
         {
-            _ = catalog.Resolve(entry.AssetKey);
-            ValidateProfile(entry);
-            var profile = new WorkspaceAssetProfile(entry.AssetKey, entry.Color);
+            var catalogAsset = catalog.Resolve(entry.AssetKey);
+            ValidateProfile(entry, catalogAsset);
+            var profile = new WorkspaceAssetProfile(entry.AssetKey, entry.Color, entry.Surface);
             if (!profiles.TryAdd(entry.AssetKey, profile))
             {
                 throw new SceneMakerDocumentException(
@@ -240,5 +276,6 @@ public static class WorkspaceConfigurationStore
     {
         public required string AssetKey { get; init; }
         public required string Color { get; init; }
+        public string? Surface { get; init; }
     }
 }

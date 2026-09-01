@@ -71,14 +71,14 @@ fi
 world_key="$(jq -r '.world_key' "$source_catalog")"
 if ! jq -e --arg world "$world_key" '
   .format == "scene_maker_workspace"
-  and .version == 3
+  and .version == 4
   and .workspace_key == $world
   and (.grid.terrain_cell_meters | type == "number" and . > 0)
   and (.grid.authoring_pixels_per_meter | type == "number" and . > 0)
   and (.grid.game_pixels_per_meter | type == "number" and . > 0)
   and (.assets | type == "array")
 ' "$config_path" >/dev/null; then
-  printf 'ERROR: SceneMaker config must be version 3 for PolyTools world %s.\n' "$world_key" >&2
+  printf 'ERROR: SceneMaker config must be version 4 for PolyTools world %s.\n' "$world_key" >&2
   exit 1
 fi
 
@@ -132,10 +132,17 @@ jq --slurpfile catalog "$source_catalog" '
       | select(.asset_type == "terrain" or .asset_type == "props")
       | . as $source
       | ($existing | map(select(.asset_key == $source.asset_key)) | first) as $old
-      | {
-          asset_key: $source.asset_key,
-          color: ($old.color // (if $source.asset_type == "terrain" then "#99E550" else "#808080" end))
-        }
+      | (if $source.asset_type == "terrain"
+         then {
+           asset_key: $source.asset_key,
+           color: ($old.color // "#99E550"),
+           surface: ($old.surface // "land")
+         }
+         else {
+           asset_key: $source.asset_key,
+           color: ($old.color // "#808080")
+         }
+         end)
     ]
   | .assets |= sort_by(.asset_key)
 ' "$config_path" >"$staged_config"

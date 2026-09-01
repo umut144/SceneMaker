@@ -11,8 +11,11 @@ supported for compatibility. SceneMaker never discovers packages by scanning
 directories and never reads a sibling PolyTools project at runtime.
 
 The workspace configuration supplies terrain-cell size, authoring/game pixel
-densities, enabled assets, and editor colors; whether an Asset is Terrain or a
-Prop is PolyTools catalog data and is never overridden. Prop footprints and
+densities, enabled assets, editor colors, and the surface each Terrain Asset
+presents to a consumer's simulation; whether an Asset is Terrain or a Prop is
+PolyTools catalog data and is never overridden. A surface is an open
+lower_snake_case token such as `land` or `water`, held per Asset rather than per
+cell so that one Terrain Asset cannot contradict itself. Prop footprints and
 anchors are derived from transformed PolyTools visible geometry and rounded
 outward to whole authoring pixels. Scenes store only semantic terrain, props,
 template anchors, and exact PolyTools `asset_key`s.

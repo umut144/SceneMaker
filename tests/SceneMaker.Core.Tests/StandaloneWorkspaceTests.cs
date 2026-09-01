@@ -12,7 +12,7 @@ public sealed class StandaloneWorkspaceTests
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "game01");
         WriteConfig(directory.Path, "game01", 0.5m, 32m, 192m, """
-            { "asset_key": "grass", "color": "#99E550" },
+            { "asset_key": "grass", "color": "#99E550", "surface": "land" },
             { "asset_key": "tree", "color": "#2E7D32" },
             { "asset_key": "portal", "color": "#8E6CFF" }
         """);
@@ -38,7 +38,7 @@ public sealed class StandaloneWorkspaceTests
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "game01");
         WriteConfig(directory.Path, "game01", 0.5m, 32m, 192m, """
-            { "asset_key": "grass", "color": "#99E550" },
+            { "asset_key": "grass", "color": "#99E550", "surface": "land" },
             { "asset_key": "tree", "color": "#2E7D32" },
             { "asset_key": "portal", "color": "#8E6CFF" }
         """);
@@ -68,7 +68,7 @@ public sealed class StandaloneWorkspaceTests
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "line01");
         WriteConfig(directory.Path, "line01", 1m, 32m, 192m, """
-            { "asset_key": "grass", "color": "#99E550" }
+            { "asset_key": "grass", "color": "#99E550", "surface": "land" }
         """);
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path, catalog);
@@ -97,7 +97,7 @@ public sealed class StandaloneWorkspaceTests
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "offset01");
         WriteConfig(directory.Path, "offset01", 1m, 32m, 192m, """
-            { "asset_key": "grass", "color": "#99E550" },
+            { "asset_key": "grass", "color": "#99E550", "surface": "land" },
             { "asset_key": "tree", "color": "#2E7D32" }
         """);
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
@@ -193,7 +193,7 @@ public sealed class StandaloneWorkspaceTests
             "game03",
             new WorkspaceGridConfiguration(1m, 10m, 40m),
             [
-                new WorkspaceAssetProfile("grass", "#99E550"),
+                new WorkspaceAssetProfile("grass", "#99E550", "land"),
                 new WorkspaceAssetProfile("portal", "#8E6CFF"),
             ],
             catalog);
@@ -258,7 +258,7 @@ public sealed class StandaloneWorkspaceTests
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "game05");
         WriteConfig(directory.Path, "game05", 0.5m, 32m, 128m, """
-            { "asset_key": "grass", "color": "#99E550" },
+            { "asset_key": "grass", "color": "#99E550", "surface": "land" },
             { "asset_key": "tree", "color": "#2E7D32" }
         """);
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
@@ -315,7 +315,7 @@ public sealed class StandaloneWorkspaceTests
         File.WriteAllText(Path.Combine(directory, WorkspaceConfigurationStore.FileName), $$"""
         {
           "format": "scene_maker_workspace",
-          "version": 3,
+          "version": 4,
           "workspace_key": "{{workspaceKey}}",
           "grid": {
             "terrain_cell_meters": {{terrainCellMeters.ToString(CultureInfo.InvariantCulture)}},
