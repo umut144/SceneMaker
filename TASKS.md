@@ -8,27 +8,7 @@ reader can decide rather than rediscover.
 Read `AGENTS.md` first — the rules there are what the fixes below have to stay
 inside.
 
-## 1. `SceneDocument.Create` accepts parameters it then ignores
-
-`src/SceneMaker.Core/Documents.cs`
-
-The factory takes `templateGroupNumber`, `insertionAnchorX` and
-`insertionAnchorY` regardless of `sceneKind`. For an Instance it drops them
-without a word: `TemplateDefinition` is only built when the kind is `Template`.
-A caller that passes a group number for an Instance gets silence, not an
-error.
-
-The documents themselves stay legal — `DocumentValidation` rejects a
-`TemplateDefinition` on an Instance — so this is an API that invites a mistake
-rather than one that produces bad data.
-
-A fix would split the factory into `CreateInstance(sceneId, width, height)` and
-`CreateTemplate(sceneId, width, height, groupNumber, insertionAnchor)`, which
-also removes the four default arguments. `SceneStore.Create` and
-`SceneMakerMain.CreateScene` are the callers; `TestScenes` in
-`tests/SceneMaker.TestSupport` builds both kinds and would follow.
-
-## 2. Instance IDs stop reading in numeric order past 9 999
+## 1. Instance IDs stop reading in numeric order past 9 999
 
 `src/SceneMaker.Core/PropEditing.cs`, `NextInstanceId`
 
@@ -46,27 +26,10 @@ migration — see the schema-version section in `AGENTS.md` for why that is not
 free. Worth doing only if a Scene ever gets near that many Props of one asset;
 `world01` is nowhere close.
 
-`NextInstanceId` also rebuilds a `HashSet` of every existing ID per call and
-scans from 1 each time. That is invisible for hundreds of Props and would
-matter long before the ID format did.
+The allocation problem that used to sit alongside this one is fixed: naming a
+Prop no longer formats a candidate string per attempt.
 
-## 3. The settings menu addresses items by hardcoded integers
-
-`src/SceneMaker.App/SceneMakerMain.cs`
-
-`CreateWorkspaceMenuId = 10`, `LoadWorkspaceMenuId = 11`, and so on. The
-numbers are grouped by section (10s, 20s, 30s) and are used both when the
-items are added and when `UpdateDocumentStatus` enables or disables them.
-
-It works, and the constants at least keep the numbers in one place. It is
-still a hand-maintained mapping: adding an item in the middle of a section
-means picking a free number, and nothing catches a collision.
-
-An enum with `AddItem(text, (int)MenuItem.CreateWorkspace)` would make the set
-closed and let the compiler notice a duplicate. Small, contained, no behaviour
-change.
-
-## 4. Building the asset bars selects an asset as a side effect
+## 2. Building the asset bars selects an asset as a side effect
 
 `src/SceneMaker.App/SceneMakerMain.cs`, `BuildTerrainAssetBar` and
 `BuildPropAssetBar`
@@ -84,3 +47,14 @@ and set the status once.
 Watch the ordering when moving it: `_canvas.SelectedTerrainAssetKey is null` is
 what currently decides whether to select, so the choice has to happen after the
 bars exist but before the caller writes its own status.
+
+This one is App code, which has no tests, and it changes when an asset gets
+selected. It is the entry here most likely to be noticed only while using the
+editor, so it wants a manual pass rather than a quick fix.
+
+## Done
+
+- One factory per Scene kind, so `CreateInstance` no longer accepts Template
+  parameters it would silently drop (`9c017be`).
+- The settings menu is a closed enum instead of seven hand-picked integers
+  (`a2f5e52`).
