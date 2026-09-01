@@ -109,6 +109,9 @@ the Godot SDK comes from NuGet, so the application assembly compiles on a plain
 runner, but starting the editor needs the Godot binary. Booting it headless
 stays a manual step, as does looking at the canvas.
 
+`scripts/ci_status.sh` reports the newest run and, when it is red, prints the
+failing steps' log lines. It needs `gh` and `jq`.
+
 ## Project documentation
 
 - `AI_CONTEXT.md` contains domain and architecture context.
