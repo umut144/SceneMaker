@@ -32,7 +32,8 @@ public static class PropEditing
         PropDisplayCatalog propAssets,
         int anchorX,
         int anchorY,
-        string assetKey)
+        string assetKey,
+        decimal? elevationMeters = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(propAssets);
@@ -46,6 +47,7 @@ public static class PropEditing
             InstanceId = NextInstanceId(scene, asset.AssetKey),
             AssetKey = assetKey,
             PositionAuthoringPx = new AuthoringPixelPosition { X = anchorX, Y = anchorY },
+            ElevationMeters = elevationMeters ?? scene.DefaultElevationMeters,
         };
         var placed = scene with
         {
@@ -114,6 +116,7 @@ public static class PropEditing
         int endAnchorX,
         int endAnchorY,
         string assetKey,
+        decimal? elevationMeters = null,
         int offsetAuthoringPixels = 0)
     {
         var asset = propAssets.Resolve(assetKey);
@@ -126,7 +129,7 @@ public static class PropEditing
                      endAnchorY,
                      offsetAuthoringPixels))
         {
-            result = Place(result, propAssets, anchorX, anchorY, assetKey);
+            result = Place(result, propAssets, anchorX, anchorY, assetKey, elevationMeters);
         }
         return result;
     }

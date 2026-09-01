@@ -202,10 +202,15 @@ public sealed class EditorController
     public void ClearTemplatePreview() => TemplatePreview = null;
 
     /// <summary>Creates a Scene Instance in the open Workspace and opens it.</summary>
-    public EditorReport CreateInstance(string sceneId, int widthCells, int heightCells) =>
+    public EditorReport CreateInstance(
+        string sceneId,
+        int widthCells,
+        int heightCells,
+        decimal defaultElevationMeters = SceneDocument.GroundElevationMeters) =>
         CreateScene(
             "Scene Instance",
-            workspace => SceneStore.CreateInstance(workspace, sceneId, widthCells, heightCells));
+            workspace => SceneStore.CreateInstance(
+                workspace, sceneId, widthCells, heightCells, defaultElevationMeters));
 
     /// <summary>Creates a Scene Template in the open Workspace and opens it.</summary>
     public EditorReport CreateTemplate(
@@ -214,7 +219,8 @@ public sealed class EditorController
         int heightCells,
         int groupNumber,
         int insertionAnchorX,
-        int insertionAnchorY) =>
+        int insertionAnchorY,
+        decimal defaultElevationMeters = SceneDocument.GroundElevationMeters) =>
         CreateScene(
             "Scene Template",
             workspace => SceneStore.CreateTemplate(
@@ -224,7 +230,8 @@ public sealed class EditorController
                 heightCells,
                 groupNumber,
                 insertionAnchorX,
-                insertionAnchorY));
+                insertionAnchorY,
+                defaultElevationMeters));
 
     /// <summary>
     /// Opens a Scene out of the current Workspace, after checking that it still

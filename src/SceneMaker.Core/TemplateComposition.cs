@@ -59,7 +59,7 @@ public static class TemplateComposition
 
         var terrain = baseScene.TerrainCells.ToDictionary(
             static cell => new TerrainCellCoordinate(cell.X, cell.Y),
-            static cell => cell.AssetKey);
+            static cell => cell);
         var props = baseScene.Props.ToList();
         List<(SelectedTemplate Candidate, HashSet<TerrainCellCoordinate> Mask)> masks = [];
         foreach (var candidate in selected)
@@ -70,9 +70,12 @@ public static class TemplateComposition
 
             foreach (var cell in candidate.Template.TerrainCells)
             {
-                terrain[new TerrainCellCoordinate(
+                var coordinate = new TerrainCellCoordinate(
                     checked(cell.X + translation.CellX),
-                    checked(cell.Y + translation.CellY))] = cell.AssetKey;
+                    checked(cell.Y + translation.CellY));
+                // The Template brings its own heights: an Anchor places it in
+                // x and y only, it never lifts or lowers what it places.
+                terrain[coordinate] = cell with { X = coordinate.X, Y = coordinate.Y };
             }
 
             props = props
@@ -93,12 +96,7 @@ public static class TemplateComposition
             TerrainCells = terrain
                 .OrderBy(static value => value.Key.Y)
                 .ThenBy(static value => value.Key.X)
-                .Select(static value => new TerrainCellDocument
-                {
-                    X = value.Key.X,
-                    Y = value.Key.Y,
-                    AssetKey = value.Value,
-                })
+                .Select(static value => value.Value)
                 .ToList(),
             Props = props
                 .OrderBy(static value => value.InstanceId, StringComparer.Ordinal)
@@ -230,6 +228,7 @@ public static class TemplateComposition
             X = checked(prop.PositionAuthoringPx.X + translation.AuthoringX),
             Y = checked(prop.PositionAuthoringPx.Y + translation.AuthoringY),
         },
+        ElevationMeters = prop.ElevationMeters,
     };
 
     private static string DerivedInstanceId(

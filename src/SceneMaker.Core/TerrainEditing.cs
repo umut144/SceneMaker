@@ -28,16 +28,18 @@ public static class TerrainEditing
         TerrainDisplayCatalog terrainAssets,
         int cellX,
         int cellY,
-        string assetKey)
+        string assetKey,
+        decimal? elevationMeters = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
         _ = terrainAssets.Resolve(assetKey);
         RequireInsideScene(scene, cellX, cellY);
+        var elevation = elevationMeters ?? scene.DefaultElevationMeters;
 
         var cells = new List<TerrainCellDocument>(scene.TerrainCells.Count + 1);
         cells.AddRange(scene.TerrainCells);
-        SetCell(cells, cellX, cellY, assetKey);
+        SetCell(cells, cellX, cellY, assetKey, elevation);
         return scene with { TerrainCells = cells };
     }
 
@@ -48,13 +50,15 @@ public static class TerrainEditing
         int startCellY,
         int endCellX,
         int endCellY,
-        string assetKey)
+        string assetKey,
+        decimal? elevationMeters = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
         _ = terrainAssets.Resolve(assetKey);
         RequireInsideScene(scene, startCellX, startCellY);
         RequireInsideScene(scene, endCellX, endCellY);
+        var elevation = elevationMeters ?? scene.DefaultElevationMeters;
 
         // A straight line between two cells inside the Scene rectangle stays
         // inside it, so the individual cells need no further bounds check.
@@ -62,7 +66,7 @@ public static class TerrainEditing
         var cells = new List<TerrainCellDocument>(scene.TerrainCells.Count + line.Count);
         cells.AddRange(scene.TerrainCells);
         foreach (var cell in line)
-            SetCell(cells, cell.X, cell.Y, assetKey);
+            SetCell(cells, cell.X, cell.Y, assetKey, elevation);
         return scene with { TerrainCells = cells };
     }
 
@@ -138,33 +142,39 @@ public static class TerrainEditing
         TerrainDisplayCatalog terrainAssets,
         int startCellX,
         int startCellY,
-        string assetKey)
+        string assetKey,
+        decimal? elevationMeters = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
         _ = terrainAssets.Resolve(assetKey);
         RequireInsideScene(scene, startCellX, startCellY);
+        var elevation = elevationMeters ?? scene.DefaultElevationMeters;
 
-        Dictionary<TerrainCellCoordinate, string> cells = scene.TerrainCells.ToDictionary(
+        var cells = scene.TerrainCells.ToDictionary(
             static cell => new TerrainCellCoordinate(cell.X, cell.Y),
-            static cell => cell.AssetKey);
+            static cell => cell);
         var start = new TerrainCellCoordinate(startCellX, startCellY);
-        string? sourceAssetKey = cells.TryGetValue(start, out var source) ? source : null;
+        string? sourceAssetKey = cells.TryGetValue(start, out var source) ? source.AssetKey : null;
         if (sourceAssetKey == assetKey) return scene;
 
         var region = ConnectedRegion(scene, cells, start, sourceAssetKey);
-        foreach (var coordinate in region) cells[coordinate] = assetKey;
+        foreach (var coordinate in region)
+        {
+            cells[coordinate] = new TerrainCellDocument
+            {
+                X = coordinate.X,
+                Y = coordinate.Y,
+                AssetKey = assetKey,
+                ElevationMeters = elevation,
+            };
+        }
         return scene with
         {
             TerrainCells = cells
                 .OrderBy(static pair => pair.Key.Y)
                 .ThenBy(static pair => pair.Key.X)
-                .Select(static pair => new TerrainCellDocument
-                {
-                    X = pair.Key.X,
-                    Y = pair.Key.Y,
-                    AssetKey = pair.Value,
-                })
+                .Select(static pair => pair.Value)
                 .ToList(),
         };
     }
@@ -176,11 +186,11 @@ public static class TerrainEditing
 
         var cells = scene.TerrainCells.ToDictionary(
             static cell => new TerrainCellCoordinate(cell.X, cell.Y),
-            static cell => cell.AssetKey);
+            static cell => cell);
         var start = new TerrainCellCoordinate(startCellX, startCellY);
-        if (!cells.TryGetValue(start, out var sourceAssetKey)) return scene;
+        if (!cells.TryGetValue(start, out var source)) return scene;
 
-        var region = ConnectedRegion(scene, cells, start, sourceAssetKey);
+        var region = ConnectedRegion(scene, cells, start, source.AssetKey);
         return scene with
         {
             TerrainCells = scene.TerrainCells
@@ -196,7 +206,7 @@ public static class TerrainEditing
     /// </summary>
     private static HashSet<TerrainCellCoordinate> ConnectedRegion(
         SceneDocument scene,
-        IReadOnlyDictionary<TerrainCellCoordinate, string> cells,
+        IReadOnlyDictionary<TerrainCellCoordinate, TerrainCellDocument> cells,
         TerrainCellCoordinate start,
         string? sourceAssetKey)
     {
@@ -216,8 +226,8 @@ public static class TerrainEditing
                     continue;
                 }
 
-                string? neighbourAssetKey = cells.TryGetValue(neighbour, out var neighbourAsset)
-                    ? neighbourAsset
+                string? neighbourAssetKey = cells.TryGetValue(neighbour, out var neighbourCell)
+                    ? neighbourCell.AssetKey
                     : null;
                 if (neighbourAssetKey != sourceAssetKey) continue;
                 region.Add(neighbour);
@@ -244,9 +254,16 @@ public static class TerrainEditing
         List<TerrainCellDocument> cells,
         int cellX,
         int cellY,
-        string assetKey)
+        string assetKey,
+        decimal elevationMeters)
     {
-        var cell = new TerrainCellDocument { X = cellX, Y = cellY, AssetKey = assetKey };
+        var cell = new TerrainCellDocument
+        {
+            X = cellX,
+            Y = cellY,
+            AssetKey = assetKey,
+            ElevationMeters = elevationMeters,
+        };
         var index = FindCell(cells, cellX, cellY);
         if (index >= 0) cells[index] = cell;
         else cells.Insert(~index, cell);

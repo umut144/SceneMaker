@@ -5,7 +5,7 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 4**, embedded **scene 6**. A reader must reject any
+Current schemas: **export 4**, embedded **scene 7**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
 
@@ -55,17 +55,20 @@ purpose.
   "required_template_groups": [1, 3],  // groups this map's Anchors ask for
   "scene": {
     "schema": "srt.scene_maker_scene",
-    "version": 6,
+    "version": 7,
     "scene_id": "world01",
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
     "size_cells": { "width": 100, "height": 100 },
-    "terrain_cells": [ { "x": 0, "y": 0, "asset_key": "grass" } ],
+    "terrain_cells": [
+      { "x": 0, "y": 0, "asset_key": "grass", "elevation_meters": 1.0 }
+    ],
     "props": [
       {
         "instance_id": "tree_0001",
         "asset_key": "tree",
-        "position_authoring_px": { "x": 1088, "y": 2624 }
+        "position_authoring_px": { "x": 1088, "y": 2624 },
+        "elevation_meters": 1.0
       }
     ],
     "template_definition": null,       // set only when scene_kind is "template"
@@ -75,7 +78,8 @@ purpose.
         "group_number": 1,
         "position_authoring_px": { "x": 1088, "y": 2624 }
       }
-    ]
+    ],
+    "default_elevation_meters": 1.0    // what a newly authored cell takes
   }
 }
 ```
@@ -108,6 +112,27 @@ may be painted as Terrain.
 Passability is not in the export and is not SceneMaker's business. The Actor
 brings its domains, the cell brings its surface, and the simulation intersects
 them.
+
+## Heights
+
+`elevation_meters` is the height of a cell's walking surface, in metres, in the
+same unit as everything else here. Ground level in `world01` is `1.0`, water
+`0.0`, a bridge deck `1.1`, a hill `2.0`; ramp cells step between them. The
+values are authored, not derived, and SceneMaker never constrains their range or
+step - a consumer's simulation decides which step an Actor can take.
+
+It is authored per cell, not per Asset, because one grass Asset covers valley
+floor and hill alike. `default_elevation_meters` on the Scene is the height a
+newly authored cell takes when the author names none; it is authored intent
+about the Scene, like its size, and a consumer has no use for it.
+
+A Prop carries its own `elevation_meters`, usually the height of the Terrain
+under it. It is a separate field because a bridge deck sits above the water it
+crosses - and that is the case that shows why a place does not have one
+surface. Over a river there are two: `(water, 0.0)` for what swims and
+`(land, 1.1)` for what walks across. Nothing in the export resolves that. The
+Actor's domain picks the surface, the height difference decides whether the step
+is possible, and both happen in the simulation.
 
 ## Coordinates and units
 
@@ -153,6 +178,8 @@ treat a violation as a corrupt file rather than a case to handle:
 - Every `asset_key` appears in `asset_profiles`.
 - Every Terrain Asset in `asset_profiles` has a non-null `surface`; every other
   Asset has none.
+- Every Terrain cell and every Prop carries `elevation_meters`. There is no
+  cell without a height and no Prop without one.
 - Every Terrain cell lies inside `size_cells`; no two cells share a coordinate.
 - Every Prop footprint is fully covered by Terrain. A Prop never floats over a
   hole.

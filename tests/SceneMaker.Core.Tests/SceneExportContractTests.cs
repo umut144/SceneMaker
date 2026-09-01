@@ -43,21 +43,21 @@ public sealed class SceneExportContractTests
             [
                 "schema", "version", "scene_id", "scene_kind", "coordinate_space",
                 "size_cells", "terrain_cells", "props", "template_definition",
-                "template_anchors",
+                "template_anchors", "default_elevation_meters",
             ],
             Keys(scene));
         Assert.Equal("srt.scene_maker_scene", scene.GetProperty("schema").GetString());
-        Assert.Equal(6, scene.GetProperty("version").GetInt32());
+        Assert.Equal(7, scene.GetProperty("version").GetInt32());
         Assert.Equal("instance", scene.GetProperty("scene_kind").GetString());
         Assert.Equal(
             "scene_local_bottom_left_y_up",
             scene.GetProperty("coordinate_space").GetString());
         Assert.Equal(["width", "height"], Keys(scene.GetProperty("size_cells")));
         Assert.Equal(
-            ["x", "y", "asset_key"],
+            ["x", "y", "asset_key", "elevation_meters"],
             Keys(scene.GetProperty("terrain_cells").EnumerateArray().First()));
         Assert.Equal(
-            ["instance_id", "asset_key", "position_authoring_px"],
+            ["instance_id", "asset_key", "position_authoring_px", "elevation_meters"],
             Keys(scene.GetProperty("props").EnumerateArray().First()));
     }
 
@@ -122,6 +122,21 @@ public sealed class SceneExportContractTests
             parsed.RootElement.GetProperty("required_template_groups")
                 .EnumerateArray()
                 .Select(value => value.GetInt32()));
+    }
+
+    [Fact]
+    public void EveryCellAndEveryPropCarriesItsHeight()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Export(workspace).GetProperty("scene");
+
+        Assert.Equal(1.0m, scene.GetProperty("default_elevation_meters").GetDecimal());
+        Assert.All(
+            scene.GetProperty("terrain_cells").EnumerateArray(),
+            cell => Assert.Equal(1.0m, cell.GetProperty("elevation_meters").GetDecimal()));
+        Assert.All(
+            scene.GetProperty("props").EnumerateArray(),
+            prop => Assert.Equal(1.0m, prop.GetProperty("elevation_meters").GetDecimal()));
     }
 
     [Fact]

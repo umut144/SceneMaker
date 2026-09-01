@@ -154,8 +154,10 @@ public static class SceneStore
         LoadedWorkspace workspace,
         string sceneId,
         int widthCells,
-        int heightCells) =>
-        WriteNewScene(workspace, SceneDocument.CreateInstance(sceneId, widthCells, heightCells));
+        int heightCells,
+        decimal defaultElevationMeters = SceneDocument.GroundElevationMeters) =>
+        WriteNewScene(workspace, SceneDocument.CreateInstance(
+            sceneId, widthCells, heightCells, defaultElevationMeters));
 
     public static LoadedScene CreateTemplate(
         LoadedWorkspace workspace,
@@ -164,14 +166,16 @@ public static class SceneStore
         int heightCells,
         int groupNumber,
         int insertionAnchorX,
-        int insertionAnchorY) =>
+        int insertionAnchorY,
+        decimal defaultElevationMeters = SceneDocument.GroundElevationMeters) =>
         WriteNewScene(workspace, SceneDocument.CreateTemplate(
             sceneId,
             widthCells,
             heightCells,
             groupNumber,
             insertionAnchorX,
-            insertionAnchorY));
+            insertionAnchorY,
+            defaultElevationMeters));
 
     private static LoadedScene WriteNewScene(LoadedWorkspace workspace, SceneDocument document)
     {
