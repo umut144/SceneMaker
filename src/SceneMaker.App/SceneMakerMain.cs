@@ -97,8 +97,6 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _templateInsertionYMetricsLabel = new();
 
     private readonly EditorController _controller = new();
-    private LoadedScene? _scene;
-    private SceneEditHistory? _history;
     private string? _pendingWorkspaceParentDirectory;
     private string? _recentSessionPath;
     private string? _templateLoadError;
@@ -137,10 +135,14 @@ public sealed partial class SceneMakerMain : Control
                 UndoEdit();
                 break;
             case Key.S:
-                PersistScene();
-                SetStatus(_scene is null
-                    ? "No Scene to save."
-                    : $"Saved Scene '{_scene.Document.SceneId}'.");
+                _autosaveTimer.Stop();
+                var save = _controller.SaveScene();
+                UpdateDocumentState();
+                SetStatus(!save.Succeeded
+                    ? save.Message
+                    : _controller.Document is { } saved
+                        ? $"Saved Scene '{saved.SceneId}'."
+                        : "No Scene to save.");
                 break;
             default:
                 return;
@@ -155,19 +157,9 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     public override void _ExitTree()
     {
-        if (_controller.Session is null || _scene is null || _history is null || !_history.IsDirty)
-            return;
-        try
-        {
-            SceneStore.Save(_controller.Session.Workspace, _scene);
-            _history.MarkSaved();
-        }
-        catch (Exception exception) when (exception is SceneMakerDocumentException
-                                          or IOException
-                                          or UnauthorizedAccessException)
-        {
-            GD.PushWarning($"Could not save the Scene while closing: {exception.Message}");
-        }
+        var report = _controller.SaveScene();
+        if (!report.Succeeded)
+            GD.PushWarning($"Could not save the Scene while closing: {report.Message}");
     }
 
     private void BuildInterface()
@@ -670,10 +662,8 @@ public sealed partial class SceneMakerMain : Control
                 entry => string.Equals(entry.FilePath, updated.FilePath, StringComparison.Ordinal));
             if (cached >= 0) _workspaceTemplates[cached] = updated;
             ClearTemplatePreview();
-            if (_scene?.FilePath == updated.FilePath)
+            if (_controller.AdoptStoredScene(updated))
             {
-                _scene = updated;
-                _history?.Reset(document);
                 _canvas.UpdateScene(updated);
                 UpdateDocumentStatus();
             }
@@ -1024,7 +1014,7 @@ public sealed partial class SceneMakerMain : Control
     private void ExportCurrentScene()
     {
         PersistScene();
-        if (_controller.Session is not { } session || _scene is not { } scene)
+        if (_controller.Session is not { } session || _controller.Scene is not { } scene)
         {
             ShowError("Load a Scene before exporting.");
             return;
@@ -1085,7 +1075,7 @@ public sealed partial class SceneMakerMain : Control
             profiles.Add(new WorkspaceAssetProfile(row.Asset.AssetKey, row.Color.Text.Trim()));
         }
 
-        var report = _controller.SaveAssetProfiles(profiles, _scene?.Document);
+        var report = _controller.SaveAssetProfiles(profiles);
         if (!report.Succeeded)
         {
             ShowError(report.Message);
@@ -1135,62 +1125,46 @@ public sealed partial class SceneMakerMain : Control
     /// <summary>Drops whatever Scene was open, without writing anything.</summary>
     private void CloseOpenScene()
     {
-        _scene = null;
-        _history = null;
+        _controller.CloseScene();
         _templatePreview = null;
         _canvas.ShowScene(null);
     }
 
     private void CreateScene()
     {
-        if (_controller.Session is not { } session) return;
-        PersistScene();
-        TryDocumentAction(() =>
-        {
-            var sceneId = _sceneIdEdit.Text.Trim();
-            var widthCells = checked((int)_sceneWidthEdit.Value);
-            var heightCells = checked((int)_sceneHeightEdit.Value);
-            _scene = SelectedSceneKind() == SceneKind.Template
-                ? SceneStore.CreateTemplate(
-                    session.Workspace,
-                    sceneId,
-                    widthCells,
-                    heightCells,
-                    checked((int)_templateGroupEdit.Value),
-                    checked((int)_templateInsertionXEdit.Value),
-                    checked((int)_templateInsertionYEdit.Value))
-                : SceneStore.CreateInstance(session.Workspace, sceneId, widthCells, heightCells);
-            _history = new SceneEditHistory(_scene.Document);
-            _canvas.ShowScene(_scene);
-            _templatePreview = null;
-            SaveRecentSession();
-            UpdateDocumentStatus();
-            SetStatus($"Created {_scene.Document.SceneKind switch
-            {
-                SceneKind.Instance => "Scene Instance",
-                SceneKind.Template => "Scene Template",
-                _ => throw new ArgumentOutOfRangeException(),
-            }} '{_scene.Document.SceneId}'.");
-        });
+        var sceneId = _sceneIdEdit.Text.Trim();
+        var widthCells = checked((int)_sceneWidthEdit.Value);
+        var heightCells = checked((int)_sceneHeightEdit.Value);
+        var report = SelectedSceneKind() == SceneKind.Template
+            ? _controller.CreateTemplate(
+                sceneId,
+                widthCells,
+                heightCells,
+                checked((int)_templateGroupEdit.Value),
+                checked((int)_templateInsertionXEdit.Value),
+                checked((int)_templateInsertionYEdit.Value))
+            : _controller.CreateInstance(sceneId, widthCells, heightCells);
+        ShowOpenedScene(report);
     }
 
     private void LoadScene(string filePath)
     {
-        if (_controller.Session is not { } session) return;
-        TryDocumentAction(() =>
+        ShowOpenedScene(_controller.OpenScene(ResolveFileSystemPath(filePath)));
+    }
+
+    /// <summary>Brings the interface in line with a Scene that was just opened.</summary>
+    private void ShowOpenedScene(EditorReport report)
+    {
+        if (!report.Succeeded)
         {
-            PersistScene();
-            _scene = SceneStore.Load(session.Workspace, ResolveFileSystemPath(filePath));
-            DocumentValidation.ValidateGrid(_scene.Document, session.Metrics);
-            TerrainEditing.ValidateAssetReferences(_scene.Document, session.TerrainAssets);
-            PropEditing.ValidateAssetReferences(_scene.Document, session.PropAssets);
-            _history = new SceneEditHistory(_scene.Document);
-            _canvas.ShowScene(_scene);
-            _templatePreview = null;
-            SaveRecentSession();
-            UpdateDocumentStatus();
-            SetStatus($"Loaded Scene '{_scene.Document.SceneId}'.");
-        });
+            ShowError(report.Message);
+            return;
+        }
+        _templatePreview = null;
+        _canvas.ShowScene(_controller.Scene);
+        SaveRecentSession();
+        UpdateDocumentStatus();
+        SetStatus(report.Message);
     }
 
     private void SelectPerspective(EditorMode mode, string perspective)
@@ -1231,7 +1205,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void ExtendMap(bool north)
     {
-        if (_scene is null || _controller.Session is null) return;
+        if (_controller.Scene is null || _controller.Session is null) return;
         var cells = checked((int)_mapExtensionCellsEdit.Value);
         var direction = north ? "north" : "east";
         ExecuteSceneCommand(new ToolOutcome.Edit(
@@ -1293,7 +1267,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void BeginTemplateAnchorPlacement()
     {
-        if (_scene?.Document.SceneKind != SceneKind.Instance)
+        if (_controller.Document?.SceneKind != SceneKind.Instance)
         {
             SetStatus("Place Anchor is available only while editing a Scene Instance.");
             return;
@@ -1308,7 +1282,11 @@ public sealed partial class SceneMakerMain : Control
 
     private void GenerateTemplatePreview()
     {
-        if (_controller.Session is not { } session || _scene?.Document.SceneKind != SceneKind.Instance) return;
+        if (_controller.Session is not { } session
+            || _controller.Document?.SceneKind != SceneKind.Instance)
+        {
+            return;
+        }
         PersistScene();
         TryDocumentAction(() =>
         {
@@ -1318,7 +1296,7 @@ public sealed partial class SceneMakerMain : Control
                 .ToList();
             var seed = unchecked((ulong)Random.Shared.NextInt64());
             _templatePreview = TemplateComposition.Compose(
-                _scene.Document,
+                _controller.Document!,
                 scenes,
                 session.PropAssets,
                 seed);
@@ -1366,43 +1344,27 @@ public sealed partial class SceneMakerMain : Control
     }
 
     /// <summary>
-    /// Applies one edit, records it for undo and reports what happened. Every
-    /// document change in the editor goes through here.
+    /// Hands one edit to the controller and shows what it did. Every document
+    /// change in the editor goes through here.
     /// </summary>
     private void ExecuteSceneCommand(ToolOutcome.Edit edit)
     {
-        if (_controller.Session is null || _scene is null || _history is null) return;
-        var before = _scene.Document;
-        SceneDocument after;
-        try
+        var result = _controller.Apply(edit);
+        if (result.Changed)
         {
-            after = edit.Apply(before);
+            ShowEditedScene();
+            _canvas.NotifySceneChanged(result.Before!, result.After!);
+            SyncSelectedAnchorGroup();
+            UpdateTemplateControls();
         }
-        catch (Exception exception) when (exception is SceneMakerDocumentException
-                                          or OverflowException)
-        {
-            SetStatus($"{edit.Name} blocked: {exception.Message}");
-            return;
-        }
-
-        if (ReferenceEquals(after, before))
-        {
-            if (edit.NoChangeText is not null) SetStatus(edit.NoChangeText);
-            return;
-        }
-
-        ApplyEdit(after, edit.StrokeKey);
-        _canvas.NotifySceneChanged(before, after);
-        SyncSelectedAnchorGroup();
-        UpdateTemplateControls();
-        if (edit.Describe is not null) SetStatus(edit.Describe(before, after));
+        Report(result.Report);
     }
 
     /// <summary>Shows the group of the Anchor the tools currently have selected.</summary>
     private void SyncSelectedAnchorGroup()
     {
-        if (_scene is null || _canvas.SelectedTemplateAnchorId is not { } anchorId) return;
-        var anchor = _scene.Document.TemplateAnchors
+        if (_controller.Scene is null || _canvas.SelectedTemplateAnchorId is not { } anchorId) return;
+        var anchor = _controller.Document!.TemplateAnchors
             .FirstOrDefault(value => value.AnchorId == anchorId);
         if (anchor is null) return;
         _updatingAnchorGroupEdit = true;
@@ -1415,7 +1377,7 @@ public sealed partial class SceneMakerMain : Control
         var groupNumber = checked((int)value);
         _canvas.TemplateAnchorGroupNumber = groupNumber;
         if (_updatingAnchorGroupEdit
-            || _scene is null
+            || _controller.Scene is null
             || _controller.Session is null
             || _canvas.SelectedTemplateAnchorId is not { } anchorId)
         {
@@ -1428,83 +1390,64 @@ public sealed partial class SceneMakerMain : Control
                 $"Assigned Template Anchor '{anchorId}' to group {groupNumber}."));
     }
 
-    private void ApplyEdit(SceneDocument document, string? strokeKey = null)
+    /// <summary>Shows an edited Scene and schedules the write.</summary>
+    private void ShowEditedScene()
     {
-        _history!.Push(document, strokeKey);
-        _scene = new LoadedScene(_scene!.FilePath, document);
+        if (_controller.Scene is not { } scene) return;
         ClearTemplatePreview();
-        _canvas.UpdateScene(_scene);
+        _canvas.UpdateScene(scene);
         _autosaveTimer.Start();
         UpdateDocumentState();
     }
 
-    private void EndEditStroke() => _history?.BreakStroke();
+    private void EndEditStroke() => _controller.EndEditStroke();
 
     /// <summary>
-    /// Writes the Scene to its Workspace if it differs from the stored copy.
-    /// Safe to call at any time; it is a no-op when there is nothing to write.
+    /// Writes the Scene out if it differs from the stored copy. Safe to call at
+    /// any time; it is a no-op when there is nothing to write.
     /// </summary>
     private void PersistScene()
     {
         _autosaveTimer.Stop();
-        if (_controller.Session is null || _scene is null || _history is null || !_history.IsDirty)
-            return;
-        try
-        {
-            SceneStore.Save(_controller.Session.Workspace, _scene);
-            _history.MarkSaved();
-            UpdateDocumentState();
-        }
-        catch (Exception exception) when (exception is SceneMakerDocumentException
-                                          or IOException
-                                          or UnauthorizedAccessException)
-        {
-            SetStatus($"Save blocked: {exception.Message}");
-        }
+        var report = _controller.SaveScene();
+        Report(report);
+        if (report.Succeeded) UpdateDocumentState();
     }
 
-    private void UndoEdit()
+    private void UndoEdit() => StepHistory(_controller.Undo());
+
+    private void RedoEdit() => StepHistory(_controller.Redo());
+
+    private void StepHistory(EditorReport report)
     {
-        if (_history is null || !_history.CanUndo)
+        if (report.Succeeded && _controller.Scene is { } scene)
         {
-            SetStatus("Nothing to undo.");
-            return;
+            _canvas.SelectProp(null);
+            _canvas.SelectTemplateAnchor(null);
+            ClearTemplatePreview();
+            _canvas.UpdateScene(scene);
+            _autosaveTimer.Start();
+            UpdateDocumentStatus();
         }
-        RestoreHistoryState(_history.Undo());
-        SetStatus($"Undo. {_history.UndoDepth} further step{Plural(_history.UndoDepth)} available.");
-    }
-
-    private void RedoEdit()
-    {
-        if (_history is null || !_history.CanRedo)
-        {
-            SetStatus("Nothing to redo.");
-            return;
-        }
-        RestoreHistoryState(_history.Redo());
-        SetStatus($"Redo. {_history.RedoDepth} further step{Plural(_history.RedoDepth)} available.");
-    }
-
-    private static string Plural(int count) => count == 1 ? string.Empty : "s";
-
-    private void RestoreHistoryState(SceneDocument document)
-    {
-        _scene = new LoadedScene(_scene!.FilePath, document);
-        _canvas.SelectProp(null);
-        _canvas.SelectTemplateAnchor(null);
-        ClearTemplatePreview();
-        _canvas.UpdateScene(_scene);
-        _autosaveTimer.Start();
-        UpdateDocumentStatus();
+        SetStatus(report.Message);
     }
 
     private void UpdateDocumentState()
     {
-        _undoButton.Disabled = _history is null || !_history.CanUndo;
-        _redoButton.Disabled = _history is null || !_history.CanRedo;
-        _documentStateLabel.Text = _history is null
-            ? string.Empty
-            : _history.IsDirty ? "unsaved" : "saved";
+        _undoButton.Disabled = !_controller.CanUndo;
+        _redoButton.Disabled = !_controller.CanRedo;
+        _documentStateLabel.Text = _controller.IsDirty switch
+        {
+            null => string.Empty,
+            true => "unsaved",
+            false => "saved",
+        };
+    }
+
+    /// <summary>Shows a report that may deliberately carry no message.</summary>
+    private void Report(EditorReport report)
+    {
+        if (report.HasMessage) SetStatus(report.Message);
     }
 
     private static void AddDocumentHistoryButton(
@@ -1528,15 +1471,15 @@ public sealed partial class SceneMakerMain : Control
         _workspaceLabel.Text = _controller.Session is null
             ? "Workspace: none"
             : $"Workspace: {_controller.Session.WorkspaceKey}";
-        _sceneLabel.Text = _scene is null
+        _sceneLabel.Text = _controller.Scene is null
             ? "Scene: none"
-            : $"Scene: {_scene.Document.SceneId}  ·  {(_scene.Document.SceneKind == SceneKind.Instance ? "Instance" : "Template")}  ·  {_scene.Document.SizeCells.Width} × {_scene.Document.SizeCells.Height} cells";
+            : $"Scene: {_controller.Document!.SceneId}  ·  {(_controller.Document!.SceneKind == SceneKind.Instance ? "Instance" : "Template")}  ·  {_controller.Document!.SizeCells.Width} × {_controller.Document!.SizeCells.Height} cells";
 
         var sceneActionsAvailable = _controller.Session is not null;
         SetSettingsItemDisabled(SettingsMenuItem.WorkspaceAssets, !sceneActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.CreateScene, !sceneActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.LoadScene, !sceneActionsAvailable);
-        SetSettingsItemDisabled(SettingsMenuItem.ExportScene, _scene is null);
+        SetSettingsItemDisabled(SettingsMenuItem.ExportScene, _controller.Scene is null);
         UpdateDrawingToolAvailability();
         UpdateTemplateControls();
         UpdateMapControls();
@@ -1546,7 +1489,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void UpdateMapControls()
     {
-        var scene = _scene?.Document;
+        var scene = _controller.Document;
         var enabled = scene is not null;
         _mapNavigationButton.Disabled = !enabled;
         _mapExtensionCellsEdit.Editable = enabled;
@@ -1573,11 +1516,11 @@ public sealed partial class SceneMakerMain : Control
     private void UpdateDrawingToolAvailability()
     {
         var templateMode = _interaction.Mode == EditorMode.Templates;
-        var instanceActive = _scene?.Document.SceneKind == SceneKind.Instance;
+        var instanceActive = _controller.Document?.SceneKind == SceneKind.Instance;
         foreach (var (tool, control) in _drawingToolControlsByTool)
         {
             control.Visible = EditorToolRegistry.Supports(_interaction.Mode, tool);
-            control.Disabled = _scene is null
+            control.Disabled = _controller.Scene is null
                 || templateMode && !instanceActive;
             control.ButtonPressed = control.Visible && tool == _interaction.ActiveTool;
         }
@@ -1587,12 +1530,12 @@ public sealed partial class SceneMakerMain : Control
     private void UpdateTemplateControls()
     {
         var workspaceActive = _controller.Session is not null;
-        var instanceActive = _scene?.Document.SceneKind == SceneKind.Instance;
+        var instanceActive = _controller.Document?.SceneKind == SceneKind.Instance;
         _placeTemplateAnchorButton.Disabled = !instanceActive;
         _templatesButton.Disabled = !workspaceActive;
         _anchorGroupEdit.Editable = instanceActive;
         _regeneratePreviewButton.Disabled = !instanceActive
-            || _scene!.Document.TemplateAnchors.Count == 0;
+            || _controller.Document!.TemplateAnchors.Count == 0;
     }
 
     private void UpdateViewStatus()
@@ -1662,49 +1605,18 @@ public sealed partial class SceneMakerMain : Control
 
     private void SaveRecentSession()
     {
-        if (_recentSessionPath is null || _controller.Session is not { } session) return;
-        RecentSessionStore.Save(_recentSessionPath, session.Workspace, _scene);
+        if (_recentSessionPath is null) return;
+        _controller.SaveRecentSession(_recentSessionPath);
     }
 
     private void RestoreRecentSession()
     {
-        try
-        {
-            var recent = RecentSessionStore.Load(_recentSessionPath!);
-            if (recent is null) return;
-            if (!_controller.OpenWorkspaceDirectory(recent.WorkspaceDirectoryPath).Succeeded)
-                throw new SceneMakerDocumentException("The recorded Workspace could not be opened.");
-            var session = _controller.Session!;
-            ShowSession();
-            _templatePreview = null;
-            _scene = recent.SceneRelativePath is null
-                ? null
-                : SceneStore.Load(
-                    session.Workspace,
-                    Path.Combine(session.DirectoryPath, recent.SceneRelativePath));
-            if (_scene is not null)
-            {
-                DocumentValidation.ValidateGrid(_scene.Document, session.Metrics);
-                TerrainEditing.ValidateAssetReferences(_scene.Document, session.TerrainAssets);
-                PropEditing.ValidateAssetReferences(_scene.Document, session.PropAssets);
-            }
-            _history = _scene is null ? null : new SceneEditHistory(_scene.Document);
-            _canvas.ShowScene(_scene);
-            SetStatus(_scene is null
-                ? $"Restored Workspace '{session.WorkspaceKey}'."
-                : $"Restored Workspace '{session.WorkspaceKey}' and Scene '{_scene.Document.SceneId}'.");
-        }
-        catch (Exception exception) when (exception is SceneMakerDocumentException
-                                          or IOException
-                                          or UnauthorizedAccessException)
-        {
-            DiscardRecentSession();
-            _controller.CloseWorkspace();
-            _scene = null;
-            _history = null;
-            _canvas.ShowScene(null);
-            SetStatus("No compatible recent session was restored.");
-        }
+        var report = _controller.RestoreRecentSession(_recentSessionPath!);
+        if (!report.Succeeded) DiscardRecentSession();
+        ShowSession();
+        _templatePreview = null;
+        _canvas.ShowScene(_controller.Scene);
+        Report(report);
     }
 
     private void DiscardRecentSession()

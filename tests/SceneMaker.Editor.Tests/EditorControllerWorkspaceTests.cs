@@ -138,8 +138,7 @@ public sealed class EditorControllerWorkspaceTests
         controller.OpenWorkspaceAt(workspace.RootPath);
 
         var report = controller.SaveAssetProfiles(
-            [new WorkspaceAssetProfile("grass", "#99E550"), new WorkspaceAssetProfile("stone", "#808080")],
-            openScene: null);
+            [new WorkspaceAssetProfile("grass", "#99E550"), new WorkspaceAssetProfile("stone", "#808080")]);
 
         Assert.True(report.Succeeded);
         Assert.Equal(
@@ -157,15 +156,16 @@ public sealed class EditorControllerWorkspaceTests
         using var workspace = TestWorkspace.Create();
         var controller = new EditorController();
         controller.OpenWorkspaceAt(workspace.RootPath);
+        controller.CreateInstance("base", 6, 6);
+        controller.Apply(new ToolOutcome.Edit(
+            "Paint",
+            document => TerrainEditing.Paint(document, workspace.Terrain, 0, 0, "grass")));
         var opened = controller.Session;
         var configPath = Path.Combine(workspace.RootPath, WorkspaceConfigurationStore.FileName);
         var stored = File.ReadAllText(configPath);
-        var scene = TestScenes.Instance(workspace);
 
-        // The Scene is covered in grass, so dropping grass would orphan it.
-        var report = controller.SaveAssetProfiles(
-            [new WorkspaceAssetProfile("sand", "#E5C07B")],
-            scene);
+        // The open Scene stands on grass, so dropping grass would orphan it.
+        var report = controller.SaveAssetProfiles([new WorkspaceAssetProfile("sand", "#E5C07B")]);
 
         Assert.False(report.Succeeded);
         Assert.Same(opened, controller.Session);
