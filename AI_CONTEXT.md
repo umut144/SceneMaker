@@ -41,6 +41,11 @@ map. The editor's preview draws a fresh seed every time on purpose: seeing a
 different arrangement each press is the point, because all of them are valid.
 The preview is transient and is never written into a document.
 
+`EXPORT_CONTRACT.md` is the consumer-facing description of that export: field
+meanings, units, the coordinate space, what the export guarantees, and the
+composition algorithm a runtime has to follow to agree with SceneMaker's own
+preview. Hand that file to a consumer rather than this one.
+
 SceneMaker has no runtime dependency on PolyTools or the source game project.
 Later consumers receive a small generic JSON export; they resolve the same
 `asset_key`s in their own PolyTools content boundaries. Each export is a
