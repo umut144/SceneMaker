@@ -10,13 +10,21 @@ namespace SceneMaker.App;
 
 public sealed partial class SceneMakerMain : Control
 {
-    private const int CreateWorkspaceMenuId = 10;
-    private const int LoadWorkspaceMenuId = 11;
-    private const int WorkspaceAssetsMenuId = 12;
-    private const int CreateSceneMenuId = 20;
-    private const int LoadSceneMenuId = 21;
-    private const int ExportSceneMenuId = 22;
-    private const int ChunkHelperMenuId = 30;
+    /// <summary>
+    /// The entries of the settings menu. The numbers exist only while the menu
+    /// does, so they are left to the compiler: a hand-picked id can silently
+    /// collide with another, an enum member cannot.
+    /// </summary>
+    private enum SettingsMenuItem
+    {
+        CreateWorkspace = 1,
+        LoadWorkspace,
+        WorkspaceAssets,
+        CreateScene,
+        LoadScene,
+        ExportScene,
+        ChunkHelper,
+    }
     private const double AutosaveDelaySeconds = 1.5;
 
     private readonly ToolInteraction _interaction = new();
@@ -683,17 +691,26 @@ public sealed partial class SceneMakerMain : Control
     {
         var menu = _settingsButton.GetPopup();
         menu.AddSeparator("Workspaces");
-        menu.AddItem("Create Workspace", CreateWorkspaceMenuId);
-        menu.AddItem("Load Workspace", LoadWorkspaceMenuId);
-        menu.AddItem("Workspace Assets", WorkspaceAssetsMenuId);
+        AddSettingsItem(menu, "Create Workspace", SettingsMenuItem.CreateWorkspace);
+        AddSettingsItem(menu, "Load Workspace", SettingsMenuItem.LoadWorkspace);
+        AddSettingsItem(menu, "Workspace Assets", SettingsMenuItem.WorkspaceAssets);
         menu.AddSeparator("Scenes");
-        menu.AddItem("Create Scene", CreateSceneMenuId);
-        menu.AddItem("Load Scene", LoadSceneMenuId);
-        menu.AddItem("Export Scene", ExportSceneMenuId);
+        AddSettingsItem(menu, "Create Scene", SettingsMenuItem.CreateScene);
+        AddSettingsItem(menu, "Load Scene", SettingsMenuItem.LoadScene);
+        AddSettingsItem(menu, "Export Scene", SettingsMenuItem.ExportScene);
         menu.AddSeparator("Canvas Helpers");
-        menu.AddItem("Chunk Helper: not applicable", ChunkHelperMenuId);
-        menu.SetItemDisabled(menu.GetItemIndex(ChunkHelperMenuId), true);
+        AddSettingsItem(menu, "Chunk Helper: not applicable", SettingsMenuItem.ChunkHelper);
+        SetSettingsItemDisabled(SettingsMenuItem.ChunkHelper, true);
         menu.IdPressed += HandleSettingsMenu;
+    }
+
+    private static void AddSettingsItem(PopupMenu menu, string text, SettingsMenuItem item) =>
+        menu.AddItem(text, (int)item);
+
+    private void SetSettingsItemDisabled(SettingsMenuItem item, bool disabled)
+    {
+        var menu = _settingsButton.GetPopup();
+        menu.SetItemDisabled(menu.GetItemIndex((int)item), disabled);
     }
 
     private void BuildDialogs()
@@ -936,18 +953,18 @@ public sealed partial class SceneMakerMain : Control
 
     private void HandleSettingsMenu(long id)
     {
-        switch (id)
+        switch ((SettingsMenuItem)id)
         {
-            case CreateWorkspaceMenuId:
+            case SettingsMenuItem.CreateWorkspace:
                 _workspaceDirectoryDialog.PopupCenteredRatio(0.75f);
                 break;
-            case LoadWorkspaceMenuId:
+            case SettingsMenuItem.LoadWorkspace:
                 OpenWorkspaceFinder();
                 break;
-            case WorkspaceAssetsMenuId:
+            case SettingsMenuItem.WorkspaceAssets:
                 ShowWorkspaceAssetsDialog();
                 break;
-            case CreateSceneMenuId:
+            case SettingsMenuItem.CreateScene:
                 if (_session is null)
                 {
                     ShowError("Create or load a Workspace before creating a Scene.");
@@ -963,7 +980,7 @@ public sealed partial class SceneMakerMain : Control
                 UpdateSceneSizeMetrics();
                 _createSceneDialog.PopupCentered(new Vector2I(760, 420));
                 break;
-            case LoadSceneMenuId:
+            case SettingsMenuItem.LoadScene:
                 if (_session is null)
                 {
                     ShowError("Create or load a Workspace before loading a Scene.");
@@ -972,7 +989,7 @@ public sealed partial class SceneMakerMain : Control
                 _sceneFileDialog.CurrentDir = _session.DirectoryPath;
                 _sceneFileDialog.PopupCenteredRatio(0.75f);
                 break;
-            case ExportSceneMenuId:
+            case SettingsMenuItem.ExportScene:
                 ExportCurrentScene();
                 break;
         }
@@ -1586,12 +1603,11 @@ public sealed partial class SceneMakerMain : Control
             ? "Scene: none"
             : $"Scene: {_scene.Document.SceneId}  ·  {(_scene.Document.SceneKind == SceneKind.Instance ? "Instance" : "Template")}  ·  {_scene.Document.SizeCells.Width} × {_scene.Document.SizeCells.Height} cells";
 
-        var menu = _settingsButton.GetPopup();
         var sceneActionsAvailable = _session is not null;
-        menu.SetItemDisabled(menu.GetItemIndex(WorkspaceAssetsMenuId), !sceneActionsAvailable);
-        menu.SetItemDisabled(menu.GetItemIndex(CreateSceneMenuId), !sceneActionsAvailable);
-        menu.SetItemDisabled(menu.GetItemIndex(LoadSceneMenuId), !sceneActionsAvailable);
-        menu.SetItemDisabled(menu.GetItemIndex(ExportSceneMenuId), _scene is null);
+        SetSettingsItemDisabled(SettingsMenuItem.WorkspaceAssets, !sceneActionsAvailable);
+        SetSettingsItemDisabled(SettingsMenuItem.CreateScene, !sceneActionsAvailable);
+        SetSettingsItemDisabled(SettingsMenuItem.LoadScene, !sceneActionsAvailable);
+        SetSettingsItemDisabled(SettingsMenuItem.ExportScene, _scene is null);
         UpdateDrawingToolAvailability();
         UpdateTemplateControls();
         UpdateMapControls();
