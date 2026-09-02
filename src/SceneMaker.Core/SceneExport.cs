@@ -13,7 +13,7 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 6;
+    public const int Version = 7;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -112,16 +112,51 @@ public static class SceneExport
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
         var authored = TerrainCoverage.AuthoredCells(scene);
+        var tops = scene.TerrainCells.ToDictionary(
+            static cell => new TerrainCellCoordinate(cell.X, cell.Y),
+            static cell => cell.ElevationMeters);
         List<string> warnings = [];
         foreach (var body in scene.WaterBodies)
         {
+            var cells = WaterGeometry.Corridor(scene, metrics, body);
             var missing = WaterGeometry
                 .CoveredTerrainCells(scene, metrics, body)
                 .Where(cell => !authored.Contains(cell))
                 .ToList();
-            if (missing.Count == 0) continue;
-            warnings.Add(
-                $"Water body '{body.WaterBodyId}' covers {missing.Count} Terrain cell{(missing.Count == 1 ? string.Empty : "s")} that carry no Terrain: {TerrainCoverage.FormatMissingCells(missing)}.");
+            if (missing.Count > 0)
+            {
+                warnings.Add(
+                    $"Water body '{body.WaterBodyId}' covers {missing.Count} Terrain cell{(missing.Count == 1 ? string.Empty : "s")} that carry no Terrain: {TerrainCoverage.FormatMissingCells(missing)}.");
+            }
+
+            // Water whose bed sits above the ground it crosses has nothing
+            // holding it in. The corridor cut can only remove Terrain, never
+            // raise it, so this is a river drawn higher than its valley.
+            var floating = 0;
+            var perTerrainCell = metrics.WaterCellsPerTerrainCell;
+            foreach (var cell in cells)
+            {
+                var under = new TerrainCellCoordinate(
+                    WaterGeometry.FloorDivide(cell.X, perTerrainCell),
+                    WaterGeometry.FloorDivide(cell.Y, perTerrainCell));
+                if (tops.TryGetValue(under, out var top) && cell.BedMeters > top) floating++;
+            }
+            if (floating > 0)
+            {
+                warnings.Add(
+                    $"Water body '{body.WaterBodyId}' floats above the Terrain in {floating} water cell{(floating == 1 ? string.Empty : "s")}: its bed is higher than the ground under it.");
+            }
+
+            // The first point is the source and the last the mouth, so a
+            // surface that climbs between them is water running uphill.
+            for (var index = 0; index + 1 < body.Points.Count; index++)
+            {
+                if (body.Points[index + 1].ElevationMeters <= body.Points[index].ElevationMeters)
+                    continue;
+                warnings.Add(
+                    $"Water body '{body.WaterBodyId}' rises from {body.Points[index].ElevationMeters:0.###} m to {body.Points[index + 1].ElevationMeters:0.###} m between points {index} and {index + 1}, which is upstream of its own mouth.");
+                break;
+            }
         }
         return warnings;
     }
@@ -142,10 +177,16 @@ public static class SceneExport
                 WaterKind = body.WaterKind,
                 AssetKey = body.AssetKey,
                 WidthMeters = body.WidthMeters,
-                ElevationMeters = body.ElevationMeters,
                 Cells = WaterGeometry
                     .Corridor(scene, metrics, body)
-                    .Select(static cell => new ExportWaterCellDocument { X = cell.X, Y = cell.Y })
+                    .Select(static cell => new ExportWaterCellDocument
+                    {
+                        X = cell.X,
+                        Y = cell.Y,
+                        BedMeters = cell.BedMeters,
+                        SurfaceMeters = cell.SurfaceMeters,
+                        CutTopMeters = cell.CutTopMeters,
+                    })
                     .ToList(),
             })
             .ToList();
@@ -251,14 +292,21 @@ public static class SceneExport
         public required WaterKind WaterKind { get; init; }
         public required string AssetKey { get; init; }
         public required decimal WidthMeters { get; init; }
-        public required decimal ElevationMeters { get; init; }
         public required List<ExportWaterCellDocument> Cells { get; init; }
     }
 
+    /// <summary>
+    /// One cell of a body, as two vertical spans sharing a floor: the water
+    /// fills bed..surface, and bed..cut_top is taken out of the Terrain. Three
+    /// numbers rather than two spans, because the two always share that floor.
+    /// </summary>
     private sealed record ExportWaterCellDocument
     {
         public required int X { get; init; }
         public required int Y { get; init; }
+        public required decimal BedMeters { get; init; }
+        public required decimal SurfaceMeters { get; init; }
+        public required decimal CutTopMeters { get; init; }
     }
 
     private sealed record ExportAssetProfileDocument

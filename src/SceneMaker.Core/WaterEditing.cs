@@ -13,6 +13,9 @@ public readonly record struct WaterDraftPoint(
     int X,
     int Y,
     WaterPointMode Mode,
+    decimal ElevationMeters,
+    decimal ChannelDepthMeters,
+    decimal ClearanceAboveMeters,
     AuthoringPixelOffset? DraggedHandleOut = null);
 
 /// <summary>
@@ -38,8 +41,7 @@ public static class WaterEditing
         TerrainDisplayCatalog terrainAssets,
         IReadOnlyList<WaterCurvePointDocument> points,
         string assetKey,
-        decimal widthMeters,
-        decimal elevationMeters)
+        decimal widthMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
@@ -59,7 +61,6 @@ public static class WaterEditing
             WaterKind = WaterKind.River,
             AssetKey = assetKey,
             WidthMeters = widthMeters,
-            ElevationMeters = elevationMeters,
             Points = [.. points],
         };
         return scene with
@@ -141,6 +142,9 @@ public static class WaterEditing
         int authoringX,
         int authoringY,
         WaterPointMode mode,
+        decimal elevationMeters = 0m,
+        decimal channelDepthMeters = DefaultChannelDepthMeters,
+        decimal clearanceAboveMeters = DefaultClearanceAboveMeters,
         AuthoringPixelOffset? handleIn = null,
         AuthoringPixelOffset? handleOut = null) => new()
     {
@@ -152,7 +156,20 @@ public static class WaterEditing
         HandleOutAuthoringPx = mode == WaterPointMode.Linear
             ? AuthoringPixelOffset.Zero
             : handleOut ?? AuthoringPixelOffset.Zero,
+        ElevationMeters = elevationMeters,
+        ChannelDepthMeters = channelDepthMeters,
+        ClearanceAboveMeters = clearanceAboveMeters,
     };
+
+    /// <summary>A river deep enough to be water, as a starting value.</summary>
+    public const decimal DefaultChannelDepthMeters = 0.5m;
+
+    /// <summary>
+    /// Headroom a river asks for by default. Generous on purpose: where the
+    /// ground never reaches it the river is simply open, and it only starts to
+    /// matter where a hill does.
+    /// </summary>
+    public const decimal DefaultClearanceAboveMeters = 5.0m;
 
     /// <summary>
     /// Turns a drawn curve into stored points. Two things happen here, both of
@@ -181,7 +198,7 @@ public static class WaterEditing
             var current = draft[index];
             if (current.Mode == WaterPointMode.Linear)
             {
-                points.Add(Point(current.X, current.Y, WaterPointMode.Linear));
+                points.Add(Vertical(current, Point(current.X, current.Y, WaterPointMode.Linear)));
                 continue;
             }
 
@@ -190,10 +207,30 @@ public static class WaterEditing
             var (handleIn, handleOut) = current.DraggedHandleOut is { } dragged
                 ? Mirrored(Orient(dragged, current, previous))
                 : Automatic(current, previous, next);
-            points.Add(Point(current.X, current.Y, WaterPointMode.Aligned, handleIn, handleOut));
+            points.Add(Vertical(current, Point(
+                current.X,
+                current.Y,
+                WaterPointMode.Aligned,
+                handleIn: handleIn,
+                handleOut: handleOut)));
         }
         return points;
     }
+
+    /// <summary>
+    /// Carries a draft point's vertical values onto the stored point. They
+    /// travel untouched: what the author set for the source is what the source
+    /// gets, and everything between two points is interpolated later rather
+    /// than baked in here.
+    /// </summary>
+    private static WaterCurvePointDocument Vertical(
+        WaterDraftPoint draft,
+        WaterCurvePointDocument point) => point with
+    {
+        ElevationMeters = draft.ElevationMeters,
+        ChannelDepthMeters = draft.ChannelDepthMeters,
+        ClearanceAboveMeters = draft.ClearanceAboveMeters,
+    };
 
     /// <summary>
     /// The drawn handle, flipped if it points back the way the curve came from.

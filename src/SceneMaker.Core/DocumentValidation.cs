@@ -208,6 +208,21 @@ public static partial class DocumentValidation
                 if (!Enum.IsDefined(point.Mode))
                     throw new SceneMakerDocumentException($"{label} requires a supported point mode.");
 
+                // Water with no depth is not water, and negative headroom would
+                // cut below the surface it is measured from. Heights themselves
+                // stay unconstrained: how high water sits is the author's, and
+                // a Scene may work below zero.
+                if (point.ChannelDepthMeters <= 0m)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} requires a positive channel_depth_meters on every point.");
+                }
+                if (point.ClearanceAboveMeters < 0m)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} cannot require negative clearance_above_meters.");
+                }
+
                 // A linear point is exactly the absence of handles. Storing a
                 // handle next to it would leave two answers to what the curve
                 // does there, and the reader could not tell which one wins.

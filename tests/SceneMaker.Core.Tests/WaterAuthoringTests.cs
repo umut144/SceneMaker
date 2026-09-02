@@ -21,12 +21,12 @@ public sealed class WaterAuthoringTests
 
         // One metre of width is two rows of water cells, and the butt caps end
         // the corridor at the source and the mouth instead of rounding past them.
-        List<WaterCellCoordinate> expected = [];
+        List<(int X, int Y)> expected = [];
         for (var y = 1; y <= 2; y++)
         {
-            for (var x = 2; x <= 9; x++) expected.Add(new WaterCellCoordinate(x, y));
+            for (var x = 2; x <= 9; x++) expected.Add((x, y));
         }
-        Assert.Equal(expected, cells);
+        Assert.Equal(expected, cells.Select(static cell => (cell.X, cell.Y)));
     }
 
     [Fact]
@@ -56,6 +56,7 @@ public sealed class WaterAuthoringTests
         Assert.Equal(
             cells.OrderBy(static cell => cell.Y).ThenBy(static cell => cell.X).ToList(),
             cells);
+        Assert.Equal(cells.Count, cells.Select(static cell => (cell.X, cell.Y)).Distinct().Count());
     }
 
     [Fact]
@@ -72,8 +73,7 @@ public sealed class WaterAuthoringTests
                 WaterEditing.Point(160, 176, WaterPointMode.Linear),
             ],
             "river",
-            widthMeters: 2.0m,
-            elevationMeters: 0.0m);
+            widthMeters: 2.0m);
 
         var cells = WaterGeometry.Corridor(scene, workspace.Metrics, scene.WaterBodies[0]);
 
@@ -99,8 +99,7 @@ public sealed class WaterAuthoringTests
                     handleOut: new AuthoringPixelOffset { X = 0, Y = -64 }),
             ],
             "river",
-            widthMeters: 1.0m,
-            elevationMeters: 0.0m);
+            widthMeters: 1.0m);
         var body = scene.WaterBodies[0];
 
         // The curve's midpoint sits at (96, 80), well north of the straight line
@@ -127,8 +126,7 @@ public sealed class WaterAuthoringTests
                 WaterEditing.Point(96, 96, WaterPointMode.Linear),
             ],
             "river",
-            widthMeters: 1.0m,
-            elevationMeters: 0.0m);
+            widthMeters: 1.0m);
         var body = scene.WaterBodies[0];
 
         // Every authored point lies on its own centerline, so every one of them
@@ -233,8 +231,7 @@ public sealed class WaterAuthoringTests
             workspace.Terrain,
             [WaterEditing.Point(32, 32, WaterPointMode.Linear)],
             "river",
-            widthMeters: 1.0m,
-            elevationMeters: 0.0m));
+            widthMeters: 1.0m));
     }
 
     [Fact]
@@ -249,8 +246,7 @@ public sealed class WaterAuthoringTests
                 WaterEditing.Point(160, 32, WaterPointMode.Linear),
             ],
             "river",
-            widthMeters: 1.0m,
-            elevationMeters: 0.0m);
+            widthMeters: 1.0m);
 
         // The shape of the curve is fine; where it sits is a grid question, and
         // that is decided at the IO boundary.
@@ -287,8 +283,7 @@ public sealed class WaterAuthoringTests
                 WaterEditing.Point(160, 32, WaterPointMode.Linear),
             ],
             "river",
-            widthMeters: 4.0m,
-            elevationMeters: 0.0m);
+            widthMeters: 4.0m);
 
         var restored = DocumentJson.DeserializeScene(DocumentJson.Serialize(scene));
 
@@ -297,7 +292,6 @@ public sealed class WaterAuthoringTests
         Assert.Equal(WaterKind.River, body.WaterKind);
         Assert.Equal("river", body.AssetKey);
         Assert.Equal(4.0m, body.WidthMeters);
-        Assert.Equal(0.0m, body.ElevationMeters);
         // Compared as a sequence rather than as whole bodies: a record holding a
         // List compares that List by reference, so equal curves would not be
         // equal documents.
@@ -316,6 +310,5 @@ public sealed class WaterAuthoringTests
                 WaterEditing.Point(160, 32, WaterPointMode.Linear),
             ],
             "river",
-            widthMeters,
-            elevationMeters: 0.0m);
+            widthMeters);
 }

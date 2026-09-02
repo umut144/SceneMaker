@@ -163,6 +163,34 @@ public sealed class EditorInteractionState
 
     public const decimal DefaultRiverWidthMeters = 4.0m;
 
+    /// <summary>
+    /// The water surface the next point takes when it is not snapped to the
+    /// Terrain, absolute like every height in the document.
+    /// </summary>
+    public decimal WaterElevationMeters { get; private set; } =
+        SceneDocument.GroundElevationMeters;
+
+    /// <summary>How deep the next point's water is.</summary>
+    public decimal WaterChannelDepthMeters { get; private set; } =
+        WaterEditing.DefaultChannelDepthMeters;
+
+    /// <summary>The headroom the next point asks for above its surface.</summary>
+    public decimal WaterClearanceAboveMeters { get; private set; } =
+        WaterEditing.DefaultClearanceAboveMeters;
+
+    /// <summary>
+    /// Whether a placed point takes the height of the Terrain under it. On by
+    /// default, because a river that follows its valley is the ordinary case
+    /// and typing its height for every point would be busywork. It is switched
+    /// off to drive a river into a mountain, where the whole point is that the
+    /// water does not follow the ground.
+    ///
+    /// <para>It is a way of filling in a number, not a relationship the document
+    /// keeps: what gets stored is the height, so later Terrain edits leave the
+    /// river where the author put it.</para>
+    /// </summary>
+    public bool SnapWaterToTerrain { get; private set; } = true;
+
     public void SelectMode(EditorMode mode)
     {
         Mode = mode;
@@ -200,4 +228,21 @@ public sealed class EditorInteractionState
         if (widthMeters <= 0m) throw new ArgumentOutOfRangeException(nameof(widthMeters));
         RiverWidthMeters = widthMeters;
     }
+
+    public void SetWaterElevation(decimal elevationMeters) =>
+        WaterElevationMeters = elevationMeters;
+
+    public void SetWaterChannelDepth(decimal depthMeters)
+    {
+        if (depthMeters <= 0m) throw new ArgumentOutOfRangeException(nameof(depthMeters));
+        WaterChannelDepthMeters = depthMeters;
+    }
+
+    public void SetWaterClearanceAbove(decimal clearanceMeters)
+    {
+        if (clearanceMeters < 0m) throw new ArgumentOutOfRangeException(nameof(clearanceMeters));
+        WaterClearanceAboveMeters = clearanceMeters;
+    }
+
+    public void SetSnapWaterToTerrain(bool enabled) => SnapWaterToTerrain = enabled;
 }

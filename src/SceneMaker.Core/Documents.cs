@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 8;
+    public const int SceneVersion = 9;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -103,9 +103,19 @@ public enum WaterPointMode
 }
 
 /// <summary>
-/// One authored point of a water body's centerline. The point itself sits on
-/// the water grid; its handles do not, because a handle is a curve control
-/// rather than a place, and snapping it would quantize the curve's shape.
+/// One authored point of a water body's centerline, in plan and in section.
+///
+/// <para>The point itself sits on the water grid; its handles do not, because a
+/// handle is a curve control rather than a place, and snapping it would quantize
+/// the curve's shape.</para>
+///
+/// <para>The three vertical values are what let one model describe an open
+/// river, a cut channel and a tunnel through a mountain without a second rule.
+/// They are absolute heights in metres, never offsets from the Terrain: a
+/// stored offset would make the water move whenever the ground under it was
+/// repainted, and a river's surface does not work that way. The editor can snap
+/// a point to the Terrain under it while drawing, but what it writes is the
+/// number, not the relationship.</para>
 /// </summary>
 public sealed record WaterCurvePointDocument
 {
@@ -113,6 +123,25 @@ public sealed record WaterCurvePointDocument
     public required WaterPointMode Mode { get; init; }
     public required AuthoringPixelOffset HandleInAuthoringPx { get; init; }
     public required AuthoringPixelOffset HandleOutAuthoringPx { get; init; }
+
+    /// <summary>The height of the water surface here, absolute.</summary>
+    public required decimal ElevationMeters { get; init; }
+
+    /// <summary>
+    /// How deep the water is here. The bed sits this far below
+    /// <see cref="ElevationMeters"/>, and the corridor is cut from the bed
+    /// upwards - so this is also where the Terrain stops being carved away and
+    /// starts being the river's floor.
+    /// </summary>
+    public required decimal ChannelDepthMeters { get; init; }
+
+    /// <summary>
+    /// The headroom the river needs above its surface. Terrain inside the
+    /// corridor is removed up to this height; Terrain that reaches higher stays
+    /// and becomes a ceiling. A river is open where the ground never gets that
+    /// high, and a tunnel where it does - the same number decides both.
+    /// </summary>
+    public required decimal ClearanceAboveMeters { get; init; }
 }
 
 /// <summary>
@@ -123,6 +152,10 @@ public sealed record WaterCurvePointDocument
 /// <para>For a River the first point is the source and the last is the mouth.
 /// That is the whole of its flow direction; nothing else in the document says
 /// which way the water runs.</para>
+///
+/// <para>Its heights are not here but on its points, and they are interpolated
+/// between them: one body describes a river that falls, deepens and ducks under
+/// a mountain along its length.</para>
 /// </summary>
 public sealed record WaterBodyDocument
 {
@@ -142,9 +175,6 @@ public sealed record WaterBodyDocument
     /// authored as a second river starting where the first one ends.
     /// </summary>
     public required decimal WidthMeters { get; init; }
-
-    /// <summary>The height of the water surface, in metres. Flat per body.</summary>
-    public required decimal ElevationMeters { get; init; }
 
     public required List<WaterCurvePointDocument> Points { get; init; }
 }

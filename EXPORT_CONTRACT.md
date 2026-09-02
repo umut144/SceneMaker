@@ -66,13 +66,19 @@ purpose.
       "water_kind": "river",
       "asset_key": "river",
       "width_meters": 8.0,
-      "elevation_meters": 0.0,
-      "cells": [ { "x": 64, "y": 20 } ] // water cells, not Terrain cells
+      "cells": [                       // water cells, not Terrain cells
+        {
+          "x": 64, "y": 20,
+          "bed_meters": 1.5,           // floor of the channel
+          "surface_meters": 2.0,       // top of the water
+          "cut_top_meters": 7.0        // Terrain is removed up to here
+        }
+      ]
     }
   ],
   "scene": {
     "schema": "srt.scene_maker_scene",
-    "version": 8,
+    "version": 9,
     "scene_id": "overworld01",   // names the map, not the Workspace
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
@@ -94,13 +100,15 @@ purpose.
         "water_kind": "river",
         "asset_key": "river",
         "width_meters": 8.0,
-        "elevation_meters": 0.0,
         "points": [
           {
             "position_authoring_px": { "x": 1024, "y": 320 },
             "mode": "aligned",         // or "linear", which zeroes both handles
             "handle_in_authoring_px":  { "x": -64, "y": 0 },
-            "handle_out_authoring_px": { "x": 64, "y": 0 }
+            "handle_out_authoring_px": { "x": 64, "y": 0 },
+            "elevation_meters": 2.0,       // water surface, absolute
+            "channel_depth_meters": 0.5,   // bed below it
+            "clearance_above_meters": 5.0  // headroom required above it
           }
         ]
       }
@@ -190,12 +198,78 @@ near its own mouth - and not an error the author could see coming.
 authored as a second river starting where the first ends, so a reader never
 interpolates a width.
 
+## Height is a stack
+
+A place is not one height. `terrain_cells[].elevation_meters` is **the top of a
+cell's solid column**, not necessarily a walking surface: a spatial element can
+take a range out of that column and put something else there. A column is
+therefore resolved rather than read.
+
+Each curve point carries three absolute heights. From them follow two spans that
+share a floor:
+
+```
+bed      = elevation_meters − channel_depth_meters
+water    = [bed, elevation_meters]                       a fill
+cut      = [bed, elevation_meters + clearance_above_meters]   removed from Terrain
+```
+
+`water_raster` delivers exactly those, per water cell, as `bed_meters`,
+`surface_meters` and `cut_top_meters` — three numbers because the two spans
+always share their floor.
+
+**Resolving a column.** For a water cell, take the Terrain cell it lies in
+(`water cell ÷ water_cells_per_terrain_cell`) and:
+
+```
+solid = (−∞, terrain_top]
+solid = solid \ every cut that covers this cell
+column = solid together with every fill that covers this cell
+```
+
+Every maximal run of `solid` presents a walking surface at its top, carrying the
+surface of that Terrain cell's Asset. Every water fill presents a water surface
+at its top, with its floor at `bed_meters`.
+
+**Cuts apply to Terrain and never to fills.** A bridge deck over a river is a
+fill inside that river's cut, and it has to survive it.
+
+Worked example, a river crossing a mountain that reaches 10 m, with water at
+2.0 m, a channel 0.5 m deep and 5.0 m of headroom:
+
+```
+bed 1.5, cut [1.5, 7.0], water [1.5, 2.0]
+column: solid (−∞, 1.5]   floor of the tunnel, walking surface at 1.5
+        water [1.5, 2.0]  water surface at 2.0
+        air   [2.0, 7.0]  the headroom that was asked for
+        solid [7.0, 10.0] the mountain above, walking surface at 10.0
+```
+
+The same three numbers against flat ground at 1 m leave nothing above the cut,
+and the river is simply open: the corridor is carved down to its bed and filled
+to its surface. An open river, a cut channel and a tunnel are one rule against
+different ground, and the Terrain is never lowered for any of them — a cut is a
+statement by the water body, not an edit to the height field.
+
+**Interpolation.** The three values are given at the authored points and are
+linear in **arc length** along the flattened centerline between them, clamped to
+the outermost point beyond either end. A cell takes the values at the point where
+its centre projects onto the centerline; where two stretches both reach a cell,
+on the inside of a bend, the nearer one wins. Across the width the values are
+constant, because a water surface is level across a river.
+
+Arc length rather than the curve's own parameter: the parameter runs unevenly, so
+a gradient would depend on how long the author made the handles that shape the
+bend. Linear rather than a spline: a spline can overshoot, and an overshoot in a
+water surface is a stretch of river running uphill between two points that both
+fall.
+
+Heights are absolute. Nothing stores a relationship to the ground, so repainting
+Terrain under a river never moves the water.
+
 Bodies may overlap - that is how a widening river or, later, a river running
 into a lake is authored. **A simulation reads their union.** Cells are not
 deduplicated across bodies, and a cell listed twice is water once.
-
-`elevation_meters` is the height of that body's water surface, flat across it,
-in the same unit as every other height here. It is not per cell.
 
 The raster is clipped to the Scene: a river drawn over the map edge simply
 stops being authored there rather than failing to export. Terrain under a river
@@ -210,8 +284,10 @@ authoring one is refused instead.
 
 ## Heights
 
-`elevation_meters` is the height of a cell's walking surface, in metres, in the
-same unit as everything else here. Ground level in `world01` is `1.0`, water
+`elevation_meters` on a Terrain cell is the top of its solid column, in metres,
+in the same unit as everything else here. With no water over it that is also its
+walking surface, which is what it always was; under a cut it is not, and the
+section above says how to resolve it. Ground level in `world01` is `1.0`, water
 `0.0`, a bridge deck `1.1`, a hill `2.0`; ramp cells step between them. The
 values are authored, not derived, and SceneMaker never constrains their range or
 step - a consumer's simulation decides which step an Actor can take.
@@ -294,7 +370,9 @@ treat a violation as a corrupt file rather than a case to handle:
   body no two cells share a coordinate. Across bodies they may.
 - Every water body has at least two curve points, a positive `width_meters`, and
   an `asset_key` that appears in `asset_profiles`. Every curve point sits on the
-  water grid and inside the Scene.
+  water grid and inside the Scene, carries a positive `channel_depth_meters` and
+  a non-negative `clearance_above_meters`.
+- In every exported water cell, `bed_meters ≤ surface_meters ≤ cut_top_meters`.
 - `water_raster` lists the same bodies as `scene.water_bodies`, in the same
   order, and each body's `cells` are what the corridor rule above produces from
   its curve. A reader may recompute them and must get the same set.

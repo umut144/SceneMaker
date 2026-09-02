@@ -256,6 +256,18 @@ public static class TerrainEditing
         return region;
     }
 
+    /// <summary>
+    /// The top of the solid column at this cell, or null where no Terrain is
+    /// authored. Cheap enough to ask per pointer press: the cell list is
+    /// canonically ordered, so this is a binary search rather than a walk.
+    /// </summary>
+    public static decimal? ElevationAt(SceneDocument scene, int cellX, int cellY)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        var index = FindCell(scene.TerrainCells, cellX, cellY);
+        return index < 0 ? null : scene.TerrainCells[index].ElevationMeters;
+    }
+
     /// <summary>Runs at the IO boundary, so it validates the whole document.</summary>
     public static void ValidateAssetReferences(
         SceneDocument scene,

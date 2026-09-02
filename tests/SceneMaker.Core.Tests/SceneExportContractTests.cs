@@ -23,7 +23,7 @@ public sealed class SceneExportContractTests
             ["format", "version", "workspace_key", "grid", "asset_profiles", "water_raster", "scene"],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(6, root.GetProperty("version").GetInt32());
+        Assert.Equal(7, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             [
@@ -48,7 +48,7 @@ public sealed class SceneExportContractTests
             ],
             Keys(scene));
         Assert.Equal("srt.scene_maker_scene", scene.GetProperty("schema").GetString());
-        Assert.Equal(8, scene.GetProperty("version").GetInt32());
+        Assert.Equal(9, scene.GetProperty("version").GetInt32());
         Assert.Equal("instance", scene.GetProperty("scene_kind").GetString());
         Assert.Equal(
             "scene_local_bottom_left_y_up",
@@ -104,30 +104,40 @@ public sealed class SceneExportContractTests
 
         var body = Assert.Single(root.GetProperty("scene").GetProperty("water_bodies").EnumerateArray());
         Assert.Equal(
-            [
-                "water_body_id", "water_kind", "asset_key", "width_meters",
-                "elevation_meters", "points",
-            ],
+            ["water_body_id", "water_kind", "asset_key", "width_meters", "points"],
             Keys(body));
         Assert.Equal("river_0001", body.GetProperty("water_body_id").GetString());
         Assert.Equal("river", body.GetProperty("water_kind").GetString());
-        Assert.Equal(0.0m, body.GetProperty("elevation_meters").GetDecimal());
+
+        // The heights live on the points, not on the body: one river falls,
+        // deepens and ducks under a mountain along its length.
         var point = body.GetProperty("points").EnumerateArray().First();
         Assert.Equal(
-            ["position_authoring_px", "mode", "handle_in_authoring_px", "handle_out_authoring_px"],
+            [
+                "position_authoring_px", "mode", "handle_in_authoring_px",
+                "handle_out_authoring_px", "elevation_meters", "channel_depth_meters",
+                "clearance_above_meters",
+            ],
             Keys(point));
         Assert.Equal("linear", point.GetProperty("mode").GetString());
         Assert.Equal(["x", "y"], Keys(point.GetProperty("position_authoring_px")));
+        Assert.Equal(2.0m, point.GetProperty("elevation_meters").GetDecimal());
 
         var raster = Assert.Single(root.GetProperty("water_raster").EnumerateArray());
         Assert.Equal(
-            [
-                "water_body_id", "water_kind", "asset_key", "width_meters",
-                "elevation_meters", "cells",
-            ],
+            ["water_body_id", "water_kind", "asset_key", "width_meters", "cells"],
             Keys(raster));
         Assert.Equal("river_0001", raster.GetProperty("water_body_id").GetString());
-        Assert.Equal(["x", "y"], Keys(raster.GetProperty("cells").EnumerateArray().First()));
+
+        // Two spans sharing a floor, as three numbers: water fills bed..surface,
+        // and bed..cut_top is what the Terrain gives up for it.
+        var cell = raster.GetProperty("cells").EnumerateArray().First();
+        Assert.Equal(
+            ["x", "y", "bed_meters", "surface_meters", "cut_top_meters"],
+            Keys(cell));
+        Assert.Equal(1.5m, cell.GetProperty("bed_meters").GetDecimal());
+        Assert.Equal(2.0m, cell.GetProperty("surface_meters").GetDecimal());
+        Assert.Equal(7.0m, cell.GetProperty("cut_top_meters").GetDecimal());
     }
 
     [Fact]
@@ -177,17 +187,20 @@ public sealed class SceneExportContractTests
         return parsed.RootElement.Clone();
     }
 
+    /// <summary>
+    /// The worked example from the contract: water at 2 m, half a metre deep,
+    /// five metres of headroom - so a bed at 1.5 m and a cut up to 7 m.
+    /// </summary>
     private static SceneDocument WithRiver(SceneDocument scene, TestWorkspace workspace) =>
         WaterEditing.PlaceRiver(
             scene,
             workspace.Terrain,
             [
-                WaterEditing.Point(32, 32, WaterPointMode.Linear),
-                WaterEditing.Point(160, 32, WaterPointMode.Linear),
+                WaterEditing.Point(32, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m),
+                WaterEditing.Point(160, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m),
             ],
             "river",
-            widthMeters: 1.0m,
-            elevationMeters: 0.0m);
+            widthMeters: 1.0m);
 
     /// <summary>Exports a Scene carrying one Terrain cell kind and one Prop.</summary>
     private static string ExportedJson(

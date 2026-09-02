@@ -981,7 +981,7 @@ public sealed partial class SceneCanvas : Control
                 _interaction.State.PropLineOffsetAuthoringPixels);
 
     /// <summary>One authored body's cells, in the colour of its Asset.</summary>
-    private sealed record WaterOverlay(Color Color, IReadOnlyList<WaterCellCoordinate> Cells);
+    private sealed record WaterOverlay(Color Color, IReadOnlyList<WaterCellSpan> Cells);
 
     private static ToolKey? ToolKeyFor(Key keycode) => keycode switch
     {

@@ -1,10 +1,20 @@
 namespace SceneMaker.Core;
 
 /// <summary>
-/// A cell of the water grid. It is finer than a Terrain cell and nests a whole
-/// number of times inside one, so it never straddles two of them.
+/// One cell of the water grid and what the body occupies there, vertically.
+///
+/// <para>Two spans, sharing a floor: the water fills
+/// <c>[Bed, Surface]</c>, and <c>[Bed, CutTop]</c> is removed from the Terrain
+/// so that the water has somewhere to be and something to travel through. An
+/// open river, a cut channel and a tunnel are the same two spans against
+/// different ground.</para>
 /// </summary>
-public readonly record struct WaterCellCoordinate(int X, int Y);
+public readonly record struct WaterCellSpan(
+    int X,
+    int Y,
+    decimal BedMeters,
+    decimal SurfaceMeters,
+    decimal CutTopMeters);
 
 /// <summary>
 /// A point on a flattened centerline, in authoring pixels. Sub-pixel on
@@ -14,7 +24,35 @@ public readonly record struct WaterCellCoordinate(int X, int Y);
 public readonly record struct CenterlinePoint(double X, double Y);
 
 /// <summary>
-/// Turns an authored water curve into the cells a simulation reads.
+/// A flattened centerline together with where the authored points sit on it,
+/// measured in authoring pixels travelled from the source.
+///
+/// <para>That measure - arc length - is what the vertical values are
+/// interpolated over. The obvious alternative, the curve's own parameter, runs
+/// unevenly: long handles make the middle of a segment pass quicker, so the
+/// river's gradient would depend on how the author shaped its bend. Arc length
+/// is what they see.</para>
+/// </summary>
+public sealed record WaterCenterline(
+    IReadOnlyList<CenterlinePoint> Points,
+    IReadOnlyList<double> AnchorStations);
+
+/// <summary>The three vertical values somewhere along a curve.</summary>
+public readonly record struct WaterProfileSample(
+    decimal ElevationMeters,
+    decimal ChannelDepthMeters,
+    decimal ClearanceAboveMeters)
+{
+    /// <summary>The floor of the channel: the water's bottom and the cut's.</summary>
+    public decimal BedMeters => ElevationMeters - ChannelDepthMeters;
+
+    /// <summary>How high the Terrain is carved away above the bed.</summary>
+    public decimal CutTopMeters => ElevationMeters + ClearanceAboveMeters;
+}
+
+/// <summary>
+/// Turns an authored water curve into the cells a simulation reads, and into
+/// what the body occupies vertically in each of them.
 ///
 /// <para>This is the only place the corridor is defined, and it is defined
 /// once: a water cell belongs to a body when its centre lies no further than
@@ -24,9 +62,10 @@ public readonly record struct CenterlinePoint(double X, double Y);
 /// river does not begin and end with a half-circle.</para>
 ///
 /// <para>The curve itself is evaluated exactly as the PolyTools Bezier tool
-/// evaluates its chains - one cubic per pair of points, with the control points
-/// taken from the handles - so a river drawn here has the shape the author drew
-/// there.</para>
+/// evaluates its chains, so a river drawn here has the shape the author drew
+/// there. The vertical values are interpolated linearly over arc length, which
+/// is the one rule that cannot make a river run uphill between two points that
+/// both fall.</para>
 ///
 /// <para>Everything is derived. Nothing in this file is stored, which is why an
 /// authored river stays reshapeable and why no consumer has to agree with a
@@ -41,6 +80,13 @@ public static class WaterGeometry
     /// stretch stays one segment.
     /// </summary>
     public const double FlattenToleranceAuthoringPixels = 4.0;
+
+    /// <summary>
+    /// Heights are rounded to the millimetre. Interpolation is done in
+    /// doubles and the document counts in decimals; without a fixed rounding
+    /// the same river would export as 1.5 one day and 1.4999999999 the next.
+    /// </summary>
+    public const int HeightDecimals = 3;
 
     private const int MaximumSubdivisionDepth = 12;
 
@@ -61,7 +107,13 @@ public static class WaterGeometry
     /// it, so the preview cannot promise a shape the export then disagrees with.
     /// </summary>
     public static IReadOnlyList<CenterlinePoint> Centerline(
-        IReadOnlyList<WaterCurvePointDocument> points)
+        IReadOnlyList<WaterCurvePointDocument> points) => Flatten(points).Points;
+
+    /// <summary>
+    /// The centerline together with the arc length at which each authored point
+    /// sits on it.
+    /// </summary>
+    public static WaterCenterline Flatten(IReadOnlyList<WaterCurvePointDocument> points)
     {
         ArgumentNullException.ThrowIfNull(points);
         if (points.Count < 2)
@@ -73,8 +125,10 @@ public static class WaterGeometry
         var first = points[0];
         List<CenterlinePoint> polyline =
             [new CenterlinePoint(first.PositionAuthoringPx.X, first.PositionAuthoringPx.Y)];
+        var anchorIndices = new int[points.Count];
         for (var index = 0; index + 1 < points.Count; index++)
         {
+            anchorIndices[index] = polyline.Count - 1;
             var start = points[index];
             var end = points[index + 1];
             var p0 = new CenterlinePoint(start.PositionAuthoringPx.X, start.PositionAuthoringPx.Y);
@@ -85,22 +139,69 @@ public static class WaterGeometry
             var p2 = new CenterlinePoint(
                 p3.X + end.HandleInAuthoringPx.X,
                 p3.Y + end.HandleInAuthoringPx.Y);
-            Flatten(p0, p1, p2, p3, 0, polyline);
+            Subdivide(p0, p1, p2, p3, 0, polyline);
         }
+        anchorIndices[^1] = polyline.Count - 1;
         if (polyline.Count < 2)
         {
             throw new SceneMakerDocumentException(
                 "A water curve that collapses to a single point has no centerline.");
         }
-        return polyline;
+
+        var stations = new double[polyline.Count];
+        for (var index = 1; index < polyline.Count; index++)
+            stations[index] = stations[index - 1] + Distance(polyline[index - 1], polyline[index]);
+
+        var anchorStations = new double[points.Count];
+        for (var index = 0; index < points.Count; index++)
+            anchorStations[index] = stations[anchorIndices[index]];
+        return new WaterCenterline(polyline, anchorStations);
     }
 
     /// <summary>
-    /// The water cells this body covers, canonically ordered by Y then X. Cells
-    /// outside the Scene are dropped rather than refused: a river is allowed to
-    /// run off the edge of the map, it simply stops being authored there.
+    /// The three values at one station, linear between the two authored points
+    /// it falls between and clamped to the outermost ones beyond them.
+    ///
+    /// <para>Linear rather than smooth on purpose. A spline through the heights
+    /// would look softer at the authored points and can overshoot - and an
+    /// overshoot in a water surface is a stretch of river running uphill
+    /// between two points that both fall. Nothing about a curve's plan should
+    /// be able to do that to its section.</para>
     /// </summary>
-    public static IReadOnlyList<WaterCellCoordinate> Corridor(
+    public static WaterProfileSample SampleAt(
+        IReadOnlyList<WaterCurvePointDocument> points,
+        IReadOnlyList<double> anchorStations,
+        double station)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        ArgumentNullException.ThrowIfNull(anchorStations);
+        if (points.Count == 0)
+            throw new SceneMakerDocumentException("A water curve has no points to sample.");
+
+        if (station <= anchorStations[0]) return Sample(points[0]);
+        if (station >= anchorStations[^1]) return Sample(points[^1]);
+
+        for (var index = 0; index + 1 < points.Count; index++)
+        {
+            var from = anchorStations[index];
+            var to = anchorStations[index + 1];
+            if (station > to) continue;
+            var span = to - from;
+            // Two anchors at the same station cannot be interpolated between;
+            // the later one wins, which is what a zero-length stretch means.
+            var fraction = span <= 0.0 ? 1.0 : (station - from) / span;
+            return Mix(points[index], points[index + 1], fraction);
+        }
+        return Sample(points[^1]);
+    }
+
+    /// <summary>
+    /// The water cells this body covers and what it occupies in each of them,
+    /// canonically ordered by Y then X. Cells outside the Scene are dropped
+    /// rather than refused: a river is allowed to run off the edge of the map,
+    /// it simply stops being authored there.
+    /// </summary>
+    public static IReadOnlyList<WaterCellSpan> Corridor(
         SceneDocument scene,
         WorkspaceMetrics metrics,
         WaterBodyDocument body)
@@ -110,7 +211,7 @@ public static class WaterGeometry
     }
 
     /// <summary>The corridor of a curve that is not a body yet.</summary>
-    public static IReadOnlyList<WaterCellCoordinate> Corridor(
+    public static IReadOnlyList<WaterCellSpan> Corridor(
         SceneDocument scene,
         WorkspaceMetrics metrics,
         IReadOnlyList<WaterCurvePointDocument> points,
@@ -130,7 +231,7 @@ public static class WaterGeometry
         var firstY = Math.Max(0, FloorDivide((int)Math.Floor(shape.MinY), step));
         var lastY = Math.Min(sceneHeight - 1, FloorDivide((int)Math.Ceiling(shape.MaxY), step));
 
-        List<WaterCellCoordinate> cells = [];
+        List<WaterCellSpan> cells = [];
         List<CorridorSegment> row = [];
         var half = step / 2.0;
         for (var y = firstY; y <= lastY; y++)
@@ -153,8 +254,10 @@ public static class WaterGeometry
             for (var x = firstX; x <= lastX; x++)
             {
                 var centreX = x * step + half;
-                if (shape.Contains(centreX, centreY, row))
-                    cells.Add(new WaterCellCoordinate(x, y));
+                if (shape.NearestStation(centreX, centreY, row) is not { } station) continue;
+                var sample = SampleAt(points, shape.AnchorStations, station);
+                cells.Add(new WaterCellSpan(
+                    x, y, sample.BedMeters, sample.ElevationMeters, sample.CutTopMeters));
             }
         }
         return cells;
@@ -174,7 +277,7 @@ public static class WaterGeometry
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(body);
         var shape = CorridorShape.For(metrics, body.Points, body.WidthMeters);
-        return shape.Contains(authoringX, authoringY, shape.Segments);
+        return shape.NearestStation(authoringX, authoringY, shape.Segments) is not null;
     }
 
     /// <summary>The Terrain cells a body's corridor lies over.</summary>
@@ -197,7 +300,27 @@ public static class WaterGeometry
             .ToList();
     }
 
-    private static void Flatten(
+    private static WaterProfileSample Sample(WaterCurvePointDocument point) => new(
+        point.ElevationMeters,
+        point.ChannelDepthMeters,
+        point.ClearanceAboveMeters);
+
+    private static WaterProfileSample Mix(
+        WaterCurvePointDocument from,
+        WaterCurvePointDocument to,
+        double fraction) => new(
+        Between(from.ElevationMeters, to.ElevationMeters, fraction),
+        Between(from.ChannelDepthMeters, to.ChannelDepthMeters, fraction),
+        Between(from.ClearanceAboveMeters, to.ClearanceAboveMeters, fraction));
+
+    private static decimal Between(decimal from, decimal to, double fraction)
+    {
+        if (from == to) return from;
+        var value = (double)from + ((double)to - (double)from) * fraction;
+        return decimal.Round((decimal)value, HeightDecimals, MidpointRounding.AwayFromZero);
+    }
+
+    private static void Subdivide(
         CenterlinePoint p0,
         CenterlinePoint p1,
         CenterlinePoint p2,
@@ -217,8 +340,8 @@ public static class WaterGeometry
         var p012 = Midpoint(p01, p12);
         var p123 = Midpoint(p12, p23);
         var middle = Midpoint(p012, p123);
-        Flatten(p0, p01, p012, middle, depth + 1, output);
-        Flatten(middle, p123, p23, p3, depth + 1, output);
+        Subdivide(p0, p01, p012, middle, depth + 1, output);
+        Subdivide(middle, p123, p23, p3, depth + 1, output);
     }
 
     private static bool IsFlat(
@@ -261,6 +384,9 @@ public static class WaterGeometry
         return dx * dx + dy * dy;
     }
 
+    private static double Distance(CenterlinePoint a, CenterlinePoint b) =>
+        Math.Sqrt(DistanceSquared(a, b));
+
     internal static int FloorDivide(int value, int divisor)
     {
         var quotient = value / divisor;
@@ -269,7 +395,8 @@ public static class WaterGeometry
     }
 
     /// <summary>
-    /// One flattened piece of the centerline, with the end caps it carries.
+    /// One flattened piece of the centerline, with the end caps it carries and
+    /// where it starts along the curve.
     ///
     /// <para>The caps belong to the two outermost segments rather than to the
     /// corridor as a whole. Clipping the whole corridor by the plane at the
@@ -286,6 +413,7 @@ public static class WaterGeometry
         double LengthSquared,
         double MinY,
         double MaxY,
+        double StartStation,
         bool CapsAtStart,
         bool CapsAtEnd)
     {
@@ -298,16 +426,24 @@ public static class WaterGeometry
             CapsAtEnd
             && (x - (StartX + DeltaX)) * DeltaX + (y - (StartY + DeltaY)) * DeltaY > 0.0;
 
-        public double DistanceSquaredTo(double x, double y)
+        /// <summary>
+        /// How far along this segment the nearest point to (x, y) lies, and how
+        /// far away it is. The fraction is what turns a position into a station
+        /// on the curve, and with it into a water level.
+        /// </summary>
+        public (double DistanceSquared, double Station) NearestTo(double x, double y)
         {
             var toPointX = x - StartX;
             var toPointY = y - StartY;
-            if (LengthSquared <= 0.0) return toPointX * toPointX + toPointY * toPointY;
+            if (LengthSquared <= 0.0)
+                return (toPointX * toPointX + toPointY * toPointY, StartStation);
             var t = (toPointX * DeltaX + toPointY * DeltaY) / LengthSquared;
             t = t < 0.0 ? 0.0 : t > 1.0 ? 1.0 : t;
             var closestX = toPointX - t * DeltaX;
             var closestY = toPointY - t * DeltaY;
-            return closestX * closestX + closestY * closestY;
+            return (
+                closestX * closestX + closestY * closestY,
+                StartStation + t * Math.Sqrt(LengthSquared));
         }
     }
 
@@ -318,6 +454,7 @@ public static class WaterGeometry
     private sealed record CorridorShape
     {
         public required IReadOnlyList<CorridorSegment> Segments { get; init; }
+        public required IReadOnlyList<double> AnchorStations { get; init; }
         public required double HalfWidth { get; init; }
         public required double MinX { get; init; }
         public required double MaxX { get; init; }
@@ -329,7 +466,8 @@ public static class WaterGeometry
             IReadOnlyList<WaterCurvePointDocument> points,
             decimal widthMeters)
         {
-            var polyline = Centerline(points);
+            var centerline = Flatten(points);
+            var polyline = centerline.Points;
             var halfWidth = (double)(widthMeters * metrics.AuthoringPixelsPerMeter) / 2.0;
 
             List<CorridorSegment> segments = new(polyline.Count - 1);
@@ -337,22 +475,26 @@ public static class WaterGeometry
             var maxX = double.MinValue;
             var minY = double.MaxValue;
             var maxY = double.MinValue;
+            var station = 0.0;
             for (var index = 0; index + 1 < polyline.Count; index++)
             {
                 var start = polyline[index];
                 var end = polyline[index + 1];
                 var deltaX = end.X - start.X;
                 var deltaY = end.Y - start.Y;
+                var lengthSquared = deltaX * deltaX + deltaY * deltaY;
                 segments.Add(new CorridorSegment(
                     start.X,
                     start.Y,
                     deltaX,
                     deltaY,
-                    deltaX * deltaX + deltaY * deltaY,
+                    lengthSquared,
                     Math.Min(start.Y, end.Y),
                     Math.Max(start.Y, end.Y),
+                    station,
                     CapsAtStart: index == 0,
                     CapsAtEnd: index + 2 == polyline.Count));
+                station += Math.Sqrt(lengthSquared);
             }
             foreach (var point in polyline)
             {
@@ -365,6 +507,7 @@ public static class WaterGeometry
             return new CorridorShape
             {
                 Segments = segments,
+                AnchorStations = centerline.AnchorStations,
                 HalfWidth = halfWidth,
                 MinX = minX - halfWidth,
                 MaxX = maxX + halfWidth,
@@ -373,20 +516,35 @@ public static class WaterGeometry
             };
         }
 
-        public bool Contains(double x, double y, IReadOnlyList<CorridorSegment> candidates)
+        /// <summary>
+        /// The station of the nearest point on the corridor's centerline, or
+        /// null when the position is not in the corridor at all.
+        ///
+        /// <para>Nearest rather than first: which stretch of river a cell
+        /// belongs to decides its water level, so on the inside of a bend, where
+        /// two stretches both reach it, the closer one has to win.</para>
+        /// </summary>
+        public double? NearestStation(
+            double x,
+            double y,
+            IReadOnlyList<CorridorSegment> candidates)
         {
             var limit = HalfWidth * HalfWidth;
+            var best = double.MaxValue;
+            double? station = null;
             foreach (var segment in candidates)
             {
-                if (segment.DistanceSquaredTo(x, y) > limit) continue;
                 // The caps trim the two outermost discs, so that the corridor
                 // ends square. They are asked per segment: a cap that reached
                 // beyond its own segment would cut the river wherever the curve
                 // happens to pass behind it.
                 if (segment.IsBeforeSource(x, y) || segment.IsBeyondMouth(x, y)) continue;
-                return true;
+                var (distanceSquared, candidate) = segment.NearestTo(x, y);
+                if (distanceSquared > limit || distanceSquared >= best) continue;
+                best = distanceSquared;
+                station = candidate;
             }
-            return false;
+            return station;
         }
     }
 }

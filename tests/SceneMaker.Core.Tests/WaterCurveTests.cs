@@ -15,8 +15,8 @@ public sealed class WaterCurveTests
     {
         var curve = WaterEditing.ResolveCurve(
         [
-            new WaterDraftPoint(32, 32, WaterPointMode.Linear),
-            new WaterDraftPoint(160, 32, WaterPointMode.Linear),
+            Draft(32, 32, WaterPointMode.Linear),
+            Draft(160, 32, WaterPointMode.Linear),
         ]);
 
         Assert.All(curve, point =>
@@ -31,10 +31,10 @@ public sealed class WaterCurveTests
     {
         var curve = WaterEditing.ResolveCurve(
         [
-            new WaterDraftPoint(
+            Draft(
                 32, 32, WaterPointMode.Aligned,
                 new AuthoringPixelOffset { X = 0, Y = 48 }),
-            new WaterDraftPoint(160, 32, WaterPointMode.Linear),
+            Draft(160, 32, WaterPointMode.Linear),
         ]);
 
         Assert.Equal(new AuthoringPixelOffset { X = 0, Y = 48 }, curve[0].HandleOutAuthoringPx);
@@ -48,8 +48,8 @@ public sealed class WaterCurveTests
         // drawn it would put a cusp where they drew a bend.
         var curve = WaterEditing.ResolveCurve(
         [
-            new WaterDraftPoint(32, 32, WaterPointMode.Linear),
-            new WaterDraftPoint(
+            Draft(32, 32, WaterPointMode.Linear),
+            Draft(
                 160, 32, WaterPointMode.Aligned,
                 new AuthoringPixelOffset { X = -32, Y = 16 }),
         ]);
@@ -63,9 +63,9 @@ public sealed class WaterCurveTests
     {
         var curve = WaterEditing.ResolveCurve(
         [
-            new WaterDraftPoint(0, 0, WaterPointMode.Aligned),
-            new WaterDraftPoint(96, 96, WaterPointMode.Aligned),
-            new WaterDraftPoint(192, 0, WaterPointMode.Aligned),
+            Draft(0, 0, WaterPointMode.Aligned),
+            Draft(96, 96, WaterPointMode.Aligned),
+            Draft(192, 0, WaterPointMode.Aligned),
         ]);
 
         // The middle point sits between (0, 0) and (192, 0): its tangent runs
@@ -88,15 +88,28 @@ public sealed class WaterCurveTests
         using var workspace = TestWorkspace.Create();
         var curve = WaterEditing.ResolveCurve(
         [
-            new WaterDraftPoint(32, 32, WaterPointMode.Linear),
-            new WaterDraftPoint(96, 96, WaterPointMode.Aligned),
-            new WaterDraftPoint(160, 32, WaterPointMode.Linear),
+            Draft(32, 32, WaterPointMode.Linear),
+            Draft(96, 96, WaterPointMode.Aligned),
+            Draft(160, 32, WaterPointMode.Linear),
         ]);
 
         var scene = WaterEditing.PlaceRiver(
-            TestScenes.Instance(workspace), workspace.Terrain, curve, "river", 4.0m, 0.0m);
+            TestScenes.Instance(workspace), workspace.Terrain, curve, "river", 4.0m);
 
         DocumentValidation.ValidateGrid(scene, workspace.Metrics);
         Assert.Equal(3, Assert.Single(scene.WaterBodies).Points.Count);
     }
+
+    /// <summary>
+    /// A draft point at the fixture's usual heights: water at ground level,
+    /// half a metre deep, five metres of headroom. The tests here are about
+    /// plan geometry, so the section stays out of their way.
+    /// </summary>
+    private static WaterDraftPoint Draft(
+        int x,
+        int y,
+        WaterPointMode mode,
+        AuthoringPixelOffset? handle = null) =>
+        new(x, y, mode, 1.0m, 0.5m, 5.0m, handle);
+
 }

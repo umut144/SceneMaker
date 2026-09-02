@@ -114,6 +114,25 @@ Core - a water body's points move by `translation_px` exactly like a Prop - and
 not small in the export contract, which would have to say what happens when a
 Template's water lands on an Instance's. Leave it until a Template needs water.
 
+## 7. A Prop over a cut is still exported as supported
+
+`src/SceneMaker.Core/SceneExport.cs`, the Prop coverage check
+
+The export guarantees that a Prop's footprint is covered by Terrain cells. Since
+a water body can cut a range out of those cells, that guarantee no longer says
+what it used to: a tree standing in the middle of a tunnel's cross-section
+passes it and floats in the game.
+
+Tightening it to "stands on solid ground at its own height" was considered and
+deliberately not done. A bridge is a Prop whose whole purpose is to span a place
+where the ground has been taken away, and a rule written now would have to be
+unwritten for it. What the support requirement is belongs to the Asset - a tree
+needs ground under it, a bridge needs ground at its two ends - so it waits for
+the Asset to be able to say so.
+
+Until then the gap is real and undetected. An author who plants something inside
+a tunnel gets no warning.
+
 ## Done
 
 - One factory per Scene kind, so `CreateInstance` no longer accepts Template

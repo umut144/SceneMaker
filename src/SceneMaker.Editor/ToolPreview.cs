@@ -34,7 +34,7 @@ public sealed record WaterDraftPreview(
     IReadOnlyList<WaterDraftPoint> Points,
     IReadOnlyList<WaterCurvePointDocument> Curve,
     IReadOnlyList<CenterlinePoint> Centerline,
-    IReadOnlyList<WaterCellCoordinate> Cells)
+    IReadOnlyList<WaterCellSpan> Cells)
 {
     public static WaterDraftPreview Empty { get; } = new([], [], [], []);
 }

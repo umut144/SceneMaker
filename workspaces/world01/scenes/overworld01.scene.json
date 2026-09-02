@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 8,
+  "version": 9,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60075,7 +60075,178 @@
       "elevation_meters": 1.0
     }
   ],
-  "water_bodies": [],
+  "water_bodies": [
+    {
+      "water_body_id": "river_0001",
+      "water_kind": "river",
+      "asset_key": "river",
+      "width_meters": 4.0,
+      "points": [
+        {
+          "position_authoring_px": {
+            "x": 672,
+            "y": 1168
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 912,
+            "y": 1328
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 1376,
+            "y": 1296
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 1984,
+            "y": 1472
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2112,
+            "y": 1792
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2384,
+            "y": 1872
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2592,
+            "y": 1952
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2592,
+            "y": 2128
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2736,
+            "y": 2208
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0
+        }
+      ]
+    }
+  ],
   "template_definition": null,
   "template_anchors": [
     {

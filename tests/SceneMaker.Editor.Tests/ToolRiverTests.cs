@@ -186,21 +186,70 @@ public sealed class ToolRiverTests
     }
 
     [Fact]
-    public void TheRiverTakesTheHeightFromTheContextBar()
+    public void APlacedPointTakesTheHeightOfTheTerrainUnderIt()
     {
         using var workspace = TestWorkspace.Create();
+        // The fixture's Terrain stands at 1 m everywhere.
         var scene = TestScenes.Instance(workspace);
         var interaction = River();
-        var context = Context(workspace, scene) with { ElevationMeters = 0.0m };
+        var context = Context(workspace, scene);
         interaction.State.SetRiverWidth(8.0m);
+        interaction.State.SetWaterChannelDepth(0.75m);
+        interaction.State.SetWaterClearanceAbove(3.0m);
 
         Place(interaction, context, 32, 32);
         Place(interaction, context, 160, 32);
         var edit = Assert.IsType<ToolOutcome.Edit>(interaction.KeyPressed(context, ToolKey.Enter));
 
         var body = Assert.Single(edit.Apply(scene).WaterBodies);
-        Assert.Equal(0.0m, body.ElevationMeters);
         Assert.Equal(8.0m, body.WidthMeters);
+        Assert.All(body.Points, point =>
+        {
+            Assert.Equal(1.0m, point.ElevationMeters);
+            Assert.Equal(0.75m, point.ChannelDepthMeters);
+            Assert.Equal(3.0m, point.ClearanceAboveMeters);
+        });
+    }
+
+    [Fact]
+    public void WithoutSnappingThePointTakesTheHeightFromTheContextBar()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = River();
+        var context = Context(workspace, scene);
+        interaction.State.SetSnapWaterToTerrain(false);
+        interaction.State.SetWaterElevation(4.0m);
+
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.KeyPressed(context, ToolKey.Enter));
+
+        // Driving a river into a mountain is exactly the case where the water
+        // must not follow the ground.
+        Assert.All(
+            Assert.Single(edit.Apply(scene).WaterBodies).Points,
+            point => Assert.Equal(4.0m, point.ElevationMeters));
+    }
+
+    [Fact]
+    public void SnappingOverUnpaintedTerrainKeepsThePreviousPointsHeight()
+    {
+        using var workspace = TestWorkspace.Create();
+        // Terrain only in the lower left corner; the second point lands beyond
+        // it, where snapping has nothing to read.
+        var scene = TerrainEditing.Paint(
+            TestScenes.EmptyInstance(), workspace.Terrain, 1, 1, "grass", 2.5m);
+        var interaction = River();
+        var context = Context(workspace, scene);
+
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.KeyPressed(context, ToolKey.Enter));
+
+        var points = Assert.Single(edit.Apply(scene).WaterBodies).Points;
+        Assert.Equal(2.5m, points[0].ElevationMeters);
+        Assert.Equal(2.5m, points[1].ElevationMeters);
     }
 
     [Fact]
@@ -212,12 +261,11 @@ public sealed class ToolRiverTests
             workspace.Terrain,
             WaterEditing.ResolveCurve(
             [
-                new WaterDraftPoint(32, 32, WaterPointMode.Linear),
-                new WaterDraftPoint(160, 32, WaterPointMode.Linear),
+                Draft(32, 32, WaterPointMode.Linear),
+                Draft(160, 32, WaterPointMode.Linear),
             ]),
             "river",
-            4.0m,
-            0.0m);
+            4.0m);
         var interaction = River();
         interaction.SetEraserEnabled(true);
         var context = Context(workspace, scene);
@@ -291,7 +339,7 @@ public sealed class ToolRiverTests
             scene,
             workspace.Metrics,
             EditorTool.Pencil,
-            [new WaterDraftPoint(32, 32, WaterPointMode.Linear)],
+            [Draft(32, 32, WaterPointMode.Linear)],
             pending: null,
             widthMeters: 4.0m);
 
@@ -338,4 +386,17 @@ public sealed class ToolRiverTests
     private static AuthoringPoint Point(int x, int y) => new(x, y);
 
     private static TerrainCellCoordinate Cell(int x, int y) => new(x, y);
+
+    /// <summary>
+    /// A draft point at the fixture's usual heights: water at ground level,
+    /// half a metre deep, five metres of headroom. The tests here are about
+    /// plan geometry, so the section stays out of their way.
+    /// </summary>
+    private static WaterDraftPoint Draft(
+        int x,
+        int y,
+        WaterPointMode mode,
+        AuthoringPixelOffset? handle = null) =>
+        new(x, y, mode, 1.0m, 0.5m, 5.0m, handle);
+
 }

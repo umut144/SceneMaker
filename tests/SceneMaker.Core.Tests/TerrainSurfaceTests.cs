@@ -139,8 +139,7 @@ public sealed class TerrainSurfaceTests
                 WaterEditing.Point(160, 32, WaterPointMode.Linear),
             ],
             "grass",
-            widthMeters: 4.0m,
-            elevationMeters: 0.0m));
+            widthMeters: 4.0m));
         Assert.Contains("cannot be drawn as a water body", drawn.Message, StringComparison.Ordinal);
     }
 

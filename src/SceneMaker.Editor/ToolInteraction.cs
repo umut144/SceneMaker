@@ -297,7 +297,7 @@ public sealed class ToolInteraction
         EditorTool.Fill when context.SelectedTerrainAssetKey is not null => FillTerrainRegion(context, cell),
         EditorTool.Line => BeginTerrainLine(cell),
         EditorTool.DrawRiver when EraserEnabled => EraseWaterBody(context, authoring),
-        EditorTool.DrawRiver => BeginRiverPoint(context, authoring),
+        EditorTool.DrawRiver => BeginRiverPoint(context, authoring, cell),
         _ => ToolOutcome.Idle.Instance,
     };
 
@@ -388,7 +388,10 @@ public sealed class ToolInteraction
     /// release, because what happens in between is the handle being pulled out
     /// of it.
     /// </summary>
-    private ToolOutcome BeginRiverPoint(ToolContext context, AuthoringPoint point)
+    private ToolOutcome BeginRiverPoint(
+        ToolContext context,
+        AuthoringPoint point,
+        TerrainCellCoordinate cell)
     {
         if (context.Scene.SceneKind != SceneKind.Instance)
             return new ToolOutcome.Message("River: a Scene Template cannot carry water.");
@@ -408,11 +411,44 @@ public sealed class ToolInteraction
                 "River: that is the point you just placed; choose a different one.");
         }
 
-        _riverPending = new WaterDraftPoint(snapped.X, snapped.Y, State.WaterPointMode);
+        var (elevation, fromTerrain) = WaterElevationFor(context, cell);
+        _riverPending = new WaterDraftPoint(
+            snapped.X,
+            snapped.Y,
+            State.WaterPointMode,
+            elevation,
+            State.WaterChannelDepthMeters,
+            State.WaterClearanceAboveMeters);
+
         var ordinal = _riverDraft.Count + 1;
+        var height = fromTerrain
+            ? $"water {elevation:0.###} m, snapped to the Terrain"
+            : $"water {elevation:0.###} m";
         return new ToolOutcome.Message(State.WaterPointMode == WaterPointMode.Linear
-            ? $"River: point {ordinal} at ({snapped.X}, {snapped.Y})."
-            : $"River: point {ordinal} at ({snapped.X}, {snapped.Y}); drag to pull its handle.");
+            ? $"River: point {ordinal} at ({snapped.X}, {snapped.Y}) · {height}."
+            : $"River: point {ordinal} at ({snapped.X}, {snapped.Y}) · {height}; drag to pull its handle.");
+    }
+
+    /// <summary>
+    /// The water surface a new point takes. Snapped to the Terrain under it
+    /// when the author asked for that and there is Terrain there; otherwise the
+    /// previous point's height, so an unpainted patch does not put a step into
+    /// the river; and otherwise what the context bar says.
+    /// </summary>
+    private (decimal Elevation, bool Snapped) WaterElevationFor(
+        ToolContext context,
+        TerrainCellCoordinate cell)
+    {
+        if (State.SnapWaterToTerrain
+            && TerrainEditing.ElevationAt(context.Scene, cell.X, cell.Y) is { } top)
+        {
+            return (top, true);
+        }
+        return (
+            _riverDraft.Count > 0
+                ? _riverDraft[^1].ElevationMeters
+                : State.WaterElevationMeters,
+            false);
     }
 
     /// <summary>
@@ -476,20 +512,21 @@ public sealed class ToolInteraction
 
         var points = WaterEditing.ResolveCurve(_riverDraft);
         var width = State.RiverWidthMeters;
-        var elevation = context.ElevationMeters;
         var assetName = context.TerrainAssets.Resolve(assetKey).Name;
         var placed = _riverDraft.Count;
+        var source = points[0].ElevationMeters;
+        var mouth = points[^1].ElevationMeters;
         _riverDraft.Clear();
         return new ToolOutcome.Edit(
             "River",
             document => WaterEditing.PlaceRiver(
-                document, context.TerrainAssets, points, assetKey, width, elevation),
+                document, context.TerrainAssets, points, assetKey, width),
             Describe: (before, after) =>
             {
                 var added = after.WaterBodies.FirstOrDefault(body =>
                     before.WaterBodies.All(previous => previous.WaterBodyId != body.WaterBodyId));
                 var name = added?.WaterBodyId ?? "river";
-                return $"Authored {name} from {placed} points · {assetName} · {width:0.###} m wide · {elevation:0.###} m.";
+                return $"Authored {name} from {placed} points · {assetName} · {width:0.###} m wide · water {source:0.###} m to {mouth:0.###} m.";
             });
     }
 

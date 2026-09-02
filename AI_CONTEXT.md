@@ -55,6 +55,32 @@ a river starts and ends straight across instead of bulging into a half-circle.
 Width belongs to the body, not to its points: a river that widens is authored
 as a second river starting where the first one ends.
 
+## Height is a stack, not a number
+
+A place is not one height. Terrain says how high its solid column reaches;
+spatial elements say which vertical ranges they take out of it and which they
+fill. A column is resolved rather than stored: start from the Terrain, remove
+every cut, add every fill.
+
+Each curve point carries three absolute heights - the water surface, the depth
+of the channel below it, and the headroom required above it. From them follow
+two spans sharing a floor: water fills `[surface - depth, surface]`, and
+`[surface - depth, surface + clearance]` is taken out of the Terrain. One rule,
+three shapes: where the ground never reaches the headroom the river is open,
+where it does a ceiling remains and the river is a tunnel, and in between it is
+a cut channel. The Terrain document is never lowered for any of them.
+
+The heights are absolute and interpolated linearly over arc length between the
+authored points - never over the curve's own parameter, which runs unevenly and
+would tie a river's gradient to the length of its handles, and never through a
+smooth spline, which can overshoot and make a stretch run uphill between two
+points that both fall. The editor can snap a point to the Terrain under it while
+drawing, but what it writes is the number: no offset is stored, so repainting
+the ground later leaves the river where the author put it.
+
+Cuts apply to Terrain and never to fills. That one sentence is what will let a
+bridge deck cross the river it spans without the river carving it away.
+
 `world01` renders water with marching squares over that raster. The raster is
 what the simulation reads; the smooth mesh is presentation, and the authored
 curve travels in the export so a consumer that wants a smooth band instead of a
