@@ -14,9 +14,12 @@ namespace SceneMaker.TestSupport;
 /// therefore covers exactly one Terrain cell, which keeps coordinate assertions
 /// readable: an anchor at (64, 64) occupies Terrain cell (2, 2).
 ///
-/// Assets: <c>grass</c> and <c>sand</c> are PolyTools terrain with the surfaces
-/// <c>land</c> and <c>sand</c>; <c>stone</c> and <c>portal</c> are PolyTools
-/// props and therefore carry no surface.
+/// The water grid is half a Terrain cell: 0.5 m, or 16 authoring pixels, the
+/// same proportion world01 authors rivers at.
+///
+/// Assets: <c>grass</c>, <c>river</c> and <c>sand</c> are PolyTools terrain with
+/// the surfaces <c>land</c>, <c>water</c> and <c>sand</c>; <c>stone</c> and
+/// <c>portal</c> are PolyTools props and therefore carry no surface.
 ///
 /// The Workspace directory is named after its key and carries the empty
 /// <c>scenes</c> and <c>templates</c> directories, so it satisfies everything
@@ -25,6 +28,7 @@ namespace SceneMaker.TestSupport;
 public sealed class TestWorkspace : IDisposable
 {
     public const int AuthoringPixelsPerCell = 32;
+    public const int AuthoringPixelsPerWaterCell = 16;
 
     private readonly string _containerPath;
 
@@ -83,16 +87,18 @@ public sealed class TestWorkspace : IDisposable
             $$"""
             {
               "format": "scene_maker_workspace",
-              "version": 4,
+              "version": 5,
               "workspace_key": "{{worldKey}}",
               "grid": {
                 "terrain_cell_meters": 1.0,
                 "authoring_pixels_per_meter": 32,
-                "game_pixels_per_meter": 192
+                "game_pixels_per_meter": 192,
+                "water_cell_meters": 0.5
               },
               "assets": [
                 { "asset_key": "grass", "color": "#99E550", "surface": "land" },
                 { "asset_key": "portal", "color": "#8E6CFF" },
+                { "asset_key": "river", "color": "#3C7DD9", "surface": "water" },
                 { "asset_key": "sand", "color": "#E5C07B", "surface": "sand" },
                 { "asset_key": "stone", "color": "#808080" }
               ]
@@ -128,6 +134,12 @@ public sealed class TestWorkspace : IDisposable
                   "runtime_package": "PolyToolsRuntimeExports/portal/manifest.json"
                 },
                 {
+                  "asset_key": "river",
+                  "display_name": "River",
+                  "asset_type": "terrain",
+                  "runtime_package": "PolyToolsRuntimeExports/river/manifest.json"
+                },
+                {
                   "asset_key": "sand",
                   "display_name": "Sand",
                   "asset_type": "terrain",
@@ -145,6 +157,7 @@ public sealed class TestWorkspace : IDisposable
 
         WriteManifest(importDirectory, "grass", "terrain");
         WriteManifest(importDirectory, "portal", "props");
+        WriteManifest(importDirectory, "river", "terrain");
         WriteManifest(importDirectory, "sand", "terrain");
         WriteManifest(importDirectory, "stone", "props");
     }

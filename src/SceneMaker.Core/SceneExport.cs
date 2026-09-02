@@ -7,10 +7,13 @@ namespace SceneMaker.Core;
 /// Writes a self-contained, engine-neutral scene snapshot. Consumers resolve
 /// asset keys in their own asset systems; the SceneMaker catalog is not exported.
 /// </summary>
+/// <summary>One written export: where it went, and what was odd about it.</summary>
+public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnings);
+
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 5;
+    public const int Version = 6;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -24,7 +27,7 @@ public static class SceneExport
     };
 
     /// <summary>Exports <paramref name="scene"/> out of its open Workspace.</summary>
-    public static string Write(WorkspaceSession session, LoadedScene scene)
+    public static SceneExportResult Write(WorkspaceSession session, LoadedScene scene)
     {
         ArgumentNullException.ThrowIfNull(session);
         return Write(
@@ -35,7 +38,7 @@ public static class SceneExport
             session.PropAssets);
     }
 
-    public static string Write(
+    public static SceneExportResult Write(
         LoadedWorkspace workspace,
         LoadedScene scene,
         WorkspaceConfiguration configuration,
@@ -56,14 +59,16 @@ public static class SceneExport
                 TerrainCellMeters = configuration.Grid.TerrainCellMeters,
                 AuthoringPixelsPerMeter = configuration.Grid.AuthoringPixelsPerMeter,
                 GamePixelsPerMeter = configuration.Grid.GamePixelsPerMeter,
+                WaterCellMeters = configuration.Grid.WaterCellMeters,
             },
             AssetProfiles = ExportProfiles(configuration, propAssets),
+            WaterRaster = ExportWaterRaster(scene.Document, configuration.Metrics),
             Scene = scene.Document,
         };
         var directory = Path.Combine(workspace.DirectoryPath, DirectoryName);
         var path = Path.Combine(directory, scene.Document.SceneId + FileSuffix);
         AtomicTextFile.Write(path, JsonSerializer.Serialize(document, JsonOptions) + "\n");
-        return path;
+        return new SceneExportResult(path, Warnings(scene.Document, configuration.Metrics));
     }
 
     /// <summary>
@@ -71,7 +76,7 @@ public static class SceneExport
     /// Templates ship as their own files so that one of them can be replaced
     /// between seasons without rewriting the map that uses it.
     /// </summary>
-    public static IReadOnlyList<string> WriteWorkspace(WorkspaceSession session)
+    public static IReadOnlyList<SceneExportResult> WriteWorkspace(WorkspaceSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
         var scenes = SceneStore
@@ -94,6 +99,56 @@ public static class SceneExport
 
         return scenes.Select(scene => Write(session, scene)).ToList();
     }
+
+    /// <summary>
+    /// What the written export has to say for itself. The warnings are not
+    /// failures: a river running off the edge of the authored Terrain is a
+    /// normal state of an unfinished map, and refusing to export it would stop
+    /// the author from looking at what they just drew. They travel with the
+    /// path so that a caller cannot write the file without being handed them.
+    /// </summary>
+    public static IReadOnlyList<string> Warnings(SceneDocument scene, WorkspaceMetrics metrics)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+        var authored = TerrainCoverage.AuthoredCells(scene);
+        List<string> warnings = [];
+        foreach (var body in scene.WaterBodies)
+        {
+            var missing = WaterGeometry
+                .CoveredTerrainCells(scene, metrics, body)
+                .Where(cell => !authored.Contains(cell))
+                .ToList();
+            if (missing.Count == 0) continue;
+            warnings.Add(
+                $"Water body '{body.WaterBodyId}' covers {missing.Count} Terrain cell{(missing.Count == 1 ? string.Empty : "s")} that carry no Terrain: {TerrainCoverage.FormatMissingCells(missing)}.");
+        }
+        return warnings;
+    }
+
+    /// <summary>
+    /// The derived half of the water: what the authored curves cover, as cells.
+    /// It sits beside the Scene rather than inside it because the Scene block is
+    /// what the author wrote and this is what SceneMaker worked out from it -
+    /// the same split <c>asset_profiles</c> already makes.
+    /// </summary>
+    private static List<ExportWaterBodyDocument> ExportWaterRaster(
+        SceneDocument scene,
+        WorkspaceMetrics metrics) =>
+        scene.WaterBodies
+            .Select(body => new ExportWaterBodyDocument
+            {
+                WaterBodyId = body.WaterBodyId,
+                WaterKind = body.WaterKind,
+                AssetKey = body.AssetKey,
+                WidthMeters = body.WidthMeters,
+                ElevationMeters = body.ElevationMeters,
+                Cells = WaterGeometry
+                    .Corridor(scene, metrics, body)
+                    .Select(static cell => new ExportWaterCellDocument { X = cell.X, Y = cell.Y })
+                    .ToList(),
+            })
+            .ToList();
 
     private static List<ExportAssetProfileDocument> ExportProfiles(
         WorkspaceConfiguration configuration,
@@ -136,6 +191,7 @@ public static class SceneExport
         DocumentValidation.ValidateGrid(scene, configuration.Metrics);
         TerrainEditing.ValidateAssetReferences(scene, terrainAssets);
         PropEditing.ValidateAssetReferences(scene, propAssets);
+        WaterEditing.ValidateAssetReferences(scene, terrainAssets);
         var authored = TerrainCoverage.AuthoredCells(scene);
         foreach (var prop in scene.Props)
         {
@@ -159,6 +215,13 @@ public static class SceneExport
         public required string WorkspaceKey { get; init; }
         public required ExportGridDocument Grid { get; init; }
         public required List<ExportAssetProfileDocument> AssetProfiles { get; init; }
+
+        /// <summary>
+        /// The cells every authored water body covers. Bodies may overlap; a
+        /// simulation reads their union. Empty for a Scene without water.
+        /// </summary>
+        public required List<ExportWaterBodyDocument> WaterRaster { get; init; }
+
         public required SceneDocument Scene { get; init; }
     }
 
@@ -167,6 +230,35 @@ public static class SceneExport
         public required decimal TerrainCellMeters { get; init; }
         public required decimal AuthoringPixelsPerMeter { get; init; }
         public required decimal GamePixelsPerMeter { get; init; }
+
+        /// <summary>
+        /// The edge length of one water cell. Finer than a Terrain cell so a
+        /// bank can follow a curve, and nesting a whole number of times inside
+        /// one so a water cell never straddles two of them.
+        /// </summary>
+        public required decimal WaterCellMeters { get; init; }
+    }
+
+    /// <summary>
+    /// One water body as a consumer reads it: what it is made of, how high its
+    /// surface sits, and the cells it covers. The authored curve that produced
+    /// the cells stays in the Scene block, where a consumer that wants a smooth
+    /// mesh instead of the raster can find it.
+    /// </summary>
+    private sealed record ExportWaterBodyDocument
+    {
+        public required string WaterBodyId { get; init; }
+        public required WaterKind WaterKind { get; init; }
+        public required string AssetKey { get; init; }
+        public required decimal WidthMeters { get; init; }
+        public required decimal ElevationMeters { get; init; }
+        public required List<ExportWaterCellDocument> Cells { get; init; }
+    }
+
+    private sealed record ExportWaterCellDocument
+    {
+        public required int X { get; init; }
+        public required int Y { get; init; }
     }
 
     private sealed record ExportAssetProfileDocument

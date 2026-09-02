@@ -10,7 +10,7 @@ if (args.Length is < 1 or > 2)
 try
 {
     var session = WorkspaceSession.Load(Path.GetFullPath(args[0]));
-    IReadOnlyList<string> written;
+    IReadOnlyList<SceneExportResult> written;
     if (args.Length == 2)
     {
         var scenePath = SceneStore.ResolvePath(session.Workspace, args[1]);
@@ -21,7 +21,12 @@ try
         written = SceneExport.WriteWorkspace(session);
     }
 
-    foreach (var path in written) Console.WriteLine(path);
+    foreach (var result in written)
+    {
+        Console.WriteLine(result.Path);
+        // Warnings go to stderr so that piping the paths somewhere stays exact.
+        foreach (var warning in result.Warnings) Console.Error.WriteLine(warning);
+    }
     return 0;
 }
 catch (SceneMakerDocumentException exception)

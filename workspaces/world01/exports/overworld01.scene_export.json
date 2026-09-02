@@ -1,11 +1,12 @@
 {
   "format": "scene_maker_scene_export",
-  "version": 5,
+  "version": 6,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,
     "authoring_pixels_per_meter": 32,
-    "game_pixels_per_meter": 192
+    "game_pixels_per_meter": 192,
+    "water_cell_meters": 0.5
   },
   "asset_profiles": [
     {
@@ -27,6 +28,12 @@
       "anchor_meters": null
     },
     {
+      "asset_key": "river",
+      "surface": "land",
+      "footprint_meters": null,
+      "anchor_meters": null
+    },
+    {
       "asset_key": "tree",
       "surface": null,
       "footprint_meters": {
@@ -39,9 +46,10 @@
       }
     }
   ],
+  "water_raster": [],
   "scene": {
     "schema": "srt.scene_maker_scene",
-    "version": 7,
+    "version": 8,
     "scene_id": "overworld01",
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60116,6 +60124,7 @@
         "elevation_meters": 1.0
       }
     ],
+    "water_bodies": [],
     "template_definition": null,
     "template_anchors": [
       {

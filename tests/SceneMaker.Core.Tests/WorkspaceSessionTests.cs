@@ -19,12 +19,12 @@ public sealed class WorkspaceSessionTests
         Assert.Equal("test_world", session.WorkspaceKey);
         Assert.Equal(Path.GetFullPath(workspace.RootPath), session.DirectoryPath);
         Assert.Equal(
-            ["grass", "sand"],
+            ["grass", "river", "sand"],
             session.TerrainAssets.Assets.Select(asset => asset.AssetKey));
         Assert.Equal(
             ["portal", "stone"],
             session.PropAssets.Assets.Select(asset => asset.AssetKey));
-        Assert.Equal(4, session.Catalog.Assets.Count);
+        Assert.Equal(5, session.Catalog.Assets.Count);
         Assert.Equal(session.Configuration.Metrics, session.Metrics);
     }
 
@@ -68,7 +68,7 @@ public sealed class WorkspaceSessionTests
 
         Assert.Equal(["grass"], narrowed.TerrainAssets.Assets.Select(asset => asset.AssetKey));
         Assert.Equal(["stone"], narrowed.PropAssets.Assets.Select(asset => asset.AssetKey));
-        Assert.Equal(["grass", "sand"], session.TerrainAssets.Assets.Select(asset => asset.AssetKey));
+        Assert.Equal(["grass", "river", "sand"], session.TerrainAssets.Assets.Select(asset => asset.AssetKey));
         Assert.Equal(["portal", "stone"], session.PropAssets.Assets.Select(asset => asset.AssetKey));
     }
 

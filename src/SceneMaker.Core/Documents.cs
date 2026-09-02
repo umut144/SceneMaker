@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 7;
+    public const int SceneVersion = 8;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -60,6 +60,95 @@ public sealed record PropDocument
     public required decimal ElevationMeters { get; init; }
 }
 
+/// <summary>
+/// An offset in authoring pixels. Distinct from
+/// <see cref="AuthoringPixelPosition"/> on purpose: a Bezier handle is a
+/// direction and a length away from its point, never a place on the map, and it
+/// is the one quantity here that may be negative.
+/// </summary>
+public sealed record AuthoringPixelOffset
+{
+    public required int X { get; init; }
+    public required int Y { get; init; }
+
+    public static AuthoringPixelOffset Zero { get; } = new() { X = 0, Y = 0 };
+
+    // A method rather than a property: a computed property would be serialized
+    // into every document as a field nobody authored.
+    public bool IsZero() => X == 0 && Y == 0;
+}
+
+/// <summary>
+/// What kind of water a body is. A River is an open curve carrying a corridor
+/// of a fixed width around it. A Lake - a closed curve, filled - is the kind
+/// this will grow, which is why the document says which kind it holds instead
+/// of assuming the only one there is today.
+/// </summary>
+public enum WaterKind
+{
+    River,
+}
+
+/// <summary>
+/// How a curve point's two handles relate. <c>Linear</c> forces both to zero,
+/// which makes the neighbouring segments straight; <c>Aligned</c> keeps them
+/// collinear with independent lengths, so the curve passes through the point
+/// without a kink. This mirrors the point modes of the PolyTools Bezier tool,
+/// deliberately reduced to the two a river needs.
+/// </summary>
+public enum WaterPointMode
+{
+    Linear,
+    Aligned,
+}
+
+/// <summary>
+/// One authored point of a water body's centerline. The point itself sits on
+/// the water grid; its handles do not, because a handle is a curve control
+/// rather than a place, and snapping it would quantize the curve's shape.
+/// </summary>
+public sealed record WaterCurvePointDocument
+{
+    public required AuthoringPixelPosition PositionAuthoringPx { get; init; }
+    public required WaterPointMode Mode { get; init; }
+    public required AuthoringPixelOffset HandleInAuthoringPx { get; init; }
+    public required AuthoringPixelOffset HandleOutAuthoringPx { get; init; }
+}
+
+/// <summary>
+/// One authored body of water. The curve is the authored truth: the cells a
+/// simulation reads are derived from it by <see cref="WaterGeometry"/> and
+/// never stored here, so a river stays reshapeable for as long as it exists.
+///
+/// <para>For a River the first point is the source and the last is the mouth.
+/// That is the whole of its flow direction; nothing else in the document says
+/// which way the water runs.</para>
+/// </summary>
+public sealed record WaterBodyDocument
+{
+    public required string WaterBodyId { get; init; }
+    public required WaterKind WaterKind { get; init; }
+
+    /// <summary>
+    /// The Terrain Asset this body is made of. Its surface - "water" - lives on
+    /// the Asset like every other surface, so a body cannot contradict the
+    /// Asset it names.
+    /// </summary>
+    public required string AssetKey { get; init; }
+
+    /// <summary>
+    /// The full width of the corridor around the centerline, in metres. It
+    /// belongs to the body rather than to its points: a river that widens is
+    /// authored as a second river starting where the first one ends.
+    /// </summary>
+    public required decimal WidthMeters { get; init; }
+
+    /// <summary>The height of the water surface, in metres. Flat per body.</summary>
+    public required decimal ElevationMeters { get; init; }
+
+    public required List<WaterCurvePointDocument> Points { get; init; }
+}
+
 public sealed record TemplateDefinitionDocument
 {
     public required int GroupNumber { get; init; }
@@ -83,6 +172,13 @@ public sealed record SceneDocument
     public required SceneSizeCells SizeCells { get; init; }
     public required List<TerrainCellDocument> TerrainCells { get; init; }
     public required List<PropDocument> Props { get; init; }
+
+    /// <summary>
+    /// The authored water of this Scene. Its raster is derived at export time,
+    /// which is why nothing here counts cells.
+    /// </summary>
+    public required List<WaterBodyDocument> WaterBodies { get; init; }
+
     public required TemplateDefinitionDocument? TemplateDefinition { get; init; }
     public required List<TemplateAnchorDocument> TemplateAnchors { get; init; }
 
@@ -156,6 +252,7 @@ public sealed record SceneDocument
         SizeCells = new SceneSizeCells { Width = widthCells, Height = heightCells },
         TerrainCells = [],
         Props = [],
+        WaterBodies = [],
         TemplateDefinition = templateDefinition,
         TemplateAnchors = [],
         DefaultElevationMeters = defaultElevationMeters,

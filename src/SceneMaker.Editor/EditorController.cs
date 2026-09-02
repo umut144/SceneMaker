@@ -526,8 +526,14 @@ public sealed class EditorController
         {
             var written = SceneExport.WriteWorkspace(session);
             if (written.Count == 0) return EditorReport.Failed("This Workspace has no Scene to export.");
-            return EditorReport.Ok(
-                $"Exported {written.Count} Scene{(written.Count == 1 ? string.Empty : "s")} to '{Path.Combine(session.DirectoryPath, SceneExport.DirectoryName)}'.");
+            var message =
+                $"Exported {written.Count} Scene{(written.Count == 1 ? string.Empty : "s")} to '{Path.Combine(session.DirectoryPath, SceneExport.DirectoryName)}'.";
+            // The export succeeded either way; a warning says what to look at,
+            // not that something has to be fixed before exporting again.
+            var warnings = written.SelectMany(static result => result.Warnings).ToList();
+            return EditorReport.Ok(warnings.Count == 0
+                ? message
+                : $"{message} {warnings.Count} warning{(warnings.Count == 1 ? string.Empty : "s")}: {string.Join(" ", warnings)}");
         }
         catch (Exception exception) when (IsDocumentFailure(exception))
         {

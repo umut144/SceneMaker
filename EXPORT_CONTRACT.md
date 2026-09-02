@@ -5,7 +5,7 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 5**, embedded **scene 7**. A reader must reject any
+Current schemas: **export 6**, embedded **scene 8**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
 
@@ -43,7 +43,8 @@ purpose.
   "grid": {
     "terrain_cell_meters": 1.0,        // edge length of one Terrain cell
     "authoring_pixels_per_meter": 32,  // unit of every *_authoring_px value
-    "game_pixels_per_meter": 192       // the consumer's own render scale
+    "game_pixels_per_meter": 192,      // the consumer's own render scale
+    "water_cell_meters": 0.5           // edge length of one water cell
   },
   "asset_profiles": [                  // every Asset the Workspace enables
     {
@@ -59,9 +60,19 @@ purpose.
       "anchor_meters":    { "x": 0.53125, "y": 0.3125 }
     }
   ],
+  "water_raster": [                    // derived from scene.water_bodies
+    {
+      "water_body_id": "river_0001",
+      "water_kind": "river",
+      "asset_key": "river",
+      "width_meters": 8.0,
+      "elevation_meters": 0.0,
+      "cells": [ { "x": 64, "y": 20 } ] // water cells, not Terrain cells
+    }
+  ],
   "scene": {
     "schema": "srt.scene_maker_scene",
-    "version": 7,
+    "version": 8,
     "scene_id": "overworld01",   // names the map, not the Workspace
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
@@ -75,6 +86,23 @@ purpose.
         "asset_key": "tree",
         "position_authoring_px": { "x": 1088, "y": 2624 },
         "elevation_meters": 1.0
+      }
+    ],
+    "water_bodies": [                  // the authored curves themselves
+      {
+        "water_body_id": "river_0001",
+        "water_kind": "river",
+        "asset_key": "river",
+        "width_meters": 8.0,
+        "elevation_meters": 0.0,
+        "points": [
+          {
+            "position_authoring_px": { "x": 1024, "y": 320 },
+            "mode": "aligned",         // or "linear", which zeroes both handles
+            "handle_in_authoring_px":  { "x": -64, "y": 0 },
+            "handle_out_authoring_px": { "x": 64, "y": 0 }
+          }
+        ]
       }
     ],
     "template_definition": null,       // set only when scene_kind is "template"
@@ -119,6 +147,62 @@ Passability is not in the export and is not SceneMaker's business. The Actor
 brings its domains, the cell brings its surface, and the simulation intersects
 them.
 
+## Water
+
+Water is authored as curves and delivered as both: the curves in
+`scene.water_bodies`, the cells they cover in `water_raster`. The raster is what
+a simulation reads. The curves are there so that a consumer that would rather
+build a smooth band than march the raster can, and so that the two can never
+drift apart - SceneMaker derives one from the other on every export.
+
+`water_kind` is `"river"` today. A river is an **open** curve: its first point
+is the source, its last is the mouth, and that is the whole of its flow
+direction. Nothing else in the export says which way the water runs.
+
+The curve is a chain of cubic Bezier segments. Between two consecutive points
+`a` and `b` the four control points are
+
+```
+P0 = a.position
+P1 = a.position + a.handle_out
+P2 = b.position + b.handle_in
+P3 = b.position
+```
+
+Positions sit on the water grid; handles do not, because a handle is a curve
+control rather than a place. A point in `"linear"` mode carries two zero
+handles, which makes both of its segments straight.
+
+**The corridor rule.** A water cell belongs to a body when its centre lies no
+further than `width_meters / 2` from the centerline, **and** on the inner side
+of the two lines perpendicular to the curve at its first and last point. Those
+two half-planes are the butt caps: without them a river would begin and end
+with a half-circle. Inner bends round off by construction. A curve that folds
+back past its own end plane is clipped by it, which is a shape to avoid rather
+than a case to handle.
+
+`width_meters` belongs to the body, not to its points. A river that widens is
+authored as a second river starting where the first ends, so a reader never
+interpolates a width.
+
+Bodies may overlap - that is how a widening river or, later, a river running
+into a lake is authored. **A simulation reads their union.** Cells are not
+deduplicated across bodies, and a cell listed twice is water once.
+
+`elevation_meters` is the height of that body's water surface, flat across it,
+in the same unit as every other height here. It is not per cell.
+
+The raster is clipped to the Scene: a river drawn over the map edge simply
+stops being authored there rather than failing to export. Terrain under a river
+is untouched and stays whatever it is. Which of the two a position is depends on
+which grid is asked - the water grid is finer and answers for its own cells -
+and that is a resolution question, not the two-surfaces-at-one-place case a
+bridge poses further down.
+
+A Scene Template carries no water. Composition moves Terrain cells and Props
+and nothing else, so a Template with a river would lose it at every Anchor;
+authoring one is refused instead.
+
 ## Heights
 
 `elevation_meters` is the height of a cell's walking surface, in metres, in the
@@ -151,14 +235,23 @@ Three units appear, and only one of them is stored:
 | Quantity | Stored as | Convert with |
 | --- | --- | --- |
 | Terrain cell | integer cell coordinates | — |
-| Prop position, Anchor position | `*_authoring_px` integers | see below |
+| Water cell | integer water cell coordinates | see below |
+| Prop position, Anchor position, curve point | `*_authoring_px` integers | see below |
 | Asset footprint and anchor | meters, in `asset_profiles` | — |
 
 ```
 authoring_px_per_cell = terrain_cell_meters × authoring_pixels_per_meter
 meters                = authoring_px / authoring_pixels_per_meter
 game_px               = authoring_px × game_pixels_per_meter / authoring_pixels_per_meter
+authoring_px_per_water_cell = water_cell_meters × authoring_pixels_per_meter
+water_cells_per_terrain_cell = terrain_cell_meters ÷ water_cell_meters
 ```
+
+Both of the last two are guaranteed to be positive whole numbers; the Workspace
+refuses a grid where they are not. For `world01` they are 16 and 2. Water cell
+`(wx, wy)` therefore covers the authoring pixels
+`[wx·16, wx·16+16) × [wy·16, wy·16+16)` and lies in Terrain cell
+`(wx ÷ 2, wy ÷ 2)`.
 
 `authoring_px_per_cell` is guaranteed to be a positive whole number; the
 Workspace refuses a grid where it is not. For `world01` it is 32.
@@ -192,10 +285,19 @@ treat a violation as a corrupt file rather than a case to handle:
   refuses a Workspace whose ids collide rather than overwriting a file. A
   consumer may use it as a stable name across a reconnect.
 - Every Terrain cell lies inside `size_cells`; no two cells share a coordinate.
+- Every water cell lies inside `size_cells` measured in water cells; within one
+  body no two cells share a coordinate. Across bodies they may.
+- Every water body has at least two curve points, a positive `width_meters`, and
+  an `asset_key` that appears in `asset_profiles`. Every curve point sits on the
+  water grid and inside the Scene.
+- `water_raster` lists the same bodies as `scene.water_bodies`, in the same
+  order, and each body's `cells` are what the corridor rule above produces from
+  its curve. A reader may recompute them and must get the same set.
 - Every Prop footprint is fully covered by Terrain. A Prop never floats over a
   hole.
-- `terrain_cells` is ordered by `y`, then `x`. `props` and `asset_profiles` are
-  ordered by their id, ordinal. This ordering is a checked invariant, not a
+- `terrain_cells` and every body's `cells` are ordered by `y`, then `x`. `props`,
+  `asset_profiles`, `scene.water_bodies` and `water_raster` are ordered by their
+  id, ordinal. This ordering is a checked invariant, not a
   coincidence, so a reader may binary-search it.
 - Editor-only data is absent: authoring colours, PolyTools geometry, and the
   Workspace's own documents are never exported.

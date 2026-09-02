@@ -24,6 +24,35 @@ New workspace configurations explicitly start with 1 m terrain cells at 32
 authoring pixels and 192 game pixels per meter. These values remain authored
 workspace data rather than an implicit reader or export fallback.
 
+## Water
+
+Terrain water is authored as curves, not as cells. A water body carries a
+centerline of Bezier points, a width and a surface height; the cells a
+simulation reads are derived from it and never stored in the Scene. That is
+what keeps a river reshapeable after it has been drawn, and it means the
+rasterization exists exactly once, in `WaterGeometry`.
+
+The water grid is finer than the Terrain grid - `water_cell_meters` in the
+Workspace config, 0.5 m for `world01`, where a Terrain cell is 1 m - because a
+bank has to follow a curve and a whole Terrain cell cannot. It has to nest a
+whole number of times inside a Terrain cell, so a water cell never straddles
+two of them. Terrain under a river stays what it was: the water layer is finer
+and answers for its own positions, which is a question of resolution rather
+than the two-surfaces-at-one-place problem a bridge poses.
+
+A River is an open curve. Its first point is the source and its last is the
+mouth - that is the whole of its flow direction. Its corridor is every water
+cell whose centre lies no further than half the body's width from the
+centerline, cut off by the two lines perpendicular to the curve at its ends, so
+a river starts and ends straight across instead of bulging into a half-circle.
+Width belongs to the body, not to its points: a river that widens is authored
+as a second river starting where the first one ends.
+
+`world01` renders water with marching squares over that raster. The raster is
+what the simulation reads; the smooth mesh is presentation, and the authored
+curve travels in the export so a consumer that wants a smooth band instead of a
+marched one has it.
+
 ## Template Anchors and groups
 
 The authored Scene Instance is the fixed part of a map. Template Anchors are

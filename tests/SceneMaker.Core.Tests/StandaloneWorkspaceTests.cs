@@ -191,7 +191,7 @@ public sealed class StandaloneWorkspaceTests
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var configuration = WorkspaceConfigurationStore.Create(
             "game03",
-            new WorkspaceGridConfiguration(1m, 10m, 40m),
+            new WorkspaceGridConfiguration(1m, 10m, 40m, 0.5m),
             [
                 new WorkspaceAssetProfile("grass", "#99E550", "land"),
                 new WorkspaceAssetProfile("portal", "#8E6CFF"),
@@ -268,13 +268,13 @@ public sealed class StandaloneWorkspaceTests
         var scene = TerrainEditing.Paint(
             SceneDocument.CreateInstance("field", 1, 1), terrain, 0, 0, "grass");
         var workspace = new LoadedWorkspace(directory.Path, "game05");
-        var path = SceneExport.Write(
+        var written = SceneExport.Write(
             workspace,
             new LoadedScene(Path.Combine(directory.Path, "scenes", "field.scene.json"), scene),
             configuration,
             terrain,
             props);
-        var json = File.ReadAllText(path);
+        var json = File.ReadAllText(written.Path);
 
         Assert.Contains("\"asset_key\": \"grass\"", json, StringComparison.Ordinal);
         Assert.Contains("\"width\": 2.0625", json, StringComparison.Ordinal);
@@ -304,23 +304,31 @@ public sealed class StandaloneWorkspaceTests
         Assert.Contains(catalog.Assets, asset => asset.AssetKey == "tree");
     }
 
+    /// <summary>
+    /// A Workspace config. <paramref name="waterCellMeters"/> defaults to the
+    /// Terrain cell, the coarsest water grid the metrics allow, because most of
+    /// these tests are about Terrain and Props and only need water to be valid.
+    /// </summary>
     private static void WriteConfig(
         string directory,
         string workspaceKey,
         decimal terrainCellMeters,
         decimal authoringPixelsPerMeter,
         decimal gamePixelsPerMeter,
-        string assets)
+        string assets,
+        decimal? waterCellMeters = null)
     {
+        var waterCell = waterCellMeters ?? terrainCellMeters;
         File.WriteAllText(Path.Combine(directory, WorkspaceConfigurationStore.FileName), $$"""
         {
           "format": "scene_maker_workspace",
-          "version": 4,
+          "version": 5,
           "workspace_key": "{{workspaceKey}}",
           "grid": {
             "terrain_cell_meters": {{terrainCellMeters.ToString(CultureInfo.InvariantCulture)}},
             "authoring_pixels_per_meter": {{authoringPixelsPerMeter.ToString(CultureInfo.InvariantCulture)}},
-            "game_pixels_per_meter": {{gamePixelsPerMeter.ToString(CultureInfo.InvariantCulture)}}
+            "game_pixels_per_meter": {{gamePixelsPerMeter.ToString(CultureInfo.InvariantCulture)}},
+            "water_cell_meters": {{waterCell.ToString(CultureInfo.InvariantCulture)}}
           },
           "assets": [
             {{assets}}

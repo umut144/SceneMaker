@@ -73,6 +73,8 @@ public static partial class DocumentValidation
             previousInstanceId = prop.InstanceId;
         }
 
+        ValidateWaterBodies(document);
+
         if (document.TemplateAnchors is null)
             throw new SceneMakerDocumentException("Scene requires template_anchors.");
 
@@ -90,6 +92,13 @@ public static partial class DocumentValidation
                 throw new SceneMakerDocumentException("Scene Template requires template_definition.");
             if (document.TemplateAnchors.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own Template Anchors.");
+
+            // Composition moves Terrain cells, Props and nothing else. A
+            // Template carrying a river would therefore lose it silently at
+            // every Anchor it is placed at, which is worse than refusing to
+            // author one until composition knows what to do with it.
+            if (document.WaterBodies.Count > 0)
+                throw new SceneMakerDocumentException("Scene Template cannot own water bodies.");
             ValidateGroupNumber("Scene Template", document.TemplateDefinition.GroupNumber);
         }
 
@@ -139,6 +148,85 @@ public static partial class DocumentValidation
                 document.SizeCells,
                 metrics);
         }
+        foreach (var body in document.WaterBodies)
+        {
+            for (var index = 0; index < body.Points.Count; index++)
+            {
+                ValidateGridPosition(
+                    $"Water body '{body.WaterBodyId}' point {index}",
+                    body.Points[index].PositionAuthoringPx,
+                    document.SizeCells,
+                    metrics.AuthoringPixelsPerTerrainCell,
+                    metrics.AuthoringPixelsPerWaterCell);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The authored curve, checked without the Workspace grid. Where its points
+    /// are allowed to sit is a grid question and belongs to
+    /// <see cref="ValidateGrid"/>; that they describe a curve at all is checked
+    /// here, so a document is never half a river.
+    /// </summary>
+    private static void ValidateWaterBodies(SceneDocument document)
+    {
+        if (document.WaterBodies is null)
+            throw new SceneMakerDocumentException("Scene requires water_bodies.");
+
+        string? previousBodyId = null;
+        foreach (var body in document.WaterBodies)
+        {
+            ValidateStableId("water_body_id", body.WaterBodyId);
+            if (previousBodyId is not null
+                && string.CompareOrdinal(body.WaterBodyId, previousBodyId) <= 0)
+            {
+                throw new SceneMakerDocumentException(
+                    "Water bodies must have unique IDs in canonical ordinal order.");
+            }
+            previousBodyId = body.WaterBodyId;
+
+            var label = $"Water body '{body.WaterBodyId}'";
+            if (!Enum.IsDefined(body.WaterKind))
+                throw new SceneMakerDocumentException($"{label} requires a supported water_kind.");
+            if (string.IsNullOrWhiteSpace(body.AssetKey))
+                throw new SceneMakerDocumentException($"{label} requires an asset_key.");
+            if (body.WidthMeters <= 0m)
+                throw new SceneMakerDocumentException($"{label} requires a positive width_meters.");
+            if (body.Points is null || body.Points.Count < 2)
+            {
+                throw new SceneMakerDocumentException(
+                    $"{label} requires at least two curve points; the first is its source and the last its mouth.");
+            }
+
+            AuthoringPixelPosition? previousPosition = null;
+            foreach (var point in body.Points)
+            {
+                if (point.PositionAuthoringPx is null)
+                    throw new SceneMakerDocumentException($"{label} requires position_authoring_px on every point.");
+                if (point.HandleInAuthoringPx is null || point.HandleOutAuthoringPx is null)
+                    throw new SceneMakerDocumentException($"{label} requires both handles on every point.");
+                if (!Enum.IsDefined(point.Mode))
+                    throw new SceneMakerDocumentException($"{label} requires a supported point mode.");
+
+                // A linear point is exactly the absence of handles. Storing a
+                // handle next to it would leave two answers to what the curve
+                // does there, and the reader could not tell which one wins.
+                if (point.Mode == WaterPointMode.Linear
+                    && !(point.HandleInAuthoringPx.IsZero() && point.HandleOutAuthoringPx.IsZero()))
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} has a linear point carrying handles; a linear point's handles are zero.");
+                }
+                if (previousPosition is not null
+                    && previousPosition.X == point.PositionAuthoringPx.X
+                    && previousPosition.Y == point.PositionAuthoringPx.Y)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} repeats the point ({point.PositionAuthoringPx.X}, {point.PositionAuthoringPx.Y}); consecutive points must differ.");
+                }
+                previousPosition = point.PositionAuthoringPx;
+            }
+        }
     }
 
     private static void ValidateGroupNumber(string label, int groupNumber)
@@ -151,22 +239,40 @@ public static partial class DocumentValidation
         string label,
         AuthoringPixelPosition? position,
         SceneSizeCells size,
-        WorkspaceMetrics metrics)
+        WorkspaceMetrics metrics) =>
+        ValidateGridPosition(
+            label,
+            position,
+            size,
+            metrics.AuthoringPixelsPerTerrainCell,
+            metrics.AuthoringPixelsPerTerrainCell);
+
+    /// <summary>
+    /// A position inside the Scene that sits on a grid. Bounds are measured in
+    /// Terrain cells because that is what a Scene's size is; the step it snaps
+    /// to is its own - the WorldGrid for an Anchor, the finer water grid for a
+    /// curve point.
+    /// </summary>
+    private static void ValidateGridPosition(
+        string label,
+        AuthoringPixelPosition? position,
+        SceneSizeCells size,
+        int terrainStep,
+        int snapStep)
     {
         if (position is null)
             throw new SceneMakerDocumentException($"{label} requires an authoring-pixel position.");
-        var step = metrics.AuthoringPixelsPerTerrainCell;
-        var width = checked(size.Width * step);
-        var height = checked(size.Height * step);
+        var width = checked(size.Width * terrainStep);
+        var height = checked(size.Height * terrainStep);
         if (position.X < 0 || position.X > width
             || position.Y < 0 || position.Y > height)
         {
             throw new SceneMakerDocumentException($"{label} lies outside Scene bounds.");
         }
-        if (position.X % step != 0 || position.Y % step != 0)
+        if (position.X % snapStep != 0 || position.Y % snapStep != 0)
         {
             throw new SceneMakerDocumentException(
-                $"{label} must align to the {step}-authoring-pixel WorldGrid.");
+                $"{label} must align to the {snapStep}-authoring-pixel grid.");
         }
     }
 

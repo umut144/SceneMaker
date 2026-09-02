@@ -4,10 +4,17 @@ using System.Text.Json.Serialization;
 
 namespace SceneMaker.Core;
 
+/// <summary>
+/// The Workspace's spatial metrics. <paramref name="WaterCellMeters"/> is the
+/// finer grid authored water is rasterized onto - a river bank has to follow a
+/// curve, which a whole Terrain cell cannot do - and must nest a whole number
+/// of times inside a Terrain cell.
+/// </summary>
 public sealed record WorkspaceGridConfiguration(
     decimal TerrainCellMeters,
     decimal AuthoringPixelsPerMeter,
-    decimal GamePixelsPerMeter);
+    decimal GamePixelsPerMeter,
+    decimal WaterCellMeters);
 
 /// <summary>
 /// SceneMaker owns enablement, authoring color and, for Terrain, the surface an
@@ -58,7 +65,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 4;
+    public const int Version = 5;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -113,6 +120,7 @@ public static class WorkspaceConfigurationStore
                 TerrainCellMeters = grid.TerrainCellMeters,
                 AuthoringPixelsPerMeter = grid.AuthoringPixelsPerMeter,
                 GamePixelsPerMeter = grid.GamePixelsPerMeter,
+                WaterCellMeters = grid.WaterCellMeters,
             },
             Assets = profiles.Select(profile => new AssetProfileDocument
             {
@@ -138,6 +146,7 @@ public static class WorkspaceConfigurationStore
                 TerrainCellMeters = configuration.Grid.TerrainCellMeters,
                 AuthoringPixelsPerMeter = configuration.Grid.AuthoringPixelsPerMeter,
                 GamePixelsPerMeter = configuration.Grid.GamePixelsPerMeter,
+                WaterCellMeters = configuration.Grid.WaterCellMeters,
             },
             Assets = configuration.AssetProfiles.Select(profile => new AssetProfileDocument
             {
@@ -165,7 +174,8 @@ public static class WorkspaceConfigurationStore
           "grid": {
             "terrain_cell_meters": 1.0,
             "authoring_pixels_per_meter": 32,
-            "game_pixels_per_meter": 192
+            "game_pixels_per_meter": 192,
+            "water_cell_meters": 0.5
           },
           "assets": []
         }
@@ -228,15 +238,17 @@ public static class WorkspaceConfigurationStore
                 $"Workspace '{document.WorkspaceKey}' requires PolyTools world '{document.WorkspaceKey}', not '{catalog.WorldKey}'.");
         }
         if (document.Grid is null || document.Grid.TerrainCellMeters <= 0m
-            || document.Grid.AuthoringPixelsPerMeter <= 0m || document.Grid.GamePixelsPerMeter <= 0m)
+            || document.Grid.AuthoringPixelsPerMeter <= 0m || document.Grid.GamePixelsPerMeter <= 0m
+            || document.Grid.WaterCellMeters <= 0m)
         {
             throw new SceneMakerDocumentException(
-                "Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, and game_pixels_per_meter.");
+                "Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, game_pixels_per_meter, and water_cell_meters.");
         }
         var grid = new WorkspaceGridConfiguration(
             document.Grid.TerrainCellMeters,
             document.Grid.AuthoringPixelsPerMeter,
-            document.Grid.GamePixelsPerMeter);
+            document.Grid.GamePixelsPerMeter,
+            document.Grid.WaterCellMeters);
         _ = new WorkspaceMetrics(grid);
         if (document.Assets is null)
             throw new SceneMakerDocumentException("Workspace config requires an assets array.");
@@ -270,6 +282,7 @@ public static class WorkspaceConfigurationStore
         public required decimal TerrainCellMeters { get; init; }
         public required decimal AuthoringPixelsPerMeter { get; init; }
         public required decimal GamePixelsPerMeter { get; init; }
+        public required decimal WaterCellMeters { get; init; }
     }
 
     private sealed record AssetProfileDocument

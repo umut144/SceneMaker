@@ -100,6 +100,20 @@ Do not resolve this by baking a Prop's height into the Terrain cell under it.
 That was considered and rejected: it destroys the fact that there is water below,
 and a boat has to be able to pass under the bridge.
 
+## 6. A Scene Template cannot carry water
+
+`src/SceneMaker.Core/DocumentValidation.cs`, the Scene Template branch
+
+`TemplateComposition.Compose` moves Terrain cells and Props. A Template holding
+a water body would therefore lose it at every Anchor it is placed at, silently,
+so authoring one is refused rather than dropped.
+
+That is the right refusal for now and the wrong feature forever: a Template with
+a pond or a stream through it is an obvious thing to want. Adding it is small in
+Core - a water body's points move by `translation_px` exactly like a Prop - and
+not small in the export contract, which would have to say what happens when a
+Template's water lands on an Instance's. Leave it until a Template needs water.
+
 ## Done
 
 - One factory per Scene kind, so `CreateInstance` no longer accepts Template
