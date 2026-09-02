@@ -94,7 +94,7 @@ public sealed class WaterCurveTests
         ]);
 
         var scene = WaterEditing.PlaceRiver(
-            TestScenes.Instance(workspace), workspace.Terrain, curve, "river", 4.0m);
+            TestScenes.Instance(workspace), workspace.Terrain, curve, "river");
 
         DocumentValidation.ValidateGrid(scene, workspace.Metrics);
         Assert.Equal(3, Assert.Single(scene.WaterBodies).Points.Count);
@@ -110,6 +110,6 @@ public sealed class WaterCurveTests
         int y,
         WaterPointMode mode,
         AuthoringPixelOffset? handle = null) =>
-        new(x, y, mode, 1.0m, 0.5m, 5.0m, handle);
+        new(x, y, mode, 1.0m, 0.5m, 5.0m, 4.0m, handle);
 
 }

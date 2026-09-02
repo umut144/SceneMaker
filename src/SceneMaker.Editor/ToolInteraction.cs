@@ -418,7 +418,8 @@ public sealed class ToolInteraction
             State.WaterPointMode,
             elevation,
             State.WaterChannelDepthMeters,
-            State.WaterClearanceAboveMeters);
+            State.WaterClearanceAboveMeters,
+            State.RiverWidthMeters);
 
         var ordinal = _riverDraft.Count + 1;
         var height = fromTerrain
@@ -511,7 +512,6 @@ public sealed class ToolInteraction
         }
 
         var points = WaterEditing.ResolveCurve(_riverDraft);
-        var width = State.RiverWidthMeters;
         var assetName = context.TerrainAssets.Resolve(assetKey).Name;
         var placed = _riverDraft.Count;
         var source = points[0].ElevationMeters;
@@ -520,13 +520,18 @@ public sealed class ToolInteraction
         return new ToolOutcome.Edit(
             "River",
             document => WaterEditing.PlaceRiver(
-                document, context.TerrainAssets, points, assetKey, width),
+                document, context.TerrainAssets, points, assetKey),
             Describe: (before, after) =>
             {
                 var added = after.WaterBodies.FirstOrDefault(body =>
                     before.WaterBodies.All(previous => previous.WaterBodyId != body.WaterBodyId));
                 var name = added?.WaterBodyId ?? "river";
-                return $"Authored {name} from {placed} points · {assetName} · {width:0.###} m wide · water {source:0.###} m to {mouth:0.###} m.";
+                var sourceWidth = points[0].WidthMeters;
+                var mouthWidth = points[^1].WidthMeters;
+                var width = sourceWidth == mouthWidth
+                    ? $"{sourceWidth:0.###} m wide"
+                    : $"{sourceWidth:0.###} to {mouthWidth:0.###} m wide";
+                return $"Authored {name} from {placed} points · {assetName} · {width} · water {source:0.###} m to {mouth:0.###} m.";
             });
     }
 

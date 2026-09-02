@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 9;
+    public const int SceneVersion = 10;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -80,7 +80,7 @@ public sealed record AuthoringPixelOffset
 
 /// <summary>
 /// What kind of water a body is. A River is an open curve carrying a corridor
-/// of a fixed width around it. A Lake - a closed curve, filled - is the kind
+/// whose width is interpolated between its points. A Lake - a closed curve, filled - is the kind
 /// this will grow, which is why the document says which kind it holds instead
 /// of assuming the only one there is today.
 /// </summary>
@@ -142,6 +142,13 @@ public sealed record WaterCurvePointDocument
     /// high, and a tunnel where it does - the same number decides both.
     /// </summary>
     public required decimal ClearanceAboveMeters { get; init; }
+
+    /// <summary>
+    /// The full width of the corridor here. Width is a point value like the
+    /// section above: a river can widen without being split into unrelated
+    /// bodies, and the value is interpolated over the same arc length.
+    /// </summary>
+    public required decimal WidthMeters { get; init; }
 }
 
 /// <summary>
@@ -168,13 +175,6 @@ public sealed record WaterBodyDocument
     /// Asset it names.
     /// </summary>
     public required string AssetKey { get; init; }
-
-    /// <summary>
-    /// The full width of the corridor around the centerline, in metres. It
-    /// belongs to the body rather than to its points: a river that widens is
-    /// authored as a second river starting where the first one ends.
-    /// </summary>
-    public required decimal WidthMeters { get; init; }
 
     public required List<WaterCurvePointDocument> Points { get; init; }
 }

@@ -69,9 +69,9 @@ unrelated reasons.
 
 | Schema | Constant | Current |
 | --- | --- | --- |
-| Scene document | `SceneMakerSchemas.SceneVersion` | 9 |
+| Scene document | `SceneMakerSchemas.SceneVersion` | 10 |
 | Workspace config | `WorkspaceConfigurationStore.Version` | 6 |
-| Scene export | `SceneExport.Version` | 7 |
+| Scene export | `SceneExport.Version` | 8 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 1 |
 | PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 15, 14 still read |
 | Recent session | `RecentSessionStore.Version` | 3 |

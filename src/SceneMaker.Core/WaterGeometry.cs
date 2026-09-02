@@ -37,11 +37,12 @@ public sealed record WaterCenterline(
     IReadOnlyList<CenterlinePoint> Points,
     IReadOnlyList<double> AnchorStations);
 
-/// <summary>The three vertical values somewhere along a curve.</summary>
+/// <summary>The vertical section and width somewhere along a curve.</summary>
 public readonly record struct WaterProfileSample(
     decimal ElevationMeters,
     decimal ChannelDepthMeters,
-    decimal ClearanceAboveMeters)
+    decimal ClearanceAboveMeters,
+    decimal WidthMeters)
 {
     /// <summary>The floor of the channel: the water's bottom and the cut's.</summary>
     public decimal BedMeters => ElevationMeters - ChannelDepthMeters;
@@ -56,7 +57,8 @@ public readonly record struct WaterProfileSample(
 ///
 /// <para>This is the only place the corridor is defined, and it is defined
 /// once: a water cell belongs to a body when its centre lies no further than
-/// half the body's width from the centerline. At the two ends the corridor is
+/// half the interpolated width from its projection on the centerline. At the
+/// two ends the corridor is
 /// cut off square rather than rounded - the disc around the first segment is
 /// clipped at the source, the disc around the last one at the mouth - so a
 /// river does not begin and end with a half-circle.</para>
@@ -207,21 +209,20 @@ public static class WaterGeometry
         WaterBodyDocument body)
     {
         ArgumentNullException.ThrowIfNull(body);
-        return Corridor(scene, metrics, body.Points, body.WidthMeters);
+        return Corridor(scene, metrics, body.Points);
     }
 
     /// <summary>The corridor of a curve that is not a body yet.</summary>
     public static IReadOnlyList<WaterCellSpan> Corridor(
         SceneDocument scene,
         WorkspaceMetrics metrics,
-        IReadOnlyList<WaterCurvePointDocument> points,
-        decimal widthMeters)
+        IReadOnlyList<WaterCurvePointDocument> points)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(points);
 
-        var shape = CorridorShape.For(metrics, points, widthMeters);
+        var shape = CorridorShape.For(metrics, points);
         var step = metrics.AuthoringPixelsPerWaterCell;
         var sceneWidth = metrics.SceneWidthWaterCells(scene);
         var sceneHeight = metrics.SceneHeightWaterCells(scene);
@@ -243,8 +244,8 @@ public static class WaterGeometry
             row.Clear();
             foreach (var segment in shape.Segments)
             {
-                if (centreY >= segment.MinY - shape.HalfWidth
-                    && centreY <= segment.MaxY + shape.HalfWidth)
+                if (centreY >= segment.MinY - shape.MaximumHalfWidth
+                    && centreY <= segment.MaxY + shape.MaximumHalfWidth)
                 {
                     row.Add(segment);
                 }
@@ -276,7 +277,7 @@ public static class WaterGeometry
     {
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(body);
-        var shape = CorridorShape.For(metrics, body.Points, body.WidthMeters);
+        var shape = CorridorShape.For(metrics, body.Points);
         return shape.NearestStation(authoringX, authoringY, shape.Segments) is not null;
     }
 
@@ -303,7 +304,8 @@ public static class WaterGeometry
     private static WaterProfileSample Sample(WaterCurvePointDocument point) => new(
         point.ElevationMeters,
         point.ChannelDepthMeters,
-        point.ClearanceAboveMeters);
+        point.ClearanceAboveMeters,
+        point.WidthMeters);
 
     private static WaterProfileSample Mix(
         WaterCurvePointDocument from,
@@ -311,7 +313,8 @@ public static class WaterGeometry
         double fraction) => new(
         Between(from.ElevationMeters, to.ElevationMeters, fraction),
         Between(from.ChannelDepthMeters, to.ChannelDepthMeters, fraction),
-        Between(from.ClearanceAboveMeters, to.ClearanceAboveMeters, fraction));
+        Between(from.ClearanceAboveMeters, to.ClearanceAboveMeters, fraction),
+        Between(from.WidthMeters, to.WidthMeters, fraction));
 
     private static decimal Between(decimal from, decimal to, double fraction)
     {
@@ -454,8 +457,10 @@ public static class WaterGeometry
     private sealed record CorridorShape
     {
         public required IReadOnlyList<CorridorSegment> Segments { get; init; }
+        public required IReadOnlyList<WaterCurvePointDocument> Points { get; init; }
         public required IReadOnlyList<double> AnchorStations { get; init; }
-        public required double HalfWidth { get; init; }
+        public required double AuthoringPixelsPerMeter { get; init; }
+        public required double MaximumHalfWidth { get; init; }
         public required double MinX { get; init; }
         public required double MaxX { get; init; }
         public required double MinY { get; init; }
@@ -463,12 +468,13 @@ public static class WaterGeometry
 
         public static CorridorShape For(
             WorkspaceMetrics metrics,
-            IReadOnlyList<WaterCurvePointDocument> points,
-            decimal widthMeters)
+            IReadOnlyList<WaterCurvePointDocument> points)
         {
             var centerline = Flatten(points);
             var polyline = centerline.Points;
-            var halfWidth = (double)(widthMeters * metrics.AuthoringPixelsPerMeter) / 2.0;
+            var authoringPixelsPerMeter = (double)metrics.AuthoringPixelsPerMeter;
+            var maximumHalfWidth = points.Max(static point => (double)point.WidthMeters)
+                * authoringPixelsPerMeter / 2.0;
 
             List<CorridorSegment> segments = new(polyline.Count - 1);
             var minX = double.MaxValue;
@@ -507,12 +513,14 @@ public static class WaterGeometry
             return new CorridorShape
             {
                 Segments = segments,
+                Points = points,
                 AnchorStations = centerline.AnchorStations,
-                HalfWidth = halfWidth,
-                MinX = minX - halfWidth,
-                MaxX = maxX + halfWidth,
-                MinY = minY - halfWidth,
-                MaxY = maxY + halfWidth,
+                AuthoringPixelsPerMeter = authoringPixelsPerMeter,
+                MaximumHalfWidth = maximumHalfWidth,
+                MinX = minX - maximumHalfWidth,
+                MaxX = maxX + maximumHalfWidth,
+                MinY = minY - maximumHalfWidth,
+                MaxY = maxY + maximumHalfWidth,
             };
         }
 
@@ -529,7 +537,6 @@ public static class WaterGeometry
             double y,
             IReadOnlyList<CorridorSegment> candidates)
         {
-            var limit = HalfWidth * HalfWidth;
             var best = double.MaxValue;
             double? station = null;
             foreach (var segment in candidates)
@@ -540,6 +547,9 @@ public static class WaterGeometry
                 // happens to pass behind it.
                 if (segment.IsBeforeSource(x, y) || segment.IsBeyondMouth(x, y)) continue;
                 var (distanceSquared, candidate) = segment.NearestTo(x, y);
+                var width = SampleAt(Points, AnchorStations, candidate).WidthMeters;
+                var halfWidth = (double)width * AuthoringPixelsPerMeter / 2.0;
+                var limit = halfWidth * halfWidth;
                 if (distanceSquared > limit || distanceSquared >= best) continue;
                 best = distanceSquared;
                 station = candidate;

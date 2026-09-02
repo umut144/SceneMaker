@@ -65,7 +65,6 @@ purpose.
       "water_body_id": "river_0001",
       "water_kind": "river",
       "asset_key": "river",
-      "width_meters": 8.0,
       "cells": [                       // water cells, not Terrain cells
         {
           "x": 64, "y": 20,
@@ -78,7 +77,7 @@ purpose.
   ],
   "scene": {
     "schema": "srt.scene_maker_scene",
-    "version": 9,
+    "version": 10,
     "scene_id": "overworld01",   // names the map, not the Workspace
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
@@ -99,7 +98,6 @@ purpose.
         "water_body_id": "river_0001",
         "water_kind": "river",
         "asset_key": "river",
-        "width_meters": 8.0,
         "points": [
           {
             "position_authoring_px": { "x": 1024, "y": 320 },
@@ -108,7 +106,8 @@ purpose.
             "handle_out_authoring_px": { "x": 64, "y": 0 },
             "elevation_meters": 2.0,       // water surface, absolute
             "channel_depth_meters": 0.5,   // bed below it
-            "clearance_above_meters": 5.0  // headroom required above it
+            "clearance_above_meters": 5.0, // headroom required above it
+            "width_meters": 8.0            // full corridor width here
           }
         ]
       }
@@ -181,9 +180,12 @@ Positions sit on the water grid; handles do not, because a handle is a curve
 control rather than a place. A point in `"linear"` mode carries two zero
 handles, which makes both of its segments straight.
 
-**The corridor rule.** A water cell belongs to a body when its centre lies no
-further than `width_meters / 2` from **some segment** of the flattened
-centerline. The two outermost segments carry the end caps: the disc around the
+**The corridor rule.** `width_meters` is authored on every point and interpolated
+linearly over the same centerline arc length as the vertical profile. A water
+cell projects its centre onto each candidate segment. It belongs to the body
+when the closest projection lies no further than half the width sampled at that
+station; where bends overlap, the nearest accepted projection supplies the
+profile. The two outermost segments carry the end caps: the disc around the
 first one is clipped by the line perpendicular to the curve at the source, the
 disc around the last one by the line perpendicular at the mouth. Without them a
 river would begin and end with a half-circle. Inner bends round off by
@@ -193,10 +195,6 @@ The caps belong to their own segment and to nothing else. A cap applied to the
 whole corridor would reach across the map and cut away whatever part of the
 river happens to lie behind it, which is a real shape - a river that bends back
 near its own mouth - and not an error the author could see coming.
-
-`width_meters` belongs to the body, not to its points. A river that widens is
-authored as a second river starting where the first ends, so a reader never
-interpolates a width.
 
 ## Height is a stack
 
@@ -368,7 +366,7 @@ treat a violation as a corrupt file rather than a case to handle:
 - Every Terrain cell lies inside `size_cells`; no two cells share a coordinate.
 - Every water cell lies inside `size_cells` measured in water cells; within one
   body no two cells share a coordinate. Across bodies they may.
-- Every water body has at least two curve points, a positive `width_meters`, and
+- Every water body has at least two curve points, a positive `width_meters` on every point, and
   an `asset_key` that appears in `asset_profiles`. Every curve point sits on the
   water grid and inside the Scene, carries a positive `channel_depth_meters` and
   a non-negative `clearance_above_meters`.

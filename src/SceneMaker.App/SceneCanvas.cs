@@ -660,8 +660,7 @@ public sealed partial class SceneCanvas : Control
             _metrics!,
             ActiveTool,
             _interaction.RiverDraft,
-            _interaction.RiverPendingPoint,
-            _interaction.State.RiverWidthMeters);
+            _interaction.RiverPendingPoint);
         if (preview.Points.Count == 0) return;
 
         var waterCellSize = _metrics!.AuthoringPixelsPerWaterCell * zoom;

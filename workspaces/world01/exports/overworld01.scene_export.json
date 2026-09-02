@@ -1,6 +1,6 @@
 {
   "format": "scene_maker_scene_export",
-  "version": 7,
+  "version": 8,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,
@@ -51,7 +51,6 @@
       "water_body_id": "river_0001",
       "water_kind": "river",
       "asset_key": "river",
-      "width_meters": 5.0,
       "cells": [
         {
           "x": 53,
@@ -9270,7 +9269,7 @@
   ],
   "scene": {
     "schema": "srt.scene_maker_scene",
-    "version": 9,
+    "version": 10,
     "scene_id": "overworld01",
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
@@ -69350,7 +69349,6 @@
         "water_body_id": "river_0001",
         "water_kind": "river",
         "asset_key": "river",
-        "width_meters": 5.0,
         "points": [
           {
             "position_authoring_px": {
@@ -69368,7 +69366,8 @@
             },
             "elevation_meters": 1.0,
             "channel_depth_meters": 0.5,
-            "clearance_above_meters": 5.0
+            "clearance_above_meters": 5.0,
+            "width_meters": 5.0
           },
           {
             "position_authoring_px": {
@@ -69386,7 +69385,8 @@
             },
             "elevation_meters": 1.0,
             "channel_depth_meters": 0.5,
-            "clearance_above_meters": 5.0
+            "clearance_above_meters": 5.0,
+            "width_meters": 5.0
           },
           {
             "position_authoring_px": {
@@ -69404,7 +69404,8 @@
             },
             "elevation_meters": 1.0,
             "channel_depth_meters": 0.5,
-            "clearance_above_meters": 5.0
+            "clearance_above_meters": 5.0,
+            "width_meters": 5.0
           },
           {
             "position_authoring_px": {
@@ -69422,7 +69423,8 @@
             },
             "elevation_meters": 1.0,
             "channel_depth_meters": 0.5,
-            "clearance_above_meters": 5.0
+            "clearance_above_meters": 5.0,
+            "width_meters": 5.0
           },
           {
             "position_authoring_px": {
@@ -69440,7 +69442,8 @@
             },
             "elevation_meters": 1.0,
             "channel_depth_meters": 0.5,
-            "clearance_above_meters": 5.0
+            "clearance_above_meters": 5.0,
+            "width_meters": 5.0
           },
           {
             "position_authoring_px": {
@@ -69458,7 +69461,8 @@
             },
             "elevation_meters": 1.0,
             "channel_depth_meters": 0.5,
-            "clearance_above_meters": 5.0
+            "clearance_above_meters": 5.0,
+            "width_meters": 5.0
           }
         ]
       }

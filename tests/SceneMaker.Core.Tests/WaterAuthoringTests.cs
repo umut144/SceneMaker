@@ -46,6 +46,30 @@ public sealed class WaterAuthoringTests
     }
 
     [Fact]
+    public void WidthIsInterpolatedBetweenTheAuthoredPoints()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WaterEditing.PlaceRiver(
+            TestScenes.Instance(workspace),
+            workspace.Terrain,
+            [
+                WaterEditing.Point(32, 96, WaterPointMode.Linear, widthMeters: 1.0m),
+                WaterEditing.Point(160, 96, WaterPointMode.Linear, widthMeters: 3.0m),
+            ],
+            "river");
+
+        var body = Assert.Single(scene.WaterBodies);
+        var centerline = WaterGeometry.Flatten(body.Points);
+        Assert.Equal(
+            2.0m,
+            WaterGeometry.SampleAt(body.Points, centerline.AnchorStations, 64.0).WidthMeters);
+
+        var cells = WaterGeometry.Corridor(scene, workspace.Metrics, body);
+        Assert.Equal(2, cells.Count(cell => cell.X == 2));
+        Assert.Equal(6, cells.Count(cell => cell.X == 9));
+    }
+
+    [Fact]
     public void TheCorridorIsCanonicallyOrderedByRowThenColumn()
     {
         using var workspace = TestWorkspace.Create();
@@ -69,11 +93,10 @@ public sealed class WaterAuthoringTests
             TestScenes.Instance(workspace),
             workspace.Terrain,
             [
-                WaterEditing.Point(32, 176, WaterPointMode.Linear),
-                WaterEditing.Point(160, 176, WaterPointMode.Linear),
+                WaterEditing.Point(32, 176, WaterPointMode.Linear, widthMeters: 2.0m),
+                WaterEditing.Point(160, 176, WaterPointMode.Linear, widthMeters: 2.0m),
             ],
-            "river",
-            widthMeters: 2.0m);
+            "river");
 
         var cells = WaterGeometry.Corridor(scene, workspace.Metrics, scene.WaterBodies[0]);
 
@@ -91,15 +114,16 @@ public sealed class WaterAuthoringTests
             [
                 WaterEditing.Point(
                     32, 32, WaterPointMode.Aligned,
+                    widthMeters: 1.0m,
                     handleIn: new AuthoringPixelOffset { X = 0, Y = -64 },
                     handleOut: new AuthoringPixelOffset { X = 0, Y = 64 }),
                 WaterEditing.Point(
                     160, 32, WaterPointMode.Aligned,
+                    widthMeters: 1.0m,
                     handleIn: new AuthoringPixelOffset { X = 0, Y = 64 },
                     handleOut: new AuthoringPixelOffset { X = 0, Y = -64 }),
             ],
-            "river",
-            widthMeters: 1.0m);
+            "river");
         var body = scene.WaterBodies[0];
 
         // The curve's midpoint sits at (96, 80), well north of the straight line
@@ -120,13 +144,12 @@ public sealed class WaterAuthoringTests
             TestScenes.Instance(workspace),
             workspace.Terrain,
             [
-                WaterEditing.Point(32, 32, WaterPointMode.Linear),
-                WaterEditing.Point(32, 160, WaterPointMode.Linear),
-                WaterEditing.Point(160, 160, WaterPointMode.Linear),
-                WaterEditing.Point(96, 96, WaterPointMode.Linear),
+                WaterEditing.Point(32, 32, WaterPointMode.Linear, widthMeters: 1.0m),
+                WaterEditing.Point(32, 160, WaterPointMode.Linear, widthMeters: 1.0m),
+                WaterEditing.Point(160, 160, WaterPointMode.Linear, widthMeters: 1.0m),
+                WaterEditing.Point(96, 96, WaterPointMode.Linear, widthMeters: 1.0m),
             ],
-            "river",
-            widthMeters: 1.0m);
+            "river");
         var body = scene.WaterBodies[0];
 
         // Every authored point lies on its own centerline, so every one of them
@@ -230,8 +253,7 @@ public sealed class WaterAuthoringTests
             TestScenes.Instance(workspace),
             workspace.Terrain,
             [WaterEditing.Point(32, 32, WaterPointMode.Linear)],
-            "river",
-            widthMeters: 1.0m));
+            "river"));
     }
 
     [Fact]
@@ -242,11 +264,10 @@ public sealed class WaterAuthoringTests
             TestScenes.Instance(workspace),
             workspace.Terrain,
             [
-                WaterEditing.Point(33, 32, WaterPointMode.Linear),
-                WaterEditing.Point(160, 32, WaterPointMode.Linear),
+                WaterEditing.Point(33, 32, WaterPointMode.Linear, widthMeters: 1.0m),
+                WaterEditing.Point(160, 32, WaterPointMode.Linear, widthMeters: 1.0m),
             ],
-            "river",
-            widthMeters: 1.0m);
+            "river");
 
         // The shape of the curve is fine; where it sits is a grid question, and
         // that is decided at the IO boundary.
@@ -282,8 +303,7 @@ public sealed class WaterAuthoringTests
                     handleOut: new AuthoringPixelOffset { X = 21, Y = 0 }),
                 WaterEditing.Point(160, 32, WaterPointMode.Linear),
             ],
-            "river",
-            widthMeters: 4.0m);
+            "river");
 
         var restored = DocumentJson.DeserializeScene(DocumentJson.Serialize(scene));
 
@@ -291,7 +311,7 @@ public sealed class WaterAuthoringTests
         Assert.Equal("river_0001", body.WaterBodyId);
         Assert.Equal(WaterKind.River, body.WaterKind);
         Assert.Equal("river", body.AssetKey);
-        Assert.Equal(4.0m, body.WidthMeters);
+        Assert.All(body.Points, point => Assert.Equal(4.0m, point.WidthMeters));
         // Compared as a sequence rather than as whole bodies: a record holding a
         // List compares that List by reference, so equal curves would not be
         // equal documents.
@@ -306,9 +326,8 @@ public sealed class WaterAuthoringTests
             scene,
             workspace.Terrain,
             [
-                WaterEditing.Point(32, 32, WaterPointMode.Linear),
-                WaterEditing.Point(160, 32, WaterPointMode.Linear),
+                WaterEditing.Point(32, 32, WaterPointMode.Linear, widthMeters: widthMeters),
+                WaterEditing.Point(160, 32, WaterPointMode.Linear, widthMeters: widthMeters),
             ],
-            "river",
-            widthMeters);
+            "river");
 }

@@ -190,8 +190,6 @@ public static partial class DocumentValidation
                 throw new SceneMakerDocumentException($"{label} requires a supported water_kind.");
             if (string.IsNullOrWhiteSpace(body.AssetKey))
                 throw new SceneMakerDocumentException($"{label} requires an asset_key.");
-            if (body.WidthMeters <= 0m)
-                throw new SceneMakerDocumentException($"{label} requires a positive width_meters.");
             if (body.Points is null || body.Points.Count < 2)
             {
                 throw new SceneMakerDocumentException(
@@ -207,6 +205,11 @@ public static partial class DocumentValidation
                     throw new SceneMakerDocumentException($"{label} requires both handles on every point.");
                 if (!Enum.IsDefined(point.Mode))
                     throw new SceneMakerDocumentException($"{label} requires a supported point mode.");
+                if (point.WidthMeters <= 0m)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} requires a positive width_meters on every point.");
+                }
 
                 // Water with no depth is not water, and negative headroom would
                 // cut below the surface it is measured from. Heights themselves

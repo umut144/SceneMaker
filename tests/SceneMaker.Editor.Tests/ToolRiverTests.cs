@@ -202,9 +202,9 @@ public sealed class ToolRiverTests
         var edit = Assert.IsType<ToolOutcome.Edit>(interaction.KeyPressed(context, ToolKey.Enter));
 
         var body = Assert.Single(edit.Apply(scene).WaterBodies);
-        Assert.Equal(8.0m, body.WidthMeters);
         Assert.All(body.Points, point =>
         {
+            Assert.Equal(8.0m, point.WidthMeters);
             Assert.Equal(1.0m, point.ElevationMeters);
             Assert.Equal(0.75m, point.ChannelDepthMeters);
             Assert.Equal(3.0m, point.ClearanceAboveMeters);
@@ -230,6 +230,24 @@ public sealed class ToolRiverTests
         Assert.All(
             Assert.Single(edit.Apply(scene).WaterBodies).Points,
             point => Assert.Equal(4.0m, point.ElevationMeters));
+    }
+
+    [Fact]
+    public void ChangingWidthWhileDrawingAppliesToTheNextPoint()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = River();
+        var context = Context(workspace, scene);
+
+        interaction.State.SetRiverWidth(4.0m);
+        Place(interaction, context, 32, 32);
+        interaction.State.SetRiverWidth(8.0m);
+        Place(interaction, context, 160, 32);
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.KeyPressed(context, ToolKey.Enter));
+        var points = Assert.Single(edit.Apply(scene).WaterBodies).Points;
+        Assert.Equal([4.0m, 8.0m], points.Select(static point => point.WidthMeters));
     }
 
     [Fact]
@@ -264,8 +282,7 @@ public sealed class ToolRiverTests
                 Draft(32, 32, WaterPointMode.Linear),
                 Draft(160, 32, WaterPointMode.Linear),
             ]),
-            "river",
-            4.0m);
+            "river");
         var interaction = River();
         interaction.SetEraserEnabled(true);
         var context = Context(workspace, scene);
@@ -340,8 +357,7 @@ public sealed class ToolRiverTests
             workspace.Metrics,
             EditorTool.Pencil,
             [Draft(32, 32, WaterPointMode.Linear)],
-            pending: null,
-            widthMeters: 4.0m);
+            pending: null);
 
         Assert.Same(WaterDraftPreview.Empty, preview);
     }
@@ -355,8 +371,7 @@ public sealed class ToolRiverTests
             workspace.Metrics,
             interaction.ActiveTool,
             interaction.RiverDraft,
-            interaction.RiverPendingPoint,
-            interaction.State.RiverWidthMeters);
+            interaction.RiverPendingPoint);
 
     private static void Place(ToolInteraction interaction, ToolContext context, int x, int y)
     {
@@ -397,6 +412,6 @@ public sealed class ToolRiverTests
         int y,
         WaterPointMode mode,
         AuthoringPixelOffset? handle = null) =>
-        new(x, y, mode, 1.0m, 0.5m, 5.0m, handle);
+        new(x, y, mode, 1.0m, 0.5m, 5.0m, 4.0m, handle);
 
 }

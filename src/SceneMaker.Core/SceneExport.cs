@@ -13,7 +13,7 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 7;
+    public const int Version = 8;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -176,7 +176,6 @@ public static class SceneExport
                 WaterBodyId = body.WaterBodyId,
                 WaterKind = body.WaterKind,
                 AssetKey = body.AssetKey,
-                WidthMeters = body.WidthMeters,
                 Cells = WaterGeometry
                     .Corridor(scene, metrics, body)
                     .Select(static cell => new ExportWaterCellDocument
@@ -291,7 +290,6 @@ public static class SceneExport
         public required string WaterBodyId { get; init; }
         public required WaterKind WaterKind { get; init; }
         public required string AssetKey { get; init; }
-        public required decimal WidthMeters { get; init; }
         public required List<ExportWaterCellDocument> Cells { get; init; }
     }
 

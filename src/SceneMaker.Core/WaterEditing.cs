@@ -16,6 +16,7 @@ public readonly record struct WaterDraftPoint(
     decimal ElevationMeters,
     decimal ChannelDepthMeters,
     decimal ClearanceAboveMeters,
+    decimal WidthMeters,
     AuthoringPixelOffset? DraggedHandleOut = null);
 
 /// <summary>
@@ -40,8 +41,7 @@ public static class WaterEditing
         SceneDocument scene,
         TerrainDisplayCatalog terrainAssets,
         IReadOnlyList<WaterCurvePointDocument> points,
-        string assetKey,
-        decimal widthMeters)
+        string assetKey)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
@@ -52,15 +52,14 @@ public static class WaterEditing
             throw new SceneMakerDocumentException(
                 "A river needs at least two points; the first is its source and the last its mouth.");
         }
-        if (widthMeters <= 0m)
-            throw new SceneMakerDocumentException("A river needs a positive width in metres.");
+        if (points.Any(static point => point.WidthMeters <= 0m))
+            throw new SceneMakerDocumentException("A river needs a positive width at every point.");
 
         var body = new WaterBodyDocument
         {
             WaterBodyId = NextWaterBodyId(scene, WaterKind.River),
             WaterKind = WaterKind.River,
             AssetKey = assetKey,
-            WidthMeters = widthMeters,
             Points = [.. points],
         };
         return scene with
@@ -145,6 +144,7 @@ public static class WaterEditing
         decimal elevationMeters = 0m,
         decimal channelDepthMeters = DefaultChannelDepthMeters,
         decimal clearanceAboveMeters = DefaultClearanceAboveMeters,
+        decimal widthMeters = DefaultWidthMeters,
         AuthoringPixelOffset? handleIn = null,
         AuthoringPixelOffset? handleOut = null) => new()
     {
@@ -159,7 +159,11 @@ public static class WaterEditing
         ElevationMeters = elevationMeters,
         ChannelDepthMeters = channelDepthMeters,
         ClearanceAboveMeters = clearanceAboveMeters,
+        WidthMeters = widthMeters,
     };
+
+    /// <summary>A useful first width without imposing a world's closed list.</summary>
+    public const decimal DefaultWidthMeters = 4.0m;
 
     /// <summary>A river deep enough to be water, as a starting value.</summary>
     public const decimal DefaultChannelDepthMeters = 0.5m;
@@ -230,6 +234,7 @@ public static class WaterEditing
         ElevationMeters = draft.ElevationMeters,
         ChannelDepthMeters = draft.ChannelDepthMeters,
         ClearanceAboveMeters = draft.ClearanceAboveMeters,
+        WidthMeters = draft.WidthMeters,
     };
 
     /// <summary>

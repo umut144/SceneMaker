@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 9,
+  "version": 10,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60080,7 +60080,6 @@
       "water_body_id": "river_0001",
       "water_kind": "river",
       "asset_key": "river",
-      "width_meters": 5.0,
       "points": [
         {
           "position_authoring_px": {
@@ -60098,7 +60097,8 @@
           },
           "elevation_meters": 1.0,
           "channel_depth_meters": 0.5,
-          "clearance_above_meters": 5.0
+          "clearance_above_meters": 5.0,
+          "width_meters": 5.0
         },
         {
           "position_authoring_px": {
@@ -60116,7 +60116,8 @@
           },
           "elevation_meters": 1.0,
           "channel_depth_meters": 0.5,
-          "clearance_above_meters": 5.0
+          "clearance_above_meters": 5.0,
+          "width_meters": 5.0
         },
         {
           "position_authoring_px": {
@@ -60134,7 +60135,8 @@
           },
           "elevation_meters": 1.0,
           "channel_depth_meters": 0.5,
-          "clearance_above_meters": 5.0
+          "clearance_above_meters": 5.0,
+          "width_meters": 5.0
         },
         {
           "position_authoring_px": {
@@ -60152,7 +60154,8 @@
           },
           "elevation_meters": 1.0,
           "channel_depth_meters": 0.5,
-          "clearance_above_meters": 5.0
+          "clearance_above_meters": 5.0,
+          "width_meters": 5.0
         },
         {
           "position_authoring_px": {
@@ -60170,7 +60173,8 @@
           },
           "elevation_meters": 1.0,
           "channel_depth_meters": 0.5,
-          "clearance_above_meters": 5.0
+          "clearance_above_meters": 5.0,
+          "width_meters": 5.0
         },
         {
           "position_authoring_px": {
@@ -60188,7 +60192,8 @@
           },
           "elevation_meters": 1.0,
           "channel_depth_meters": 0.5,
-          "clearance_above_meters": 5.0
+          "clearance_above_meters": 5.0,
+          "width_meters": 5.0
         }
       ]
     }

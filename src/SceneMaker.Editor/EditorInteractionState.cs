@@ -161,7 +161,7 @@ public sealed class EditorInteractionState
     /// </summary>
     public decimal RiverWidthMeters { get; private set; } = DefaultRiverWidthMeters;
 
-    public const decimal DefaultRiverWidthMeters = 4.0m;
+    public const decimal DefaultRiverWidthMeters = WaterEditing.DefaultWidthMeters;
 
     /// <summary>
     /// The water surface the next point takes when it is not snapped to the

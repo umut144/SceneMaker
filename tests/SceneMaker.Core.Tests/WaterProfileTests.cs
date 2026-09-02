@@ -37,12 +37,11 @@ public sealed class WaterProfileTests
             TestScenes.Instance(workspace),
             workspace.Terrain,
             [
-                WaterEditing.Point(0, 96, WaterPointMode.Linear, 3.0m, 0.5m, 5.0m),
-                WaterEditing.Point(32, 96, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m),
-                WaterEditing.Point(160, 96, WaterPointMode.Linear, 1.0m, 0.5m, 5.0m),
+                WaterEditing.Point(0, 96, WaterPointMode.Linear, 3.0m, 0.5m, 5.0m, 1.0m),
+                WaterEditing.Point(32, 96, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+                WaterEditing.Point(160, 96, WaterPointMode.Linear, 1.0m, 0.5m, 5.0m, 1.0m),
             ],
-            "river",
-            widthMeters: 1.0m);
+            "river");
 
         var cells = WaterGeometry.Corridor(scene, workspace.Metrics, scene.WaterBodies[0]);
 
@@ -62,11 +61,10 @@ public sealed class WaterProfileTests
             TestScenes.Instance(workspace),
             workspace.Terrain,
             [
-                WaterEditing.Point(0, 96, WaterPointMode.Linear, 4.0m, 0.5m, 1.0m),
-                WaterEditing.Point(160, 96, WaterPointMode.Linear, 2.0m, 1.5m, 5.0m),
+                WaterEditing.Point(0, 96, WaterPointMode.Linear, 4.0m, 0.5m, 1.0m, 1.0m),
+                WaterEditing.Point(160, 96, WaterPointMode.Linear, 2.0m, 1.5m, 5.0m, 1.0m),
             ],
-            "river",
-            widthMeters: 1.0m);
+            "river");
 
         var cells = WaterGeometry.Corridor(scene, workspace.Metrics, scene.WaterBodies[0]);
         var cell = cells.First(cell => cell.X == 5);
@@ -145,9 +143,8 @@ public sealed class WaterProfileTests
             TestScenes.Instance(workspace),
             workspace.Terrain,
             [
-                WaterEditing.Point(0, 96, WaterPointMode.Linear, elevations.Source, 0.5m, 5.0m),
-                WaterEditing.Point(160, 96, WaterPointMode.Linear, elevations.Mouth, 0.5m, 5.0m),
+                WaterEditing.Point(0, 96, WaterPointMode.Linear, elevations.Source, 0.5m, 5.0m, 1.0m),
+                WaterEditing.Point(160, 96, WaterPointMode.Linear, elevations.Mouth, 0.5m, 5.0m, 1.0m),
             ],
-            "river",
-            widthMeters: 1.0m);
+            "river");
 }

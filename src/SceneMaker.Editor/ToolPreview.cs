@@ -146,8 +146,7 @@ public static class ToolPreviewBuilder
         WorkspaceMetrics metrics,
         EditorTool tool,
         IReadOnlyList<WaterDraftPoint> draft,
-        WaterDraftPoint? pending,
-        decimal widthMeters)
+        WaterDraftPoint? pending)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
@@ -174,7 +173,7 @@ public static class ToolPreviewBuilder
             points,
             curve,
             WaterGeometry.Centerline(curve),
-            WaterGeometry.Corridor(scene, metrics, curve, widthMeters));
+            WaterGeometry.Corridor(scene, metrics, curve));
     }
 
     public static int CountOf(IReadOnlyList<PropPreview> previews, PropPreviewKind kind)

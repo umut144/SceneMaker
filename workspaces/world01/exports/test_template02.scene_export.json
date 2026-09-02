@@ -1,6 +1,6 @@
 {
   "format": "scene_maker_scene_export",
-  "version": 7,
+  "version": 8,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,
@@ -49,7 +49,7 @@
   "water_raster": [],
   "scene": {
     "schema": "srt.scene_maker_scene",
-    "version": 9,
+    "version": 10,
     "scene_id": "test_template02",
     "scene_kind": "template",
     "coordinate_space": "scene_local_bottom_left_y_up",

@@ -28,7 +28,7 @@ workspace data rather than an implicit reader or export fallback.
 ## Water
 
 Terrain water is authored as curves, not as cells. A water body carries a
-centerline of Bezier points, a width and a surface height; the cells a
+centerline of Bezier points carrying width and a vertical section; the cells a
 simulation reads are derived from it and never stored in the Scene. That is
 what keeps a river reshapeable after it has been drawn, and it means the
 rasterization exists exactly once, in `WaterGeometry`.
@@ -49,7 +49,7 @@ than the two-surfaces-at-one-place problem a bridge poses.
 
 A River is an open curve. Its first point is the source and its last is the
 mouth - that is the whole of its flow direction. Its corridor is every water
-cell whose centre lies no further than half the body's width from the
+cell whose centre lies no further than half the interpolated point width from the
 centerline, cut off by the two lines perpendicular to the curve at its ends, so
 a river starts and ends straight across instead of bulging into a half-circle.
 Width belongs to the body, not to its points: a river that widens is authored
