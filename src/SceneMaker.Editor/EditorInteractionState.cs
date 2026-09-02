@@ -155,7 +155,7 @@ public sealed class EditorInteractionState
     public WaterPointMode WaterPointMode { get; private set; } = WaterPointMode.Linear;
 
     /// <summary>
-    /// The width the next river is authored with, in metres. A starting value
+    /// The width the next river point is authored with, in metres. A starting value
     /// rather than a rule - the document accepts any positive width, and which
     /// widths a given world uses is that world's business.
     /// </summary>

@@ -50,7 +50,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _waterDerivedSpanLabel = new();
     private readonly Button _eraserToggle = new();
     private readonly Button _heatmapToggle = new();
-    private readonly OptionButton _waterHeatmapValueEdit = new();
+    private readonly MenuButton _waterHeatmapValueEdit = new();
     private readonly Label _viewLabel = new();
     private readonly Label _statusLabel = new();
     private readonly Label _documentStateLabel = new();
@@ -371,9 +371,9 @@ public sealed partial class SceneMakerMain : Control
         _contextMenuBar.AddChild(_waterElevationLabel);
         _waterElevationEdit.Name = "WaterElevation";
         ConfigureElevationInput(_waterElevationEdit);
-        _waterElevationEdit.Editable = false;
         _waterElevationEdit.TooltipText =
-            "The water surface the next point takes when it is not snapped to the Terrain.";
+            "The water surface the next point takes with Snap off, and the fallback "
+            + "for the first point when Snap finds no Terrain.";
         _waterElevationEdit.ValueChanged += SetWaterElevation;
         _contextMenuBar.AddChild(_waterElevationEdit);
         _waterDepthLabel.Name = "WaterDepthLabel";
@@ -481,15 +481,18 @@ public sealed partial class SceneMakerMain : Control
         _heatmapToggle.Toggled += SetHeatmapEnabled;
         _toolOptionsBar.AddChild(_heatmapToggle);
         _waterHeatmapValueEdit.Name = "WaterHeatmapValue";
-        _waterHeatmapValueEdit.AddItem("Surface", (int)WaterHeatmapValue.Surface);
-        _waterHeatmapValueEdit.AddItem("Bed", (int)WaterHeatmapValue.Bed);
-        _waterHeatmapValueEdit.AddItem("Cut top", (int)WaterHeatmapValue.CutTop);
-        _waterHeatmapValueEdit.Selected = (int)WaterHeatmapValue.Surface;
+        _waterHeatmapValueEdit.Text = "S";
+        _waterHeatmapValueEdit.Alignment = HorizontalAlignment.Center;
+        _waterHeatmapValueEdit.CustomMinimumSize = new Vector2(42f, 42f);
+        _waterHeatmapValueEdit.Disabled = true;
+        var waterHeatmapMenu = _waterHeatmapValueEdit.GetPopup();
+        waterHeatmapMenu.AddItem("Surface", (int)WaterHeatmapValue.Surface);
+        waterHeatmapMenu.AddItem("Bed", (int)WaterHeatmapValue.Bed);
+        waterHeatmapMenu.AddItem("Cut top", (int)WaterHeatmapValue.CutTop);
+        waterHeatmapMenu.IdPressed += SetWaterHeatmapValue;
         _waterHeatmapValueEdit.TooltipText =
             "Which boundary of every water span the height view shows. Terrain and Props "
             + "continue to show their own elevation.";
-        _waterHeatmapValueEdit.Visible = false;
-        _waterHeatmapValueEdit.ItemSelected += SetWaterHeatmapValue;
         _toolOptionsBar.AddChild(_waterHeatmapValueEdit);
         UpdateToolContextLabel();
 
@@ -1462,16 +1465,27 @@ public sealed partial class SceneMakerMain : Control
     private void SetHeatmapEnabled(bool enabled)
     {
         _canvas.HeatmapEnabled = enabled;
-        _waterHeatmapValueEdit.Visible = enabled;
+        UpdateWaterHeatmapAvailability();
         SetStatus(enabled
-            ? "Height view on. Water shows its surface; drawing and placing work as usual."
+            ? "Height view on. Drawing and placing work as usual."
             : "Height view off.");
     }
 
+    private void UpdateWaterHeatmapAvailability() =>
+        _waterHeatmapValueEdit.Disabled = !_canvas.HeatmapEnabled
+            || _controller.Document?.WaterBodies.Count is not > 0;
+
     private void SetWaterHeatmapValue(long item)
     {
-        var value = (WaterHeatmapValue)_waterHeatmapValueEdit.GetItemId((int)item);
+        var value = (WaterHeatmapValue)item;
         _canvas.WaterHeatmapValue = value;
+        _waterHeatmapValueEdit.Text = value switch
+        {
+            WaterHeatmapValue.Surface => "S",
+            WaterHeatmapValue.Bed => "B",
+            WaterHeatmapValue.CutTop => "C",
+            _ => throw new ArgumentOutOfRangeException(nameof(value)),
+        };
         SetStatus(value switch
         {
             WaterHeatmapValue.Surface => "Height view: water cells show their surface.",
@@ -1527,10 +1541,9 @@ public sealed partial class SceneMakerMain : Control
     private void SetSnapWaterToTerrain(bool enabled)
     {
         _interaction.State.SetSnapWaterToTerrain(enabled);
-        _waterElevationEdit.Editable = !enabled;
         UpdateWaterDerivedSpan();
         SetStatus(enabled
-            ? "Snap on: a placed point takes the height of the Terrain under it."
+            ? "Snap on: a point takes the Terrain height; Water is the no-Terrain fallback."
             : "Snap off: a placed point takes the water level from the context bar.");
     }
 
@@ -1560,15 +1573,12 @@ public sealed partial class SceneMakerMain : Control
 
     private void UpdateWaterDerivedSpan()
     {
-        if (_interaction.State.SnapWaterToTerrain)
-        {
-            _waterDerivedSpanLabel.Text = "Bed / Cut follow snapped Water";
-            return;
-        }
         var water = _interaction.State.WaterElevationMeters;
         var bed = water - _interaction.State.WaterChannelDepthMeters;
         var cutTop = water + _interaction.State.WaterClearanceAboveMeters;
-        _waterDerivedSpanLabel.Text = $"Bed {bed:0.###} · Cut {cutTop:0.###} m";
+        _waterDerivedSpanLabel.Text = _interaction.State.SnapWaterToTerrain
+            ? $"Fallback bed {bed:0.###} · cut {cutTop:0.###} m"
+            : $"Bed {bed:0.###} · Cut {cutTop:0.###} m";
     }
 
     private void UpdateToolContextLabel()
@@ -1764,6 +1774,7 @@ public sealed partial class SceneMakerMain : Control
         if (_controller.Scene is not { } scene) return;
         ClearTemplatePreview();
         _canvas.UpdateScene(scene);
+        UpdateWaterHeatmapAvailability();
         _autosaveTimer.Start();
         UpdateDocumentState();
     }
@@ -1905,6 +1916,7 @@ public sealed partial class SceneMakerMain : Control
         SetSettingsItemDisabled(SettingsMenuItem.LoadScene, !sceneActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.ExportWorkspace, _controller.Session is null);
         UpdateDrawingToolAvailability();
+        UpdateWaterHeatmapAvailability();
         UpdateTemplateControls();
         UpdateMapControls();
         UpdateDocumentState();

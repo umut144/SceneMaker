@@ -52,8 +52,8 @@ mouth - that is the whole of its flow direction. Its corridor is every water
 cell whose centre lies no further than half the interpolated point width from the
 centerline, cut off by the two lines perpendicular to the curve at its ends, so
 a river starts and ends straight across instead of bulging into a half-circle.
-Width belongs to the body, not to its points: a river that widens is authored
-as a second river starting where the first one ends.
+Width belongs to each curve point and is interpolated linearly over centerline
+arc length, so one river can widen or narrow without being split into bodies.
 
 ## Height is a stack, not a number
 

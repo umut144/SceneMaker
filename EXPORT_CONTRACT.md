@@ -183,9 +183,9 @@ handles, which makes both of its segments straight.
 **The corridor rule.** `width_meters` is authored on every point and interpolated
 linearly over the same centerline arc length as the vertical profile. A water
 cell projects its centre onto each candidate segment. It belongs to the body
-when the closest projection lies no further than half the width sampled at that
-station; where bends overlap, the nearest accepted projection supplies the
-profile. The two outermost segments carry the end caps: the disc around the
+when some candidate projection lies no further than half the width sampled at
+that projection's station; among the accepted projections, the nearest supplies
+the profile. The two outermost segments carry the end caps: the disc around the
 first one is clipped by the line perpendicular to the curve at the source, the
 disc around the last one by the line perpendicular at the mouth. Without them a
 river would begin and end with a half-circle. Inner bends round off by

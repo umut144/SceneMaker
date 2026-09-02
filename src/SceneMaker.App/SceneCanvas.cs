@@ -500,7 +500,9 @@ public sealed partial class SceneCanvas : Control
         DrawString(
             font,
             panel.Position + new Vector2(Padding, 14f),
-            $"Height · {WaterHeatmapLabel()} (m)",
+            document.WaterBodies.Count == 0
+                ? "Height (m)"
+                : $"Height · {WaterHeatmapLabel()} (m)",
             HorizontalAlignment.Left,
             width: -1f,
             fontSize: FontSize,
@@ -600,7 +602,7 @@ public sealed partial class SceneCanvas : Control
         WaterHeatmapValue.Surface => cell.SurfaceMeters,
         WaterHeatmapValue.Bed => cell.BedMeters,
         WaterHeatmapValue.CutTop => cell.CutTopMeters,
-        _ => throw new ArgumentOutOfRangeException(nameof(_waterHeatmapValue)),
+        _ => throw new InvalidOperationException("Unknown water heatmap value."),
     };
 
     private string WaterHeatmapLabel() => _waterHeatmapValue switch
@@ -608,7 +610,7 @@ public sealed partial class SceneCanvas : Control
         WaterHeatmapValue.Surface => "Water surface",
         WaterHeatmapValue.Bed => "River bed",
         WaterHeatmapValue.CutTop => "Cut top",
-        _ => throw new ArgumentOutOfRangeException(nameof(_waterHeatmapValue)),
+        _ => throw new InvalidOperationException("Unknown water heatmap value."),
     };
 
     private static Color ElevationColor(decimal elevation, (decimal Low, decimal High) range)
