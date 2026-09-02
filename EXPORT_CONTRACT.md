@@ -174,12 +174,17 @@ control rather than a place. A point in `"linear"` mode carries two zero
 handles, which makes both of its segments straight.
 
 **The corridor rule.** A water cell belongs to a body when its centre lies no
-further than `width_meters / 2` from the centerline, **and** on the inner side
-of the two lines perpendicular to the curve at its first and last point. Those
-two half-planes are the butt caps: without them a river would begin and end
-with a half-circle. Inner bends round off by construction. A curve that folds
-back past its own end plane is clipped by it, which is a shape to avoid rather
-than a case to handle.
+further than `width_meters / 2` from **some segment** of the flattened
+centerline. The two outermost segments carry the end caps: the disc around the
+first one is clipped by the line perpendicular to the curve at the source, the
+disc around the last one by the line perpendicular at the mouth. Without them a
+river would begin and end with a half-circle. Inner bends round off by
+construction.
+
+The caps belong to their own segment and to nothing else. A cap applied to the
+whole corridor would reach across the map and cut away whatever part of the
+river happens to lie behind it, which is a real shape - a river that bends back
+near its own mouth - and not an error the author could see coming.
 
 `width_meters` belongs to the body, not to its points. A river that widens is
 authored as a second river starting where the first ends, so a reader never

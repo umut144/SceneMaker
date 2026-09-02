@@ -18,10 +18,10 @@ public readonly record struct CenterlinePoint(double X, double Y);
 ///
 /// <para>This is the only place the corridor is defined, and it is defined
 /// once: a water cell belongs to a body when its centre lies no further than
-/// half the body's width from the centerline, and between the two lines
-/// perpendicular to the curve at its first and last point. Those two
-/// half-planes are what makes a river start and end straight across instead of
-/// bulging into a half-circle at its source.</para>
+/// half the body's width from the centerline. At the two ends the corridor is
+/// cut off square rather than rounded - the disc around the first segment is
+/// clipped at the source, the disc around the last one at the mouth - so a
+/// river does not begin and end with a half-circle.</para>
 ///
 /// <para>The curve itself is evaluated exactly as the PolyTools Bezier tool
 /// evaluates its chains - one cubic per pair of points, with the control points
@@ -268,6 +268,16 @@ public static class WaterGeometry
         return remainder < 0 ? quotient - 1 : quotient;
     }
 
+    /// <summary>
+    /// One flattened piece of the centerline, with the end caps it carries.
+    ///
+    /// <para>The caps belong to the two outermost segments rather than to the
+    /// corridor as a whole. Clipping the whole corridor by the plane at the
+    /// mouth was wrong in a way that only showed on a river that bends back
+    /// near its own end: the plane reaches across the map and cuts away the
+    /// body it passes over, and the author sees a river that stops halfway.
+    /// A cap trims the disc around its own segment and nothing else.</para>
+    /// </summary>
     private readonly record struct CorridorSegment(
         double StartX,
         double StartY,
@@ -275,8 +285,19 @@ public static class WaterGeometry
         double DeltaY,
         double LengthSquared,
         double MinY,
-        double MaxY)
+        double MaxY,
+        bool CapsAtStart,
+        bool CapsAtEnd)
     {
+        /// <summary>Behind the source, on the far side of the line across it.</summary>
+        public bool IsBeforeSource(double x, double y) =>
+            CapsAtStart && (x - StartX) * DeltaX + (y - StartY) * DeltaY < 0.0;
+
+        /// <summary>Past the mouth, on the far side of the line across it.</summary>
+        public bool IsBeyondMouth(double x, double y) =>
+            CapsAtEnd
+            && (x - (StartX + DeltaX)) * DeltaX + (y - (StartY + DeltaY)) * DeltaY > 0.0;
+
         public double DistanceSquaredTo(double x, double y)
         {
             var toPointX = x - StartX;
@@ -302,16 +323,6 @@ public static class WaterGeometry
         public required double MaxX { get; init; }
         public required double MinY { get; init; }
         public required double MaxY { get; init; }
-
-        /// <summary>The source, and the direction the water leaves it in.</summary>
-        public required CenterlinePoint Start { get; init; }
-        public required double StartDirectionX { get; init; }
-        public required double StartDirectionY { get; init; }
-
-        /// <summary>The mouth, and the direction the water arrives in.</summary>
-        public required CenterlinePoint End { get; init; }
-        public required double EndDirectionX { get; init; }
-        public required double EndDirectionY { get; init; }
 
         public static CorridorShape For(
             WorkspaceMetrics metrics,
@@ -339,7 +350,9 @@ public static class WaterGeometry
                     deltaY,
                     deltaX * deltaX + deltaY * deltaY,
                     Math.Min(start.Y, end.Y),
-                    Math.Max(start.Y, end.Y)));
+                    Math.Max(start.Y, end.Y),
+                    CapsAtStart: index == 0,
+                    CapsAtEnd: index + 2 == polyline.Count));
             }
             foreach (var point in polyline)
             {
@@ -349,10 +362,6 @@ public static class WaterGeometry
                 maxY = Math.Max(maxY, point.Y);
             }
 
-            var first = polyline[0];
-            var second = polyline[1];
-            var last = polyline[^1];
-            var beforeLast = polyline[^2];
             return new CorridorShape
             {
                 Segments = segments,
@@ -361,27 +370,21 @@ public static class WaterGeometry
                 MaxX = maxX + halfWidth,
                 MinY = minY - halfWidth,
                 MaxY = maxY + halfWidth,
-                Start = first,
-                StartDirectionX = second.X - first.X,
-                StartDirectionY = second.Y - first.Y,
-                End = last,
-                EndDirectionX = last.X - beforeLast.X,
-                EndDirectionY = last.Y - beforeLast.Y,
             };
         }
 
         public bool Contains(double x, double y, IReadOnlyList<CorridorSegment> candidates)
         {
-            // Butt caps. Without these two half-planes the distance test alone
-            // would round the source and the mouth into half-circles, and a
-            // river would appear to start with a pond.
-            if ((x - Start.X) * StartDirectionX + (y - Start.Y) * StartDirectionY < 0.0) return false;
-            if ((x - End.X) * EndDirectionX + (y - End.Y) * EndDirectionY > 0.0) return false;
-
             var limit = HalfWidth * HalfWidth;
             foreach (var segment in candidates)
             {
-                if (segment.DistanceSquaredTo(x, y) <= limit) return true;
+                if (segment.DistanceSquaredTo(x, y) > limit) continue;
+                // The caps trim the two outermost discs, so that the corridor
+                // ends square. They are asked per segment: a cap that reached
+                // beyond its own segment would cut the river wherever the curve
+                // happens to pass behind it.
+                if (segment.IsBeforeSource(x, y) || segment.IsBeyondMouth(x, y)) continue;
+                return true;
             }
             return false;
         }

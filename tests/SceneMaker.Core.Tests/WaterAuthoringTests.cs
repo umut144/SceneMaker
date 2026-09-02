@@ -110,6 +110,57 @@ public sealed class WaterAuthoringTests
     }
 
     [Fact]
+    public void ACurveThatBendsBackNearItsMouthKeepsItsWholeBody()
+    {
+        using var workspace = TestWorkspace.Create();
+        // A hook whose last segment runs back down to the south-west, over the
+        // half of the map its own source sits in. An end cap that reached
+        // beyond its own segment would cut that half away, and the author would
+        // see a river that stops halfway - which is exactly what it did.
+        var scene = WaterEditing.PlaceRiver(
+            TestScenes.Instance(workspace),
+            workspace.Terrain,
+            [
+                WaterEditing.Point(32, 32, WaterPointMode.Linear),
+                WaterEditing.Point(32, 160, WaterPointMode.Linear),
+                WaterEditing.Point(160, 160, WaterPointMode.Linear),
+                WaterEditing.Point(96, 96, WaterPointMode.Linear),
+            ],
+            "river",
+            widthMeters: 1.0m,
+            elevationMeters: 0.0m);
+        var body = scene.WaterBodies[0];
+
+        // Every authored point lies on its own centerline, so every one of them
+        // is in its own corridor. Nothing else about a curve's shape can make
+        // that untrue.
+        foreach (var point in body.Points)
+        {
+            Assert.True(
+                WaterGeometry.Contains(
+                    workspace.Metrics,
+                    body,
+                    point.PositionAuthoringPx.X,
+                    point.PositionAuthoringPx.Y),
+                $"({point.PositionAuthoringPx.X}, {point.PositionAuthoringPx.Y}) fell out of its own corridor.");
+        }
+    }
+
+    [Fact]
+    public void TheCapsStillEndTheCorridorSquareAtBothEnds()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = River(workspace, TestScenes.Instance(workspace));
+        var body = scene.WaterBodies[0];
+
+        // The river runs from (32, 32) to (160, 32). Beside it is water,
+        // before the source and past the mouth is not.
+        Assert.True(WaterGeometry.Contains(workspace.Metrics, body, 96, 40));
+        Assert.False(WaterGeometry.Contains(workspace.Metrics, body, 24, 32));
+        Assert.False(WaterGeometry.Contains(workspace.Metrics, body, 168, 32));
+    }
+
+    [Fact]
     public void RiversTakeStableIdsInCanonicalOrder()
     {
         using var workspace = TestWorkspace.Create();
