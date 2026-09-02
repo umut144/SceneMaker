@@ -21,6 +21,8 @@ public sealed partial class SceneCanvas : Control
     private static readonly Color TemplateAnchorBorder = Color.FromHtml("#7B8491");
     private static readonly Color TemplateAnchorText = Color.FromHtml("#252A31");
     private static readonly Color TemplatePreviewOutline = Color.FromHtml("#FFFFFF");
+    private static readonly Color WaterCurveColor = Color.FromHtml("#FFD866");
+    private static readonly Color WaterHandleColor = Color.FromHtml("#8FE3FF");
 
     /// <summary>
     /// One hue, dark to light, for reading height as magnitude. It is anchored
@@ -61,6 +63,12 @@ public sealed partial class SceneCanvas : Control
     private ToolInteraction _interaction = new();
     private bool _pointerOverCanvas;
     private bool _heatmapEnabled;
+    // Rasterizing a corridor is cheap but not free, and the authored bodies do
+    // not change between frames. The cache is keyed by the document itself, so
+    // it renews on an edit, an undo and a Template preview alike without anyone
+    // having to remember to invalidate it.
+    private SceneDocument? _waterOverlayDocument;
+    private IReadOnlyList<WaterOverlay> _waterOverlays = [];
 
     public SceneCanvas()
     {
@@ -372,6 +380,7 @@ public sealed partial class SceneCanvas : Control
 
         var authoredTerrain = _templatePreview is null ? _sceneTerrain : _previewTerrain;
         DrawTerrain(document, pan, zoom, highlighted: Mode == EditorMode.Terrain);
+        DrawWater(document, pan, zoom, highlighted: Mode == EditorMode.Terrain);
         DrawProps(
             document,
             pan,
@@ -382,7 +391,10 @@ public sealed partial class SceneCanvas : Control
         if (Mode == EditorMode.Props)
             DrawPropToolPreview(pan, zoom, heightAuthoringPixels);
         else if (Mode == EditorMode.Terrain)
+        {
             DrawTerrainToolPreview(document, pan, zoom);
+            DrawWaterToolPreview(document, pan, zoom, heightAuthoringPixels);
+        }
 
         var visible = new Rect2(Vector2.Zero, Size).Intersection(sceneRect);
         if (visible.Size.X > 0f && visible.Size.Y > 0f)
@@ -581,6 +593,127 @@ public sealed partial class SceneCanvas : Control
                     ? color
                     : new Color(color.R, color.G, color.B, 0.24f));
         }
+    }
+
+    /// <summary>
+    /// The authored water, drawn as the cells it covers rather than as the
+    /// curve behind it: what the corridor rule produces is what the simulation
+    /// reads, so it is what the author has to be able to see.
+    /// </summary>
+    private void DrawWater(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        bool highlighted)
+    {
+        if (document.WaterBodies.Count == 0) return;
+        var cellSize = _metrics!.AuthoringPixelsPerWaterCell * zoom;
+        var rows = _metrics.SceneHeightWaterCells(document);
+        foreach (var overlay in WaterOverlays(document))
+        {
+            var color = highlighted || _heatmapEnabled
+                ? overlay.Color
+                : new Color(overlay.Color.R, overlay.Color.G, overlay.Color.B, 0.24f);
+            foreach (var cell in overlay.Cells)
+            {
+                var rectangle = new Rect2(
+                    pan + new Vector2(cell.X * cellSize, (rows - cell.Y - 1) * cellSize),
+                    new Vector2(cellSize, cellSize));
+                if (rectangle.End.X < 0f || rectangle.End.Y < 0f
+                    || rectangle.Position.X > Size.X || rectangle.Position.Y > Size.Y)
+                    continue;
+                DrawRect(rectangle, color);
+            }
+        }
+    }
+
+    private IReadOnlyList<WaterOverlay> WaterOverlays(SceneDocument document)
+    {
+        if (ReferenceEquals(_waterOverlayDocument, document)) return _waterOverlays;
+
+        List<WaterOverlay> overlays = new(document.WaterBodies.Count);
+        foreach (var body in document.WaterBodies)
+        {
+            if (!_terrainColors.TryGetValue(body.AssetKey, out var color)) continue;
+            overlays.Add(new WaterOverlay(
+                color,
+                WaterGeometry.Corridor(document, _metrics!, body)));
+        }
+        _waterOverlayDocument = document;
+        _waterOverlays = overlays;
+        return _waterOverlays;
+    }
+
+    /// <summary>
+    /// The river being drawn: its corridor in the Asset's own colour, so the
+    /// author sees the water rather than a symbol for it, and over that the
+    /// curve, its points and the handles that shape them.
+    /// </summary>
+    private void DrawWaterToolPreview(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        var preview = ToolPreviewBuilder.BuildWaterDraft(
+            document,
+            _metrics!,
+            ActiveTool,
+            _interaction.RiverDraft,
+            _interaction.RiverPendingPoint,
+            _interaction.State.RiverWidthMeters);
+        if (preview.Points.Count == 0) return;
+
+        var waterCellSize = _metrics!.AuthoringPixelsPerWaterCell * zoom;
+        var rows = _metrics.SceneHeightWaterCells(document);
+        var fill = SelectedTerrainAssetKey is { } assetKey
+            && _terrainColors.TryGetValue(assetKey, out var assetColor)
+                ? assetColor
+                : WaterCurveColor;
+        foreach (var cell in preview.Cells)
+        {
+            DrawRect(
+                new Rect2(
+                    pan + new Vector2(cell.X * waterCellSize, (rows - cell.Y - 1) * waterCellSize),
+                    new Vector2(waterCellSize, waterCellSize)),
+                new Color(fill.R, fill.G, fill.B, 0.55f));
+        }
+
+        Vector2 Screen(double authoringX, double authoringY) => pan + new Vector2(
+            (float)authoringX * zoom,
+            (sceneHeightAuthoringPixels - (float)authoringY) * zoom);
+
+        if (preview.Centerline.Count >= 2)
+        {
+            var line = new Vector2[preview.Centerline.Count];
+            for (var index = 0; index < preview.Centerline.Count; index++)
+                line[index] = Screen(preview.Centerline[index].X, preview.Centerline[index].Y);
+            DrawPolyline(line, WaterCurveColor, 2.0f);
+        }
+
+        for (var index = 0; index < preview.Curve.Count; index++)
+        {
+            var point = preview.Curve[index];
+            var centre = Screen(point.PositionAuthoringPx.X, point.PositionAuthoringPx.Y);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleInAuthoringPx, Screen);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleOutAuthoringPx, Screen);
+            // The source and the mouth are what the runtime reads as flow
+            // direction, so they are drawn as more than another point.
+            var isEnd = index == 0 || index == preview.Curve.Count - 1;
+            DrawCircle(centre, isEnd ? 5.0f : 3.5f, WaterCurveColor);
+        }
+    }
+
+    private void DrawHandle(
+        Vector2 centre,
+        AuthoringPixelPosition position,
+        AuthoringPixelOffset handle,
+        Func<double, double, Vector2> screen)
+    {
+        if (handle.IsZero()) return;
+        var tip = screen(position.X + handle.X, position.Y + handle.Y);
+        DrawLine(centre, tip, WaterHandleColor, 1.5f);
+        DrawCircle(tip, 3.0f, WaterHandleColor);
     }
 
     private void DrawTerrainToolPreview(
@@ -846,6 +979,9 @@ public sealed partial class SceneCanvas : Control
                 lineStart,
                 lineEnd,
                 _interaction.State.PropLineOffsetAuthoringPixels);
+
+    /// <summary>One authored body's cells, in the colour of its Asset.</summary>
+    private sealed record WaterOverlay(Color Color, IReadOnlyList<WaterCellCoordinate> Cells);
 
     private static ToolKey? ToolKeyFor(Key keycode) => keycode switch
     {

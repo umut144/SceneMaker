@@ -36,6 +36,10 @@ public sealed partial class SceneMakerMain : Control
     private readonly VSeparator _toolContextSeparator = new();
     private readonly Label _propLineOffsetLabel = new();
     private readonly SpinBox _propLineOffsetEdit = new();
+    private readonly Label _waterPointModeLabel = new();
+    private readonly OptionButton _waterPointModeEdit = new();
+    private readonly Label _riverWidthLabel = new();
+    private readonly SpinBox _riverWidthEdit = new();
     private readonly Button _eraserToggle = new();
     private readonly Button _heatmapToggle = new();
     private readonly Label _viewLabel = new();
@@ -326,6 +330,28 @@ public sealed partial class SceneMakerMain : Control
         _propLineOffsetEdit.CustomMinimumSize = new Vector2(130f, 0f);
         _propLineOffsetEdit.ValueChanged += SetPropLineOffset;
         _contextMenuBar.AddChild(_propLineOffsetEdit);
+        _waterPointModeLabel.Name = "WaterPointModeLabel";
+        _waterPointModeLabel.Text = "Point";
+        _waterPointModeLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_waterPointModeLabel);
+        _waterPointModeEdit.Name = "WaterPointMode";
+        _waterPointModeEdit.AddItem("Linear", (int)WaterPointMode.Linear);
+        _waterPointModeEdit.AddItem("Aligned", (int)WaterPointMode.Aligned);
+        _waterPointModeEdit.Selected = (int)WaterPointMode.Linear;
+        _waterPointModeEdit.TooltipText =
+            "How the next curve point's handles behave. Switchable while drawing; "
+            + "it decides what the next point does and leaves the placed ones alone.";
+        _waterPointModeEdit.ItemSelected += SetWaterPointMode;
+        _contextMenuBar.AddChild(_waterPointModeEdit);
+        _riverWidthLabel.Name = "RiverWidthLabel";
+        _riverWidthLabel.Text = "Width";
+        _riverWidthLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_riverWidthLabel);
+        _riverWidthEdit.Name = "RiverWidth";
+        ConfigureRiverWidthInput(_riverWidthEdit);
+        _riverWidthEdit.TooltipText = "The width of the corridor around the river's centerline.";
+        _riverWidthEdit.ValueChanged += SetRiverWidth;
+        _contextMenuBar.AddChild(_riverWidthEdit);
         _contextMenuBar.AddThemeConstantOverride("separation", 8);
 
         var canvasColumn = new VBoxContainer
@@ -1091,7 +1117,14 @@ public sealed partial class SceneMakerMain : Control
     /// rather than 1.1000000000000001 and a bare 2. Heights then read the same
     /// everywhere and repainting a Scene does not churn its file.
     /// </summary>
-    private static decimal ElevationOf(double value) => decimal.Parse(
+    private static decimal ElevationOf(double value) => DecimalOf(value);
+
+    /// <summary>
+    /// The same for every measurement the context bar authors in metres - a
+    /// height, a width - so none of them churns a document with a value that is
+    /// only nearly what was typed.
+    /// </summary>
+    private static decimal DecimalOf(double value) => decimal.Parse(
         value.ToString("0.0##", CultureInfo.InvariantCulture),
         CultureInfo.InvariantCulture);
 
@@ -1313,6 +1346,42 @@ public sealed partial class SceneMakerMain : Control
         SetStatus($"Prop Line offset set to {offset} authoring px.");
     }
 
+    /// <summary>
+    /// Widths step by whole water cells, because a corridor is measured in
+    /// them. Which widths a world actually uses is that world's business, so
+    /// the editor offers a range rather than a list.
+    /// </summary>
+    private void ConfigureRiverWidthInput(SpinBox input)
+    {
+        var waterCell = _controller.Session is { } session
+            ? (double)session.Metrics.WaterCellMeters
+            : 0.5;
+        input.MinValue = waterCell;
+        input.MaxValue = 1024.0;
+        input.Step = waterCell;
+        input.AllowGreater = false;
+        input.AllowLesser = false;
+        input.Suffix = " m";
+        input.CustomMinimumSize = new Vector2(110f, 0f);
+        input.Value = (double)EditorInteractionState.DefaultRiverWidthMeters;
+    }
+
+    private void SetWaterPointMode(long item)
+    {
+        var mode = (WaterPointMode)_waterPointModeEdit.GetItemId((int)item);
+        _interaction.State.SetWaterPointMode(mode);
+        SetStatus(mode == WaterPointMode.Linear
+            ? "River: the next point makes its segments straight."
+            : "River: drag the next point to pull its handle, or click for an automatic one.");
+    }
+
+    private void SetRiverWidth(double value)
+    {
+        var width = DecimalOf(value);
+        _interaction.State.SetRiverWidth(width);
+        SetStatus($"River width set to {width:0.###} m.");
+    }
+
     private void UpdateToolContextLabel()
     {
         _toolContextLabel.Text =
@@ -1320,9 +1389,15 @@ public sealed partial class SceneMakerMain : Control
             + EditorToolRegistry.Resolve(_interaction.ActiveTool).DisplayName;
         var propLineActive = _interaction.Mode == EditorMode.Props
             && _interaction.ActiveTool == EditorTool.Line;
-        _toolContextSeparator.Visible = propLineActive;
+        var riverActive = _interaction.Mode == EditorMode.Terrain
+            && _interaction.ActiveTool == EditorTool.River;
+        _toolContextSeparator.Visible = propLineActive || riverActive;
         _propLineOffsetLabel.Visible = propLineActive;
         _propLineOffsetEdit.Visible = propLineActive;
+        _waterPointModeLabel.Visible = riverActive;
+        _waterPointModeEdit.Visible = riverActive;
+        _riverWidthLabel.Visible = riverActive;
+        _riverWidthEdit.Visible = riverActive;
     }
 
     private void SelectTerrainAsset(string assetKey)
@@ -1646,6 +1721,8 @@ public sealed partial class SceneMakerMain : Control
         _canvas.ConfigureMetrics(session.Metrics);
         _canvas.ConfigureTerrainAssets(session.TerrainAssets);
         _canvas.ConfigurePropAssets(session.PropAssets);
+        ConfigureRiverWidthInput(_riverWidthEdit);
+        _interaction.State.SetRiverWidth(DecimalOf(_riverWidthEdit.Value));
         UpdateSceneSizeMetrics();
         RebuildAssetBars();
     }

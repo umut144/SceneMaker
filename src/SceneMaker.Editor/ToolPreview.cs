@@ -32,10 +32,11 @@ public sealed record PropPreview(
 /// </summary>
 public sealed record WaterDraftPreview(
     IReadOnlyList<WaterDraftPoint> Points,
+    IReadOnlyList<WaterCurvePointDocument> Curve,
     IReadOnlyList<CenterlinePoint> Centerline,
     IReadOnlyList<WaterCellCoordinate> Cells)
 {
-    public static WaterDraftPreview Empty { get; } = new([], [], []);
+    public static WaterDraftPreview Empty { get; } = new([], [], [], []);
 }
 
 public sealed record TerrainPreview(
@@ -162,11 +163,16 @@ public static class ToolPreviewBuilder
         {
             points.Add(value);
         }
-        if (points.Count < 2) return new WaterDraftPreview(points, [], []);
+        if (points.Count == 0) return WaterDraftPreview.Empty;
 
+        // The handles are resolved even for a single point, so that the one
+        // being dragged out is drawn while it is being dragged.
         var curve = WaterEditing.ResolveCurve(points);
+        if (points.Count < 2) return new WaterDraftPreview(points, curve, [], []);
+
         return new WaterDraftPreview(
             points,
+            curve,
             WaterGeometry.Centerline(curve),
             WaterGeometry.Corridor(scene, metrics, curve, widthMeters));
     }

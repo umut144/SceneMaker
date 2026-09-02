@@ -48,6 +48,7 @@ Modus. Beispiele sind:
 - `Pencil`
 - `Line`
 - `Terrain Fill`
+- `River`
 - Template-bezogene Werkzeuge wie `Anchor Move`
 
 Das primäre Werkzeug beschreibt, welche Art von Aktion ausgeführt wird.
@@ -67,6 +68,10 @@ Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
   Ziehens alle betroffenen Tiles und führt die Linie beim Loslassen aus.
 - `Prop:Line` behält Startpunkt, Endpunkt und die Bestätigung mit Enter als
   getrennte Schritte.
+- `Terrain:River` zeichnet eine offene Bezier-Kurve: Drücken legt einen
+  Kurvenpunkt auf dem Wasserraster fest, Ziehen zieht sein Handle heraus,
+  Loslassen setzt ihn. Enter schließt den Fluss ab, Escape nimmt Punkt für Punkt
+  zurück.
 
 Ein aktiver `Eraser` verwendet für Terrain-Highlights die Löschfarbe, damit die
 Auswirkung vor dem Ausführen sichtbar ist.
@@ -82,6 +87,33 @@ auf deren `default_elevation_meters` — dem Wert, den der Autor beim Anlegen im
 Feld `Ground height` gesetzt hat. Damit findet man die Vorgabe der Scene immer
 wieder vor, kann aber pro Strich davon abweichen, ohne dass das Dokument sich
 ändert.
+
+### Terrain:River
+
+Das ContextMenu von `Terrain:River` enthält zwei Werte. `Point` schaltet
+zwischen `Linear` und `Aligned` um: `Linear` macht die angrenzenden Segmente
+gerade, `Aligned` hält die beiden Handles eines Punktes kollinear. Wie beim
+Bezier-Werkzeug von PolyTools ist das Sitzungszustand und gilt für den *nächsten*
+Punkt — es lässt sich also mitten im Zeichnen umschalten und rührt die bereits
+gesetzten Punkte nicht an. `Width` ist die Breite des Korridors um die
+Mittellinie, in Schritten einer Wasserzelle.
+
+Handles folgen dem Zeiger ungerastert. Ein Handle ist eine Kurvensteuerung und
+kein Ort; würde es einrasten, rastete die Form der Kurve mit ein. Ein Zug unter
+einer halben Wasserzelle zählt als Klick — ein `Aligned`-Punkt, den man nur
+anklickt, bekommt seine Handles automatisch aus seinen Nachbarn.
+
+Der erste Punkt ist die Quelle, der letzte die Mündung; mehr sagt das Dokument
+über die Fließrichtung nicht. Die Höhe kommt wie bei allem anderen aus `Height`
+im ContextMenu — für Wasser in world01 also 0.
+
+Der fertige Fluss ist **ein** Bearbeitungsschritt: ein Rückgängig nimmt den
+Fluss zurück, nicht seinen letzten Punkt. `River` + `Eraser` löscht den ganzen
+Body unter dem Zeiger. Einzelne Zellen sind nicht radierbar, weil sie aus der
+Kurve abgeleitet sind.
+
+Ein Scene Template kann kein Wasser tragen; das Werkzeug sagt das beim ersten
+Klick, statt es beim Speichern scheitern zu lassen.
 
 ### Prop:Line
 

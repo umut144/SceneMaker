@@ -227,6 +227,7 @@ public sealed class ToolRiverTests
         Place(interaction, context, 32, 96);
         var single = Preview(workspace, scene, interaction);
         Assert.Single(single.Points);
+        Assert.Single(single.Curve);
         Assert.Empty(single.Cells);
 
         Place(interaction, context, 160, 96);
