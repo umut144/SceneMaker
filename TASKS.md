@@ -133,6 +133,52 @@ the Asset to be able to say so.
 Until then the gap is real and undetected. An author who plants something inside
 a tunnel gets no warning.
 
+## 8. Height analysis and a first-person Layered-3D preview
+
+The height view is currently a continuous colour ramp stretched automatically
+between the lowest and highest Terrain or Prop elevation in the Scene. It is a
+useful overview, but it cannot yet inspect authored height bands or answer
+whether an Actor can move through the resulting space. Water spans are not part
+of the view either.
+
+The intended next form of the height view has three independent capabilities:
+
+- an optional author-selected low/high range, so one outlying mountain does not
+  compress every useful height into one colour;
+- discrete elevation bands and an arbitrary multi-selection of elevations, so
+  chosen floors can be highlighted while the rest of the Scene is muted;
+- a traversal overlay that compares neighbouring floor spans, available
+  headroom and surface compatibility for a selected Actor profile.
+
+For `world01`, authored elevations should eventually snap to a Workspace-owned
+quantum of `0.125 m`. That is half of its ordinary `0.25 m` step capability, so
+two elevation increments make the largest ordinary step. The quantum is a
+Workspace metric, not a SceneMaker constant. Likewise, `0.25 m` is an Actor or
+simulation capability rather than a property of the geometry: another Actor
+may accept a different step. A separate grade tool may later distribute a
+start and end elevation across cells in quantum-sized increments; the height
+view itself should remain inspection rather than silently editing the Scene.
+
+Do not call adjacent flat cell tops a slope without fixing the mesh rule.
+Different cell elevations form terraces and vertical steps. A visually smooth
+ramp requires an explicit derived meshing rule or a separately authored ramp;
+the `0.125 m` quantum alone does not create inclined geometry.
+
+The same analysis should lead to a generated first-person LookDev mode. It is
+DOOM-like in use - enter the authored map, walk it and inspect stairs, tunnels,
+rivers and bridges - but it must not adopt classic DOOM's single-floor/single-
+ceiling limitation. SceneMaker's source remains Layered 3D, never a dense 3D
+voxel grid: remaining solid-span tops make floors, the undersides of higher
+spans make ceilings, span boundaries make walls, water spans make water, and
+cuts make open channels or tunnels. Multiple floors may exist at the same X/Y.
+
+The preview is derived and engine-neutral authoring data stays unchanged. Its
+first useful version can be untextured Godot debug geometry with collision and
+an Actor profile providing step height, body height and compatible surfaces.
+It should expose mistakes the top-down view cannot: insufficient headroom,
+unsupported or unreachable surfaces, an unintended tunnel roof, and whether a
+boat or walker can actually pass beneath a bridge.
+
 ## Done
 
 - One factory per Scene kind, so `CreateInstance` no longer accepts Template
