@@ -69,6 +69,28 @@ against, its stations wrap, and it needs an orientation before anything can be
 said about its inside, so it gets its own entry point rather than flowing
 quietly through code that clamps.
 
+A flattened loop comes back as a ring whose first point is not repeated at the
+end, with the way home carried in its own `TotalLength` rather than in the last
+station. Its orientation is derived from the shoelace area and never applied:
+SceneMaker authors in `scene_local_bottom_left_y_up`, so a positive area is
+counter-clockwise - in a y-down space the same sign would mean the opposite -
+and a consumer that needs a particular winding asks and decides for itself
+rather than having the authored points turned around behind it.
+
+Whether a ring is usable as a contour is a geometric question with a stated
+tolerance, not an algebraic one. Flattened coordinates are ordinary doubles and
+the products inside an orientation determinant are rounded before they are
+subtracted, so `cross == 0` is not a dependable test for collinear and equality
+is not a dependable test for touching. The rule is instead that a contour needs
+three distinct points, an area, non-adjacent edges at least
+`ClosedChainGeometry.SimplicityToleranceAuthoringPixels` apart, and adjacent
+edges that share their common corner and nothing else. A near touch is rejected
+for the same reason a touch is: nothing downstream could tell the two apart. The
+tolerance is a four-thousandth of an authoring pixel - far above the arithmetic
+and far below anything the grid can resolve - and it says only that the test
+decides the same way every time. How thin a contour may usefully be is a
+different question, and it belongs with the rule that fills one.
+
 ## Height is a stack, not a number
 
 A place is not one height. Terrain says how high its solid column reaches;

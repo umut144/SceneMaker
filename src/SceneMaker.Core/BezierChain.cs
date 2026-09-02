@@ -42,6 +42,25 @@ public sealed record FlattenedChain(
     IReadOnlyList<double> AnchorStations);
 
 /// <summary>
+/// A flattened closed chain: a ring of points, where each authored point sits
+/// on it, and how long the whole way round is.
+///
+/// <para>The first point is not repeated at the end. A ring has no last point,
+/// and writing one down invites every consumer to decide for itself whether to
+/// skip it. The way back from <c>Points[^1]</c> to <c>Points[0]</c> is a
+/// segment like any other; it is the reason <see cref="TotalLength"/> exists
+/// separately from the last station, which only reaches the last point.</para>
+///
+/// <para>Derived geometry, never authored. The name says so on purpose: what an
+/// author draws is a document, and this is what flattening made of it.</para>
+/// </summary>
+public sealed record FlattenedClosedChain(
+    IReadOnlyList<ChainPoint> Points,
+    IReadOnlyList<double> Stations,
+    IReadOnlyList<double> AnchorStations,
+    double TotalLength);
+
+/// <summary>
 /// One flattened piece of a chain, and where along the chain it starts.
 ///
 /// <para>It carries no width and no ends. A segment knows how to answer where
@@ -192,6 +211,111 @@ public static class BezierChain
                 chain.Stations[index]));
         }
         return segments;
+    }
+
+    /// <summary>
+    /// Flattens a closed chain: every authored point to the next, and then the
+    /// last one back to the first.
+    ///
+    /// <para>The closing edge is an edge like any other. It runs from the last
+    /// authored point to the first, and it is shaped by the last point's
+    /// outgoing handle and the first point's incoming one - the two handles
+    /// that have nowhere else to point on a ring.</para>
+    ///
+    /// <para>Two authored points are enough: two anchors with handles bulging
+    /// opposite ways make a lens, which is a perfectly good loop. Whether what
+    /// comes out is usable - three distinct points, an area, no self-contact -
+    /// is a question about the flattened ring, and
+    /// <see cref="ClosedChainGeometry.Validate"/> answers it. This throws only
+    /// when there was never a chain to flatten.</para>
+    /// </summary>
+    public static FlattenedClosedChain FlattenClosed(IReadOnlyList<BezierChainPoint> points)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        if (points.Count < 2)
+        {
+            throw new SceneMakerDocumentException(
+                "A closed bezier chain needs at least two points to be flattened.");
+        }
+
+        var first = points[0];
+        List<ChainPoint> polyline = [new ChainPoint(first.X, first.Y)];
+        var anchorIndices = new int[points.Count];
+        for (var index = 0; index < points.Count; index++)
+        {
+            anchorIndices[index] = polyline.Count - 1;
+            var start = points[index];
+            var end = points[(index + 1) % points.Count];
+            var p0 = new ChainPoint(start.X, start.Y);
+            var p1 = new ChainPoint(p0.X + start.HandleOutX, p0.Y + start.HandleOutY);
+            var p3 = new ChainPoint(end.X, end.Y);
+            var p2 = new ChainPoint(p3.X + end.HandleInX, p3.Y + end.HandleInY);
+            Subdivide(p0, p1, p2, p3, 0, polyline);
+        }
+
+        // The closing edge ends where the ring began. Append only ever compares
+        // against the point before it, so that repeat has to be dropped here -
+        // the one place a closed chain does something an open one does not.
+        if (polyline.Count > 1 && DistanceSquared(polyline[^1], polyline[0]) <= 1e-18)
+            polyline.RemoveAt(polyline.Count - 1);
+
+        var stations = new double[polyline.Count];
+        for (var index = 1; index < polyline.Count; index++)
+            stations[index] = stations[index - 1] + Distance(polyline[index - 1], polyline[index]);
+        var totalLength = stations[^1] + Distance(polyline[^1], polyline[0]);
+
+        var anchorStations = new double[points.Count];
+        for (var index = 0; index < points.Count; index++)
+            anchorStations[index] = stations[anchorIndices[index]];
+        return new FlattenedClosedChain(polyline, stations, anchorStations, totalLength);
+    }
+
+    /// <summary>
+    /// The ring as segments - one per point, the last of them the way back to
+    /// the first.
+    /// </summary>
+    public static IReadOnlyList<ChainSegment> Segments(FlattenedClosedChain closed)
+    {
+        ArgumentNullException.ThrowIfNull(closed);
+        var polyline = closed.Points;
+        List<ChainSegment> segments = new(polyline.Count);
+        for (var index = 0; index < polyline.Count; index++)
+        {
+            var start = polyline[index];
+            var end = polyline[(index + 1) % polyline.Count];
+            var deltaX = end.X - start.X;
+            var deltaY = end.Y - start.Y;
+            segments.Add(new ChainSegment(
+                start.X,
+                start.Y,
+                deltaX,
+                deltaY,
+                deltaX * deltaX + deltaY * deltaY,
+                Math.Min(start.Y, end.Y),
+                Math.Max(start.Y, end.Y),
+                closed.Stations[index]));
+        }
+        return segments;
+    }
+
+    /// <summary>
+    /// Brings a station onto the ring: the same place, expressed in
+    /// <c>[0, totalLength)</c>.
+    ///
+    /// <para>This is how a station on a closed chain is normalised, and the only
+    /// way it may be. An open chain clamps at its two ends because a river has a
+    /// source and a mouth; a ring has neither, and running one through code that
+    /// clamps would pin everything past the last authored point onto it instead
+    /// of carrying on round. The total length never comes back - it is the same
+    /// place as zero, and one answer for one place.</para>
+    /// </summary>
+    public static double WrapStation(double station, double totalLength)
+    {
+        if (totalLength <= 0.0) return 0.0;
+        var wrapped = station % totalLength;
+        if (wrapped < 0.0) wrapped += totalLength;
+        // A tiny negative station lands exactly on the length once shifted.
+        return wrapped >= totalLength ? 0.0 : wrapped;
     }
 
     private static void Subdivide(
