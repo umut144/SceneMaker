@@ -35,6 +35,7 @@ public readonly record struct CenterlinePoint(double X, double Y);
 /// </summary>
 public sealed record WaterCenterline(
     IReadOnlyList<CenterlinePoint> Points,
+    IReadOnlyList<double> Stations,
     IReadOnlyList<double> AnchorStations);
 
 /// <summary>The vertical section and width somewhere along a curve.</summary>
@@ -157,7 +158,7 @@ public static class WaterGeometry
         var anchorStations = new double[points.Count];
         for (var index = 0; index < points.Count; index++)
             anchorStations[index] = stations[anchorIndices[index]];
-        return new WaterCenterline(polyline, anchorStations);
+        return new WaterCenterline(polyline, stations, anchorStations);
     }
 
     /// <summary>
@@ -244,8 +245,8 @@ public static class WaterGeometry
             row.Clear();
             foreach (var segment in shape.Segments)
             {
-                if (centreY >= segment.MinY - shape.MaximumHalfWidth
-                    && centreY <= segment.MaxY + shape.MaximumHalfWidth)
+                if (centreY >= segment.MinY - segment.MaximumHalfWidth
+                    && centreY <= segment.MaxY + segment.MaximumHalfWidth)
                 {
                     row.Add(segment);
                 }
@@ -417,9 +418,13 @@ public static class WaterGeometry
         double MinY,
         double MaxY,
         double StartStation,
+        double StartHalfWidth,
+        double EndHalfWidth,
         bool CapsAtStart,
         bool CapsAtEnd)
     {
+        public double MaximumHalfWidth => Math.Max(StartHalfWidth, EndHalfWidth);
+
         /// <summary>Behind the source, on the far side of the line across it.</summary>
         public bool IsBeforeSource(double x, double y) =>
             CapsAtStart && (x - StartX) * DeltaX + (y - StartY) * DeltaY < 0.0;
@@ -434,19 +439,25 @@ public static class WaterGeometry
         /// far away it is. The fraction is what turns a position into a station
         /// on the curve, and with it into a water level.
         /// </summary>
-        public (double DistanceSquared, double Station) NearestTo(double x, double y)
+        public (double DistanceSquared, double Station, double HalfWidth) NearestTo(
+            double x,
+            double y)
         {
             var toPointX = x - StartX;
             var toPointY = y - StartY;
             if (LengthSquared <= 0.0)
-                return (toPointX * toPointX + toPointY * toPointY, StartStation);
+                return (
+                    toPointX * toPointX + toPointY * toPointY,
+                    StartStation,
+                    StartHalfWidth);
             var t = (toPointX * DeltaX + toPointY * DeltaY) / LengthSquared;
             t = t < 0.0 ? 0.0 : t > 1.0 ? 1.0 : t;
             var closestX = toPointX - t * DeltaX;
             var closestY = toPointY - t * DeltaY;
             return (
                 closestX * closestX + closestY * closestY,
-                StartStation + t * Math.Sqrt(LengthSquared));
+                StartStation + t * Math.Sqrt(LengthSquared),
+                StartHalfWidth + t * (EndHalfWidth - StartHalfWidth));
         }
     }
 
@@ -457,9 +468,7 @@ public static class WaterGeometry
     private sealed record CorridorShape
     {
         public required IReadOnlyList<CorridorSegment> Segments { get; init; }
-        public required IReadOnlyList<WaterCurvePointDocument> Points { get; init; }
         public required IReadOnlyList<double> AnchorStations { get; init; }
-        public required double AuthoringPixelsPerMeter { get; init; }
         public required double MaximumHalfWidth { get; init; }
         public required double MinX { get; init; }
         public required double MaxX { get; init; }
@@ -489,6 +498,14 @@ public static class WaterGeometry
                 var deltaX = end.X - start.X;
                 var deltaY = end.Y - start.Y;
                 var lengthSquared = deltaX * deltaX + deltaY * deltaY;
+                var startHalfWidth = WidthAt(
+                    points,
+                    centerline.AnchorStations,
+                    centerline.Stations[index]) * authoringPixelsPerMeter / 2.0;
+                var endHalfWidth = WidthAt(
+                    points,
+                    centerline.AnchorStations,
+                    centerline.Stations[index + 1]) * authoringPixelsPerMeter / 2.0;
                 segments.Add(new CorridorSegment(
                     start.X,
                     start.Y,
@@ -498,6 +515,8 @@ public static class WaterGeometry
                     Math.Min(start.Y, end.Y),
                     Math.Max(start.Y, end.Y),
                     station,
+                    startHalfWidth,
+                    endHalfWidth,
                     CapsAtStart: index == 0,
                     CapsAtEnd: index + 2 == polyline.Count));
                 station += Math.Sqrt(lengthSquared);
@@ -513,9 +532,7 @@ public static class WaterGeometry
             return new CorridorShape
             {
                 Segments = segments,
-                Points = points,
                 AnchorStations = centerline.AnchorStations,
-                AuthoringPixelsPerMeter = authoringPixelsPerMeter,
                 MaximumHalfWidth = maximumHalfWidth,
                 MinX = minX - maximumHalfWidth,
                 MaxX = maxX + maximumHalfWidth,
@@ -546,15 +563,35 @@ public static class WaterGeometry
                 // beyond its own segment would cut the river wherever the curve
                 // happens to pass behind it.
                 if (segment.IsBeforeSource(x, y) || segment.IsBeyondMouth(x, y)) continue;
-                var (distanceSquared, candidate) = segment.NearestTo(x, y);
-                var width = SampleAt(Points, AnchorStations, candidate).WidthMeters;
-                var halfWidth = (double)width * AuthoringPixelsPerMeter / 2.0;
+                var (distanceSquared, candidate, halfWidth) = segment.NearestTo(x, y);
                 var limit = halfWidth * halfWidth;
                 if (distanceSquared > limit || distanceSquared >= best) continue;
                 best = distanceSquared;
                 station = candidate;
             }
             return station;
+        }
+
+        private static double WidthAt(
+            IReadOnlyList<WaterCurvePointDocument> points,
+            IReadOnlyList<double> anchorStations,
+            double station)
+        {
+            if (station <= anchorStations[0]) return (double)points[0].WidthMeters;
+            if (station >= anchorStations[^1]) return (double)points[^1].WidthMeters;
+
+            for (var index = 0; index + 1 < points.Count; index++)
+            {
+                var from = anchorStations[index];
+                var to = anchorStations[index + 1];
+                if (station > to) continue;
+                var span = to - from;
+                var fraction = span <= 0.0 ? 1.0 : (station - from) / span;
+                return (double)points[index].WidthMeters
+                    + ((double)points[index + 1].WidthMeters
+                        - (double)points[index].WidthMeters) * fraction;
+            }
+            return (double)points[^1].WidthMeters;
         }
     }
 }

@@ -403,14 +403,26 @@ public sealed partial class SceneCanvas : Control
         DrawRect(sceneRect, SceneBackground);
 
         var authoredTerrain = _templatePreview is null ? _sceneTerrain : _previewTerrain;
-        DrawTerrain(document, pan, zoom, highlighted: Mode == EditorMode.Terrain);
-        DrawWater(document, pan, zoom, highlighted: Mode == EditorMode.Terrain);
+        var elevationRange = _heatmapEnabled ? ElevationRange(document) : null;
+        DrawTerrain(
+            document,
+            pan,
+            zoom,
+            elevationRange,
+            highlighted: Mode == EditorMode.Terrain);
+        DrawWater(
+            document,
+            pan,
+            zoom,
+            elevationRange,
+            highlighted: Mode == EditorMode.Terrain);
         DrawProps(
             document,
             pan,
             zoom,
             heightAuthoringPixels,
             authoredTerrain,
+            elevationRange,
             highlighted: Mode == EditorMode.Props);
         if (Mode == EditorMode.Props)
             DrawPropToolPreview(pan, zoom, heightAuthoringPixels);
@@ -460,7 +472,7 @@ public sealed partial class SceneCanvas : Control
             highlighted: Mode == EditorMode.Templates);
 
         DrawRect(sceneRect, SceneBorder, filled: false, width: 2.0f);
-        if (_heatmapEnabled) DrawElevationLegend(document);
+        if (elevationRange is { } range) DrawElevationLegend(document, range);
     }
 
     /// <summary>
@@ -468,9 +480,10 @@ public sealed partial class SceneCanvas : Control
     /// own: the ramp it actually uses, with the two heights it is stretched
     /// between. A Scene at one height says so instead of showing a range.
     /// </summary>
-    private void DrawElevationLegend(SceneDocument document)
+    private void DrawElevationLegend(
+        SceneDocument document,
+        (decimal Low, decimal High) range)
     {
-        if (ElevationRange(document) is not { } range) return;
         var font = ThemeDB.FallbackFont;
         const int FontSize = 12;
         const float BarWidth = 176f;
@@ -612,10 +625,10 @@ public sealed partial class SceneCanvas : Control
         SceneDocument document,
         Vector2 pan,
         float zoom,
+        (decimal Low, decimal High)? range,
         bool highlighted)
     {
         var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
-        var range = _heatmapEnabled ? ElevationRange(document) : null;
         foreach (var cell in document.TerrainCells)
         {
             Color color;
@@ -646,12 +659,12 @@ public sealed partial class SceneCanvas : Control
         SceneDocument document,
         Vector2 pan,
         float zoom,
+        (decimal Low, decimal High)? range,
         bool highlighted)
     {
         if (document.WaterBodies.Count == 0) return;
         var cellSize = _metrics!.AuthoringPixelsPerWaterCell * zoom;
         var rows = _metrics.SceneHeightWaterCells(document);
-        var range = _heatmapEnabled ? ElevationRange(document) : null;
         foreach (var overlay in WaterOverlays(document))
         {
             foreach (var cell in overlay.Cells)
@@ -794,10 +807,10 @@ public sealed partial class SceneCanvas : Control
         float zoom,
         int sceneHeightAuthoringPixels,
         IReadOnlySet<TerrainCellCoordinate> authoredTerrain,
+        (decimal Low, decimal High)? range,
         bool highlighted)
     {
         if (_propAssets is null) return;
-        var propRange = _heatmapEnabled ? ElevationRange(document) : null;
         foreach (var prop in document.Props)
         {
             var asset = _propAssets.Resolve(prop.AssetKey);
@@ -810,7 +823,7 @@ public sealed partial class SceneCanvas : Control
                 pan,
                 zoom,
                 sceneHeightAuthoringPixels);
-            var color = propRange is { } propSpan
+            var color = range is { } propSpan
                 ? ElevationColor(prop.ElevationMeters, propSpan)
                 : Color.FromHtml(asset.Color);
             var selected = highlighted && prop.InstanceId == _interaction.SelectedPropInstanceId;
