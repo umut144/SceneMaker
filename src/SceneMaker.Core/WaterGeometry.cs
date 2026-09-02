@@ -17,26 +17,22 @@ public readonly record struct WaterCellSpan(
     decimal CutTopMeters);
 
 /// <summary>
-/// A point on a flattened centerline, in authoring pixels. Sub-pixel on
-/// purpose: the curve runs between authored points, and rounding it to whole
-/// pixels first would put a visible stair into the corridor it produces.
-/// </summary>
-public readonly record struct CenterlinePoint(double X, double Y);
-
-/// <summary>
-/// A flattened centerline together with where the authored points sit on it,
-/// measured in authoring pixels travelled from the source.
+/// A river's flattened centerline together with where its authored points sit
+/// on it.
 ///
-/// <para>That measure - arc length - is what the vertical values are
-/// interpolated over. The obvious alternative, the curve's own parameter, runs
-/// unevenly: long handles make the middle of a segment pass quicker, so the
-/// river's gradient would depend on how the author shaped its bend. Arc length
-/// is what they see.</para>
+/// <para>A <see cref="FlattenedChain"/> under a name that says what it is here.
+/// The chain arithmetic is shared - a mountain outline and a route will want
+/// the same flattening - but a centerline is a river's word for it, and the
+/// callers that read this were written against that word.</para>
 /// </summary>
 public sealed record WaterCenterline(
-    IReadOnlyList<CenterlinePoint> Points,
+    IReadOnlyList<ChainPoint> Points,
     IReadOnlyList<double> Stations,
-    IReadOnlyList<double> AnchorStations);
+    IReadOnlyList<double> AnchorStations)
+{
+    internal static WaterCenterline From(FlattenedChain chain) =>
+        new(chain.Points, chain.Stations, chain.AnchorStations);
+}
 
 /// <summary>
 /// The vertical section somewhere along a curve.
@@ -70,11 +66,12 @@ public readonly record struct WaterProfileSample(
 /// clipped at the source, the disc around the last one at the mouth - so a
 /// river does not begin and end with a half-circle.</para>
 ///
-/// <para>The curve itself is evaluated exactly as the PolyTools Bezier tool
-/// evaluates its chains, so a river drawn here has the shape the author drew
-/// there. The vertical values are interpolated linearly over arc length, which
-/// is the one rule that cannot make a river run uphill between two points that
-/// both fall.</para>
+/// <para>The curve itself is flattened and measured by
+/// <see cref="BezierChain"/>, which knows nothing about water. What stays here
+/// is what only a river means: the width along it, the two end caps, and the
+/// vertical section. The vertical values are interpolated linearly over arc
+/// length, which is the one rule that cannot make a river run uphill between
+/// two points that both fall.</para>
 ///
 /// <para>Everything is derived. Nothing in this file is stored, which is why an
 /// authored river stays reshapeable and why no consumer has to agree with a
@@ -83,12 +80,12 @@ public readonly record struct WaterProfileSample(
 public static class WaterGeometry
 {
     /// <summary>
-    /// How far the flattened polyline may deviate from the true curve, in
-    /// authoring pixels. A quarter of a 16-pixel water cell: fine enough that
-    /// the flattening never decides a cell, coarse enough that a straight
-    /// stretch stays one segment.
+    /// How far the flattened centerline may deviate from the true curve, in
+    /// authoring pixels. The chain's tolerance, under the name rivers have
+    /// always asked for it by.
     /// </summary>
-    public const double FlattenToleranceAuthoringPixels = 4.0;
+    public const double FlattenToleranceAuthoringPixels =
+        BezierChain.FlattenToleranceAuthoringPixels;
 
     /// <summary>
     /// Heights are rounded to the millimetre. Interpolation is done in
@@ -97,14 +94,11 @@ public static class WaterGeometry
     /// </summary>
     public const int HeightDecimals = 3;
 
-    private const int MaximumSubdivisionDepth = 12;
-
     /// <summary>
     /// The body's centerline as a polyline in authoring pixels, from source to
-    /// mouth. Consecutive duplicates are dropped, so every segment has a
-    /// direction.
+    /// mouth.
     /// </summary>
-    public static IReadOnlyList<CenterlinePoint> Centerline(WaterBodyDocument body)
+    public static IReadOnlyList<ChainPoint> Centerline(WaterBodyDocument body)
     {
         ArgumentNullException.ThrowIfNull(body);
         return Centerline(body.Points);
@@ -115,57 +109,15 @@ public static class WaterGeometry
     /// tool previews what it is about to author with the code that will author
     /// it, so the preview cannot promise a shape the export then disagrees with.
     /// </summary>
-    public static IReadOnlyList<CenterlinePoint> Centerline(
-        IReadOnlyList<WaterCurvePointDocument> points) => Flatten(points).Points;
+    public static IReadOnlyList<ChainPoint> Centerline(
+        IReadOnlyList<WaterCurvePointDocument> points) => FlattenChain(points).Points;
 
     /// <summary>
     /// The centerline together with the arc length at which each authored point
     /// sits on it.
     /// </summary>
-    public static WaterCenterline Flatten(IReadOnlyList<WaterCurvePointDocument> points)
-    {
-        ArgumentNullException.ThrowIfNull(points);
-        if (points.Count < 2)
-        {
-            throw new SceneMakerDocumentException(
-                "A water curve needs at least two points to have a centerline.");
-        }
-
-        var first = points[0];
-        List<CenterlinePoint> polyline =
-            [new CenterlinePoint(first.PositionAuthoringPx.X, first.PositionAuthoringPx.Y)];
-        var anchorIndices = new int[points.Count];
-        for (var index = 0; index + 1 < points.Count; index++)
-        {
-            anchorIndices[index] = polyline.Count - 1;
-            var start = points[index];
-            var end = points[index + 1];
-            var p0 = new CenterlinePoint(start.PositionAuthoringPx.X, start.PositionAuthoringPx.Y);
-            var p1 = new CenterlinePoint(
-                p0.X + start.HandleOutAuthoringPx.X,
-                p0.Y + start.HandleOutAuthoringPx.Y);
-            var p3 = new CenterlinePoint(end.PositionAuthoringPx.X, end.PositionAuthoringPx.Y);
-            var p2 = new CenterlinePoint(
-                p3.X + end.HandleInAuthoringPx.X,
-                p3.Y + end.HandleInAuthoringPx.Y);
-            Subdivide(p0, p1, p2, p3, 0, polyline);
-        }
-        anchorIndices[^1] = polyline.Count - 1;
-        if (polyline.Count < 2)
-        {
-            throw new SceneMakerDocumentException(
-                "A water curve that collapses to a single point has no centerline.");
-        }
-
-        var stations = new double[polyline.Count];
-        for (var index = 1; index < polyline.Count; index++)
-            stations[index] = stations[index - 1] + Distance(polyline[index - 1], polyline[index]);
-
-        var anchorStations = new double[points.Count];
-        for (var index = 0; index < points.Count; index++)
-            anchorStations[index] = stations[anchorIndices[index]];
-        return new WaterCenterline(polyline, stations, anchorStations);
-    }
+    public static WaterCenterline Flatten(IReadOnlyList<WaterCurvePointDocument> points) =>
+        WaterCenterline.From(FlattenChain(points));
 
     /// <summary>
     /// The three values at one station, linear between the two authored points
@@ -308,6 +260,45 @@ public static class WaterGeometry
             .ToList();
     }
 
+    /// <summary>
+    /// A river's curve as a plain Bezier chain. The one place a water document
+    /// becomes geometry, so that nothing below here has to know what a river
+    /// is - and so that a mountain outline can arrive through its own converter
+    /// rather than through this one.
+    /// </summary>
+    private static BezierChainPoint[] ToChain(IReadOnlyList<WaterCurvePointDocument> points)
+    {
+        var chain = new BezierChainPoint[points.Count];
+        for (var index = 0; index < points.Count; index++)
+        {
+            var point = points[index];
+            chain[index] = new BezierChainPoint(
+                point.PositionAuthoringPx.X,
+                point.PositionAuthoringPx.Y,
+                point.HandleInAuthoringPx.X,
+                point.HandleInAuthoringPx.Y,
+                point.HandleOutAuthoringPx.X,
+                point.HandleOutAuthoringPx.Y);
+        }
+        return chain;
+    }
+
+    /// <summary>
+    /// Flattens a river's curve. The count is checked here rather than left to
+    /// the chain, so that an author who has placed one point is told about a
+    /// river rather than about a chain.
+    /// </summary>
+    private static FlattenedChain FlattenChain(IReadOnlyList<WaterCurvePointDocument> points)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        if (points.Count < 2)
+        {
+            throw new SceneMakerDocumentException(
+                "A water curve needs at least two points to have a centerline.");
+        }
+        return BezierChain.FlattenOpen(ToChain(points));
+    }
+
     private static WaterProfileSample Sample(WaterCurvePointDocument point) => new(
         point.ElevationMeters,
         point.ChannelDepthMeters,
@@ -328,73 +319,6 @@ public static class WaterGeometry
         return decimal.Round((decimal)value, HeightDecimals, MidpointRounding.AwayFromZero);
     }
 
-    private static void Subdivide(
-        CenterlinePoint p0,
-        CenterlinePoint p1,
-        CenterlinePoint p2,
-        CenterlinePoint p3,
-        int depth,
-        List<CenterlinePoint> output)
-    {
-        if (depth >= MaximumSubdivisionDepth || IsFlat(p0, p1, p2, p3))
-        {
-            Append(output, p3);
-            return;
-        }
-
-        var p01 = Midpoint(p0, p1);
-        var p12 = Midpoint(p1, p2);
-        var p23 = Midpoint(p2, p3);
-        var p012 = Midpoint(p01, p12);
-        var p123 = Midpoint(p12, p23);
-        var middle = Midpoint(p012, p123);
-        Subdivide(p0, p01, p012, middle, depth + 1, output);
-        Subdivide(middle, p123, p23, p3, depth + 1, output);
-    }
-
-    private static bool IsFlat(
-        CenterlinePoint p0,
-        CenterlinePoint p1,
-        CenterlinePoint p2,
-        CenterlinePoint p3)
-    {
-        var chordX = p3.X - p0.X;
-        var chordY = p3.Y - p0.Y;
-        var chordLengthSquared = chordX * chordX + chordY * chordY;
-        var tolerance = FlattenToleranceAuthoringPixels;
-        if (chordLengthSquared <= 1e-12)
-        {
-            // A loop back onto the same point has no chord to measure against,
-            // so the handles themselves decide whether anything happens here.
-            return DistanceSquared(p0, p1) <= tolerance * tolerance
-                && DistanceSquared(p0, p2) <= tolerance * tolerance;
-        }
-        var first = Math.Abs((p1.X - p0.X) * chordY - (p1.Y - p0.Y) * chordX);
-        var second = Math.Abs((p2.X - p0.X) * chordY - (p2.Y - p0.Y) * chordX);
-        var deviation = first + second;
-        return deviation * deviation <= tolerance * tolerance * chordLengthSquared;
-    }
-
-    private static void Append(List<CenterlinePoint> output, CenterlinePoint point)
-    {
-        var last = output[^1];
-        if (DistanceSquared(last, point) <= 1e-18) return;
-        output.Add(point);
-    }
-
-    private static CenterlinePoint Midpoint(CenterlinePoint a, CenterlinePoint b) =>
-        new((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0);
-
-    private static double DistanceSquared(CenterlinePoint a, CenterlinePoint b)
-    {
-        var dx = a.X - b.X;
-        var dy = a.Y - b.Y;
-        return dx * dx + dy * dy;
-    }
-
-    private static double Distance(CenterlinePoint a, CenterlinePoint b) =>
-        Math.Sqrt(DistanceSquared(a, b));
-
     internal static int FloorDivide(int value, int divisor)
     {
         var quotient = value / divisor;
@@ -403,8 +327,8 @@ public static class WaterGeometry
     }
 
     /// <summary>
-    /// One flattened piece of the centerline, with the end caps it carries and
-    /// where it starts along the curve.
+    /// One flattened piece of the centerline, with the width the corridor has
+    /// along it and the end caps it carries.
     ///
     /// <para>The caps belong to the two outermost segments rather than to the
     /// corridor as a whole. Clipping the whole corridor by the plane at the
@@ -414,54 +338,40 @@ public static class WaterGeometry
     /// A cap trims the disc around its own segment and nothing else.</para>
     /// </summary>
     private readonly record struct CorridorSegment(
-        double StartX,
-        double StartY,
-        double DeltaX,
-        double DeltaY,
-        double LengthSquared,
-        double MinY,
-        double MaxY,
-        double StartStation,
+        ChainSegment Chain,
         double StartHalfWidth,
         double EndHalfWidth,
         bool CapsAtStart,
         bool CapsAtEnd)
     {
+        public double MinY => Chain.MinY;
+        public double MaxY => Chain.MaxY;
         public double MaximumHalfWidth => Math.Max(StartHalfWidth, EndHalfWidth);
 
         /// <summary>Behind the source, on the far side of the line across it.</summary>
         public bool IsBeforeSource(double x, double y) =>
-            CapsAtStart && (x - StartX) * DeltaX + (y - StartY) * DeltaY < 0.0;
+            CapsAtStart
+            && (x - Chain.StartX) * Chain.DeltaX + (y - Chain.StartY) * Chain.DeltaY < 0.0;
 
         /// <summary>Past the mouth, on the far side of the line across it.</summary>
         public bool IsBeyondMouth(double x, double y) =>
             CapsAtEnd
-            && (x - (StartX + DeltaX)) * DeltaX + (y - (StartY + DeltaY)) * DeltaY > 0.0;
+            && (x - (Chain.StartX + Chain.DeltaX)) * Chain.DeltaX
+                + (y - (Chain.StartY + Chain.DeltaY)) * Chain.DeltaY > 0.0;
 
         /// <summary>
-        /// How far along this segment the nearest point to (x, y) lies, and how
-        /// far away it is. The fraction is what turns a position into a station
-        /// on the curve, and with it into a water level.
+        /// How far along this segment the nearest point to (x, y) lies, how far
+        /// away it is, and how wide the corridor is there. The station is what
+        /// turns a position into a place on the curve, and with it into a water
+        /// level; the half width is interpolated over the very fraction the
+        /// projection produced, so the two can never describe different points.
         /// </summary>
         public (double DistanceSquared, double Station, double HalfWidth) NearestTo(
             double x,
             double y)
         {
-            var toPointX = x - StartX;
-            var toPointY = y - StartY;
-            if (LengthSquared <= 0.0)
-                return (
-                    toPointX * toPointX + toPointY * toPointY,
-                    StartStation,
-                    StartHalfWidth);
-            var t = (toPointX * DeltaX + toPointY * DeltaY) / LengthSquared;
-            t = t < 0.0 ? 0.0 : t > 1.0 ? 1.0 : t;
-            var closestX = toPointX - t * DeltaX;
-            var closestY = toPointY - t * DeltaY;
-            return (
-                closestX * closestX + closestY * closestY,
-                StartStation + t * Math.Sqrt(LengthSquared),
-                StartHalfWidth + t * (EndHalfWidth - StartHalfWidth));
+            var (distanceSquared, t, station) = Chain.ProjectTo(x, y);
+            return (distanceSquared, station, StartHalfWidth + t * (EndHalfWidth - StartHalfWidth));
         }
     }
 
@@ -483,24 +393,20 @@ public static class WaterGeometry
             WorkspaceMetrics metrics,
             IReadOnlyList<WaterCurvePointDocument> points)
         {
-            var centerline = Flatten(points);
+            var centerline = FlattenChain(points);
             var polyline = centerline.Points;
             var authoringPixelsPerMeter = (double)metrics.AuthoringPixelsPerMeter;
             var maximumHalfWidth = points.Max(static point => (double)point.WidthMeters)
                 * authoringPixelsPerMeter / 2.0;
 
-            List<CorridorSegment> segments = new(polyline.Count - 1);
+            var chainSegments = BezierChain.Segments(centerline);
+            List<CorridorSegment> segments = new(chainSegments.Count);
             var minX = double.MaxValue;
             var maxX = double.MinValue;
             var minY = double.MaxValue;
             var maxY = double.MinValue;
-            for (var index = 0; index + 1 < polyline.Count; index++)
+            for (var index = 0; index < chainSegments.Count; index++)
             {
-                var start = polyline[index];
-                var end = polyline[index + 1];
-                var deltaX = end.X - start.X;
-                var deltaY = end.Y - start.Y;
-                var lengthSquared = deltaX * deltaX + deltaY * deltaY;
                 var startHalfWidth = WidthAt(
                     points,
                     centerline.AnchorStations,
@@ -510,14 +416,7 @@ public static class WaterGeometry
                     centerline.AnchorStations,
                     centerline.Stations[index + 1]) * authoringPixelsPerMeter / 2.0;
                 segments.Add(new CorridorSegment(
-                    start.X,
-                    start.Y,
-                    deltaX,
-                    deltaY,
-                    lengthSquared,
-                    Math.Min(start.Y, end.Y),
-                    Math.Max(start.Y, end.Y),
-                    centerline.Stations[index],
+                    chainSegments[index],
                     startHalfWidth,
                     endHalfWidth,
                     CapsAtStart: index == 0,

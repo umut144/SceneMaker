@@ -55,6 +55,20 @@ a river starts and ends straight across instead of bulging into a half-circle.
 Width belongs to each curve point and is interpolated linearly over centerline
 arc length, so one river can widen or narrow without being split into bodies.
 
+The curve arithmetic underneath is not water's own. Flattening a cubic Bezier
+chain, measuring arc length along it and projecting a position onto one of its
+segments live in `BezierChain`, which knows nothing about rivers; a mountain
+outline and a route flatten the same way. What stays in `WaterGeometry` is what
+only a river means: the width along the corridor, the two end caps, and the
+vertical section. Each authored kind keeps its own document record and converts
+into the shared chain - one shared record instead would force every kind to
+carry the others' fields and tie schemas together that have no reason to change
+at the same time. `BezierChain` flattens open chains only. A closed loop is not
+the same thing with its ends joined: it has no first and last point to clamp
+against, its stations wrap, and it needs an orientation before anything can be
+said about its inside, so it gets its own entry point rather than flowing
+quietly through code that clamps.
+
 ## Height is a stack, not a number
 
 A place is not one height. Terrain says how high its solid column reaches;
