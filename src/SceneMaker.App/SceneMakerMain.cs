@@ -143,14 +143,7 @@ public sealed partial class SceneMakerMain : Control
                 UndoEdit();
                 break;
             case Key.S:
-                _autosaveTimer.Stop();
-                var save = _controller.SaveScene();
-                UpdateDocumentState();
-                SetStatus(!save.Succeeded
-                    ? save.Message
-                    : _controller.Document is { } saved
-                        ? $"Saved Scene '{saved.SceneId}'."
-                        : "No Scene to save.");
+                SaveSceneNow();
                 break;
             default:
                 return;
@@ -1559,6 +1552,33 @@ public sealed partial class SceneMakerMain : Control
     /// ago. Reaching past the draft into the history would undo the wrong thing
     /// and leave the half-drawn river standing.
     /// </summary>
+    /// <summary>
+    /// Writes the Scene and says what happened. A Scene with nothing to write
+    /// is told apart from one that was written: reporting a save either way
+    /// reads as confirmation that whatever the author just drew is on disk,
+    /// which is exactly what it is not.
+    /// </summary>
+    private void SaveSceneNow()
+    {
+        _autosaveTimer.Stop();
+        var hadChanges = _controller.IsDirty == true;
+        var save = _controller.SaveScene();
+        UpdateDocumentState();
+        if (!save.Succeeded)
+        {
+            SetStatus(save.Message);
+            return;
+        }
+        if (_controller.Document is not { } scene)
+        {
+            SetStatus("No Scene to save.");
+            return;
+        }
+        SetStatus(hadChanges
+            ? $"Saved Scene '{scene.SceneId}'."
+            : $"Scene '{scene.SceneId}' has no unsaved change.");
+    }
+
     private void UndoEdit()
     {
         if (_interaction.UndoDraftStep() is { } stepped)
