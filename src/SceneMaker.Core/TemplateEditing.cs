@@ -4,15 +4,8 @@ public static class TemplateEditing
 {
     public const int AnchorVisualSizeAuthoringPixels = 32;
 
-    public static int SnapToWorldGrid(int coordinate, int authoringPixelsPerTerrainCell)
-    {
-        if (authoringPixelsPerTerrainCell <= 0)
-            throw new ArgumentOutOfRangeException(nameof(authoringPixelsPerTerrainCell));
-        var step = authoringPixelsPerTerrainCell;
-        return checked((int)Math.Round(
-            (decimal)coordinate / step,
-            MidpointRounding.AwayFromZero) * step);
-    }
+    public static int SnapToWorldGrid(int coordinate, int authoringPixelsPerTerrainCell) =>
+        WorkspaceMetrics.SnapToGrid(coordinate, authoringPixelsPerTerrainCell);
 
     public static SceneDocument PlaceAnchor(
         SceneDocument scene,

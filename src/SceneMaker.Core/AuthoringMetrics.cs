@@ -53,6 +53,27 @@ public sealed class WorkspaceMetrics
     public int SceneHeightAuthoringPixels(SceneDocument scene) =>
         checked(scene.SizeCells.Height * AuthoringPixelsPerTerrainCell);
 
+    /// <summary>The nearest position on the Terrain grid.</summary>
+    public int SnapToTerrainGrid(int authoringPixels) =>
+        SnapToGrid(authoringPixels, AuthoringPixelsPerTerrainCell);
+
+    /// <summary>The nearest position on the finer water grid.</summary>
+    public int SnapToWaterGrid(int authoringPixels) =>
+        SnapToGrid(authoringPixels, AuthoringPixelsPerWaterCell);
+
+    /// <summary>
+    /// Rounds an authoring-pixel coordinate to a grid of <paramref name="step"/>
+    /// pixels. Half a step rounds away from zero, so a position exactly between
+    /// two grid lines always lands on the same one.
+    /// </summary>
+    public static int SnapToGrid(int coordinate, int step)
+    {
+        if (step <= 0) throw new ArgumentOutOfRangeException(nameof(step));
+        return checked((int)Math.Round(
+            (decimal)coordinate / step,
+            MidpointRounding.AwayFromZero) * step);
+    }
+
     public int SceneWidthWaterCells(SceneDocument scene) =>
         checked(scene.SizeCells.Width * WaterCellsPerTerrainCell);
 

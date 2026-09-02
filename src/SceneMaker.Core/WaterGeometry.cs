@@ -52,19 +52,31 @@ public static class WaterGeometry
     public static IReadOnlyList<CenterlinePoint> Centerline(WaterBodyDocument body)
     {
         ArgumentNullException.ThrowIfNull(body);
-        if (body.Points.Count < 2)
+        return Centerline(body.Points);
+    }
+
+    /// <summary>
+    /// The same, for a curve that is not a body yet - the one being drawn. The
+    /// tool previews what it is about to author with the code that will author
+    /// it, so the preview cannot promise a shape the export then disagrees with.
+    /// </summary>
+    public static IReadOnlyList<CenterlinePoint> Centerline(
+        IReadOnlyList<WaterCurvePointDocument> points)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        if (points.Count < 2)
         {
             throw new SceneMakerDocumentException(
-                $"Water body '{body.WaterBodyId}' needs at least two points to have a centerline.");
+                "A water curve needs at least two points to have a centerline.");
         }
 
-        var first = body.Points[0];
+        var first = points[0];
         List<CenterlinePoint> polyline =
             [new CenterlinePoint(first.PositionAuthoringPx.X, first.PositionAuthoringPx.Y)];
-        for (var index = 0; index + 1 < body.Points.Count; index++)
+        for (var index = 0; index + 1 < points.Count; index++)
         {
-            var start = body.Points[index];
-            var end = body.Points[index + 1];
+            var start = points[index];
+            var end = points[index + 1];
             var p0 = new CenterlinePoint(start.PositionAuthoringPx.X, start.PositionAuthoringPx.Y);
             var p1 = new CenterlinePoint(
                 p0.X + start.HandleOutAuthoringPx.X,
@@ -78,7 +90,7 @@ public static class WaterGeometry
         if (polyline.Count < 2)
         {
             throw new SceneMakerDocumentException(
-                $"Water body '{body.WaterBodyId}' collapses to a single point and has no centerline.");
+                "A water curve that collapses to a single point has no centerline.");
         }
         return polyline;
     }
@@ -93,11 +105,22 @@ public static class WaterGeometry
         WorkspaceMetrics metrics,
         WaterBodyDocument body)
     {
+        ArgumentNullException.ThrowIfNull(body);
+        return Corridor(scene, metrics, body.Points, body.WidthMeters);
+    }
+
+    /// <summary>The corridor of a curve that is not a body yet.</summary>
+    public static IReadOnlyList<WaterCellCoordinate> Corridor(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        IReadOnlyList<WaterCurvePointDocument> points,
+        decimal widthMeters)
+    {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
-        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(points);
 
-        var shape = CorridorShape.For(metrics, body);
+        var shape = CorridorShape.For(metrics, points, widthMeters);
         var step = metrics.AuthoringPixelsPerWaterCell;
         var sceneWidth = metrics.SceneWidthWaterCells(scene);
         var sceneHeight = metrics.SceneHeightWaterCells(scene);
@@ -150,7 +173,7 @@ public static class WaterGeometry
     {
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(body);
-        var shape = CorridorShape.For(metrics, body);
+        var shape = CorridorShape.For(metrics, body.Points, body.WidthMeters);
         return shape.Contains(authoringX, authoringY, shape.Segments);
     }
 
@@ -290,10 +313,13 @@ public static class WaterGeometry
         public required double EndDirectionX { get; init; }
         public required double EndDirectionY { get; init; }
 
-        public static CorridorShape For(WorkspaceMetrics metrics, WaterBodyDocument body)
+        public static CorridorShape For(
+            WorkspaceMetrics metrics,
+            IReadOnlyList<WaterCurvePointDocument> points,
+            decimal widthMeters)
         {
-            var polyline = Centerline(body);
-            var halfWidth = (double)(body.WidthMeters * metrics.AuthoringPixelsPerMeter) / 2.0;
+            var polyline = Centerline(points);
+            var halfWidth = (double)(widthMeters * metrics.AuthoringPixelsPerMeter) / 2.0;
 
             List<CorridorSegment> segments = new(polyline.Count - 1);
             var minX = double.MaxValue;

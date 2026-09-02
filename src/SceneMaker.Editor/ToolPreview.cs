@@ -24,6 +24,20 @@ public sealed record PropPreview(
     PropPreviewKind Kind,
     string? Explanation);
 
+/// <summary>
+/// The river being drawn: the points placed so far including the one still
+/// being placed, the curve they describe, and the cells that curve would cover.
+/// The last two are empty until there are two points, because one point is not
+/// yet a curve.
+/// </summary>
+public sealed record WaterDraftPreview(
+    IReadOnlyList<WaterDraftPoint> Points,
+    IReadOnlyList<CenterlinePoint> Centerline,
+    IReadOnlyList<WaterCellCoordinate> Cells)
+{
+    public static WaterDraftPreview Empty { get; } = new([], [], []);
+}
+
 public sealed record TerrainPreview(
     IReadOnlyList<TerrainCellCoordinate> Cells,
     bool Erasing)
@@ -119,6 +133,42 @@ public static class ToolPreviewBuilder
                 validation.Reason ?? validation.Warning));
         }
         return previews;
+    }
+
+    /// <summary>
+    /// What the river being drawn would author. It resolves the handles and
+    /// rasterizes with the same Core code the edit itself uses, so the corridor
+    /// the author sees is the corridor they get.
+    /// </summary>
+    public static WaterDraftPreview BuildWaterDraft(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        EditorTool tool,
+        IReadOnlyList<WaterDraftPoint> draft,
+        WaterDraftPoint? pending,
+        decimal widthMeters)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentNullException.ThrowIfNull(draft);
+        if (tool != EditorTool.River) return WaterDraftPreview.Empty;
+
+        List<WaterDraftPoint> points = [.. draft];
+        // The pending point can still be sitting on the previous one for as
+        // long as the pointer has not moved off it, and a curve with no length
+        // has no centerline.
+        if (pending is { } value
+            && (points.Count == 0 || points[^1].X != value.X || points[^1].Y != value.Y))
+        {
+            points.Add(value);
+        }
+        if (points.Count < 2) return new WaterDraftPreview(points, [], []);
+
+        var curve = WaterEditing.ResolveCurve(points);
+        return new WaterDraftPreview(
+            points,
+            WaterGeometry.Centerline(curve),
+            WaterGeometry.Corridor(scene, metrics, curve, widthMeters));
     }
 
     public static int CountOf(IReadOnlyList<PropPreview> previews, PropPreviewKind kind)

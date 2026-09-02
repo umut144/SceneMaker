@@ -3,6 +3,19 @@ using System.Globalization;
 namespace SceneMaker.Core;
 
 /// <summary>
+/// One point of a curve while it is being drawn: where it sits, how its handles
+/// are meant to behave, and the handle the author actually pulled out of it, if
+/// any. A point placed with a plain click has none, which is what lets
+/// <see cref="WaterEditing.ResolveCurve"/> tell "no handle wanted" apart from
+/// "a handle of zero length".
+/// </summary>
+public readonly record struct WaterDraftPoint(
+    int X,
+    int Y,
+    WaterPointMode Mode,
+    AuthoringPixelOffset? DraggedHandleOut = null);
+
+/// <summary>
 /// Water editing over the canonically ordered body list. Like the other editing
 /// operations these are pure <c>SceneDocument -&gt; SceneDocument</c> functions
 /// that assume a canonical document and produce one; validation runs at the IO
@@ -121,6 +134,113 @@ public static class WaterEditing
         HandleOutAuthoringPx = mode == WaterPointMode.Linear
             ? AuthoringPixelOffset.Zero
             : handleOut ?? AuthoringPixelOffset.Zero,
+    };
+
+    /// <summary>
+    /// Turns a drawn curve into stored points. Two things happen here, both of
+    /// them copied from the PolyTools Bezier tool so that a curve drawn in
+    /// SceneMaker behaves the way the same gestures behave there.
+    ///
+    /// <para>A handle the author pulled out is kept, but oriented along the
+    /// direction the curve is travelling: dragging backwards past the previous
+    /// point would otherwise put a cusp where the author drew a bend. Its
+    /// mirror becomes the incoming handle, so the curve passes through the
+    /// point without a kink.</para>
+    ///
+    /// <para>An aligned point the author only clicked has no handle of its own,
+    /// and gets one from its neighbours: a tangent along the line between them,
+    /// a third of the distance to each. That is what makes clicking through a
+    /// river produce a curve rather than a polygon. A linear point keeps none of
+    /// this - it is exactly the absence of handles.</para>
+    /// </summary>
+    public static IReadOnlyList<WaterCurvePointDocument> ResolveCurve(
+        IReadOnlyList<WaterDraftPoint> draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        List<WaterCurvePointDocument> points = new(draft.Count);
+        for (var index = 0; index < draft.Count; index++)
+        {
+            var current = draft[index];
+            if (current.Mode == WaterPointMode.Linear)
+            {
+                points.Add(Point(current.X, current.Y, WaterPointMode.Linear));
+                continue;
+            }
+
+            WaterDraftPoint? previous = index > 0 ? draft[index - 1] : null;
+            WaterDraftPoint? next = index + 1 < draft.Count ? draft[index + 1] : null;
+            var (handleIn, handleOut) = current.DraggedHandleOut is { } dragged
+                ? Mirrored(Orient(dragged, current, previous))
+                : Automatic(current, previous, next);
+            points.Add(Point(current.X, current.Y, WaterPointMode.Aligned, handleIn, handleOut));
+        }
+        return points;
+    }
+
+    /// <summary>
+    /// The drawn handle, flipped if it points back the way the curve came from.
+    /// </summary>
+    private static AuthoringPixelOffset Orient(
+        AuthoringPixelOffset handleOut,
+        WaterDraftPoint current,
+        WaterDraftPoint? previous)
+    {
+        if (previous is not { } from) return handleOut;
+        var travelX = current.X - from.X;
+        var travelY = current.Y - from.Y;
+        return handleOut.X * travelX + handleOut.Y * travelY < 0
+            ? new AuthoringPixelOffset { X = -handleOut.X, Y = -handleOut.Y }
+            : handleOut;
+    }
+
+    private static (AuthoringPixelOffset In, AuthoringPixelOffset Out) Mirrored(
+        AuthoringPixelOffset handleOut) =>
+        (new AuthoringPixelOffset { X = -handleOut.X, Y = -handleOut.Y }, handleOut);
+
+    private static (AuthoringPixelOffset In, AuthoringPixelOffset Out) Automatic(
+        WaterDraftPoint current,
+        WaterDraftPoint? previous,
+        WaterDraftPoint? next)
+    {
+        // An end of the curve has one neighbour and therefore one handle: a
+        // third of the way towards it, which is the cubic that draws a straight
+        // line and bends only once the other end says so.
+        if (previous is not { } from)
+        {
+            return next is { } onlyNext
+                ? (AuthoringPixelOffset.Zero, Third(current, onlyNext))
+                : (AuthoringPixelOffset.Zero, AuthoringPixelOffset.Zero);
+        }
+        if (next is not { } to) return (Third(current, from), AuthoringPixelOffset.Zero);
+
+        var tangentX = (double)(to.X - from.X);
+        var tangentY = (double)(to.Y - from.Y);
+        var tangentLength = Math.Sqrt(tangentX * tangentX + tangentY * tangentY);
+        if (tangentLength <= 0.0) return (Third(current, from), Third(current, to));
+
+        var directionX = tangentX / tangentLength;
+        var directionY = tangentY / tangentLength;
+        var incoming = Distance(current, from) / 3.0;
+        var outgoing = Distance(current, to) / 3.0;
+        return (
+            Offset(-directionX * incoming, -directionY * incoming),
+            Offset(directionX * outgoing, directionY * outgoing));
+    }
+
+    private static AuthoringPixelOffset Third(WaterDraftPoint from, WaterDraftPoint to) =>
+        Offset((to.X - from.X) / 3.0, (to.Y - from.Y) / 3.0);
+
+    private static double Distance(WaterDraftPoint from, WaterDraftPoint to)
+    {
+        var deltaX = (double)(to.X - from.X);
+        var deltaY = (double)(to.Y - from.Y);
+        return Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
+    }
+
+    private static AuthoringPixelOffset Offset(double x, double y) => new()
+    {
+        X = (int)Math.Round(x, MidpointRounding.AwayFromZero),
+        Y = (int)Math.Round(y, MidpointRounding.AwayFromZero),
     };
 
     private static string NextWaterBodyId(SceneDocument scene, WaterKind kind)

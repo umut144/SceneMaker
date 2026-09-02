@@ -25,6 +25,8 @@ public sealed class ToolInteraction
     private TerrainCellCoordinate? _terrainLineStart;
     private TerrainCellCoordinate? _terrainLineEnd;
     private bool _terrainLineDragging;
+    private readonly List<WaterDraftPoint> _riverDraft = [];
+    private WaterDraftPoint? _riverPending;
     private string? _draggedAnchorId;
     private AuthoringPoint? _draggedAnchorPosition;
 
@@ -45,6 +47,15 @@ public sealed class ToolInteraction
 
     /// <summary>Set only while a Terrain line is actually being dragged.</summary>
     public TerrainCellCoordinate? TerrainLineStart => _terrainLineDragging ? _terrainLineStart : null;
+
+    /// <summary>The curve points placed so far, source first.</summary>
+    public IReadOnlyList<WaterDraftPoint> RiverDraft => _riverDraft;
+
+    /// <summary>
+    /// The point being placed right now: fixed by pressing, still gathering its
+    /// handle until the button is released.
+    /// </summary>
+    public WaterDraftPoint? RiverPendingPoint => _riverPending;
 
     public string? DraggedAnchorId => _draggedAnchorId;
     public AuthoringPoint? DraggedAnchorPosition => _draggedAnchorPosition;
@@ -129,7 +140,7 @@ public sealed class ToolInteraction
         PointerMoved(authoring, cell);
         return Mode switch
         {
-            EditorMode.Terrain => TerrainPressed(context, cell),
+            EditorMode.Terrain => TerrainPressed(context, authoring, cell),
             EditorMode.Props => PropPressed(context, authoring),
             EditorMode.Templates => TemplatePressed(context, authoring),
             _ => ToolOutcome.Idle.Instance,
@@ -156,6 +167,8 @@ public sealed class ToolInteraction
                 return PaintTerrainCell(context, cell, TerrainPaintStroke);
             case EditorMode.Terrain when ActiveTool == EditorTool.Fill && EraserEnabled:
                 return EraseTerrainRegion(cell, TerrainRegionEraseStroke);
+            case EditorMode.Terrain when ActiveTool == EditorTool.River && _riverPending is not null:
+                return DragRiverHandle(context, authoring);
             case EditorMode.Props when ActiveTool == EditorTool.Pencil && EraserEnabled:
                 return EraseProp(context, authoring, PropEraseStroke);
             case EditorMode.Templates when ActiveTool == EditorTool.AnchorMove
@@ -180,6 +193,8 @@ public sealed class ToolInteraction
             return EraserEnabled ? EraseTerrainLine(start, end) : PaintTerrainLine(context, start, end);
         }
 
+        if (_riverPending is not null) return CommitRiverPoint();
+
         if (_draggedAnchorId is { } anchorId && _draggedAnchorPosition is { } position)
         {
             ClearAnchorDrag();
@@ -191,6 +206,8 @@ public sealed class ToolInteraction
     public ToolOutcome KeyPressed(ToolContext context, ToolKey key)
     {
         ArgumentNullException.ThrowIfNull(context);
+        if (Mode == EditorMode.Terrain && ActiveTool == EditorTool.River)
+            return key == ToolKey.Enter ? FinishRiver(context) : CancelRiverPoint();
         if (Mode != EditorMode.Props || ActiveTool != EditorTool.Line)
             return ToolOutcome.Idle.Instance;
 
@@ -253,7 +270,10 @@ public sealed class ToolInteraction
             });
     }
 
-    private ToolOutcome TerrainPressed(ToolContext context, TerrainCellCoordinate cell) => ActiveTool switch
+    private ToolOutcome TerrainPressed(
+        ToolContext context,
+        AuthoringPoint authoring,
+        TerrainCellCoordinate cell) => ActiveTool switch
     {
         EditorTool.Pencil when EraserEnabled => EraseTerrainCell(cell, TerrainEraseStroke),
         EditorTool.Pencil when context.SelectedTerrainAssetKey is not null =>
@@ -261,6 +281,8 @@ public sealed class ToolInteraction
         EditorTool.Fill when EraserEnabled => EraseTerrainRegion(cell, TerrainRegionEraseStroke),
         EditorTool.Fill when context.SelectedTerrainAssetKey is not null => FillTerrainRegion(context, cell),
         EditorTool.Line => BeginTerrainLine(cell),
+        EditorTool.River when EraserEnabled => EraseWaterBody(context, authoring),
+        EditorTool.River => BeginRiverPoint(context, authoring),
         _ => ToolOutcome.Idle.Instance,
     };
 
@@ -344,6 +366,157 @@ public sealed class ToolInteraction
                 return ToolOutcome.Idle.Instance;
         }
     }
+
+    /// <summary>
+    /// Fixes the next curve point where the pointer went down, snapped to the
+    /// water grid. Nothing is authored yet: the point is only committed on
+    /// release, because what happens in between is the handle being pulled out
+    /// of it.
+    /// </summary>
+    private ToolOutcome BeginRiverPoint(ToolContext context, AuthoringPoint point)
+    {
+        if (context.Scene.SceneKind != SceneKind.Instance)
+            return new ToolOutcome.Message("River: a Scene Template cannot carry water.");
+        if (context.SelectedTerrainAssetKey is null)
+            return new ToolOutcome.Message("River: choose a Terrain asset first.");
+
+        var snapped = new AuthoringPoint(
+            context.Metrics.SnapToWaterGrid(point.X),
+            context.Metrics.SnapToWaterGrid(point.Y));
+        if (!IsInsideScene(context, snapped))
+            return new ToolOutcome.Message("River: a curve point has to sit inside the Scene.");
+        if (_riverDraft.Count > 0
+            && _riverDraft[^1].X == snapped.X
+            && _riverDraft[^1].Y == snapped.Y)
+        {
+            return new ToolOutcome.Message(
+                "River: that is the point you just placed; choose a different one.");
+        }
+
+        _riverPending = new WaterDraftPoint(snapped.X, snapped.Y, State.WaterPointMode);
+        var ordinal = _riverDraft.Count + 1;
+        return new ToolOutcome.Message(State.WaterPointMode == WaterPointMode.Linear
+            ? $"River: point {ordinal} at ({snapped.X}, {snapped.Y})."
+            : $"River: point {ordinal} at ({snapped.X}, {snapped.Y}); drag to pull its handle.");
+    }
+
+    /// <summary>
+    /// The handle follows the pointer exactly and is not snapped: a handle is a
+    /// curve control rather than a place, and quantizing it would quantize the
+    /// shape of the curve. A drag shorter than half a water cell counts as none,
+    /// so a click that shifts by a pixel still places a plain point.
+    /// </summary>
+    private ToolOutcome DragRiverHandle(ToolContext context, AuthoringPoint point)
+    {
+        if (_riverPending is not { } pending) return ToolOutcome.Idle.Instance;
+        if (pending.Mode == WaterPointMode.Linear) return ToolOutcome.Idle.Instance;
+
+        var deltaX = point.X - pending.X;
+        var deltaY = point.Y - pending.Y;
+        var threshold = context.Metrics.AuthoringPixelsPerWaterCell / 2;
+        var pulled = deltaX * deltaX + deltaY * deltaY >= threshold * threshold;
+        _riverPending = pending with
+        {
+            DraggedHandleOut = pulled
+                ? new AuthoringPixelOffset { X = deltaX, Y = deltaY }
+                : null,
+        };
+        return ToolOutcome.Idle.Instance;
+    }
+
+    private ToolOutcome CommitRiverPoint()
+    {
+        if (_riverPending is not { } pending) return ToolOutcome.Idle.Instance;
+        _riverPending = null;
+        _riverDraft.Add(pending);
+        return new ToolOutcome.Message(_riverDraft.Count < 2
+            ? "River: source placed. Keep placing points; Enter finishes at the mouth."
+            : $"River: {_riverDraft.Count} points. Enter finishes it, Escape takes the last one back.");
+    }
+
+    /// <summary>
+    /// Turns the draft into one authored river. The whole curve is a single
+    /// edit, so one undo takes back the river rather than its last point.
+    /// </summary>
+    private ToolOutcome FinishRiver(ToolContext context)
+    {
+        if (context.SelectedTerrainAssetKey is not { } assetKey)
+            return new ToolOutcome.Message("River: choose a Terrain asset first.");
+        if (_riverPending is null && _riverDraft.Count < 2)
+        {
+            return new ToolOutcome.Message(
+                "River: a river needs a source and a mouth; place at least two points.");
+        }
+
+        if (_riverPending is { } pending)
+        {
+            _riverDraft.Add(pending);
+            _riverPending = null;
+        }
+        if (_riverDraft.Count < 2)
+        {
+            return new ToolOutcome.Message(
+                "River: a river needs a source and a mouth; place at least two points.");
+        }
+
+        var points = WaterEditing.ResolveCurve(_riverDraft);
+        var width = State.RiverWidthMeters;
+        var elevation = context.ElevationMeters;
+        var assetName = context.TerrainAssets.Resolve(assetKey).Name;
+        var placed = _riverDraft.Count;
+        _riverDraft.Clear();
+        return new ToolOutcome.Edit(
+            "River",
+            document => WaterEditing.PlaceRiver(
+                document, context.TerrainAssets, points, assetKey, width, elevation),
+            Describe: (before, after) =>
+            {
+                var added = after.WaterBodies.FirstOrDefault(body =>
+                    before.WaterBodies.All(previous => previous.WaterBodyId != body.WaterBodyId));
+                var name = added?.WaterBodyId ?? "river";
+                return $"Authored {name} from {placed} points · {assetName} · {width:0.###} m wide · {elevation:0.###} m.";
+            });
+    }
+
+    /// <summary>
+    /// Escape steps back through the draft: first the point still being placed,
+    /// then the points already placed, one at a time.
+    /// </summary>
+    private ToolOutcome CancelRiverPoint()
+    {
+        if (_riverPending is not null)
+        {
+            _riverPending = null;
+            return new ToolOutcome.Message("River: point released.");
+        }
+        if (_riverDraft.Count == 0)
+            return new ToolOutcome.Message("River: nothing to take back.");
+
+        _riverDraft.RemoveAt(_riverDraft.Count - 1);
+        return new ToolOutcome.Message(_riverDraft.Count == 0
+            ? "River: draft cleared."
+            : $"River: {_riverDraft.Count} point{Plural(_riverDraft.Count)} left.");
+    }
+
+    /// <summary>
+    /// Erases the whole body under the pointer. Single cells are not erasable
+    /// on purpose: they are derived from the curve, so rubbing one out would be
+    /// undone by the next time the corridor is worked out.
+    /// </summary>
+    private static ToolOutcome EraseWaterBody(ToolContext context, AuthoringPoint point)
+    {
+        var body = WaterEditing.FindAt(context.Scene, context.Metrics, point.X, point.Y);
+        if (body is null) return new ToolOutcome.Message("River Eraser: no water here.");
+        var bodyId = body.WaterBodyId;
+        return new ToolOutcome.Edit(
+            "River Eraser",
+            document => WaterEditing.Remove(document, bodyId),
+            Describe: (_, _) => $"Removed water body '{bodyId}'.");
+    }
+
+    private static bool IsInsideScene(ToolContext context, AuthoringPoint point) =>
+        point.X >= 0 && point.X <= context.Metrics.SceneWidthAuthoringPixels(context.Scene)
+        && point.Y >= 0 && point.Y <= context.Metrics.SceneHeightAuthoringPixels(context.Scene);
 
     private ToolOutcome BeginTerrainLine(TerrainCellCoordinate cell)
     {
@@ -527,6 +700,13 @@ public sealed class ToolInteraction
         ClearPropLine();
         ClearTerrainLine();
         ClearAnchorDrag();
+        ClearRiverDraft();
+    }
+
+    private void ClearRiverDraft()
+    {
+        _riverDraft.Clear();
+        _riverPending = null;
     }
 
     private void ClearPropLine()

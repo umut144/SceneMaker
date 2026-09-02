@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using SceneMaker.Core;
 
 namespace SceneMaker.Editor;
 
@@ -17,6 +18,7 @@ public enum EditorTool
     Pencil,
     Line,
     Fill,
+    River,
     AnchorPlace,
     AnchorMove,
 }
@@ -39,6 +41,7 @@ public static class EditorToolRegistry
         Define(EditorTool.Line, "Line", "line.svg",
             EditorMode.Terrain, EditorMode.Props),
         Define(EditorTool.Fill, "Fill", "fill.svg", EditorMode.Terrain),
+        Define(EditorTool.River, "River", "river.svg", EditorMode.Terrain),
         Define(EditorTool.AnchorMove, "Move Anchor", "move.svg", EditorMode.Templates),
         Define(EditorTool.AnchorPlace, "Place Anchor", string.Empty,
             false, EditorMode.Templates),
@@ -98,6 +101,23 @@ public sealed class EditorInteractionState
     public bool EraserEnabled { get; private set; }
     public int PropLineOffsetAuthoringPixels { get; private set; }
 
+    /// <summary>
+    /// How the next curve point's handles behave. Session state, switchable
+    /// while a river is being drawn, exactly like the point mode of the
+    /// PolyTools Bezier tool: it decides what the next point does, and says
+    /// nothing about the points already placed.
+    /// </summary>
+    public WaterPointMode WaterPointMode { get; private set; } = WaterPointMode.Linear;
+
+    /// <summary>
+    /// The width the next river is authored with, in metres. A starting value
+    /// rather than a rule - the document accepts any positive width, and which
+    /// widths a given world uses is that world's business.
+    /// </summary>
+    public decimal RiverWidthMeters { get; private set; } = DefaultRiverWidthMeters;
+
+    public const decimal DefaultRiverWidthMeters = 4.0m;
+
     public void SelectMode(EditorMode mode)
     {
         Mode = mode;
@@ -122,5 +142,17 @@ public sealed class EditorInteractionState
         if (authoringPixels < 0)
             throw new ArgumentOutOfRangeException(nameof(authoringPixels));
         PropLineOffsetAuthoringPixels = authoringPixels;
+    }
+
+    public void SetWaterPointMode(WaterPointMode mode)
+    {
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        WaterPointMode = mode;
+    }
+
+    public void SetRiverWidth(decimal widthMeters)
+    {
+        if (widthMeters <= 0m) throw new ArgumentOutOfRangeException(nameof(widthMeters));
+        RiverWidthMeters = widthMeters;
     }
 }

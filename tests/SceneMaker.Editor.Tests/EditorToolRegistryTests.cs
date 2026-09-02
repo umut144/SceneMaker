@@ -71,5 +71,9 @@ public sealed class EditorToolRegistryTests
         Assert.True(EditorToolRegistry.Supports(EditorMode.Props, EditorTool.Selector));
         Assert.True(EditorToolRegistry.Supports(EditorMode.Templates, EditorTool.AnchorMove));
         Assert.False(EditorToolRegistry.Supports(EditorMode.Templates, EditorTool.Pencil));
+        // Water is Terrain: a River is authored where Terrain is authored.
+        Assert.True(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.River));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Props, EditorTool.River));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Templates, EditorTool.River));
     }
 }
