@@ -17,9 +17,25 @@ public sealed record WorkspaceGridConfiguration(
     decimal WaterCellMeters);
 
 /// <summary>
+/// How a Terrain Asset is authored. This is editor knowledge rather than game
+/// meaning: <c>Cells</c> is painted cell by cell, <c>Curve</c> is drawn as a
+/// centerline with a width and rasterized from it.
+///
+/// <para>The Asset says it rather than SceneMaker deriving it from
+/// <see cref="WorkspaceAssetProfile.Surface"/>. A surface is an open token
+/// whose meaning SceneMaker never reads - a world that calls its water "fluid",
+/// or that draws its lava along a curve, has to work the same way.</para>
+/// </summary>
+public enum TerrainAuthoring
+{
+    Cells,
+    Curve,
+}
+
+/// <summary>
 /// SceneMaker owns enablement, authoring color and, for Terrain, the surface an
-/// Asset presents. Whether an Asset is Terrain or a Prop is PolyTools catalog
-/// data and is never overridden here.
+/// Asset presents and the way it is authored. Whether an Asset is Terrain or a
+/// Prop is PolyTools catalog data and is never overridden here.
 ///
 /// <para><see cref="Surface"/> is the domain a consumer's simulation reasons
 /// about - "land", "water", and whatever comes later. It is an open token on
@@ -27,7 +43,11 @@ public sealed record WorkspaceGridConfiguration(
 /// rather than on the cell, so a Terrain Asset cannot contradict itself from
 /// one cell to the next. Null for everything that is not Terrain.</para>
 /// </summary>
-public sealed record WorkspaceAssetProfile(string AssetKey, string Color, string? Surface = null);
+public sealed record WorkspaceAssetProfile(
+    string AssetKey,
+    string Color,
+    string? Surface = null,
+    TerrainAuthoring? Authoring = null);
 
 public sealed class WorkspaceConfiguration
 {
@@ -65,7 +85,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 5;
+    public const int Version = 6;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -127,6 +147,7 @@ public static class WorkspaceConfigurationStore
                 AssetKey = profile.AssetKey,
                 Color = profile.Color,
                 Surface = profile.Surface,
+                Authoring = profile.Authoring,
             }).ToList(),
         };
         return Parse(document, catalog);
@@ -153,6 +174,7 @@ public static class WorkspaceConfigurationStore
                 AssetKey = profile.AssetKey,
                 Color = profile.Color,
                 Surface = profile.Surface,
+                Authoring = profile.Authoring,
             }).OrderBy(static entry => entry.AssetKey, StringComparer.Ordinal).ToList(),
         };
         var path = Path.Combine(Path.GetFullPath(workspaceDirectory), FileName);
@@ -206,6 +228,24 @@ public static class WorkspaceConfigurationStore
             throw new SceneMakerDocumentException(
                 $"Asset '{entry.AssetKey}' is not Terrain and must not declare a surface.");
         }
+        // Asked of the Asset instead of guessed from its surface, so that which
+        // tools it offers - and whether it may be painted at all - is authored
+        // Workspace data like everything else here.
+        if (isTerrain && entry.Authoring is null)
+        {
+            throw new SceneMakerDocumentException(
+                $"Terrain Asset '{entry.AssetKey}' requires an authoring of 'cells' or 'curve'.");
+        }
+        if (!isTerrain && entry.Authoring is not null)
+        {
+            throw new SceneMakerDocumentException(
+                $"Asset '{entry.AssetKey}' is not Terrain and must not declare an authoring.");
+        }
+        if (entry.Authoring is { } authoring && !Enum.IsDefined(authoring))
+        {
+            throw new SceneMakerDocumentException(
+                $"Asset '{entry.AssetKey}' declares an unsupported authoring.");
+        }
         if (entry.Surface is { } surface && !IsSurfaceToken(surface))
         {
             throw new SceneMakerDocumentException(
@@ -258,7 +298,8 @@ public static class WorkspaceConfigurationStore
         {
             var catalogAsset = catalog.Resolve(entry.AssetKey);
             ValidateProfile(entry, catalogAsset);
-            var profile = new WorkspaceAssetProfile(entry.AssetKey, entry.Color, entry.Surface);
+            var profile = new WorkspaceAssetProfile(
+                entry.AssetKey, entry.Color, entry.Surface, entry.Authoring);
             if (!profiles.TryAdd(entry.AssetKey, profile))
             {
                 throw new SceneMakerDocumentException(
@@ -290,5 +331,6 @@ public static class WorkspaceConfigurationStore
         public required string AssetKey { get; init; }
         public required string Color { get; init; }
         public string? Surface { get; init; }
+        public TerrainAuthoring? Authoring { get; init; }
     }
 }

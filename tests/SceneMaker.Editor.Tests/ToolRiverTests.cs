@@ -320,7 +320,7 @@ public sealed class ToolRiverTests
     {
         var interaction = new ToolInteraction();
         interaction.SelectMode(EditorMode.Terrain);
-        interaction.SelectTool(EditorTool.River);
+        interaction.SelectTool(EditorTool.DrawRiver);
         return interaction;
     }
 

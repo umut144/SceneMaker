@@ -102,7 +102,7 @@ public sealed class ToolInteraction
     /// </summary>
     public bool HasUnfinishedDraft => Mode switch
     {
-        EditorMode.Terrain when ActiveTool == EditorTool.River =>
+        EditorMode.Terrain when ActiveTool == EditorTool.DrawRiver =>
             _riverPending is not null || _riverDraft.Count > 0,
         EditorMode.Props when ActiveTool == EditorTool.Line =>
             _propLineStart is not null || _propLineEnd is not null,
@@ -195,7 +195,7 @@ public sealed class ToolInteraction
                 return PaintTerrainCell(context, cell, TerrainPaintStroke);
             case EditorMode.Terrain when ActiveTool == EditorTool.Fill && EraserEnabled:
                 return EraseTerrainRegion(cell, TerrainRegionEraseStroke);
-            case EditorMode.Terrain when ActiveTool == EditorTool.River && _riverPending is not null:
+            case EditorMode.Terrain when ActiveTool == EditorTool.DrawRiver && _riverPending is not null:
                 return DragRiverHandle(context, authoring);
             case EditorMode.Props when ActiveTool == EditorTool.Pencil && EraserEnabled:
                 return EraseProp(context, authoring, PropEraseStroke);
@@ -234,7 +234,7 @@ public sealed class ToolInteraction
     public ToolOutcome KeyPressed(ToolContext context, ToolKey key)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (Mode == EditorMode.Terrain && ActiveTool == EditorTool.River)
+        if (Mode == EditorMode.Terrain && ActiveTool == EditorTool.DrawRiver)
             return key == ToolKey.Enter ? FinishRiver(context) : CancelRiverPoint();
         if (Mode != EditorMode.Props || ActiveTool != EditorTool.Line)
             return ToolOutcome.Idle.Instance;
@@ -296,8 +296,8 @@ public sealed class ToolInteraction
         EditorTool.Fill when EraserEnabled => EraseTerrainRegion(cell, TerrainRegionEraseStroke),
         EditorTool.Fill when context.SelectedTerrainAssetKey is not null => FillTerrainRegion(context, cell),
         EditorTool.Line => BeginTerrainLine(cell),
-        EditorTool.River when EraserEnabled => EraseWaterBody(context, authoring),
-        EditorTool.River => BeginRiverPoint(context, authoring),
+        EditorTool.DrawRiver when EraserEnabled => EraseWaterBody(context, authoring),
+        EditorTool.DrawRiver => BeginRiverPoint(context, authoring),
         _ => ToolOutcome.Idle.Instance,
     };
 

@@ -1,3 +1,4 @@
+using SceneMaker.Core;
 using SceneMaker.Editor;
 using Xunit;
 
@@ -72,8 +73,54 @@ public sealed class EditorToolRegistryTests
         Assert.True(EditorToolRegistry.Supports(EditorMode.Templates, EditorTool.AnchorMove));
         Assert.False(EditorToolRegistry.Supports(EditorMode.Templates, EditorTool.Pencil));
         // Water is Terrain: a River is authored where Terrain is authored.
-        Assert.True(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.River));
-        Assert.False(EditorToolRegistry.Supports(EditorMode.Props, EditorTool.River));
-        Assert.False(EditorToolRegistry.Supports(EditorMode.Templates, EditorTool.River));
+        Assert.True(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawRiver));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Props, EditorTool.DrawRiver));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Templates, EditorTool.DrawRiver));
+    }
+
+    [Fact]
+    public void TerrainToolsAreOfferedByHowTheChosenAssetIsAuthored()
+    {
+        // A painted Asset has no Bezier, a drawn one has no Pencil and no Fill.
+        Assert.True(EditorToolRegistry.Offers(
+            EditorMode.Terrain, EditorTool.Pencil, TerrainAuthoring.Cells));
+        Assert.False(EditorToolRegistry.Offers(
+            EditorMode.Terrain, EditorTool.DrawRiver, TerrainAuthoring.Cells));
+        Assert.True(EditorToolRegistry.Offers(
+            EditorMode.Terrain, EditorTool.DrawRiver, TerrainAuthoring.Curve));
+        Assert.False(EditorToolRegistry.Offers(
+            EditorMode.Terrain, EditorTool.Fill, TerrainAuthoring.Curve));
+
+        // Outside Terrain the authoring says nothing at all.
+        Assert.True(EditorToolRegistry.Offers(
+            EditorMode.Props, EditorTool.Pencil, TerrainAuthoring.Curve));
+        // And while no Asset is chosen, nothing is narrowed away.
+        Assert.True(EditorToolRegistry.Offers(EditorMode.Terrain, EditorTool.Pencil, null));
+        Assert.True(EditorToolRegistry.Offers(EditorMode.Terrain, EditorTool.DrawRiver, null));
+    }
+
+    [Fact]
+    public void EveryAuthoringHasAToolToFallBackTo()
+    {
+        Assert.Equal(
+            EditorTool.Pencil,
+            EditorToolRegistry.DefaultTool(EditorMode.Terrain, TerrainAuthoring.Cells));
+        Assert.Equal(
+            EditorTool.DrawRiver,
+            EditorToolRegistry.DefaultTool(EditorMode.Terrain, TerrainAuthoring.Curve));
+        Assert.Equal(
+            EditorToolRegistry.DefaultTool(EditorMode.Props),
+            EditorToolRegistry.DefaultTool(EditorMode.Props, TerrainAuthoring.Curve));
+
+        foreach (var mode in Enum.GetValues<EditorMode>())
+        {
+            foreach (var authoring in Enum.GetValues<TerrainAuthoring>())
+            {
+                var tool = EditorToolRegistry.DefaultTool(mode, authoring);
+                Assert.True(
+                    EditorToolRegistry.Offers(mode, tool, authoring),
+                    $"Mode {mode} with {authoring} falls back to {tool}, which it does not offer.");
+            }
+        }
     }
 }

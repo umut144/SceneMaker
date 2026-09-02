@@ -64,7 +64,7 @@ public sealed class WorkspaceSessionTests
         var session = WorkspaceSession.Load(workspace.RootPath);
 
         var narrowed = session.WithAssetProfiles(
-            [new WorkspaceAssetProfile("grass", "#99E550", "land"), new WorkspaceAssetProfile("stone", "#808080")]);
+            [new WorkspaceAssetProfile("grass", "#99E550", "land", TerrainAuthoring.Cells), new WorkspaceAssetProfile("stone", "#808080")]);
 
         Assert.Equal(["grass"], narrowed.TerrainAssets.Assets.Select(asset => asset.AssetKey));
         Assert.Equal(["stone"], narrowed.PropAssets.Assets.Select(asset => asset.AssetKey));
@@ -80,7 +80,7 @@ public sealed class WorkspaceSessionTests
         var stored = File.ReadAllText(configPath);
         var session = WorkspaceSession.Load(workspace.RootPath);
 
-        _ = session.WithAssetProfiles([new WorkspaceAssetProfile("grass", "#99E550", "land")]);
+        _ = session.WithAssetProfiles([new WorkspaceAssetProfile("grass", "#99E550", "land", TerrainAuthoring.Cells)]);
 
         Assert.Equal(stored, File.ReadAllText(configPath));
     }

@@ -114,7 +114,8 @@ public sealed partial class SceneMakerMain : Control
         PolyToolsCatalogAsset Asset,
         CheckBox Enabled,
         LineEdit Color,
-        LineEdit Surface);
+        LineEdit Surface,
+        OptionButton Authoring);
 
     public override void _Ready()
     {
@@ -468,7 +469,7 @@ public sealed partial class SceneMakerMain : Control
                 TooltipText = $"{asset.Name} · {asset.AssetKey}",
                 CustomMinimumSize = new Vector2(120f, 0f),
             };
-            button.AddThemeColorOverride("font_color", Color.FromHtml(asset.Color));
+            StyleAssetButton(button, Color.FromHtml(asset.Color));
             button.Pressed += () => SelectTerrainAsset(asset.AssetKey);
             _terrainAssetBar.AddChild(button);
             if (_canvas.SelectedTerrainAssetKey is null)
@@ -478,6 +479,48 @@ public sealed partial class SceneMakerMain : Control
             }
         }
         _terrainAssetBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
+    }
+
+    /// <summary>
+    /// An Asset button reads as its Asset. Selection is therefore carried by the
+    /// background - a filled chip in the Asset's own colour - and never by the
+    /// text: the default theme recolours a pressed Button's font white, which
+    /// turned the one Asset the author had chosen into the one Asset whose
+    /// colour they could no longer see.
+    /// </summary>
+    private static void StyleAssetButton(Button button, Color color)
+    {
+        foreach (var state in AssetButtonFontStates)
+            button.AddThemeColorOverride(state, color);
+        button.AddThemeStyleboxOverride("pressed", AssetButtonBox(color, 0.22f, borderWidth: 1));
+        button.AddThemeStyleboxOverride("hover", AssetButtonBox(color, 0.10f, borderWidth: 0));
+        button.AddThemeStyleboxOverride(
+            "hover_pressed", AssetButtonBox(color, 0.30f, borderWidth: 1));
+    }
+
+    private static readonly string[] AssetButtonFontStates =
+    [
+        "font_color",
+        "font_pressed_color",
+        "font_hover_color",
+        "font_hover_pressed_color",
+        "font_focus_color",
+    ];
+
+    private static StyleBoxFlat AssetButtonBox(Color color, float fill, int borderWidth)
+    {
+        var box = new StyleBoxFlat
+        {
+            BgColor = new Color(color.R, color.G, color.B, fill),
+            BorderColor = color,
+            ContentMarginLeft = 10f,
+            ContentMarginRight = 10f,
+            ContentMarginTop = 4f,
+            ContentMarginBottom = 4f,
+        };
+        box.SetBorderWidthAll(borderWidth);
+        box.SetCornerRadiusAll(4);
+        return box;
     }
 
     private void BuildPropAssetBar()
@@ -493,7 +536,7 @@ public sealed partial class SceneMakerMain : Control
                 TooltipText = $"{asset.Name} · {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} authoring px · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels})",
                 CustomMinimumSize = new Vector2(160f, 0f),
             };
-            button.AddThemeColorOverride("font_color", Color.FromHtml(asset.Color));
+            StyleAssetButton(button, Color.FromHtml(asset.Color));
             button.Pressed += () => SelectPropAsset(asset.AssetKey);
             _propAssetBar.AddChild(button);
             if (_canvas.SelectedPropAssetKey is null)
@@ -1060,7 +1103,7 @@ public sealed partial class SceneMakerMain : Control
         _workspaceAssetEditorRows.Clear();
         _workspaceAssetRows.AddChild(new Label
         {
-            Text = "Assets come from the synchronized PolyTools catalog. SceneMaker owns enablement, authoring color, and the surface a Terrain Asset presents to the game; whether an Asset is Terrain or a Prop is PolyTools data.",
+            Text = "Assets come from the synchronized PolyTools catalog. SceneMaker owns enablement, authoring color, the surface a Terrain Asset presents to the game, and whether it is painted as cells or drawn as a curve; whether an Asset is Terrain or a Prop is PolyTools data.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         foreach (var asset in _controller.Session.Catalog.Assets)
@@ -1068,7 +1111,7 @@ public sealed partial class SceneMakerMain : Control
             var profile = _controller.Session.Configuration.AssetProfiles
                 .SingleOrDefault(value => value.AssetKey == asset.AssetKey);
             var isTerrain = asset.AssetType == PolyToolsAssetType.Terrain;
-            var row = new GridContainer { Columns = 4 };
+            var row = new GridContainer { Columns = 5 };
             var enabled = new CheckBox { Text = asset.AssetKey, ButtonPressed = profile is not null };
             enabled.CustomMinimumSize = new Vector2(180f, 0f);
             var color = NewAssetField(profile?.Color ?? string.Empty, "#RRGGBB");
@@ -1077,13 +1120,20 @@ public sealed partial class SceneMakerMain : Control
                 profile?.Surface ?? (isTerrain ? DefaultSurface : string.Empty),
                 isTerrain ? "land" : string.Empty);
             surface.Editable = isTerrain;
+            // How a Terrain Asset is authored decides which tools it offers, so
+            // it is chosen here rather than guessed from its surface.
+            var authoring = new OptionButton { Disabled = !isTerrain };
+            authoring.AddItem("cells", (int)TerrainAuthoring.Cells);
+            authoring.AddItem("curve", (int)TerrainAuthoring.Curve);
+            authoring.Selected = (int)(profile?.Authoring ?? TerrainAuthoring.Cells);
             row.AddChild(enabled);
             row.AddChild(new Label { Text = asset.AssetType.ToString() });
             row.AddChild(color);
             row.AddChild(surface);
+            row.AddChild(authoring);
             _workspaceAssetRows.AddChild(row);
             _workspaceAssetEditorRows.Add(asset.AssetKey,
-                new WorkspaceAssetEditorRow(asset, enabled, color, surface));
+                new WorkspaceAssetEditorRow(asset, enabled, color, surface, authoring));
         }
         _workspaceAssetsDialog.PopupCentered(new Vector2I(760, 520));
     }
@@ -1155,13 +1205,16 @@ public sealed partial class SceneMakerMain : Control
         foreach (var row in _workspaceAssetEditorRows.Values)
         {
             if (!row.Enabled.ButtonPressed) continue;
-            var surface = row.Asset.AssetType == PolyToolsAssetType.Terrain
-                ? row.Surface.Text.Trim()
-                : null;
+            var isTerrain = row.Asset.AssetType == PolyToolsAssetType.Terrain;
+            var surface = isTerrain ? row.Surface.Text.Trim() : null;
+            var authoring = isTerrain
+                ? (TerrainAuthoring)row.Authoring.GetItemId(row.Authoring.Selected)
+                : (TerrainAuthoring?)null;
             profiles.Add(new WorkspaceAssetProfile(
                 row.Asset.AssetKey,
                 row.Color.Text.Trim(),
-                surface));
+                surface,
+                authoring));
         }
 
         var report = _controller.SaveAssetProfiles(profiles);
@@ -1383,7 +1436,7 @@ public sealed partial class SceneMakerMain : Control
         var propLineActive = _interaction.Mode == EditorMode.Props
             && _interaction.ActiveTool == EditorTool.Line;
         var riverActive = _interaction.Mode == EditorMode.Terrain
-            && _interaction.ActiveTool == EditorTool.River;
+            && _interaction.ActiveTool == EditorTool.DrawRiver;
         _toolContextSeparator.Visible = propLineActive || riverActive;
         _propLineOffsetLabel.Visible = propLineActive;
         _propLineOffsetEdit.Visible = propLineActive;
@@ -1397,7 +1450,36 @@ public sealed partial class SceneMakerMain : Control
     {
         var asset = _controller.Session!.TerrainAssets.Resolve(assetKey);
         _canvas.SelectedTerrainAssetKey = assetKey;
+        // The tools follow the Asset. Grass is painted and has no Bezier; a
+        // river is drawn and has no Pencil or Fill, and offering them would be
+        // offering something that cannot work.
+        if (_interaction.Mode == EditorMode.Terrain
+            && !EditorToolRegistry.Offers(EditorMode.Terrain, _interaction.ActiveTool, asset.Authoring))
+        {
+            _canvas.SelectTool(EditorToolRegistry.DefaultTool(EditorMode.Terrain, asset.Authoring));
+        }
+        UpdateDrawingToolAvailability();
+        UpdateToolContextLabel();
         SetStatus($"Selected Terrain '{asset.Name}' ({asset.AssetKey}).");
+    }
+
+    /// <summary>
+    /// How the chosen Terrain Asset is authored, or null while none is chosen -
+    /// then the tool bar narrows nothing.
+    /// </summary>
+    private TerrainAuthoring? SelectedTerrainAuthoring()
+    {
+        if (_controller.Session is not { } session
+            || _canvas.SelectedTerrainAssetKey is not { } assetKey)
+        {
+            return null;
+        }
+        foreach (var asset in session.TerrainAssets.Assets)
+        {
+            if (string.Equals(asset.AssetKey, assetKey, StringComparison.Ordinal))
+                return asset.Authoring;
+        }
+        return null;
     }
 
     private void SelectPropAsset(string assetKey)
@@ -1706,7 +1788,8 @@ public sealed partial class SceneMakerMain : Control
         var instanceActive = _controller.Document?.SceneKind == SceneKind.Instance;
         foreach (var (tool, control) in _drawingToolControlsByTool)
         {
-            control.Visible = EditorToolRegistry.Supports(_interaction.Mode, tool);
+            control.Visible = EditorToolRegistry.Offers(
+                _interaction.Mode, tool, SelectedTerrainAuthoring());
             control.Disabled = _controller.Scene is null
                 || templateMode && !instanceActive;
             control.ButtonPressed = control.Visible && tool == _interaction.ActiveTool;

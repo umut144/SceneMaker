@@ -2,7 +2,16 @@ using System.Collections.ObjectModel;
 
 namespace SceneMaker.Core;
 
-public sealed record TerrainDisplayAsset(string AssetKey, string Name, string Color);
+/// <summary>
+/// A Terrain Asset as the editor shows and uses it. <paramref name="Authoring"/>
+/// is what decides which tools it offers and whether it may be painted or
+/// drawn; it is Workspace data, never a guess from the Asset's surface.
+/// </summary>
+public sealed record TerrainDisplayAsset(
+    string AssetKey,
+    string Name,
+    string Color,
+    TerrainAuthoring Authoring);
 
 public sealed class TerrainDisplayCatalog
 {
@@ -30,7 +39,12 @@ public static class TerrainDisplayCatalogLoader
             var catalogAsset = catalog.Resolve(profile.AssetKey);
             if (catalogAsset.AssetType != PolyToolsAssetType.Terrain) continue;
             assets.Add(profile.AssetKey, new TerrainDisplayAsset(
-                profile.AssetKey, catalogAsset.Name, profile.Color));
+                profile.AssetKey,
+                catalogAsset.Name,
+                profile.Color,
+                // Non-null for every Terrain Asset; the configuration refuses
+                // to load one without it.
+                profile.Authoring!.Value));
         }
         return new TerrainDisplayCatalog(assets);
     }

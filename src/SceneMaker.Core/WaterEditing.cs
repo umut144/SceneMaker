@@ -44,7 +44,7 @@ public static class WaterEditing
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
         ArgumentNullException.ThrowIfNull(points);
-        _ = terrainAssets.Resolve(assetKey);
+        _ = RequireDrawable(terrainAssets, assetKey);
         if (points.Count < 2)
         {
             throw new SceneMakerDocumentException(
@@ -112,7 +112,25 @@ public static class WaterEditing
         ArgumentNullException.ThrowIfNull(terrainAssets);
         DocumentValidation.Validate(scene);
         foreach (var body in scene.WaterBodies)
-            _ = terrainAssets.Resolve(body.AssetKey);
+            _ = RequireDrawable(terrainAssets, body.AssetKey);
+    }
+
+    /// <summary>
+    /// A body of water is made of an Asset that is authored as a curve. The
+    /// other way round - a river made of grass - was possible and produced a
+    /// green river nobody asked for.
+    /// </summary>
+    private static TerrainDisplayAsset RequireDrawable(
+        TerrainDisplayCatalog terrainAssets,
+        string assetKey)
+    {
+        var asset = terrainAssets.Resolve(assetKey);
+        if (asset.Authoring != TerrainAuthoring.Curve)
+        {
+            throw new SceneMakerDocumentException(
+                $"Terrain Asset '{assetKey}' is authored as cells and cannot be drawn as a water body.");
+        }
+        return asset;
     }
 
     /// <summary>

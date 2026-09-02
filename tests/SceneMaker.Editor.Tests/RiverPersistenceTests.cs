@@ -23,7 +23,7 @@ public sealed class RiverPersistenceTests
 
         var interaction = new ToolInteraction();
         interaction.SelectMode(EditorMode.Terrain);
-        interaction.SelectTool(EditorTool.River);
+        interaction.SelectTool(EditorTool.DrawRiver);
         var context = Context(workspace, controller);
 
         interaction.PointerPressed(context, new AuthoringPoint(32, 32), new TerrainCellCoordinate(1, 1));
@@ -64,7 +64,7 @@ public sealed class RiverPersistenceTests
 
         var interaction = new ToolInteraction();
         interaction.SelectMode(EditorMode.Terrain);
-        interaction.SelectTool(EditorTool.River);
+        interaction.SelectTool(EditorTool.DrawRiver);
         var context = Context(workspace, controller);
 
         interaction.PointerPressed(context, new AuthoringPoint(32, 32), new TerrainCellCoordinate(1, 1));

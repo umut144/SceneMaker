@@ -1,6 +1,6 @@
 {
   "format": "scene_maker_workspace",
-  "version": 5,
+  "version": 6,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,
@@ -16,12 +16,14 @@
     {
       "asset_key": "grass",
       "color": "#99E550",
-      "surface": "land"
+      "surface": "land",
+      "authoring": "cells"
     },
     {
       "asset_key": "river",
       "color": "#3C7DD9",
-      "surface": "water"
+      "surface": "water",
+      "authoring": "curve"
     },
     {
       "asset_key": "tree",

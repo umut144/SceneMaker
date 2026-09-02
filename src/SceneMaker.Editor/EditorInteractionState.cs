@@ -18,17 +18,25 @@ public enum EditorTool
     Pencil,
     Line,
     Fill,
-    River,
+    DrawRiver,
     AnchorPlace,
     AnchorMove,
 }
 
+/// <summary>
+/// One tool in the tool bar. <paramref name="TerrainAuthoring"/> says which kind
+/// of Terrain Asset it authors - painted cells or a drawn curve - and is null
+/// for tools that have nothing to do with Terrain. It is what lets the tool bar
+/// offer a Pencil for grass and a Bezier for a river without either of them
+/// having to be explained away.
+/// </summary>
 public sealed record EditorToolDefinition(
     EditorTool Tool,
     string DisplayName,
     string IconFileName,
     IReadOnlySet<EditorMode> SupportedModes,
-    bool ShowInToolBar = true);
+    bool ShowInToolBar = true,
+    TerrainAuthoring? TerrainAuthoring = null);
 
 public static class EditorToolRegistry
 {
@@ -37,11 +45,13 @@ public static class EditorToolRegistry
         Define(EditorTool.Selector, "Selector", "select.svg",
             EditorMode.Props, EditorMode.Templates),
         Define(EditorTool.Pencil, "Pencil", "pencil.svg",
-            EditorMode.Terrain, EditorMode.Props),
+            TerrainAuthoring.Cells, EditorMode.Terrain, EditorMode.Props),
         Define(EditorTool.Line, "Line", "line.svg",
-            EditorMode.Terrain, EditorMode.Props),
-        Define(EditorTool.Fill, "Fill", "fill.svg", EditorMode.Terrain),
-        Define(EditorTool.River, "River", "river.svg", EditorMode.Terrain),
+            TerrainAuthoring.Cells, EditorMode.Terrain, EditorMode.Props),
+        Define(EditorTool.Fill, "Fill", "fill.svg",
+            TerrainAuthoring.Cells, EditorMode.Terrain),
+        Define(EditorTool.DrawRiver, "Draw River", "river.svg",
+            TerrainAuthoring.Curve, EditorMode.Terrain),
         Define(EditorTool.AnchorMove, "Move Anchor", "move.svg", EditorMode.Templates),
         Define(EditorTool.AnchorPlace, "Place Anchor", string.Empty,
             false, EditorMode.Templates),
@@ -58,6 +68,18 @@ public static class EditorToolRegistry
     public static bool Supports(EditorMode mode, EditorTool tool) =>
         Resolve(tool).SupportedModes.Contains(mode);
 
+    /// <summary>
+    /// Whether a mode offers this tool for the Terrain Asset in hand. Outside
+    /// Terrain, and while no Asset is chosen, the authoring says nothing and
+    /// every supported tool is offered.
+    /// </summary>
+    public static bool Offers(EditorMode mode, EditorTool tool, TerrainAuthoring? terrainAuthoring)
+    {
+        if (!Supports(mode, tool)) return false;
+        if (mode != EditorMode.Terrain || terrainAuthoring is null) return true;
+        return Resolve(tool).TerrainAuthoring == terrainAuthoring;
+    }
+
     public static EditorTool DefaultTool(EditorMode mode) => mode switch
     {
         EditorMode.Terrain => EditorTool.Pencil,
@@ -65,6 +87,21 @@ public static class EditorToolRegistry
         EditorMode.Templates => EditorTool.Selector,
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
+
+    /// <summary>
+    /// The tool to fall back to when the active one is not offered for the
+    /// Asset in hand - the first one the tool bar shows for it, so choosing a
+    /// river never leaves the author holding a Pencil that cannot draw it.
+    /// </summary>
+    public static EditorTool DefaultTool(EditorMode mode, TerrainAuthoring? terrainAuthoring)
+    {
+        if (mode != EditorMode.Terrain || terrainAuthoring is null) return DefaultTool(mode);
+        foreach (var definition in ToolBarDefinitions)
+        {
+            if (Offers(mode, definition.Tool, terrainAuthoring)) return definition.Tool;
+        }
+        return DefaultTool(mode);
+    }
 
     public static string ModeDisplayName(EditorMode mode) => mode switch
     {
@@ -80,6 +117,14 @@ public static class EditorToolRegistry
         string iconFileName,
         params EditorMode[] modes) =>
         new(tool, displayName, iconFileName, modes.ToHashSet());
+
+    private static EditorToolDefinition Define(
+        EditorTool tool,
+        string displayName,
+        string iconFileName,
+        TerrainAuthoring terrainAuthoring,
+        params EditorMode[] modes) =>
+        new(tool, displayName, iconFileName, modes.ToHashSet(), true, terrainAuthoring);
 
     private static EditorToolDefinition Define(
         EditorTool tool,

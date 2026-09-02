@@ -15,6 +15,25 @@ namespace SceneMaker.Core;
 /// </summary>
 public static class TerrainEditing
 {
+    /// <summary>
+    /// Painting a cell is only possible with an Asset that is authored as
+    /// cells. A curve Asset carries a shape the raster is derived from, so a
+    /// hand-painted cell of it would be a cell nothing produced and nothing
+    /// maintains.
+    /// </summary>
+    private static TerrainDisplayAsset RequirePaintable(
+        TerrainDisplayCatalog terrainAssets,
+        string assetKey)
+    {
+        var asset = terrainAssets.Resolve(assetKey);
+        if (asset.Authoring != TerrainAuthoring.Cells)
+        {
+            throw new SceneMakerDocumentException(
+                $"Terrain Asset '{assetKey}' is authored as a curve and cannot be painted as cells.");
+        }
+        return asset;
+    }
+
     private static readonly TerrainCellCoordinate[] CardinalNeighbours =
     [
         new(1, 0),
@@ -33,7 +52,7 @@ public static class TerrainEditing
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
-        _ = terrainAssets.Resolve(assetKey);
+        _ = RequirePaintable(terrainAssets, assetKey);
         RequireInsideScene(scene, cellX, cellY);
         var elevation = elevationMeters ?? scene.DefaultElevationMeters;
 
@@ -55,7 +74,7 @@ public static class TerrainEditing
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
-        _ = terrainAssets.Resolve(assetKey);
+        _ = RequirePaintable(terrainAssets, assetKey);
         RequireInsideScene(scene, startCellX, startCellY);
         RequireInsideScene(scene, endCellX, endCellY);
         var elevation = elevationMeters ?? scene.DefaultElevationMeters;
@@ -147,7 +166,7 @@ public static class TerrainEditing
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
-        _ = terrainAssets.Resolve(assetKey);
+        _ = RequirePaintable(terrainAssets, assetKey);
         RequireInsideScene(scene, startCellX, startCellY);
         var elevation = elevationMeters ?? scene.DefaultElevationMeters;
 
@@ -246,7 +265,7 @@ public static class TerrainEditing
         ArgumentNullException.ThrowIfNull(terrainAssets);
         DocumentValidation.Validate(scene);
         foreach (var cell in scene.TerrainCells)
-            _ = terrainAssets.Resolve(cell.AssetKey);
+            _ = RequirePaintable(terrainAssets, cell.AssetKey);
     }
 
     /// <summary>Replaces or inserts one cell, keeping the list canonical.</summary>

@@ -138,7 +138,7 @@ public sealed class EditorControllerWorkspaceTests
         controller.OpenWorkspaceAt(workspace.RootPath);
 
         var report = controller.SaveAssetProfiles(
-            [new WorkspaceAssetProfile("grass", "#99E550", "land"), new WorkspaceAssetProfile("stone", "#808080")]);
+            [new WorkspaceAssetProfile("grass", "#99E550", "land", TerrainAuthoring.Cells), new WorkspaceAssetProfile("stone", "#808080")]);
 
         Assert.True(report.Succeeded);
         Assert.Equal(
@@ -165,7 +165,7 @@ public sealed class EditorControllerWorkspaceTests
         var stored = File.ReadAllText(configPath);
 
         // The open Scene stands on grass, so dropping grass would orphan it.
-        var report = controller.SaveAssetProfiles([new WorkspaceAssetProfile("sand", "#E5C07B", "sand")]);
+        var report = controller.SaveAssetProfiles([new WorkspaceAssetProfile("sand", "#E5C07B", "sand", TerrainAuthoring.Cells)]);
 
         Assert.False(report.Succeeded);
         Assert.Same(opened, controller.Session);

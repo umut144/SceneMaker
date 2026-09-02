@@ -57,7 +57,7 @@ public sealed class TerrainSurfaceTests
         using var workspace = TestWorkspace.Create();
 
         var narrowed = workspace.Configuration.WithAssetProfiles(
-            [new WorkspaceAssetProfile("grass", "#99E550", surface)],
+            [new WorkspaceAssetProfile("grass", "#99E550", surface, TerrainAuthoring.Cells)],
             workspace.Catalog);
 
         Assert.Equal(surface, narrowed.ResolveAssetProfile("grass").Surface);
@@ -81,11 +81,75 @@ public sealed class TerrainSurfaceTests
     }
 
     [Fact]
+    public void ATerrainAssetWithoutAnAuthoringIsRefused()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            workspace.Configuration.WithAssetProfiles(
+                [new WorkspaceAssetProfile("grass", "#99E550", "land")],
+                workspace.Catalog));
+
+        Assert.Contains("requires an authoring", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void APropWithAnAuthoringIsRefused()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            workspace.Configuration.WithAssetProfiles(
+                [new WorkspaceAssetProfile("stone", "#808080", null, TerrainAuthoring.Cells)],
+                workspace.Catalog));
+
+        Assert.Contains("must not declare an authoring", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheAuthoringSurvivesAWriteAndReadRoundTrip()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        WorkspaceConfigurationStore.Save(workspace.RootPath, workspace.Configuration);
+        var reloaded = WorkspaceConfigurationStore.Load(workspace.RootPath, workspace.Catalog);
+
+        Assert.Equal(TerrainAuthoring.Cells, reloaded.ResolveAssetProfile("grass").Authoring);
+        Assert.Equal(TerrainAuthoring.Curve, reloaded.ResolveAssetProfile("river").Authoring);
+        Assert.Null(reloaded.ResolveAssetProfile("stone").Authoring);
+    }
+
+    [Fact]
+    public void ACurveAssetCannotBePaintedAndACellAssetCannotBeDrawn()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+
+        // A river painted cell by cell would be a raster nothing derives and
+        // nothing maintains; a river made of grass would be a green river.
+        var painted = Assert.Throws<SceneMakerDocumentException>(
+            () => TerrainEditing.Paint(scene, workspace.Terrain, 0, 0, "river"));
+        Assert.Contains("cannot be painted as cells", painted.Message, StringComparison.Ordinal);
+
+        var drawn = Assert.Throws<SceneMakerDocumentException>(() => WaterEditing.PlaceRiver(
+            scene,
+            workspace.Terrain,
+            [
+                WaterEditing.Point(32, 32, WaterPointMode.Linear),
+                WaterEditing.Point(160, 32, WaterPointMode.Linear),
+            ],
+            "grass",
+            widthMeters: 4.0m,
+            elevationMeters: 0.0m));
+        Assert.Contains("cannot be drawn as a water body", drawn.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheSurfaceSurvivesAWriteAndReadRoundTrip()
     {
         using var workspace = TestWorkspace.Create();
         var narrowed = workspace.Configuration.WithAssetProfiles(
-            [new WorkspaceAssetProfile("grass", "#99E550", "swamp")],
+            [new WorkspaceAssetProfile("grass", "#99E550", "swamp", TerrainAuthoring.Cells)],
             workspace.Catalog);
 
         WorkspaceConfigurationStore.Save(workspace.RootPath, narrowed);

@@ -19,7 +19,8 @@ namespace SceneMaker.TestSupport;
 ///
 /// Assets: <c>grass</c>, <c>river</c> and <c>sand</c> are PolyTools terrain with
 /// the surfaces <c>land</c>, <c>water</c> and <c>sand</c>; <c>stone</c> and
-/// <c>portal</c> are PolyTools props and therefore carry no surface.
+/// <c>portal</c> are PolyTools props and therefore carry no surface. Only
+/// <c>river</c> is authored as a curve; the other two are painted as cells.
 ///
 /// The Workspace directory is named after its key and carries the empty
 /// <c>scenes</c> and <c>templates</c> directories, so it satisfies everything
@@ -87,7 +88,7 @@ public sealed class TestWorkspace : IDisposable
             $$"""
             {
               "format": "scene_maker_workspace",
-              "version": 5,
+              "version": 6,
               "workspace_key": "{{worldKey}}",
               "grid": {
                 "terrain_cell_meters": 1.0,
@@ -96,10 +97,10 @@ public sealed class TestWorkspace : IDisposable
                 "water_cell_meters": 0.5
               },
               "assets": [
-                { "asset_key": "grass", "color": "#99E550", "surface": "land" },
+                { "asset_key": "grass", "color": "#99E550", "surface": "land", "authoring": "cells" },
                 { "asset_key": "portal", "color": "#8E6CFF" },
-                { "asset_key": "river", "color": "#3C7DD9", "surface": "water" },
-                { "asset_key": "sand", "color": "#E5C07B", "surface": "sand" },
+                { "asset_key": "river", "color": "#3C7DD9", "surface": "water", "authoring": "curve" },
+                { "asset_key": "sand", "color": "#E5C07B", "surface": "sand", "authoring": "cells" },
                 { "asset_key": "stone", "color": "#808080" }
               ]
             }

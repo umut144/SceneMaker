@@ -11,8 +11,9 @@ supported for compatibility. SceneMaker never discovers packages by scanning
 directories and never reads a sibling PolyTools project at runtime.
 
 The workspace configuration supplies terrain-cell size, authoring/game pixel
-densities, enabled assets, editor colors, and the surface each Terrain Asset
-presents to a consumer's simulation; whether an Asset is Terrain or a Prop is
+densities, enabled assets, editor colors, the surface each Terrain Asset
+presents to a consumer's simulation, and how each Terrain Asset is authored -
+painted as cells or drawn as a curve; whether an Asset is Terrain or a Prop is
 PolyTools catalog data and is never overridden. A surface is an open
 lower_snake_case token such as `land` or `water`, held per Asset rather than per
 cell so that one Terrain Asset cannot contradict itself. Prop footprints and
@@ -31,6 +32,12 @@ centerline of Bezier points, a width and a surface height; the cells a
 simulation reads are derived from it and never stored in the Scene. That is
 what keeps a river reshapeable after it has been drawn, and it means the
 rasterization exists exactly once, in `WaterGeometry`.
+
+Which Terrain Assets are drawn that way is authored Workspace data
+(`authoring: "cells" | "curve"`), not something SceneMaker works out from a
+surface token whose meaning it never reads. It is what the tool bar narrows
+itself by, and it makes two mistakes impossible: a river painted cell by cell,
+and a river made of grass.
 
 The water grid is finer than the Terrain grid - `water_cell_meters` in the
 Workspace config, 0.5 m for `world01`, where a Terrain cell is 1 m - because a

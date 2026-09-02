@@ -41,15 +41,27 @@ Die Werkzeugauswahl besteht aus zwei unabhängigen, typisierten Dimensionen:
   oder `Templates`.
 - `EditorTool` bestimmt das primäre Werkzeug innerhalb dieses Modus.
 
-Die linke Werkzeugleiste ist mode-aware und zeigt nur die Werkzeuge des aktiven
-Modus. Beispiele sind:
+Die linke Werkzeugleiste zeigt nur die Werkzeuge des aktiven Modus — und im
+Terrain-Modus zusätzlich nur die, die zum gewählten Asset passen. Ob ein
+Terrain-Asset gemalt oder gezeichnet wird, steht in der Workspace-Konfiguration
+(`authoring: "cells" | "curve"`), nicht in seinem Surface-Token. Bei `grass`
+stehen also `Pencil`, `Line` und `Terrain Fill` bereit, bei `river` `Draw River`.
+Ist das aktive Werkzeug für das neu gewählte Asset nicht vorgesehen, wechselt
+die Leiste selbst auf das erste passende — wer einen Fluss wählt, hält nie einen
+Stift in der Hand, der ihn nicht zeichnen kann.
 
 - `Selector`
 - `Pencil`
 - `Line`
 - `Terrain Fill`
-- `River`
+- `Draw River`
 - Template-bezogene Werkzeuge wie `Anchor Move`
+
+Die Assetleisten oben zeigen jedes Asset in seiner eigenen Farbe. Die Auswahl
+liegt deshalb auf dem **Hintergrund** — eine gefüllte Fläche in der Assetfarbe
+mit Rahmen —, nicht auf der Schrift: Godots Standard-Theme färbt die Schrift
+eines gedrückten Knopfes weiß, und damit wäre ausgerechnet das gewählte Asset
+das einzige, dessen Farbe man nicht mehr sieht.
 
 Das primäre Werkzeug beschreibt, welche Art von Aktion ausgeführt wird.
 Scene-Typ (`Instance` oder `Template`) und Editor-Modus bleiben voneinander
@@ -68,7 +80,7 @@ Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
   Ziehens alle betroffenen Tiles und führt die Linie beim Loslassen aus.
 - `Prop:Line` behält Startpunkt, Endpunkt und die Bestätigung mit Enter als
   getrennte Schritte.
-- `Terrain:River` zeichnet eine offene Bezier-Kurve: Drücken legt einen
+- `Terrain:Draw River` zeichnet eine offene Bezier-Kurve: Drücken legt einen
   Kurvenpunkt auf dem Wasserraster fest, Ziehen zieht sein Handle heraus,
   Loslassen setzt ihn. Enter schließt den Fluss ab, Escape nimmt Punkt für Punkt
   zurück.
@@ -88,9 +100,9 @@ Feld `Ground height` gesetzt hat. Damit findet man die Vorgabe der Scene immer
 wieder vor, kann aber pro Strich davon abweichen, ohne dass das Dokument sich
 ändert.
 
-### Terrain:River
+### Terrain:Draw River
 
-Das ContextMenu von `Terrain:River` enthält zwei Werte. `Point` schaltet
+Das ContextMenu von `Terrain:Draw River` enthält zwei Werte. `Point` schaltet
 zwischen `Linear` und `Aligned` um: `Linear` macht die angrenzenden Segmente
 gerade, `Aligned` hält die beiden Handles eines Punktes kollinear. Wie beim
 Bezier-Werkzeug von PolyTools ist das Sitzungszustand und gilt für den *nächsten*
@@ -109,7 +121,7 @@ im ContextMenu — für Wasser in world01 also 0.
 
 Der fertige Fluss ist **ein** Bearbeitungsschritt: ein Rückgängig nimmt danach
 den ganzen Fluss zurück, nicht seinen letzten Punkt. Während des Zeichnens gilt
-die Entwurfsregel weiter unten — da nimmt Rückgängig Punkt für Punkt zurück. `River` + `Eraser` löscht den ganzen
+die Entwurfsregel weiter unten — da nimmt Rückgängig Punkt für Punkt zurück. `Draw River` + `Eraser` löscht den ganzen
 Body unter dem Zeiger. Einzelne Zellen sind nicht radierbar, weil sie aus der
 Kurve abgeleitet sind.
 
