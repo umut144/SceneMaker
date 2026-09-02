@@ -171,7 +171,7 @@ public sealed class TestWorkspace : IDisposable
             Path.Combine(directory, "manifest.json"),
             $$"""
             {
-              "schema_version": 15,
+              "schema_version": 16,
               "asset_key": "{{assetKey}}",
               "display_name": "{{assetKey}}",
               "asset_type": "{{assetType}}",
@@ -191,7 +191,8 @@ public sealed class TestWorkspace : IDisposable
                   },
                   "contour_stroke_mesh": null
                 }
-              ]
+              ],
+              "regions": []
             }
             """);
     }

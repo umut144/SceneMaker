@@ -281,27 +281,175 @@ public sealed class StandaloneWorkspaceTests
         Assert.DoesNotContain("#99E550", json, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ImportRejectsOutdatedPolyToolsManifestSchema()
+    [Theory]
+    [InlineData(14)]
+    [InlineData(15)]
+    [InlineData(17)]
+    public void ImportRejectsReplacedPolyToolsManifestSchemas(int schema)
     {
         using var directory = TemporaryDirectory.Create();
-        WritePolyToolsImport(directory.Path, "game06", manifestSchema: 13);
+        WritePolyToolsImport(directory.Path, "game06", manifestSchema: schema);
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             PolyToolsCatalogImporter.Load(directory.Path));
 
-        Assert.Contains("schema_version 14 or 15", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("schema_version 16", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void ImportAcceptsCurrentPolyToolsManifestSchema()
     {
         using var directory = TemporaryDirectory.Create();
-        WritePolyToolsImport(directory.Path, "game07", manifestSchema: 15);
+        WritePolyToolsImport(directory.Path, "game07");
 
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
 
         Assert.Contains(catalog.Assets, asset => asset.AssetKey == "tree");
+    }
+
+    [Fact]
+    public void ImportValidatesBothRegionGeometryVariantsWithoutChangingVisibleBounds()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game08", regions: """
+            [
+              {
+                "region_id": "region_authored",
+                "name": "attack_region",
+                "role": "attack",
+                "geometry_source": "authored",
+                "source_component_id": "body",
+                "vertices": [[-100.0, -100.0], [100.0, -100.0], [0.0, 100.0]],
+                "indices": [0, 1, 2]
+              },
+              {
+                "region_id": "region_component",
+                "name": "collision_region",
+                "role": "collision",
+                "geometry_source": "component",
+                "source_component_id": "body"
+              }
+            ]
+        """);
+
+        var tree = PolyToolsCatalogImporter.Load(directory.Path).Resolve("tree");
+
+        Assert.Equal(-1.01m, tree.BoundsMeters.MinimumX);
+        Assert.Equal(0.01m, tree.BoundsMeters.MinimumY);
+        Assert.Equal(1.02m, tree.BoundsMeters.MaximumX);
+        Assert.Equal(2.03m, tree.BoundsMeters.MaximumY);
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidRegions))]
+    public void ImportRejectsInvalidRegionVariants(string regions, string expectedMessage)
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game09", regions: regions);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            PolyToolsCatalogImporter.Load(directory.Path));
+
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string, string> InvalidRegions => new()
+    {
+        {
+            "null",
+            "requires array regions"
+        },
+        {
+            """
+            [{
+              "region_id": "region_component",
+              "name": "collision_region",
+              "role": "collision",
+              "geometry_source": "component",
+              "source_component_id": "body",
+              "vertices": [[0, 0], [1, 0], [0, 1]],
+              "indices": [0, 1, 2]
+            }]
+            """,
+            "must not contain vertices or indices"
+        },
+        {
+            """
+            [{
+              "region_id": "region_authored",
+              "name": "hurt_region",
+              "role": "hurt",
+              "geometry_source": "authored",
+              "source_component_id": "body"
+            }]
+            """,
+            "requires array vertices"
+        },
+        {
+            """
+            [{
+              "region_id": "region_missing",
+              "name": "collision_region",
+              "role": "collision",
+              "geometry_source": "component",
+              "source_component_id": "missing"
+            }]
+            """,
+            "references missing Component 'missing'"
+        },
+        {
+            """
+            [{
+              "region_id": "region_unknown",
+              "name": "collision_region",
+              "role": "defence",
+              "geometry_source": "component",
+              "source_component_id": "body"
+            }]
+            """,
+            "unsupported role 'defence'"
+        },
+    };
+
+    [Fact]
+    public void ImportRejectsComponentBoundRegionWithoutAnOrdinaryClosedGeometrySource()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(
+            directory.Path,
+            "game10",
+            treeComponents: """
+                {
+                  "component_id": "body",
+                  "parent_component_id": null,
+                  "kind": "asset_reference",
+                  "source_asset_key": "grass",
+                  "local_transform": {
+                    "position": [0.0, 0.0],
+                    "rotation_radians": 0.0,
+                    "scale": [1.0, 1.0]
+                  },
+                  "mesh": null,
+                  "contour_stroke_mesh": null
+                }
+            """,
+            regions: """
+                [{
+                  "region_id": "region_component",
+                  "name": "collision_region",
+                  "role": "collision",
+                  "geometry_source": "component",
+                  "source_component_id": "body"
+                }]
+            """);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            PolyToolsCatalogImporter.Load(directory.Path));
+
+        Assert.Contains(
+            "requires an ordinary source Component with closed geometry",
+            exception.Message,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -342,7 +490,8 @@ public sealed class StandaloneWorkspaceTests
         string worldKey,
         string? treeComponents = null,
         string treePivot = "[0.0, 0.0]",
-        int manifestSchema = 14)
+        int manifestSchema = PolyToolsCatalogImporter.ManifestSchemaVersion,
+        string regions = "[]")
     {
         var importDirectory = Path.Combine(
             workspaceDirectory,
@@ -397,7 +546,8 @@ public sealed class StandaloneWorkspaceTests
             "props",
             manifestSchema,
             treePivot,
-            treeComponents ?? BasicComponent("[[-1.01, 0.01], [1.02, 2.03]]"));
+            treeComponents ?? BasicComponent("[[-1.01, 0.01], [1.02, 2.03]]"),
+            regions);
     }
 
     private static string BasicComponent(string vertices) => $$"""
@@ -423,7 +573,8 @@ public sealed class StandaloneWorkspaceTests
         string assetType,
         int schema,
         string assetPivot,
-        string components)
+        string components,
+        string regions = "[]")
     {
         var directory = Path.Combine(
             importDirectory, "PolyToolsRuntimeExports", assetKey);
@@ -437,7 +588,8 @@ public sealed class StandaloneWorkspaceTests
           "asset_pivot": {{assetPivot}},
           "components": [
             {{components}}
-          ]
+          ],
+          "regions": {{regions}}
         }
         """);
     }

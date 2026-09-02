@@ -8,7 +8,7 @@ source_catalog="$source_world_dir/catalog.json"
 config_path="$workspace_dir/config.json"
 import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
-current_manifest_schema=15
+current_manifest_schema=16
 
 cleanup() {
   local status=$?
@@ -71,14 +71,28 @@ fi
 world_key="$(jq -r '.world_key' "$source_catalog")"
 if ! jq -e --arg world "$world_key" '
   .format == "scene_maker_workspace"
-  and .version == 4
+  and .version == 6
   and .workspace_key == $world
   and (.grid.terrain_cell_meters | type == "number" and . > 0)
   and (.grid.authoring_pixels_per_meter | type == "number" and . > 0)
   and (.grid.game_pixels_per_meter | type == "number" and . > 0)
+  and (.grid.water_cell_meters | type == "number" and . > 0)
   and (.assets | type == "array")
 ' "$config_path" >/dev/null; then
-  printf 'ERROR: SceneMaker config must be version 4 for PolyTools world %s.\n' "$world_key" >&2
+  printf 'ERROR: SceneMaker config must be version 6 for PolyTools world %s.\n' "$world_key" >&2
+  exit 1
+fi
+if ! jq -e --slurpfile catalog "$source_catalog" '
+  . as $config
+  | all($catalog[0].assets[];
+      .asset_type != "terrain"
+      or (.asset_key as $key
+        | any($config.assets[];
+            .asset_key == $key
+            and (.surface | type == "string" and length > 0)
+            and (.authoring == "cells" or .authoring == "curve"))))
+' "$config_path" >/dev/null; then
+  printf '%s\n' 'ERROR: every synchronized Terrain Asset needs an authored surface and authoring mode in the SceneMaker config.' >&2
   exit 1
 fi
 
@@ -99,10 +113,10 @@ while IFS=$'\t' read -r asset_key asset_type runtime_package; do
     --arg key "$asset_key" \
     --arg type "$asset_type" \
     --argjson current_schema "$current_manifest_schema" '
-      (.schema_version == 14 or .schema_version == $current_schema)
+      . as $manifest
+      | .schema_version == $current_schema
       and .asset_key == $key
       and .asset_type == $type
-      and (if .schema_version == $current_schema then (.regions | type == "array") else true end)
       and (.asset_pivot | type == "array" and length == 2
         and all(.[]; type == "number" and isfinite))
       and (.components | type == "array" and length > 0)
@@ -113,6 +127,36 @@ while IFS=$'\t' read -r asset_key asset_type runtime_package; do
         and (.local_transform.rotation_radians | type == "number" and isfinite)
         and (.local_transform.scale | type == "array" and length == 2
           and all(.[]; type == "number" and isfinite))
+      )
+      and (([.components[].component_id] | unique | length)
+        == ([.components[].component_id] | length))
+      and (.regions | type == "array")
+      and (([.regions[].region_id] | unique | length)
+        == ([.regions[].region_id] | length))
+      and all(.regions[];
+        . as $region
+        | ($manifest.components
+          | map(select(.component_id == $region.source_component_id))) as $sources
+        | (.region_id | type == "string" and length > 0)
+        and (.name | type == "string" and test("^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"))
+        and (.role == "attack" or .role == "hurt" or .role == "collision")
+        and (.geometry_source == "authored" or .geometry_source == "component")
+        and (.source_component_id | type == "string" and length > 0)
+        and ($sources | length == 1)
+        and if .geometry_source == "authored" then
+          (.vertices | type == "array" and length > 0
+            and all(.[]; type == "array" and length == 2
+              and all(.[]; type == "number" and isfinite)))
+          and (.indices | type == "array" and length > 0 and length % 3 == 0
+            and all(.[]; type == "number" and isfinite and floor == .
+              and . >= 0 and . < ($region.vertices | length)))
+        else
+          (has("vertices") | not)
+          and (has("indices") | not)
+          and ($sources[0].kind != "asset_reference")
+          and (($sources[0].mesh | type == "object")
+            or ($sources[0].closed_region_mesh | type == "object"))
+        end
       )
     ' "$manifest_path" >/dev/null; then
     printf 'ERROR: invalid PolyTools manifest: %s\n' "$manifest_path" >&2
@@ -136,7 +180,8 @@ jq --slurpfile catalog "$source_catalog" '
          then {
            asset_key: $source.asset_key,
            color: ($old.color // "#99E550"),
-           surface: ($old.surface // "land")
+           surface: $old.surface,
+           authoring: $old.authoring
          }
          else {
            asset_key: $source.asset_key,

@@ -49,8 +49,7 @@ public static class PolyToolsCatalogImporter
     public const string PolyToolsDirectoryName = "polytools";
     public const string CatalogFileName = "catalog.json";
     public const int CatalogSchemaVersion = 1;
-    public const int LegacyManifestSchemaVersion = 14;
-    public const int ManifestSchemaVersion = 15;
+    public const int ManifestSchemaVersion = 16;
 
     public static PolyToolsCatalog Load(string workspaceDirectory)
     {
@@ -180,7 +179,8 @@ public static class PolyToolsCatalogImporter
                 componentObject, "local_transform", $"PolyTools Component '{componentId}'");
             var kind = OptionalString(componentObject, "kind");
             var sourceAssetKey = OptionalString(componentObject, "source_asset_key");
-            if (string.Equals(kind, "asset_reference", StringComparison.Ordinal)
+            var isAssetReference = string.Equals(kind, "asset_reference", StringComparison.Ordinal);
+            if (isAssetReference
                 && string.IsNullOrWhiteSpace(sourceAssetKey))
             {
                 throw new SceneMakerDocumentException(
@@ -195,12 +195,17 @@ public static class PolyToolsCatalogImporter
                 visibleVertices,
                 componentId,
                 requireOutline: true);
+            var hasMesh = HasObject(componentObject, "mesh");
+            var hasClosedRegionMesh = HasObject(componentObject, "closed_region_mesh");
             if (!components.TryAdd(componentId, new RuntimeComponent(
                     componentId,
                     parentId,
                     localTransform,
                     sourceAssetKey,
-                    visibleVertices)))
+                    visibleVertices,
+                    isAssetReference,
+                    hasMesh,
+                    hasClosedRegionMesh)))
             {
                 throw new SceneMakerDocumentException(
                     $"PolyTools manifest '{entry.AssetKey}' contains duplicate Component '{componentId}'.");
@@ -216,7 +221,119 @@ public static class PolyToolsCatalogImporter
                     $"PolyTools Component '{component.ComponentId}' references missing parent '{component.ParentComponentId}'.");
             }
         }
-        return new RuntimeManifest(entry.AssetKey, assetPivot, components);
+        var regions = LoadRegions(root, components, entry.AssetKey);
+        return new RuntimeManifest(entry.AssetKey, assetPivot, components, regions);
+    }
+
+    private static IReadOnlyList<RuntimeRegion> LoadRegions(
+        JsonElement root,
+        IReadOnlyDictionary<string, RuntimeComponent> components,
+        string assetKey)
+    {
+        var array = RequireArray(root, "regions", $"PolyTools manifest '{assetKey}'");
+        var regions = new List<RuntimeRegion>();
+        var regionIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var element in array.EnumerateArray())
+        {
+            var regionObject = RequireObject(element, $"PolyTools manifest '{assetKey}' Region");
+            var regionId = RequireString(regionObject, "region_id", $"PolyTools manifest '{assetKey}' Region");
+            DocumentValidation.ValidateStableId("PolyTools region_id", regionId);
+            if (!regionIds.Add(regionId))
+            {
+                throw new SceneMakerDocumentException(
+                    $"PolyTools manifest '{assetKey}' contains duplicate Region '{regionId}'.");
+            }
+
+            var label = $"PolyTools Region '{regionId}'";
+            var name = RequireString(regionObject, "name", label);
+            if (!IsLowerSnakeCase(name))
+                throw new SceneMakerDocumentException($"{label} name must use lower_snake_case.");
+            var role = RequireString(regionObject, "role", label);
+            if (role is not ("attack" or "hurt" or "collision"))
+                throw new SceneMakerDocumentException($"{label} has unsupported role '{role}'.");
+
+            var geometrySource = RequireString(regionObject, "geometry_source", label);
+            var sourceComponentId = RequireString(regionObject, "source_component_id", label);
+            if (!components.TryGetValue(sourceComponentId, out var sourceComponent))
+            {
+                throw new SceneMakerDocumentException(
+                    $"{label} references missing Component '{sourceComponentId}'.");
+            }
+
+            switch (geometrySource)
+            {
+                case "authored":
+                {
+                    var geometry = RequireIndexedGeometry(regionObject, label);
+                    regions.Add(new AuthoredRuntimeRegion(
+                        regionId,
+                        name,
+                        role,
+                        sourceComponentId,
+                        geometry.Vertices,
+                        geometry.Indices));
+                    break;
+                }
+                case "component":
+                    if (regionObject.TryGetProperty("vertices", out _)
+                        || regionObject.TryGetProperty("indices", out _))
+                    {
+                        throw new SceneMakerDocumentException(
+                            $"{label} with component geometry must not contain vertices or indices.");
+                    }
+                    if (sourceComponent.IsAssetReference
+                        || !sourceComponent.HasMesh && !sourceComponent.HasClosedRegionMesh)
+                    {
+                        throw new SceneMakerDocumentException(
+                            $"{label} requires an ordinary source Component with closed geometry.");
+                    }
+                    regions.Add(new ComponentBoundRuntimeRegion(
+                        regionId,
+                        name,
+                        role,
+                        sourceComponentId));
+                    break;
+                default:
+                    throw new SceneMakerDocumentException(
+                        $"{label} has unsupported geometry_source '{geometrySource}'.");
+            }
+        }
+        return regions;
+    }
+
+    private static IndexedGeometry RequireIndexedGeometry(JsonElement owner, string label)
+    {
+        var vertexArray = RequireArray(owner, "vertices", label);
+        if (vertexArray.GetArrayLength() == 0)
+            throw new SceneMakerDocumentException($"{label} requires non-empty vertices.");
+        var vertices = vertexArray.EnumerateArray()
+            .Select(vertex => RequirePoint(vertex, $"{label} vertex"))
+            .ToArray();
+
+        var indexArray = RequireArray(owner, "indices", label);
+        if (indexArray.GetArrayLength() == 0 || indexArray.GetArrayLength() % 3 != 0)
+            throw new SceneMakerDocumentException($"{label} indices must contain complete triangles.");
+        var indices = new int[indexArray.GetArrayLength()];
+        for (var index = 0; index < indices.Length; index++)
+        {
+            if (!indexArray[index].TryGetInt32(out var vertexIndex)
+                || vertexIndex < 0
+                || vertexIndex >= vertices.Length)
+            {
+                throw new SceneMakerDocumentException($"{label} contains an invalid vertex index.");
+            }
+            indices[index] = vertexIndex;
+        }
+        for (var index = 0; index < indices.Length; index += 3)
+        {
+            if (indices[index] == indices[index + 1]
+                || indices[index] == indices[index + 2]
+                || indices[index + 1] == indices[index + 2])
+            {
+                throw new SceneMakerDocumentException($"{label} contains a degenerate triangle.");
+            }
+        }
+        return new IndexedGeometry(vertices, indices);
     }
 
     private static AssetBoundsMeters BoundsForAsset(
@@ -315,6 +432,31 @@ public static class PolyToolsCatalogImporter
             destination.Add(RequirePoint(vertex, $"PolyTools Component '{componentId}' vertex"));
     }
 
+    private static bool HasObject(JsonElement owner, string propertyName) =>
+        owner.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Object;
+
+    private static bool IsLowerSnakeCase(string value)
+    {
+        var requiresLetter = true;
+        foreach (var character in value)
+        {
+            if (requiresLetter)
+            {
+                if (character is < 'a' or > 'z') return false;
+                requiresLetter = false;
+            }
+            else if (character == '_')
+            {
+                requiresLetter = true;
+            }
+            else if (character is not (>= 'a' and <= 'z') and not (>= '0' and <= '9'))
+            {
+                return false;
+            }
+        }
+        return !requiresLetter;
+    }
+
     private static Transform RequireTransform(JsonElement owner, string propertyName, string label)
     {
         if (!owner.TryGetProperty(propertyName, out var value))
@@ -381,10 +523,10 @@ public static class PolyToolsCatalogImporter
     {
         if (!owner.TryGetProperty("schema_version", out var value)
             || !value.TryGetInt32(out var actual)
-            || actual is not (LegacyManifestSchemaVersion or ManifestSchemaVersion))
+            || actual != ManifestSchemaVersion)
         {
             throw new SceneMakerDocumentException(
-                $"{label} must use schema_version {LegacyManifestSchemaVersion} or {ManifestSchemaVersion}.");
+                $"{label} must use schema_version {ManifestSchemaVersion}.");
         }
     }
 
@@ -433,14 +575,44 @@ public static class PolyToolsCatalogImporter
     private sealed record RuntimeManifest(
         string AssetKey,
         Point AssetPivot,
-        SortedDictionary<string, RuntimeComponent> Components);
+        SortedDictionary<string, RuntimeComponent> Components,
+        IReadOnlyList<RuntimeRegion> Regions);
 
     private sealed record RuntimeComponent(
         string ComponentId,
         string? ParentComponentId,
         Transform LocalTransform,
         string? SourceAssetKey,
-        IReadOnlyList<Point> VisibleVertices);
+        IReadOnlyList<Point> VisibleVertices,
+        bool IsAssetReference,
+        bool HasMesh,
+        bool HasClosedRegionMesh);
+
+    private abstract record RuntimeRegion(
+        string RegionId,
+        string Name,
+        string Role,
+        string SourceComponentId);
+
+    private sealed record AuthoredRuntimeRegion(
+        string RegionId,
+        string Name,
+        string Role,
+        string SourceComponentId,
+        IReadOnlyList<Point> Vertices,
+        IReadOnlyList<int> Indices)
+        : RuntimeRegion(RegionId, Name, Role, SourceComponentId);
+
+    private sealed record ComponentBoundRuntimeRegion(
+        string RegionId,
+        string Name,
+        string Role,
+        string SourceComponentId)
+        : RuntimeRegion(RegionId, Name, Role, SourceComponentId);
+
+    private sealed record IndexedGeometry(
+        IReadOnlyList<Point> Vertices,
+        IReadOnlyList<int> Indices);
 
     private readonly record struct Point(double X, double Y);
 

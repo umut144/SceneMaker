@@ -73,17 +73,15 @@ unrelated reasons.
 | Workspace config | `WorkspaceConfigurationStore.Version` | 6 |
 | Scene export | `SceneExport.Version` | 8 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 1 |
-| PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 15, 14 still read |
+| PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 16 |
 | Recent session | `RecentSessionStore.Version` | 3 |
 
 There is no migration code and none is planned. Every reader rejects a document
-whose version it does not know; the runtime manifest is the one exception,
-where the previous version is still accepted so a partly synchronized import
-does not block authoring. Bumping a version therefore means rewriting the
+whose version it does not know. Bumping a version therefore means rewriting the
 affected files by hand — `workspaces/` is the only authored data — or
-re-exporting them, and updating the reader in `BevyProjects/world01` for the
-export. If that ever stops being practical, add migrations at the IO boundary,
-never inside the documents.
+re-exporting and synchronizing generated imports, and updating the reader in
+`BevyProjects/world01` for the export. If that ever stops being practical, add
+migrations at the IO boundary, never inside the documents.
 
 ## Engineering
 
@@ -101,6 +99,7 @@ dotnet build SceneMaker.csproj
 dotnet build src/SceneMaker.Cli/SceneMaker.Cli.csproj
 dotnet test tests/SceneMaker.Core.Tests/SceneMaker.Core.Tests.csproj
 dotnet test tests/SceneMaker.Editor.Tests/SceneMaker.Editor.Tests.csproj
+tests/test_sync_polytools_world.sh
 /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . --editor --quit
 ```
 

@@ -5,10 +5,12 @@ game and contains its own scene/template data and `config.json`.
 
 Each Workspace consumes a synchronized copy of the current PolyTools Runtime
 Export below `imports/polytools/`. PolyTools Catalog schema 1 is the closed
-Asset set; the current Runtime Manifest schema 15 supplies geometry, hierarchy,
-Asset References, and pivots. Legacy Runtime Manifest schema 14 remains
-supported for compatibility. SceneMaker never discovers packages by scanning
-directories and never reads a sibling PolyTools project at runtime.
+Asset set; Runtime Manifest schema 16 supplies geometry, hierarchy, Asset
+References, pivots, and validated gameplay Regions. Authored and
+Component-bound Regions remain distinct, do not contribute to SceneMaker's
+visible Asset bounds, and older Manifest schemas are rejected. SceneMaker never
+discovers packages by scanning directories and never reads a sibling PolyTools
+project at runtime.
 
 The workspace configuration supplies terrain-cell size, authoring/game pixel
 densities, enabled assets, editor colors, the surface each Terrain Asset

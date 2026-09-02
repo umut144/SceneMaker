@@ -65,6 +65,9 @@ jobs:
           --logger "trx;LogFileName=editor-tests.trx"
           --results-directory test-results
 
+      - name: PolyTools sync preflight
+        run: tests/test_sync_polytools_world.sh
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
