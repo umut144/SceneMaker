@@ -74,6 +74,35 @@ public sealed class WaterAuthoringTests
     }
 
     [Fact]
+    public void TheWidthThatDecidesMembershipIsNotRounded()
+    {
+        using var workspace = TestWorkspace.Create();
+        // Half of 2.5 m is exactly 40 authoring pixels, and 40 pixels is exactly
+        // how far the cell centres of rows 3 and 8 sit from a centerline at
+        // y = 96. A river from 2.499 m to 2.500 m therefore runs just inside
+        // that boundary the whole way without ever reaching it - but at the
+        // middle column the interpolated width is 2.4995 m, which rounds to
+        // 2.500 and would let both rows in.
+        var scene = WaterEditing.PlaceRiver(
+            TestScenes.Instance(workspace),
+            workspace.Terrain,
+            [
+                WaterEditing.Point(0, 96, WaterPointMode.Linear, widthMeters: 2.499m),
+                WaterEditing.Point(48, 96, WaterPointMode.Linear, widthMeters: 2.500m),
+            ],
+            "river");
+
+        var cells = WaterGeometry.Corridor(
+            scene, workspace.Metrics, Assert.Single(scene.WaterBodies));
+
+        // Three columns inside the butt caps, four rows each. Rounding the width
+        // anywhere between the authored points makes it sixteen cells, because
+        // two whole rows arrive at once.
+        Assert.Equal(12, cells.Count);
+        Assert.Equal([4, 5, 6, 7], cells.Select(static cell => cell.Y).Distinct().Order());
+    }
+
+    [Fact]
     public void TheCorridorIsCanonicallyOrderedByRowThenColumn()
     {
         using var workspace = TestWorkspace.Create();
