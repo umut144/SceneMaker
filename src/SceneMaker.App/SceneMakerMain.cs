@@ -40,6 +40,13 @@ public sealed partial class SceneMakerMain : Control
     private readonly OptionButton _waterPointModeEdit = new();
     private readonly Label _riverWidthLabel = new();
     private readonly SpinBox _riverWidthEdit = new();
+    private readonly CheckBox _snapWaterToggle = new();
+    private readonly Label _waterElevationLabel = new();
+    private readonly SpinBox _waterElevationEdit = new();
+    private readonly Label _waterDepthLabel = new();
+    private readonly SpinBox _waterDepthEdit = new();
+    private readonly Label _waterClearanceLabel = new();
+    private readonly SpinBox _waterClearanceEdit = new();
     private readonly Button _eraserToggle = new();
     private readonly Button _heatmapToggle = new();
     private readonly Label _viewLabel = new();
@@ -346,6 +353,48 @@ public sealed partial class SceneMakerMain : Control
         _riverWidthEdit.TooltipText = "The width of the corridor around the river's centerline.";
         _riverWidthEdit.ValueChanged += SetRiverWidth;
         _contextMenuBar.AddChild(_riverWidthEdit);
+        _snapWaterToggle.Name = "SnapWaterToTerrain";
+        _snapWaterToggle.Text = "Snap";
+        _snapWaterToggle.ButtonPressed = true;
+        _snapWaterToggle.TooltipText =
+            "Take the water level from the Terrain under each placed point. "
+            + "Switch it off to drive a river into a mountain, where the water "
+            + "must not follow the ground. What gets stored is the height, not "
+            + "the relationship: repainting Terrain later never moves the river.";
+        _snapWaterToggle.Toggled += SetSnapWaterToTerrain;
+        _contextMenuBar.AddChild(_snapWaterToggle);
+        _waterElevationLabel.Name = "WaterElevationLabel";
+        _waterElevationLabel.Text = "Water";
+        _waterElevationLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_waterElevationLabel);
+        _waterElevationEdit.Name = "WaterElevation";
+        ConfigureElevationInput(_waterElevationEdit);
+        _waterElevationEdit.TooltipText =
+            "The water surface the next point takes when it is not snapped to the Terrain.";
+        _waterElevationEdit.ValueChanged += SetWaterElevation;
+        _contextMenuBar.AddChild(_waterElevationEdit);
+        _waterDepthLabel.Name = "WaterDepthLabel";
+        _waterDepthLabel.Text = "Depth";
+        _waterDepthLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_waterDepthLabel);
+        _waterDepthEdit.Name = "WaterDepth";
+        ConfigureWaterSpanInput(_waterDepthEdit, 0.1, WaterEditing.DefaultChannelDepthMeters);
+        _waterDepthEdit.TooltipText =
+            "How deep the channel is below the surface. The Terrain is carved away "
+            + "from the bed upwards, so this is also where the river's floor sits.";
+        _waterDepthEdit.ValueChanged += SetWaterDepth;
+        _contextMenuBar.AddChild(_waterDepthEdit);
+        _waterClearanceLabel.Name = "WaterClearanceLabel";
+        _waterClearanceLabel.Text = "Clearance";
+        _waterClearanceLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_waterClearanceLabel);
+        _waterClearanceEdit.Name = "WaterClearance";
+        ConfigureWaterSpanInput(_waterClearanceEdit, 0.0, WaterEditing.DefaultClearanceAboveMeters);
+        _waterClearanceEdit.TooltipText =
+            "The headroom the river needs above its surface. Where the ground never "
+            + "reaches it the river is open; where it does, that much is left as a tunnel.";
+        _waterClearanceEdit.ValueChanged += SetWaterClearance;
+        _contextMenuBar.AddChild(_waterClearanceEdit);
         _contextMenuBar.AddThemeConstantOverride("separation", 8);
 
         var canvasColumn = new VBoxContainer
@@ -1142,6 +1191,19 @@ public sealed partial class SceneMakerMain : Control
     private const string DefaultSurface = "land";
 
     /// <summary>A height in metres, in the tenth-of-a-metre steps ramps use.</summary>
+    /// <summary>A vertical extent in metres: a depth below or a height above.</summary>
+    private static void ConfigureWaterSpanInput(SpinBox input, double minimum, decimal value)
+    {
+        input.MinValue = minimum;
+        input.MaxValue = 1000;
+        input.Step = 0.1;
+        input.AllowGreater = false;
+        input.AllowLesser = false;
+        input.Suffix = " m";
+        input.CustomMinimumSize = new Vector2(110f, 0f);
+        input.Value = (double)value;
+    }
+
     private static void ConfigureElevationInput(SpinBox input)
     {
         input.MinValue = -1000;
@@ -1428,6 +1490,35 @@ public sealed partial class SceneMakerMain : Control
         SetStatus($"River width set to {width:0.###} m.");
     }
 
+    private void SetSnapWaterToTerrain(bool enabled)
+    {
+        _interaction.State.SetSnapWaterToTerrain(enabled);
+        SetStatus(enabled
+            ? "Snap on: a placed point takes the height of the Terrain under it."
+            : "Snap off: a placed point takes the water level from the context bar.");
+    }
+
+    private void SetWaterElevation(double value)
+    {
+        var elevation = DecimalOf(value);
+        _interaction.State.SetWaterElevation(elevation);
+        SetStatus($"Water level set to {elevation:0.###} m.");
+    }
+
+    private void SetWaterDepth(double value)
+    {
+        var depth = DecimalOf(value);
+        _interaction.State.SetWaterChannelDepth(depth);
+        SetStatus($"Channel depth set to {depth:0.###} m; the bed sits that far below the surface.");
+    }
+
+    private void SetWaterClearance(double value)
+    {
+        var clearance = DecimalOf(value);
+        _interaction.State.SetWaterClearanceAbove(clearance);
+        SetStatus($"Clearance set to {clearance:0.###} m of headroom above the water.");
+    }
+
     private void UpdateToolContextLabel()
     {
         _toolContextLabel.Text =
@@ -1444,6 +1535,17 @@ public sealed partial class SceneMakerMain : Control
         _waterPointModeEdit.Visible = riverActive;
         _riverWidthLabel.Visible = riverActive;
         _riverWidthEdit.Visible = riverActive;
+        _snapWaterToggle.Visible = riverActive;
+        _waterElevationLabel.Visible = riverActive;
+        _waterElevationEdit.Visible = riverActive;
+        _waterDepthLabel.Visible = riverActive;
+        _waterDepthEdit.Visible = riverActive;
+        _waterClearanceLabel.Visible = riverActive;
+        _waterClearanceEdit.Visible = riverActive;
+        // Height authors Terrain and Props. Water carries its own three, so
+        // leaving it in reach here would offer a number that changes nothing.
+        _elevationLabel.Visible = !riverActive;
+        _elevationEdit.Visible = !riverActive;
     }
 
     private void SelectTerrainAsset(string assetKey)

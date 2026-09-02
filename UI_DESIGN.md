@@ -102,7 +102,8 @@ wieder vor, kann aber pro Strich davon abweichen, ohne dass das Dokument sich
 
 ### Terrain:Draw River
 
-Das ContextMenu von `Terrain:Draw River` enthält zwei Werte. `Point` schaltet
+Das ContextMenu von `Terrain:Draw River` enthält den Grundriss und den Schnitt.
+`Point` schaltet
 zwischen `Linear` und `Aligned` um: `Linear` macht die angrenzenden Segmente
 gerade, `Aligned` hält die beiden Handles eines Punktes kollinear. Wie beim
 Bezier-Werkzeug von PolyTools ist das Sitzungszustand und gilt für den *nächsten*
@@ -116,8 +117,23 @@ einer halben Wasserzelle zählt als Klick — ein `Aligned`-Punkt, den man nur
 anklickt, bekommt seine Handles automatisch aus seinen Nachbarn.
 
 Der erste Punkt ist die Quelle, der letzte die Mündung; mehr sagt das Dokument
-über die Fließrichtung nicht. Die Höhe kommt wie bei allem anderen aus `Height`
-im ContextMenu — für Wasser in world01 also 0.
+über die Fließrichtung nicht.
+
+Der Schnitt steht daneben: `Water` ist die Wasseroberfläche, `Depth` die Tiefe
+des Bettes darunter, `Clearance` die Kopfhöhe darüber, die aus dem Terrain
+ausgeschnitten wird. Alle drei gelten für den *nächsten* Punkt und werden
+zwischen gesetzten Punkten über die Bogenlänge interpoliert.
+
+`Snap` ist standardmäßig an und nimmt die Wasserhöhe aus dem Terrain unter dem
+gesetzten Punkt — ein Fluss folgt damit seinem Tal, ohne dass man eine Zahl
+tippt. Für einen Tunnel schaltet man ihn ab, denn dort ist der ganze Sinn, dass
+das Wasser dem Berg gerade *nicht* folgt. Gespeichert wird auch dann nur die
+Zahl: es gibt keinen Terrain-Bezug im Dokument, ein später umgemaltes Gelände
+verschiebt also keinen Fluss. Liegt unter einem Punkt kein Terrain, erbt er die
+Höhe seines Vorgängers, und die Statuszeile sagt es.
+
+`Height` ist bei `Draw River` deshalb ausgeblendet: es authoriert Terrain und
+Props, und Wasser bringt seine eigenen drei Werte mit.
 
 Der fertige Fluss ist **ein** Bearbeitungsschritt: ein Rückgängig nimmt danach
 den ganzen Fluss zurück, nicht seinen letzten Punkt. Während des Zeichnens gilt
