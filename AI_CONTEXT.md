@@ -93,6 +93,21 @@ and far below anything the grid can resolve - and it says only that the test
 decides the same way every time. How thin a contour may usefully be is a
 different question, and it belongs with the rule that fills one.
 
+Filling a contour asks the same question of a cell that a river's corridor
+does: is its centre inside. A mountain's edge and a river's edge therefore
+cannot disagree by half a cell where they meet. A centre within the same
+tolerance of the outline counts as inside - the corridor already admits a
+centre lying exactly on its edge, and a contour whose own edges may sit no
+closer together than that tolerance cannot then be rastered by a rule
+pretending to resolve less. Everywhere else a horizontal ray decides by
+even-odd parity, which agrees with the winding rule for simple rings and only
+for those, which is why only those may be filled - the fill checks and refuses
+rather than trusting its caller. Nothing reads the winding, so the same outline
+drawn either way round fills identically. Narrowing the ring to the segments a
+row can meet is an optimisation and only that: a segment on one side of a row
+cannot cross its ray, and one further off than the tolerance cannot be within
+it.
+
 ## Height is a stack, not a number
 
 A place is not one height. Terrain says how high its solid column reaches;

@@ -68,13 +68,18 @@ public static class ClosedChainGeometry
     /// <summary>
     /// How far apart a contour's own edges have to stay, in authoring pixels.
     ///
-    /// <para>A four-thousandth of a pixel: some seven orders of magnitude above
-    /// the rounding error of the doubles involved, and far below anything the
-    /// authoring grid or any raster derived from it could resolve - a water cell
-    /// is sixteen pixels. Small on purpose. It is here to make the test decide
-    /// the same way every time, not to express a view about how thin a mountain
-    /// may be; that is an authoring-quality question, it belongs with the rule
-    /// that fills a contour, and it does not exist yet.</para>
+    /// <para>A four-thousandth of a pixel: comfortably above the rounding of
+    /// doubles at the coordinates SceneMaker authors at, and far below anything
+    /// the authoring grid or a raster derived from it could resolve - a water
+    /// cell is sixteen pixels. That margin is not a guarantee independent of
+    /// scale: rounding error grows with the size of the coordinates, so the
+    /// headroom narrows as a Scene does, which is a reason to stay at authoring
+    /// scale rather than a promise that holds at any.</para>
+    ///
+    /// <para>Small on purpose. It is here to make the test decide the same way
+    /// every time, not to express a view about how thin a mountain may be; that
+    /// is an authoring-quality question, it belongs with the rule that fills a
+    /// contour, and it does not exist yet.</para>
     ///
     /// <para>A power of two, so the constant itself is exact.</para>
     /// </summary>
