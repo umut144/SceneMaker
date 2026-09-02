@@ -108,8 +108,9 @@ zwischen `Linear` und `Aligned` um: `Linear` macht die angrenzenden Segmente
 gerade, `Aligned` hält die beiden Handles eines Punktes kollinear. Wie beim
 Bezier-Werkzeug von PolyTools ist das Sitzungszustand und gilt für den *nächsten*
 Punkt — es lässt sich also mitten im Zeichnen umschalten und rührt die bereits
-gesetzten Punkte nicht an. `Width` ist die Breite des Korridors um die
-Mittellinie, in Schritten einer Wasserzelle.
+gesetzten Punkte nicht an. `Width` ist die Breite des Korridors am nächsten
+Punkt, in Schritten einer Wasserzelle. Wie das vertikale Profil wird sie
+zwischen gesetzten Punkten über die Bogenlänge interpoliert.
 
 Handles folgen dem Zeiger ungerastert. Ein Handle ist eine Kurvensteuerung und
 kein Ort; würde es einrasten, rastete die Form der Kurve mit ein. Ein Zug unter
@@ -158,13 +159,16 @@ Die rechte Leiste trennt zwei Sorten Schalter durch einen Separator. Oberhalb
 steht, was die Werkzeuge *anders arbeiten* lässt — derzeit der `Eraser`.
 Unterhalb steht, was die Karte *anders aussehen* lässt.
 
-Dort sitzt die Höhenansicht (`m`). Sie färbt Terrain und Props nach ihrer Höhe
-statt nach ihrem Asset, mit einem einzigen Blauton von dunkel nach hell: tiefer
-Grund tritt zum Hintergrund zurück, hoher Grund hebt sich ab. Die Skala spannt
-sich über die tatsächlich vorkommenden Höhen der Scene, und eine Legende oben
-rechts auf der Canvas nennt die beiden Enden — ohne sie wären die Farben
-bedeutungslos. Eine Scene mit nur einer Höhe sagt das statt eine Spanne zu
-zeigen.
+Dort sitzt die Höhenansicht (`m`). Sie färbt Terrain, Props und Wasser nach ihrer
+Höhe statt nach ihrem Asset, mit einem einzigen Blauton von dunkel nach hell:
+tiefer Grund tritt zum Hintergrund zurück, hoher Grund hebt sich ab. Wasser hat
+drei relevante Grenzen; die Auswahl unter dem aktivierten Schalter zeigt
+wahlweise `Surface`, `Bed` oder `Cut top`. Terrain und Props behalten dabei ihre
+eigene Elevation, sodass alles auf derselben Skala vergleichbar bleibt. Die
+Skala spannt sich über die tatsächlich vorkommenden Höhen der Scene, und eine
+Legende oben rechts auf der Canvas nennt Auswahl und beide Enden — ohne sie
+wären die Farben bedeutungslos. Eine Scene mit nur einer Höhe sagt das statt
+eine Spanne zu zeigen.
 
 Die Höhenansicht ist eine Sicht, kein Modus: Zeichnen, Platzieren, Radieren und
 Auswählen funktionieren unverändert weiter.

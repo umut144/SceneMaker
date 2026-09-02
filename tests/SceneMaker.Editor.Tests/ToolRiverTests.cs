@@ -222,14 +222,16 @@ public sealed class ToolRiverTests
         interaction.State.SetWaterElevation(4.0m);
 
         Place(interaction, context, 32, 32);
+        interaction.State.SetWaterElevation(2.0m);
         Place(interaction, context, 160, 32);
         var edit = Assert.IsType<ToolOutcome.Edit>(interaction.KeyPressed(context, ToolKey.Enter));
 
         // Driving a river into a mountain is exactly the case where the water
         // must not follow the ground.
-        Assert.All(
-            Assert.Single(edit.Apply(scene).WaterBodies).Points,
-            point => Assert.Equal(4.0m, point.ElevationMeters));
+        Assert.Equal(
+            [4.0m, 2.0m],
+            Assert.Single(edit.Apply(scene).WaterBodies).Points
+                .Select(static point => point.ElevationMeters));
     }
 
     [Fact]

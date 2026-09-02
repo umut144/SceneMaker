@@ -422,9 +422,12 @@ public sealed class ToolInteraction
             State.RiverWidthMeters);
 
         var ordinal = _riverDraft.Count + 1;
+        var bed = elevation - State.WaterChannelDepthMeters;
+        var cutTop = elevation + State.WaterClearanceAboveMeters;
         var height = fromTerrain
             ? $"water {elevation:0.###} m, snapped to the Terrain"
             : $"water {elevation:0.###} m";
+        height += $" · bed {bed:0.###} m · cut top {cutTop:0.###} m";
         return new ToolOutcome.Message(State.WaterPointMode == WaterPointMode.Linear
             ? $"River: point {ordinal} at ({snapped.X}, {snapped.Y}) · {height}."
             : $"River: point {ordinal} at ({snapped.X}, {snapped.Y}) · {height}; drag to pull its handle.");
@@ -440,16 +443,17 @@ public sealed class ToolInteraction
         ToolContext context,
         TerrainCellCoordinate cell)
     {
-        if (State.SnapWaterToTerrain
-            && TerrainEditing.ElevationAt(context.Scene, cell.X, cell.Y) is { } top)
+        if (State.SnapWaterToTerrain)
         {
-            return (top, true);
+            if (TerrainEditing.ElevationAt(context.Scene, cell.X, cell.Y) is { } top)
+                return (top, true);
+            return (
+                _riverDraft.Count > 0
+                    ? _riverDraft[^1].ElevationMeters
+                    : State.WaterElevationMeters,
+                false);
         }
-        return (
-            _riverDraft.Count > 0
-                ? _riverDraft[^1].ElevationMeters
-                : State.WaterElevationMeters,
-            false);
+        return (State.WaterElevationMeters, false);
     }
 
     /// <summary>

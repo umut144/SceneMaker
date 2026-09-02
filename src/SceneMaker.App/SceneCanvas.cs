@@ -7,6 +7,14 @@ using SceneMaker.Editor;
 
 namespace SceneMaker.App;
 
+/// <summary>Which boundary of a water span the height view colours.</summary>
+public enum WaterHeatmapValue
+{
+    Surface,
+    Bed,
+    CutTop,
+}
+
 public sealed partial class SceneCanvas : Control
 {
     private static readonly Color CanvasBackground = Color.FromHtml("#101722");
@@ -63,6 +71,7 @@ public sealed partial class SceneCanvas : Control
     private ToolInteraction _interaction = new();
     private bool _pointerOverCanvas;
     private bool _heatmapEnabled;
+    private WaterHeatmapValue _waterHeatmapValue;
     // Rasterizing a corridor is cheap but not free, and the authored bodies do
     // not change between frames. The cache is keyed by the document itself, so
     // it renews on an edit, an undo and a Template preview alike without anyone
@@ -114,6 +123,21 @@ public sealed partial class SceneCanvas : Control
         set
         {
             _heatmapEnabled = value;
+            QueueRedraw();
+        }
+    }
+
+    /// <summary>
+    /// Water has three useful heights rather than one. Terrain and Props keep
+    /// showing their elevation while this chooses which water-span boundary is
+    /// compared with them.
+    /// </summary>
+    public WaterHeatmapValue WaterHeatmapValue
+    {
+        get => _waterHeatmapValue;
+        set
+        {
+            _waterHeatmapValue = value;
             QueueRedraw();
         }
     }
@@ -449,7 +473,7 @@ public sealed partial class SceneCanvas : Control
         if (ElevationRange(document) is not { } range) return;
         var font = ThemeDB.FallbackFont;
         const int FontSize = 12;
-        const float BarWidth = 132f;
+        const float BarWidth = 176f;
         const float BarHeight = 10f;
         const float Padding = 8f;
 
@@ -463,7 +487,7 @@ public sealed partial class SceneCanvas : Control
         DrawString(
             font,
             panel.Position + new Vector2(Padding, 14f),
-            "Height (m)",
+            $"Height · {WaterHeatmapLabel()} (m)",
             HorizontalAlignment.Left,
             width: -1f,
             fontSize: FontSize,
@@ -539,22 +563,40 @@ public sealed partial class SceneCanvas : Control
     }
 
     /// <summary>
-    /// The lowest and highest authored height in the Scene, or null when it has
-    /// no Terrain and no Props. A Scene at one height gets a zero-width range,
-    /// which the ramp reads as its top step.
+    /// The lowest and highest height currently represented in the Scene, or
+    /// null when it has none. Water contributes the selected span boundary, so
+    /// changing Surface/Bed/Cut top changes one coherent scale for everything.
     /// </summary>
-    private static (decimal Low, decimal High)? ElevationRange(SceneDocument document)
+    private (decimal Low, decimal High)? ElevationRange(SceneDocument document)
     {
         decimal? low = null;
         decimal? high = null;
         foreach (var elevation in document.TerrainCells.Select(static cell => cell.ElevationMeters)
-                     .Concat(document.Props.Select(static prop => prop.ElevationMeters)))
+                     .Concat(document.Props.Select(static prop => prop.ElevationMeters))
+                     .Concat(WaterOverlays(document).SelectMany(
+                         overlay => overlay.Cells.Select(WaterElevation))))
         {
             low = low is null || elevation < low ? elevation : low;
             high = high is null || elevation > high ? elevation : high;
         }
         return low is null || high is null ? null : (low.Value, high.Value);
     }
+
+    private decimal WaterElevation(WaterCellSpan cell) => _waterHeatmapValue switch
+    {
+        WaterHeatmapValue.Surface => cell.SurfaceMeters,
+        WaterHeatmapValue.Bed => cell.BedMeters,
+        WaterHeatmapValue.CutTop => cell.CutTopMeters,
+        _ => throw new ArgumentOutOfRangeException(nameof(_waterHeatmapValue)),
+    };
+
+    private string WaterHeatmapLabel() => _waterHeatmapValue switch
+    {
+        WaterHeatmapValue.Surface => "Water surface",
+        WaterHeatmapValue.Bed => "River bed",
+        WaterHeatmapValue.CutTop => "Cut top",
+        _ => throw new ArgumentOutOfRangeException(nameof(_waterHeatmapValue)),
+    };
 
     private static Color ElevationColor(decimal elevation, (decimal Low, decimal High) range)
     {
@@ -609,13 +651,16 @@ public sealed partial class SceneCanvas : Control
         if (document.WaterBodies.Count == 0) return;
         var cellSize = _metrics!.AuthoringPixelsPerWaterCell * zoom;
         var rows = _metrics.SceneHeightWaterCells(document);
+        var range = _heatmapEnabled ? ElevationRange(document) : null;
         foreach (var overlay in WaterOverlays(document))
         {
-            var color = highlighted || _heatmapEnabled
-                ? overlay.Color
-                : new Color(overlay.Color.R, overlay.Color.G, overlay.Color.B, 0.24f);
             foreach (var cell in overlay.Cells)
             {
+                var color = range is { } span
+                    ? ElevationColor(WaterElevation(cell), span)
+                    : highlighted
+                        ? overlay.Color
+                        : new Color(overlay.Color.R, overlay.Color.G, overlay.Color.B, 0.24f);
                 var rectangle = new Rect2(
                     pan + new Vector2(cell.X * cellSize, (rows - cell.Y - 1) * cellSize),
                     new Vector2(cellSize, cellSize));

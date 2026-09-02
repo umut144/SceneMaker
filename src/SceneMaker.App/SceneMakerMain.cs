@@ -47,8 +47,10 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _waterDepthEdit = new();
     private readonly Label _waterClearanceLabel = new();
     private readonly SpinBox _waterClearanceEdit = new();
+    private readonly Label _waterDerivedSpanLabel = new();
     private readonly Button _eraserToggle = new();
     private readonly Button _heatmapToggle = new();
+    private readonly OptionButton _waterHeatmapValueEdit = new();
     private readonly Label _viewLabel = new();
     private readonly Label _statusLabel = new();
     private readonly Label _documentStateLabel = new();
@@ -369,6 +371,7 @@ public sealed partial class SceneMakerMain : Control
         _contextMenuBar.AddChild(_waterElevationLabel);
         _waterElevationEdit.Name = "WaterElevation";
         ConfigureElevationInput(_waterElevationEdit);
+        _waterElevationEdit.Editable = false;
         _waterElevationEdit.TooltipText =
             "The water surface the next point takes when it is not snapped to the Terrain.";
         _waterElevationEdit.ValueChanged += SetWaterElevation;
@@ -395,6 +398,12 @@ public sealed partial class SceneMakerMain : Control
             + "reaches it the river is open; where it does, that much is left as a tunnel.";
         _waterClearanceEdit.ValueChanged += SetWaterClearance;
         _contextMenuBar.AddChild(_waterClearanceEdit);
+        _waterDerivedSpanLabel.Name = "WaterDerivedSpan";
+        _waterDerivedSpanLabel.VerticalAlignment = VerticalAlignment.Center;
+        _waterDerivedSpanLabel.TooltipText =
+            "Derived boundaries only: bed = water - depth; cut top = water + clearance.";
+        _contextMenuBar.AddChild(_waterDerivedSpanLabel);
+        UpdateWaterDerivedSpan();
         _contextMenuBar.AddThemeConstantOverride("separation", 8);
 
         var canvasColumn = new VBoxContainer
@@ -467,10 +476,21 @@ public sealed partial class SceneMakerMain : Control
         _heatmapToggle.Text = "m";
         _heatmapToggle.Alignment = HorizontalAlignment.Center;
         _heatmapToggle.ToggleMode = true;
-        _heatmapToggle.TooltipText = "Show Terrain and Props by height instead of by Asset";
+        _heatmapToggle.TooltipText = "Show Terrain, Props and Water by height instead of by Asset";
         _heatmapToggle.CustomMinimumSize = new Vector2(42f, 42f);
         _heatmapToggle.Toggled += SetHeatmapEnabled;
         _toolOptionsBar.AddChild(_heatmapToggle);
+        _waterHeatmapValueEdit.Name = "WaterHeatmapValue";
+        _waterHeatmapValueEdit.AddItem("Surface", (int)WaterHeatmapValue.Surface);
+        _waterHeatmapValueEdit.AddItem("Bed", (int)WaterHeatmapValue.Bed);
+        _waterHeatmapValueEdit.AddItem("Cut top", (int)WaterHeatmapValue.CutTop);
+        _waterHeatmapValueEdit.Selected = (int)WaterHeatmapValue.Surface;
+        _waterHeatmapValueEdit.TooltipText =
+            "Which boundary of every water span the height view shows. Terrain and Props "
+            + "continue to show their own elevation.";
+        _waterHeatmapValueEdit.Visible = false;
+        _waterHeatmapValueEdit.ItemSelected += SetWaterHeatmapValue;
+        _toolOptionsBar.AddChild(_waterHeatmapValueEdit);
         UpdateToolContextLabel();
 
         var footer = new HBoxContainer { Name = "Footer" };
@@ -1442,9 +1462,23 @@ public sealed partial class SceneMakerMain : Control
     private void SetHeatmapEnabled(bool enabled)
     {
         _canvas.HeatmapEnabled = enabled;
+        _waterHeatmapValueEdit.Visible = enabled;
         SetStatus(enabled
-            ? "Height view on. Drawing and placing work as usual."
+            ? "Height view on. Water shows its surface; drawing and placing work as usual."
             : "Height view off.");
+    }
+
+    private void SetWaterHeatmapValue(long item)
+    {
+        var value = (WaterHeatmapValue)_waterHeatmapValueEdit.GetItemId((int)item);
+        _canvas.WaterHeatmapValue = value;
+        SetStatus(value switch
+        {
+            WaterHeatmapValue.Surface => "Height view: water cells show their surface.",
+            WaterHeatmapValue.Bed => "Height view: water cells show the river bed.",
+            WaterHeatmapValue.CutTop => "Height view: water cells show the top of the Terrain cut.",
+            _ => throw new ArgumentOutOfRangeException(nameof(value)),
+        });
     }
 
     private void SetPropLineOffset(double value)
@@ -1493,6 +1527,8 @@ public sealed partial class SceneMakerMain : Control
     private void SetSnapWaterToTerrain(bool enabled)
     {
         _interaction.State.SetSnapWaterToTerrain(enabled);
+        _waterElevationEdit.Editable = !enabled;
+        UpdateWaterDerivedSpan();
         SetStatus(enabled
             ? "Snap on: a placed point takes the height of the Terrain under it."
             : "Snap off: a placed point takes the water level from the context bar.");
@@ -1502,6 +1538,7 @@ public sealed partial class SceneMakerMain : Control
     {
         var elevation = DecimalOf(value);
         _interaction.State.SetWaterElevation(elevation);
+        UpdateWaterDerivedSpan();
         SetStatus($"Water level set to {elevation:0.###} m.");
     }
 
@@ -1509,6 +1546,7 @@ public sealed partial class SceneMakerMain : Control
     {
         var depth = DecimalOf(value);
         _interaction.State.SetWaterChannelDepth(depth);
+        UpdateWaterDerivedSpan();
         SetStatus($"Channel depth set to {depth:0.###} m; the bed sits that far below the surface.");
     }
 
@@ -1516,7 +1554,21 @@ public sealed partial class SceneMakerMain : Control
     {
         var clearance = DecimalOf(value);
         _interaction.State.SetWaterClearanceAbove(clearance);
+        UpdateWaterDerivedSpan();
         SetStatus($"Clearance set to {clearance:0.###} m of headroom above the water.");
+    }
+
+    private void UpdateWaterDerivedSpan()
+    {
+        if (_interaction.State.SnapWaterToTerrain)
+        {
+            _waterDerivedSpanLabel.Text = "Bed / Cut follow snapped Water";
+            return;
+        }
+        var water = _interaction.State.WaterElevationMeters;
+        var bed = water - _interaction.State.WaterChannelDepthMeters;
+        var cutTop = water + _interaction.State.WaterClearanceAboveMeters;
+        _waterDerivedSpanLabel.Text = $"Bed {bed:0.###} · Cut {cutTop:0.###} m";
     }
 
     private void UpdateToolContextLabel()
@@ -1542,6 +1594,7 @@ public sealed partial class SceneMakerMain : Control
         _waterDepthEdit.Visible = riverActive;
         _waterClearanceLabel.Visible = riverActive;
         _waterClearanceEdit.Visible = riverActive;
+        _waterDerivedSpanLabel.Visible = riverActive;
         // Height authors Terrain and Props. Water carries its own three, so
         // leaving it in reach here would offer a number that changes nothing.
         _elevationLabel.Visible = !riverActive;

@@ -138,8 +138,8 @@ a tunnel gets no warning.
 The height view is currently a continuous colour ramp stretched automatically
 between the lowest and highest Terrain or Prop elevation in the Scene. It is a
 useful overview, but it cannot yet inspect authored height bands or answer
-whether an Actor can move through the resulting space. Water spans are not part
-of the view either.
+whether an Actor can move through the resulting space. Water now participates
+through a Surface/Bed/Cut-top selector, on the same scale as Terrain and Props.
 
 The intended next form of the height view has three independent capabilities:
 
