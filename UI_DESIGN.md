@@ -107,8 +107,9 @@ Der erste Punkt ist die Quelle, der letzte die Mündung; mehr sagt das Dokument
 über die Fließrichtung nicht. Die Höhe kommt wie bei allem anderen aus `Height`
 im ContextMenu — für Wasser in world01 also 0.
 
-Der fertige Fluss ist **ein** Bearbeitungsschritt: ein Rückgängig nimmt den
-Fluss zurück, nicht seinen letzten Punkt. `River` + `Eraser` löscht den ganzen
+Der fertige Fluss ist **ein** Bearbeitungsschritt: ein Rückgängig nimmt danach
+den ganzen Fluss zurück, nicht seinen letzten Punkt. Während des Zeichnens gilt
+die Entwurfsregel weiter unten — da nimmt Rückgängig Punkt für Punkt zurück. `River` + `Eraser` löscht den ganzen
 Body unter dem Zeiger. Einzelne Zellen sind nicht radierbar, weil sie aus der
 Kurve abgeleitet sind.
 
@@ -190,6 +191,13 @@ Jede Bearbeitung landet in einer Historie unveränderlicher Scene-Dokumente:
 - `Cmd/Strg+Z` macht rückgängig, `Cmd/Strg+Shift+Z` beziehungsweise `Cmd/Strg+Y`
   stellt wieder her. Dieselben Schritte liegen als Schaltflächen rechts in der
   Dokument-Infoleiste.
+- Solange ein Werkzeug einen **unfertigen Entwurf** hält — ein Fluss im
+  Zeichnen, eine Prop-Linie mit festgelegtem Startpunkt — gehören beide Tasten
+  dem Entwurf. Rückgängig nimmt den zuletzt gesetzten Punkt zurück, genau wie
+  Escape; Wiederherstellen hat dort nichts zurückzugeben und sagt das. Erst wenn
+  der Entwurf leer ist, greifen beide wieder auf die Historie zu. Andernfalls
+  würde ein Rückgängig mitten im Zeichnen eine längst abgeschlossene Bearbeitung
+  zurücknehmen und den halben Fluss stehen lassen.
 - Ein zusammenhängender Zug ist genau ein Schritt: Wer den Pencil über vierzig
   Zellen zieht, nimmt ihn mit einem einzigen Rückgängig zurück. Der Zug endet
   beim Loslassen der Maustaste.

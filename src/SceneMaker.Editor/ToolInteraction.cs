@@ -96,6 +96,34 @@ public sealed class ToolInteraction
         _pointerCell = null;
     }
 
+    /// <summary>
+    /// Whether the active tool is holding work the author has begun and not
+    /// finished - a river being drawn, a Prop line with a fixed start.
+    /// </summary>
+    public bool HasUnfinishedDraft => Mode switch
+    {
+        EditorMode.Terrain when ActiveTool == EditorTool.River =>
+            _riverPending is not null || _riverDraft.Count > 0,
+        EditorMode.Props when ActiveTool == EditorTool.Line =>
+            _propLineStart is not null || _propLineEnd is not null,
+        _ => false,
+    };
+
+    /// <summary>
+    /// One step back inside that unfinished work, or null when there is none
+    /// and the undo belongs to the document history instead.
+    ///
+    /// <para>Undo means "take back what I just did", and while a river is being
+    /// drawn what the author just did was place a point. Reaching past it into
+    /// the history would undo an edit they finished minutes ago, leave the
+    /// half-drawn river standing, and give no hint that either happened.</para>
+    /// </summary>
+    public ToolOutcome? UndoDraftStep()
+    {
+        if (!HasUnfinishedDraft) return null;
+        return Mode == EditorMode.Terrain ? CancelRiverPoint() : CancelPropLineStep();
+    }
+
     public void SelectProp(string? instanceId) => SelectedPropInstanceId = instanceId;
 
     public void SelectTemplateAnchor(string? anchorId) => SelectedTemplateAnchorId = anchorId;
@@ -211,20 +239,7 @@ public sealed class ToolInteraction
         if (Mode != EditorMode.Props || ActiveTool != EditorTool.Line)
             return ToolOutcome.Idle.Instance;
 
-        if (key == ToolKey.Escape)
-        {
-            if (_propLineEnd is not null)
-            {
-                _propLineEnd = null;
-                return new ToolOutcome.Message("Line Draw: end point released; choose a new end point.");
-            }
-            if (_propLineStart is not null)
-            {
-                _propLineStart = null;
-                return new ToolOutcome.Message("Line Draw: start point released; choose a new start point.");
-            }
-            return new ToolOutcome.Message("Line Draw: choose a start point.");
-        }
+        if (key == ToolKey.Escape) return CancelPropLineStep();
 
         if (_propLineStart is not { } start || _propLineEnd is not { } end)
         {
@@ -517,6 +532,21 @@ public sealed class ToolInteraction
     private static bool IsInsideScene(ToolContext context, AuthoringPoint point) =>
         point.X >= 0 && point.X <= context.Metrics.SceneWidthAuthoringPixels(context.Scene)
         && point.Y >= 0 && point.Y <= context.Metrics.SceneHeightAuthoringPixels(context.Scene);
+
+    private ToolOutcome CancelPropLineStep()
+    {
+        if (_propLineEnd is not null)
+        {
+            _propLineEnd = null;
+            return new ToolOutcome.Message("Line Draw: end point released; choose a new end point.");
+        }
+        if (_propLineStart is not null)
+        {
+            _propLineStart = null;
+            return new ToolOutcome.Message("Line Draw: start point released; choose a new start point.");
+        }
+        return new ToolOutcome.Message("Line Draw: choose a start point.");
+    }
 
     private ToolOutcome BeginTerrainLine(TerrainCellCoordinate cell)
     {

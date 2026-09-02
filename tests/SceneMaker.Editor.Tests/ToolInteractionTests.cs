@@ -245,6 +245,33 @@ public sealed class ToolInteractionTests
         Assert.NotNull(edit.NoChangeText);
     }
 
+    [Fact]
+    public void UndoTakesBackAFixedPropLineStartBeforeItTouchesTheHistory()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = At(EditorMode.Props, EditorTool.Line);
+        var context = Context(workspace, scene);
+
+        interaction.PointerPressed(context, Point(64, 64), Cell(2, 2));
+        Assert.True(interaction.HasUnfinishedDraft);
+
+        Assert.NotNull(interaction.UndoDraftStep());
+
+        Assert.False(interaction.HasUnfinishedDraft);
+        Assert.Null(interaction.UndoDraftStep());
+    }
+
+    [Fact]
+    public void AToolWithoutADraftLeavesUndoToTheHistory()
+    {
+        using var workspace = TestWorkspace.Create();
+        var interaction = At(EditorMode.Terrain, EditorTool.Pencil);
+
+        Assert.False(interaction.HasUnfinishedDraft);
+        Assert.Null(interaction.UndoDraftStep());
+    }
+
     private static ToolInteraction At(EditorMode mode, EditorTool tool)
     {
         var interaction = new ToolInteraction();

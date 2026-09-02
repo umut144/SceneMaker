@@ -1552,9 +1552,38 @@ public sealed partial class SceneMakerMain : Control
         if (report.Succeeded) UpdateDocumentState();
     }
 
-    private void UndoEdit() => StepHistory(_controller.Undo());
+    /// <summary>
+    /// Undo takes back what the author just did. While a tool is holding an
+    /// unfinished draft - a river being drawn, a Prop line with a fixed start -
+    /// that is the last point they placed, not an edit they finished minutes
+    /// ago. Reaching past the draft into the history would undo the wrong thing
+    /// and leave the half-drawn river standing.
+    /// </summary>
+    private void UndoEdit()
+    {
+        if (_interaction.UndoDraftStep() is { } stepped)
+        {
+            HandleToolOutcome(stepped);
+            _canvas.QueueRedraw();
+            return;
+        }
+        StepHistory(_controller.Undo());
+    }
 
-    private void RedoEdit() => StepHistory(_controller.Redo());
+    /// <summary>
+    /// The other half of the same rule: while a draft is open both keys belong
+    /// to it, and there redo has nothing to give back.
+    /// </summary>
+    private void RedoEdit()
+    {
+        if (_interaction.HasUnfinishedDraft)
+        {
+            SetStatus(
+                "Redo: nothing to restore while a draft is open. Enter finishes it, Escape drops it.");
+            return;
+        }
+        StepHistory(_controller.Redo());
+    }
 
     private void StepHistory(EditorReport report)
     {

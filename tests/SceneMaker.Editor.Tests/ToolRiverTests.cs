@@ -104,6 +104,47 @@ public sealed class ToolRiverTests
     }
 
     [Fact]
+    public void UndoTakesBackTheLastPointWhileTheRiverIsStillBeingDrawn()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = River();
+        var context = Context(workspace, scene);
+
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 96, 32);
+        Assert.True(interaction.HasUnfinishedDraft);
+
+        Assert.NotNull(interaction.UndoDraftStep());
+        Assert.Single(interaction.RiverDraft);
+        Assert.NotNull(interaction.UndoDraftStep());
+        Assert.Empty(interaction.RiverDraft);
+
+        // With the draft gone the undo belongs to the document history again,
+        // which is what a null says.
+        Assert.False(interaction.HasUnfinishedDraft);
+        Assert.Null(interaction.UndoDraftStep());
+    }
+
+    [Fact]
+    public void AFinishedRiverIsUndoneByTheDocumentHistory()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = River();
+        var context = Context(workspace, scene);
+
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+        interaction.KeyPressed(context, ToolKey.Enter);
+
+        // One river is one edit: once it is authored the tool holds nothing,
+        // and undo takes back the whole river rather than its last point.
+        Assert.False(interaction.HasUnfinishedDraft);
+        Assert.Null(interaction.UndoDraftStep());
+    }
+
+    [Fact]
     public void ASinglePointIsNotARiverYet()
     {
         using var workspace = TestWorkspace.Create();
