@@ -183,9 +183,9 @@ handles, which makes both of its segments straight.
 **The corridor rule.** `width_meters` is authored on every point and interpolated
 linearly over the same centerline arc length as the vertical profile. A water
 cell projects its centre onto each candidate segment. It belongs to the body
-when some candidate projection lies no further than half the width sampled at
-that projection's station; among the accepted projections, the nearest supplies
-the profile. The two outermost segments carry the end caps: the disc around the
+when some candidate projection lies no further than half the width at that
+projection's station; among the accepted projections, the nearest supplies the
+profile. The two outermost segments carry the end caps: the disc around the
 first one is clipped by the line perpendicular to the curve at the source, the
 disc around the last one by the line perpendicular at the mouth. Without them a
 river would begin and end with a half-circle. Inner bends round off by
@@ -261,6 +261,15 @@ a gradient would depend on how long the author made the handles that shape the
 bend. Linear rather than a spline: a spline can overshoot, and an overshoot in a
 water surface is a stretch of river running uphill between two points that both
 fall.
+
+**Precision.** The three heights this file carries per water cell are rounded to
+the millimetre, because they are written down and a file that says 1.4999999999
+one day and 1.5 the next is a file nobody can diff. The **width is not rounded**:
+it is never written anywhere, it only decides which cells belong to the body, and
+rounding it first would widen the corridor by up to half a millimetre - enough to
+pull in a whole row wherever half the width falls exactly on a cell centre's
+distance. A reader recomputing the raster has to interpolate the width at full
+precision to arrive at the same set.
 
 Heights are absolute. Nothing stores a relationship to the ground, so repainting
 Terrain under a river never moves the water.

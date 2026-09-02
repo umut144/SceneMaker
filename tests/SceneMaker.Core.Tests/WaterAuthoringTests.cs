@@ -58,15 +58,19 @@ public sealed class WaterAuthoringTests
             ],
             "river");
 
-        var body = Assert.Single(scene.WaterBodies);
-        var centerline = WaterGeometry.Flatten(body.Points);
-        Assert.Equal(
-            2.0m,
-            WaterGeometry.SampleAt(body.Points, centerline.AnchorStations, 64.0).WidthMeters);
+        // The raster is what the width rule produces, so the raster is what is
+        // checked: asking a sampling function instead would only compare the
+        // corridor against a second implementation of the same interpolation.
+        // One metre at the source growing to three at the mouth doubles the
+        // corridor from two rows to six, and every column in between follows
+        // its own station.
+        var cells = WaterGeometry.Corridor(scene, workspace.Metrics, Assert.Single(scene.WaterBodies));
 
-        var cells = WaterGeometry.Corridor(scene, workspace.Metrics, body);
-        Assert.Equal(2, cells.Count(cell => cell.X == 2));
-        Assert.Equal(6, cells.Count(cell => cell.X == 9));
+        Assert.Equal(
+            [2, 2, 4, 4, 4, 4, 6, 6],
+            Enumerable.Range(2, 8).Select(column => cells.Count(cell => cell.X == column)));
+        // Outside the butt caps there is no corridor at either end.
+        Assert.DoesNotContain(cells, cell => cell.X is 1 or 10);
     }
 
     [Fact]

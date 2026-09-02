@@ -38,12 +38,18 @@ public sealed record WaterCenterline(
     IReadOnlyList<double> Stations,
     IReadOnlyList<double> AnchorStations);
 
-/// <summary>The vertical section and width somewhere along a curve.</summary>
+/// <summary>
+/// The vertical section somewhere along a curve.
+///
+/// <para>Width is deliberately not part of it. The corridor resolves its width
+/// per flattened segment, unrounded, and that is the binding rule; a second
+/// width here would be a second answer to the same question, and the two
+/// rounded differently.</para>
+/// </summary>
 public readonly record struct WaterProfileSample(
     decimal ElevationMeters,
     decimal ChannelDepthMeters,
-    decimal ClearanceAboveMeters,
-    decimal WidthMeters)
+    decimal ClearanceAboveMeters)
 {
     /// <summary>The floor of the channel: the water's bottom and the cut's.</summary>
     public decimal BedMeters => ElevationMeters - ChannelDepthMeters;
@@ -305,8 +311,7 @@ public static class WaterGeometry
     private static WaterProfileSample Sample(WaterCurvePointDocument point) => new(
         point.ElevationMeters,
         point.ChannelDepthMeters,
-        point.ClearanceAboveMeters,
-        point.WidthMeters);
+        point.ClearanceAboveMeters);
 
     private static WaterProfileSample Mix(
         WaterCurvePointDocument from,
@@ -314,8 +319,7 @@ public static class WaterGeometry
         double fraction) => new(
         Between(from.ElevationMeters, to.ElevationMeters, fraction),
         Between(from.ChannelDepthMeters, to.ChannelDepthMeters, fraction),
-        Between(from.ClearanceAboveMeters, to.ClearanceAboveMeters, fraction),
-        Between(from.WidthMeters, to.WidthMeters, fraction));
+        Between(from.ClearanceAboveMeters, to.ClearanceAboveMeters, fraction));
 
     private static decimal Between(decimal from, decimal to, double fraction)
     {
@@ -490,7 +494,6 @@ public static class WaterGeometry
             var maxX = double.MinValue;
             var minY = double.MaxValue;
             var maxY = double.MinValue;
-            var station = 0.0;
             for (var index = 0; index + 1 < polyline.Count; index++)
             {
                 var start = polyline[index];
@@ -514,12 +517,11 @@ public static class WaterGeometry
                     lengthSquared,
                     Math.Min(start.Y, end.Y),
                     Math.Max(start.Y, end.Y),
-                    station,
+                    centerline.Stations[index],
                     startHalfWidth,
                     endHalfWidth,
                     CapsAtStart: index == 0,
                     CapsAtEnd: index + 2 == polyline.Count));
-                station += Math.Sqrt(lengthSquared);
             }
             foreach (var point in polyline)
             {
@@ -572,6 +574,23 @@ public static class WaterGeometry
             return station;
         }
 
+        /// <summary>
+        /// The corridor's width at one station, linear between the authored
+        /// points and unrounded.
+        ///
+        /// <para>This is the binding rule, and it is the only place a width is
+        /// interpolated. Rounding it first - as the stored section values are
+        /// rounded - would widen the corridor by up to half a millimetre, which
+        /// is enough to pull in a whole row of cells wherever half the width
+        /// lands exactly on a cell centre's distance. Only values that get
+        /// written down are rounded; this one decides and is not written
+        /// anywhere.</para>
+        ///
+        /// <para>Asked twice per flattened segment rather than once per cell:
+        /// a segment lies inside a single authored interval, so its width is
+        /// linear in the segment's own parameter and can be interpolated from
+        /// its two ends exactly.</para>
+        /// </summary>
         private static double WidthAt(
             IReadOnlyList<WaterCurvePointDocument> points,
             IReadOnlyList<double> anchorStations,

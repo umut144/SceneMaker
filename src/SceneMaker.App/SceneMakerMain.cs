@@ -486,10 +486,13 @@ public sealed partial class SceneMakerMain : Control
         _waterHeatmapValueEdit.CustomMinimumSize = new Vector2(42f, 42f);
         _waterHeatmapValueEdit.Disabled = true;
         var waterHeatmapMenu = _waterHeatmapValueEdit.GetPopup();
-        waterHeatmapMenu.AddItem("Surface", (int)WaterHeatmapValue.Surface);
-        waterHeatmapMenu.AddItem("Bed", (int)WaterHeatmapValue.Bed);
-        waterHeatmapMenu.AddItem("Cut top", (int)WaterHeatmapValue.CutTop);
+        // Radio items, so the menu shows which boundary is being drawn rather
+        // than leaving the single letter on the button to carry it alone.
+        waterHeatmapMenu.AddRadioCheckItem("Surface", (int)WaterHeatmapValue.Surface);
+        waterHeatmapMenu.AddRadioCheckItem("Bed", (int)WaterHeatmapValue.Bed);
+        waterHeatmapMenu.AddRadioCheckItem("Cut top", (int)WaterHeatmapValue.CutTop);
         waterHeatmapMenu.IdPressed += SetWaterHeatmapValue;
+        CheckWaterHeatmapItem(WaterHeatmapValue.Surface);
         _waterHeatmapValueEdit.TooltipText =
             "Which boundary of every water span the height view shows. Terrain and Props "
             + "continue to show their own elevation.";
@@ -1471,6 +1474,14 @@ public sealed partial class SceneMakerMain : Control
             : "Height view off.");
     }
 
+    /// <summary>Marks one radio item and clears the rest.</summary>
+    private void CheckWaterHeatmapItem(WaterHeatmapValue value)
+    {
+        var menu = _waterHeatmapValueEdit.GetPopup();
+        for (var index = 0; index < menu.ItemCount; index++)
+            menu.SetItemChecked(index, menu.GetItemId(index) == (int)value);
+    }
+
     private void UpdateWaterHeatmapAvailability() =>
         _waterHeatmapValueEdit.Disabled = !_canvas.HeatmapEnabled
             || _controller.Document?.WaterBodies.Count is not > 0;
@@ -1484,8 +1495,9 @@ public sealed partial class SceneMakerMain : Control
             WaterHeatmapValue.Surface => "S",
             WaterHeatmapValue.Bed => "B",
             WaterHeatmapValue.CutTop => "C",
-            _ => throw new ArgumentOutOfRangeException(nameof(value)),
+            _ => throw new InvalidOperationException("Unknown water heatmap value."),
         };
+        CheckWaterHeatmapItem(value);
         SetStatus(value switch
         {
             WaterHeatmapValue.Surface => "Height view: water cells show their surface.",
