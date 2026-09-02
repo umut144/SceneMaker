@@ -137,8 +137,8 @@ public static class SceneExport
             foreach (var cell in cells)
             {
                 var under = new TerrainCellCoordinate(
-                    WaterGeometry.FloorDivide(cell.X, perTerrainCell),
-                    WaterGeometry.FloorDivide(cell.Y, perTerrainCell));
+                    WorkspaceMetrics.FloorDivide(cell.X, perTerrainCell),
+                    WorkspaceMetrics.FloorDivide(cell.Y, perTerrainCell));
                 if (tops.TryGetValue(under, out var top) && cell.BedMeters > top) floating++;
             }
             if (floating > 0)

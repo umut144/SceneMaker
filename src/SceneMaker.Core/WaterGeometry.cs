@@ -186,10 +186,14 @@ public static class WaterGeometry
         var sceneWidth = metrics.SceneWidthWaterCells(scene);
         var sceneHeight = metrics.SceneHeightWaterCells(scene);
 
-        var firstX = Math.Max(0, FloorDivide((int)Math.Floor(shape.MinX), step));
-        var lastX = Math.Min(sceneWidth - 1, FloorDivide((int)Math.Ceiling(shape.MaxX), step));
-        var firstY = Math.Max(0, FloorDivide((int)Math.Floor(shape.MinY), step));
-        var lastY = Math.Min(sceneHeight - 1, FloorDivide((int)Math.Ceiling(shape.MaxY), step));
+        var firstX = Math.Max(
+            0, WorkspaceMetrics.FloorDivide((int)Math.Floor(shape.MinX), step));
+        var lastX = Math.Min(
+            sceneWidth - 1, WorkspaceMetrics.FloorDivide((int)Math.Ceiling(shape.MaxX), step));
+        var firstY = Math.Max(
+            0, WorkspaceMetrics.FloorDivide((int)Math.Floor(shape.MinY), step));
+        var lastY = Math.Min(
+            sceneHeight - 1, WorkspaceMetrics.FloorDivide((int)Math.Ceiling(shape.MaxY), step));
 
         List<WaterCellSpan> cells = [];
         List<CorridorSegment> row = [];
@@ -251,8 +255,8 @@ public static class WaterGeometry
         foreach (var cell in Corridor(scene, metrics, body))
         {
             covered.Add(new TerrainCellCoordinate(
-                FloorDivide(cell.X, perTerrainCell),
-                FloorDivide(cell.Y, perTerrainCell)));
+                WorkspaceMetrics.FloorDivide(cell.X, perTerrainCell),
+                WorkspaceMetrics.FloorDivide(cell.Y, perTerrainCell)));
         }
         return covered
             .OrderBy(static cell => cell.Y)
@@ -317,13 +321,6 @@ public static class WaterGeometry
         if (from == to) return from;
         var value = (double)from + ((double)to - (double)from) * fraction;
         return decimal.Round((decimal)value, HeightDecimals, MidpointRounding.AwayFromZero);
-    }
-
-    internal static int FloorDivide(int value, int divisor)
-    {
-        var quotient = value / divisor;
-        var remainder = value % divisor;
-        return remainder < 0 ? quotient - 1 : quotient;
     }
 
     /// <summary>

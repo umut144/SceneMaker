@@ -347,10 +347,10 @@ public static class TerrainCoverage
         if (bounds.Width <= 0 || bounds.Height <= 0)
             throw new ArgumentOutOfRangeException(nameof(bounds));
         var step = metrics.AuthoringPixelsPerTerrainCell;
-        var firstX = FloorDivide(bounds.Left, step);
-        var lastX = FloorDivide(checked(bounds.Right - 1), step);
-        var firstY = FloorDivide(bounds.Bottom, step);
-        var lastY = FloorDivide(checked(bounds.Top - 1), step);
+        var firstX = WorkspaceMetrics.FloorDivide(bounds.Left, step);
+        var lastX = WorkspaceMetrics.FloorDivide(checked(bounds.Right - 1), step);
+        var firstY = WorkspaceMetrics.FloorDivide(bounds.Bottom, step);
+        var lastY = WorkspaceMetrics.FloorDivide(checked(bounds.Top - 1), step);
         List<TerrainCellCoordinate> cells = [];
         for (var y = firstY; y <= lastY; y++)
         {
@@ -436,12 +436,5 @@ public static class TerrainCoverage
             index++;
         }
         return string.Join(",", ranges);
-    }
-
-    private static int FloorDivide(int value, int divisor)
-    {
-        var quotient = value / divisor;
-        var remainder = value % divisor;
-        return remainder < 0 ? quotient - 1 : quotient;
     }
 }
