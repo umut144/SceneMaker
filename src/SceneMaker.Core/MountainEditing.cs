@@ -2,6 +2,13 @@ using System.Globalization;
 
 namespace SceneMaker.Core;
 
+/// <summary>One point of a closed mountain contour while it is being drawn.</summary>
+public readonly record struct MountainDraftPoint(
+    int X,
+    int Y,
+    MountainPointMode Mode,
+    AuthoringPixelOffset? DraggedHandleOut = null);
+
 /// <summary>Pure edits for closed, level-topped mountain bodies.</summary>
 public static class MountainEditing
 {
@@ -56,6 +63,59 @@ public static class MountainEditing
             : scene with { MountainBodies = remaining };
     }
 
+    /// <summary>
+    /// The topmost mountain contour containing an authoring position. Picking
+    /// follows the same containment rule as rasterization, so the body the
+    /// eraser sees is the one whose cells the author sees.
+    /// </summary>
+    public static MountainBodyDocument? FindAt(
+        SceneDocument scene,
+        int authoringX,
+        int authoringY)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        return scene.MountainBodies
+            .Where(body => ContourRaster.Contains(
+                MountainGeometry.RequireContour(body), authoringX, authoringY))
+            .OrderBy(static body => body.ElevationMeters)
+            .ThenBy(static body => body.MountainBodyId, StringComparer.Ordinal)
+            .LastOrDefault();
+    }
+
+    /// <summary>
+    /// Resolves a closed draft into stored Bezier points. Unlike an open river,
+    /// every aligned point has two neighbours: the last and first points are
+    /// neighbours across the closing edge too.
+    /// </summary>
+    public static IReadOnlyList<MountainCurvePointDocument> ResolveContour(
+        IReadOnlyList<MountainDraftPoint> draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        List<MountainCurvePointDocument> points = new(draft.Count);
+        for (var index = 0; index < draft.Count; index++)
+        {
+            var current = draft[index];
+            if (current.Mode == MountainPointMode.Linear)
+            {
+                points.Add(Point(current.X, current.Y));
+                continue;
+            }
+
+            var previous = draft[(index + draft.Count - 1) % draft.Count];
+            var next = draft[(index + 1) % draft.Count];
+            var (handleIn, handleOut) = current.DraggedHandleOut is { } dragged
+                ? Mirrored(Orient(dragged, current, previous))
+                : AutomaticHandles(current, previous, next);
+            points.Add(Point(
+                current.X,
+                current.Y,
+                MountainPointMode.Aligned,
+                handleIn: handleIn,
+                handleOut: handleOut));
+        }
+        return points;
+    }
+
     public static MountainCurvePointDocument Point(
         int authoringX,
         int authoringY,
@@ -97,6 +157,56 @@ public static class MountainEditing
         }
         return asset;
     }
+
+    private static AuthoringPixelOffset Orient(
+        AuthoringPixelOffset handleOut,
+        MountainDraftPoint current,
+        MountainDraftPoint previous)
+    {
+        var travelX = current.X - previous.X;
+        var travelY = current.Y - previous.Y;
+        return handleOut.X * travelX + handleOut.Y * travelY < 0
+            ? new AuthoringPixelOffset { X = -handleOut.X, Y = -handleOut.Y }
+            : handleOut;
+    }
+
+    private static (AuthoringPixelOffset In, AuthoringPixelOffset Out) Mirrored(
+        AuthoringPixelOffset handleOut) =>
+        (new AuthoringPixelOffset { X = -handleOut.X, Y = -handleOut.Y }, handleOut);
+
+    private static (AuthoringPixelOffset In, AuthoringPixelOffset Out) AutomaticHandles(
+        MountainDraftPoint current,
+        MountainDraftPoint previous,
+        MountainDraftPoint next)
+    {
+        var tangentX = (double)(next.X - previous.X);
+        var tangentY = (double)(next.Y - previous.Y);
+        var tangentLength = Math.Sqrt(tangentX * tangentX + tangentY * tangentY);
+        if (tangentLength <= 0.0)
+            return (Third(current, previous), Third(current, next));
+
+        var incoming = Distance(current, previous) / 3.0;
+        var outgoing = Distance(current, next) / 3.0;
+        return (
+            Offset(-tangentX / tangentLength * incoming, -tangentY / tangentLength * incoming),
+            Offset(tangentX / tangentLength * outgoing, tangentY / tangentLength * outgoing));
+    }
+
+    private static AuthoringPixelOffset Third(MountainDraftPoint from, MountainDraftPoint to) =>
+        Offset((to.X - from.X) / 3.0, (to.Y - from.Y) / 3.0);
+
+    private static double Distance(MountainDraftPoint from, MountainDraftPoint to)
+    {
+        var deltaX = (double)(to.X - from.X);
+        var deltaY = (double)(to.Y - from.Y);
+        return Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
+    }
+
+    private static AuthoringPixelOffset Offset(double x, double y) => new()
+    {
+        X = (int)Math.Round(x, MidpointRounding.AwayFromZero),
+        Y = (int)Math.Round(y, MidpointRounding.AwayFromZero),
+    };
 
     private static string NextMountainBodyId(SceneDocument scene)
     {

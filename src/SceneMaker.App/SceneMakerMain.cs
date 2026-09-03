@@ -333,11 +333,11 @@ public sealed partial class SceneMakerMain : Control
         _propLineOffsetEdit.CustomMinimumSize = new Vector2(130f, 0f);
         _propLineOffsetEdit.ValueChanged += SetPropLineOffset;
         _contextMenuBar.AddChild(_propLineOffsetEdit);
-        _waterPointModeLabel.Name = "WaterPointModeLabel";
+        _waterPointModeLabel.Name = "CurvePointModeLabel";
         _waterPointModeLabel.Text = "Point";
         _waterPointModeLabel.VerticalAlignment = VerticalAlignment.Center;
         _contextMenuBar.AddChild(_waterPointModeLabel);
-        _waterPointModeEdit.Name = "WaterPointMode";
+        _waterPointModeEdit.Name = "CurvePointMode";
         _waterPointModeEdit.AddItem("Linear", (int)WaterPointMode.Linear);
         _waterPointModeEdit.AddItem("Aligned", (int)WaterPointMode.Aligned);
         _waterPointModeEdit.Selected = (int)WaterPointMode.Linear;
@@ -1545,9 +1545,20 @@ public sealed partial class SceneMakerMain : Control
 
     private void SetWaterPointMode(long item)
     {
-        var mode = (WaterPointMode)_waterPointModeEdit.GetItemId((int)item);
-        _interaction.State.SetWaterPointMode(mode);
-        SetStatus(mode == WaterPointMode.Linear
+        var mode = _waterPointModeEdit.GetItemId((int)item);
+        if (_interaction.ActiveTool == EditorTool.DrawMountain)
+        {
+            var mountainMode = (MountainPointMode)mode;
+            _interaction.State.SetMountainPointMode(mountainMode);
+            SetStatus(mountainMode == MountainPointMode.Linear
+                ? "Mountain: the next contour point makes straight edges."
+                : "Mountain: drag the next point to pull its handle, or click for an automatic one.");
+            return;
+        }
+
+        var waterMode = (WaterPointMode)mode;
+        _interaction.State.SetWaterPointMode(waterMode);
+        SetStatus(waterMode == WaterPointMode.Linear
             ? "River: the next point makes its segments straight."
             : "River: drag the next point to pull its handle, or click for an automatic one.");
     }
@@ -1611,11 +1622,17 @@ public sealed partial class SceneMakerMain : Control
             && _interaction.ActiveTool == EditorTool.Line;
         var riverActive = _interaction.Mode == EditorMode.Terrain
             && _interaction.ActiveTool == EditorTool.DrawRiver;
-        _toolContextSeparator.Visible = propLineActive || riverActive;
+        var mountainActive = _interaction.Mode == EditorMode.Terrain
+            && _interaction.ActiveTool == EditorTool.DrawMountain;
+        var curveActive = riverActive || mountainActive;
+        _toolContextSeparator.Visible = propLineActive || curveActive;
         _propLineOffsetLabel.Visible = propLineActive;
         _propLineOffsetEdit.Visible = propLineActive;
-        _waterPointModeLabel.Visible = riverActive;
-        _waterPointModeEdit.Visible = riverActive;
+        _waterPointModeLabel.Visible = curveActive;
+        _waterPointModeEdit.Visible = curveActive;
+        _waterPointModeEdit.Selected = mountainActive
+            ? (int)_interaction.State.MountainPointMode
+            : (int)_interaction.State.WaterPointMode;
         _riverWidthLabel.Visible = riverActive;
         _riverWidthEdit.Visible = riverActive;
         _snapWaterToggle.Visible = riverActive;

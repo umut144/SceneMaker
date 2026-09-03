@@ -45,7 +45,8 @@ Die linke Werkzeugleiste zeigt nur die Werkzeuge des aktiven Modus — und im
 Terrain-Modus zusätzlich nur die, die zum gewählten Asset passen. Ob ein
 Terrain-Asset gemalt oder gezeichnet wird, steht in der Workspace-Konfiguration
 (`authoring: "cells" | "curve"`), nicht in seinem Surface-Token. Bei `grass`
-stehen also `Pencil`, `Line` und `Terrain Fill` bereit, bei `river` `Draw River`.
+stehen also `Pencil`, `Line`, `Terrain Fill` und `Draw Mountain` bereit, bei
+`river` `Draw River`.
 Ist das aktive Werkzeug für das neu gewählte Asset nicht vorgesehen, wechselt
 die Leiste selbst auf das erste passende — wer einen Fluss wählt, hält nie einen
 Stift in der Hand, der ihn nicht zeichnen kann.
@@ -55,6 +56,7 @@ Stift in der Hand, der ihn nicht zeichnen kann.
 - `Line`
 - `Terrain Fill`
 - `Draw River`
+- `Draw Mountain`
 - Template-bezogene Werkzeuge wie `Anchor Move`
 
 Die Assetleisten oben zeigen jedes Asset in seiner eigenen Farbe. Die Auswahl
@@ -84,6 +86,9 @@ Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
   Kurvenpunkt auf dem Wasserraster fest, Ziehen zieht sein Handle heraus,
   Loslassen setzt ihn. Enter schließt den Fluss ab, Escape nimmt Punkt für Punkt
   zurück.
+- `Terrain:Draw Mountain` zeichnet eine geschlossene Bezier-Kontur auf dem
+  Terrainraster. Enter schließt und authoriert den ganzen Berg; Escape oder
+  Rückgängig nimmt während des Entwurfs jeweils den letzten Punkt zurück.
 
 Ein aktiver `Eraser` verwendet für Terrain-Highlights die Löschfarbe, damit die
 Auswirkung vor dem Ausführen sichtbar ist.
@@ -150,6 +155,26 @@ Kurve abgeleitet sind.
 
 Ein Scene Template kann kein Wasser tragen; das Werkzeug sagt das beim ersten
 Klick, statt es beim Speichern scheitern zu lassen.
+
+### Terrain:Draw Mountain
+
+`Draw Mountain` steht für zellen-authorierte Terrain-Assets bereit. Jeder Klick
+setzt einen Konturpunkt auf das Terrainraster; `Point` schaltet wie beim Fluss
+zwischen geraden Kanten und `Aligned`-Bezierpunkten. Die Kontur ist zyklisch:
+auch der erste und der letzte Punkt sind Nachbarn, und automatische Handles
+formen deshalb die Schließkante genauso wie jede andere Kante.
+
+Die Vorschau zeigt die abgeleiteten Terrainzellen in der Assetfarbe. Eine
+gültige geschlossene Kontur hat einen gelben Umriss; Selbstkontakt oder eine
+Kontur ohne Fläche wird rot und kann mit Enter nicht abgeschlossen werden. Das
+`Height`-Feld ist die absolute Oberkante des ganzen Bergkörpers. Ein fertiger
+Berg ist ein Bearbeitungsschritt. Mit eingeschaltetem `Eraser` löscht ein Klick
+den obersten ganzen Bergkörper unter dem Zeiger, nie eine einzelne abgeleitete
+Zelle.
+
+Die Canvasdarstellung und die Terrainunterstützung für Props verwenden bereits
+das gefaltete Höhenfeld aus gemalten Zellen und Bergkörpern. Dadurch sieht und
+trifft der Autor genau die Terrainzellen, die auch der Export erhält.
 
 ### Prop:Line
 

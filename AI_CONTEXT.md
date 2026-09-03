@@ -124,6 +124,15 @@ or tunnel through one, whereas modelling a mountain as a fill would incorrectly
 make it immune to cuts. Scene Templates cannot carry mountain bodies until
 composition knows how to translate their source contours.
 
+The `Draw Mountain` Terrain tool is the authoring entry point for those bodies.
+It uses the same `ToolInteraction -> ToolOutcome` path as every other tool:
+points snap to the Terrain grid, handles remain unsnapped, Enter closes the
+contour as one undoable body, and Escape or draft undo removes one point. Point
+modes are per next point and the aligned automatic handles are cyclic, so the
+closing Bezier edge has no special endpoint behaviour. Invalid contours remain
+visible in red but cannot be committed. The eraser picks with the same contour
+predicate used by rasterization and removes the topmost whole body.
+
 ## Height is a stack, not a number
 
 A place is not one height. Terrain says how high its solid column reaches;

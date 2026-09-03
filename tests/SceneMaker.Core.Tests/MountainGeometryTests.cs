@@ -12,6 +12,47 @@ namespace SceneMaker.Core.Tests;
 public sealed class MountainGeometryTests
 {
     [Fact]
+    public void ClosedAlignedDraftResolvesHandlesAtEveryPointIncludingTheSeam()
+    {
+        var points = MountainEditing.ResolveContour(
+        [
+            new MountainDraftPoint(0, 0, MountainPointMode.Aligned),
+            new MountainDraftPoint(96, 0, MountainPointMode.Aligned),
+            new MountainDraftPoint(96, 96, MountainPointMode.Aligned),
+        ]);
+
+        Assert.All(points, point =>
+        {
+            Assert.False(point.HandleInAuthoringPx.IsZero());
+            Assert.False(point.HandleOutAuthoringPx.IsZero());
+        });
+    }
+
+    [Fact]
+    public void PickingAnOverlapFindsTheHighestMountain()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = MountainEditing.Place(
+            TestScenes.EmptyInstance(),
+            workspace.Metrics,
+            workspace.Terrain,
+            Square(32, 32, 160, 160),
+            "grass",
+            2m);
+        scene = MountainEditing.Place(
+            scene,
+            workspace.Metrics,
+            workspace.Terrain,
+            Square(64, 64, 128, 128),
+            "grass",
+            4m);
+
+        Assert.Equal("mountain_0002", MountainEditing.FindAt(scene, 96, 96)?.MountainBodyId);
+        Assert.Equal("mountain_0001", MountainEditing.FindAt(scene, 48, 48)?.MountainBodyId);
+        Assert.Null(MountainEditing.FindAt(scene, 8, 8));
+    }
+
+    [Fact]
     public void ASquareMountainRaisesExactlyTheCellsInsideItsContour()
     {
         using var workspace = TestWorkspace.Create();

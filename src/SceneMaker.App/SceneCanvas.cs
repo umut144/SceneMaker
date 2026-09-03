@@ -65,6 +65,8 @@ public sealed partial class SceneCanvas : Control
     // on every frame. Both sets are rebuilt only when their document changes.
     private IReadOnlySet<TerrainCellCoordinate> _sceneTerrain = new HashSet<TerrainCellCoordinate>();
     private IReadOnlySet<TerrainCellCoordinate> _previewTerrain = new HashSet<TerrainCellCoordinate>();
+    private SceneDocument? _effectiveTerrainDocument;
+    private IReadOnlyList<TerrainCellDocument> _effectiveTerrain = [];
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
     private TerrainDisplayCatalog? _terrainAssets;
     private PropDisplayCatalog? _propAssets;
@@ -195,6 +197,9 @@ public sealed partial class SceneCanvas : Control
     public void ConfigureMetrics(WorkspaceMetrics metrics)
     {
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
+        _effectiveTerrainDocument = null;
+        if (_scene is not null)
+            _sceneTerrain = EffectiveTerrainCoordinates(_scene.Document);
         QueueRedraw();
     }
 
@@ -208,10 +213,10 @@ public sealed partial class SceneCanvas : Control
     public void ShowScene(LoadedScene? scene)
     {
         _scene = scene;
-        _sceneTerrain = AuthoredTerrain(scene?.Document);
+        _sceneTerrain = EffectiveTerrainCoordinates(scene?.Document);
         _templatePreview = null;
         _templatePreviewMasks = [];
-        _previewTerrain = AuthoredTerrain(null);
+        _previewTerrain = EffectiveTerrainCoordinates(null);
         ViewState = new CanvasViewState();
         _interaction.ResetForScene();
         QueueRedraw();
@@ -221,21 +226,33 @@ public sealed partial class SceneCanvas : Control
     public void UpdateScene(LoadedScene scene)
     {
         _scene = scene;
-        _sceneTerrain = AuthoredTerrain(scene.Document);
+        _sceneTerrain = EffectiveTerrainCoordinates(scene.Document);
         QueueRedraw();
     }
 
-    private static IReadOnlySet<TerrainCellCoordinate> AuthoredTerrain(SceneDocument? document) =>
+    private IReadOnlySet<TerrainCellCoordinate> EffectiveTerrainCoordinates(SceneDocument? document) =>
         document is null
             ? new HashSet<TerrainCellCoordinate>()
-            : TerrainCoverage.AuthoredCells(document);
+            : EffectiveTerrain(document)
+                .Select(static cell => new TerrainCellCoordinate(cell.X, cell.Y))
+                .ToHashSet();
+
+    private IReadOnlyList<TerrainCellDocument> EffectiveTerrain(SceneDocument document)
+    {
+        if (ReferenceEquals(_effectiveTerrainDocument, document)) return _effectiveTerrain;
+        _effectiveTerrain = _metrics is null
+            ? document.TerrainCells
+            : MountainGeometry.EffectiveTerrainCells(document, _metrics);
+        _effectiveTerrainDocument = document;
+        return _effectiveTerrain;
+    }
 
     public void ShowTemplatePreview(
         SceneDocument? scene,
         IReadOnlyList<TemplateTerrainMask>? effectiveTerrainMasks = null)
     {
         _templatePreview = scene;
-        _previewTerrain = AuthoredTerrain(scene);
+        _previewTerrain = EffectiveTerrainCoordinates(scene);
         _templatePreviewMasks = effectiveTerrainMasks ?? [];
         QueueRedraw();
     }
@@ -430,6 +447,7 @@ public sealed partial class SceneCanvas : Control
         {
             DrawTerrainToolPreview(document, pan, zoom);
             DrawWaterToolPreview(document, pan, zoom, heightAuthoringPixels);
+            DrawMountainToolPreview(document, pan, zoom, heightAuthoringPixels);
         }
 
         var visible = new Rect2(Vector2.Zero, Size).Intersection(sceneRect);
@@ -586,7 +604,7 @@ public sealed partial class SceneCanvas : Control
     {
         decimal? low = null;
         decimal? high = null;
-        foreach (var elevation in document.TerrainCells.Select(static cell => cell.ElevationMeters)
+        foreach (var elevation in EffectiveTerrain(document).Select(static cell => cell.ElevationMeters)
                      .Concat(document.Props.Select(static prop => prop.ElevationMeters))
                      .Concat(WaterOverlays(document).SelectMany(
                          overlay => overlay.Cells.Select(WaterElevation))))
@@ -631,7 +649,7 @@ public sealed partial class SceneCanvas : Control
         bool highlighted)
     {
         var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
-        foreach (var cell in document.TerrainCells)
+        foreach (var cell in EffectiveTerrain(document))
         {
             Color color;
             if (range is { } span) color = ElevationColor(cell.ElevationMeters, span);
@@ -760,6 +778,66 @@ public sealed partial class SceneCanvas : Control
             // direction, so they are drawn as more than another point.
             var isEnd = index == 0 || index == preview.Curve.Count - 1;
             DrawCircle(centre, isEnd ? 5.0f : 3.5f, WaterCurveColor);
+        }
+    }
+
+    private void DrawMountainToolPreview(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        var preview = ToolPreviewBuilder.BuildMountainDraft(
+            document,
+            _metrics!,
+            ActiveTool,
+            _interaction.MountainDraft,
+            _interaction.MountainPendingPoint);
+        if (preview.Points.Count == 0) return;
+
+        var outlineColor = preview.IsValid ? ValidPreviewColor : InvalidPreviewColor;
+        var fill = SelectedTerrainAssetKey is { } assetKey
+            && _terrainColors.TryGetValue(assetKey, out var assetColor)
+                ? assetColor
+                : outlineColor;
+        var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
+        foreach (var cell in preview.Cells)
+        {
+            DrawRect(
+                new Rect2(
+                    pan + new Vector2(
+                        cell.X * cellSize,
+                        (document.SizeCells.Height - cell.Y - 1) * cellSize),
+                    new Vector2(cellSize, cellSize)),
+                new Color(fill.R, fill.G, fill.B, 0.55f));
+        }
+
+        Vector2 Screen(double authoringX, double authoringY) => pan + new Vector2(
+            (float)authoringX * zoom,
+            (sceneHeightAuthoringPixels - (float)authoringY) * zoom);
+
+        if (preview.Outline.Count >= 2)
+        {
+            var line = new Vector2[preview.Outline.Count + 1];
+            for (var index = 0; index < preview.Outline.Count; index++)
+                line[index] = Screen(preview.Outline[index].X, preview.Outline[index].Y);
+            line[^1] = line[0];
+            DrawPolyline(line, outlineColor, 2.0f);
+        }
+        else if (preview.Points.Count >= 2)
+        {
+            var line = preview.Points
+                .Select(point => Screen(point.X, point.Y))
+                .ToArray();
+            DrawPolyline(line, outlineColor, 2.0f);
+        }
+
+        foreach (var point in preview.Curve)
+        {
+            var centre = Screen(point.PositionAuthoringPx.X, point.PositionAuthoringPx.Y);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleInAuthoringPx, Screen);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleOutAuthoringPx, Screen);
+            DrawCircle(centre, 4.0f, outlineColor);
         }
     }
 

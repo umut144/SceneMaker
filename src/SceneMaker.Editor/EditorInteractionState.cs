@@ -19,6 +19,7 @@ public enum EditorTool
     Line,
     Fill,
     DrawRiver,
+    DrawMountain,
     AnchorPlace,
     AnchorMove,
 }
@@ -52,6 +53,8 @@ public static class EditorToolRegistry
             TerrainAuthoring.Cells, EditorMode.Terrain),
         Define(EditorTool.DrawRiver, "Draw River", "river.svg",
             TerrainAuthoring.Curve, EditorMode.Terrain),
+        Define(EditorTool.DrawMountain, "Draw Mountain", "mountain.svg",
+            TerrainAuthoring.Cells, EditorMode.Terrain),
         Define(EditorTool.AnchorMove, "Move Anchor", "move.svg", EditorMode.Templates),
         Define(EditorTool.AnchorPlace, "Place Anchor", string.Empty,
             false, EditorMode.Templates),
@@ -154,6 +157,9 @@ public sealed class EditorInteractionState
     /// </summary>
     public WaterPointMode WaterPointMode { get; private set; } = WaterPointMode.Linear;
 
+    /// <summary>How the next point of a closed mountain contour behaves.</summary>
+    public MountainPointMode MountainPointMode { get; private set; } = MountainPointMode.Linear;
+
     /// <summary>
     /// The width the next river point is authored with, in metres. A starting value
     /// rather than a rule - the document accepts any positive width, and which
@@ -221,6 +227,12 @@ public sealed class EditorInteractionState
     {
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
         WaterPointMode = mode;
+    }
+
+    public void SetMountainPointMode(MountainPointMode mode)
+    {
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        MountainPointMode = mode;
     }
 
     public void SetRiverWidth(decimal widthMeters)

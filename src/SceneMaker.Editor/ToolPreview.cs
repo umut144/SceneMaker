@@ -39,6 +39,17 @@ public sealed record WaterDraftPreview(
     public static WaterDraftPreview Empty { get; } = new([], [], [], []);
 }
 
+/// <summary>The closed mountain contour being drawn and its derived Terrain fill.</summary>
+public sealed record MountainDraftPreview(
+    IReadOnlyList<MountainDraftPoint> Points,
+    IReadOnlyList<MountainCurvePointDocument> Curve,
+    IReadOnlyList<ChainPoint> Outline,
+    IReadOnlyList<TerrainCellCoordinate> Cells,
+    bool IsValid)
+{
+    public static MountainDraftPreview Empty { get; } = new([], [], [], [], false);
+}
+
 public sealed record TerrainPreview(
     IReadOnlyList<TerrainCellCoordinate> Cells,
     bool Erasing)
@@ -174,6 +185,58 @@ public static class ToolPreviewBuilder
             curve,
             WaterGeometry.Centerline(curve),
             WaterGeometry.Corridor(scene, metrics, curve));
+    }
+
+    /// <summary>
+    /// What the mountain draft would author. The outline is shown even when it
+    /// crosses itself; the fill appears only when the exact Core contour rule
+    /// accepts it.
+    /// </summary>
+    public static MountainDraftPreview BuildMountainDraft(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        EditorTool tool,
+        IReadOnlyList<MountainDraftPoint> draft,
+        MountainDraftPoint? pending)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentNullException.ThrowIfNull(draft);
+        if (tool != EditorTool.DrawMountain) return MountainDraftPreview.Empty;
+
+        List<MountainDraftPoint> points = [.. draft];
+        if (pending is { } value
+            && (points.Count == 0 || points[^1].X != value.X || points[^1].Y != value.Y))
+        {
+            points.Add(value);
+        }
+        if (points.Count == 0) return MountainDraftPreview.Empty;
+
+        var curve = MountainEditing.ResolveContour(points);
+        if (points.Count < 3)
+            return new MountainDraftPreview(points, curve, [], [], false);
+
+        var body = new MountainBodyDocument
+        {
+            MountainBodyId = "mountain_preview",
+            AssetKey = "preview",
+            ElevationMeters = 0m,
+            Points = [.. curve],
+        };
+        var outline = MountainGeometry.Flatten(body).Points;
+        try
+        {
+            return new MountainDraftPreview(
+                points,
+                curve,
+                outline,
+                MountainGeometry.TerrainCells(scene, metrics, body),
+                true);
+        }
+        catch (SceneMakerDocumentException)
+        {
+            return new MountainDraftPreview(points, curve, outline, [], false);
+        }
     }
 
     public static int CountOf(IReadOnlyList<PropPreview> previews, PropPreviewKind kind)

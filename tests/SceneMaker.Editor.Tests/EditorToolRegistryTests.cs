@@ -76,6 +76,8 @@ public sealed class EditorToolRegistryTests
         Assert.True(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawRiver));
         Assert.False(EditorToolRegistry.Supports(EditorMode.Props, EditorTool.DrawRiver));
         Assert.False(EditorToolRegistry.Supports(EditorMode.Templates, EditorTool.DrawRiver));
+        Assert.True(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawMountain));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Props, EditorTool.DrawMountain));
     }
 
     [Fact]
@@ -86,6 +88,10 @@ public sealed class EditorToolRegistryTests
             EditorMode.Terrain, EditorTool.Pencil, TerrainAuthoring.Cells));
         Assert.False(EditorToolRegistry.Offers(
             EditorMode.Terrain, EditorTool.DrawRiver, TerrainAuthoring.Cells));
+        Assert.True(EditorToolRegistry.Offers(
+            EditorMode.Terrain, EditorTool.DrawMountain, TerrainAuthoring.Cells));
+        Assert.False(EditorToolRegistry.Offers(
+            EditorMode.Terrain, EditorTool.DrawMountain, TerrainAuthoring.Curve));
         Assert.True(EditorToolRegistry.Offers(
             EditorMode.Terrain, EditorTool.DrawRiver, TerrainAuthoring.Curve));
         Assert.False(EditorToolRegistry.Offers(

@@ -27,6 +27,8 @@ public sealed class ToolInteraction
     private bool _terrainLineDragging;
     private readonly List<WaterDraftPoint> _riverDraft = [];
     private WaterDraftPoint? _riverPending;
+    private readonly List<MountainDraftPoint> _mountainDraft = [];
+    private MountainDraftPoint? _mountainPending;
     private string? _draggedAnchorId;
     private AuthoringPoint? _draggedAnchorPosition;
 
@@ -56,6 +58,12 @@ public sealed class ToolInteraction
     /// handle until the button is released.
     /// </summary>
     public WaterDraftPoint? RiverPendingPoint => _riverPending;
+
+    /// <summary>The closed mountain contour points placed so far.</summary>
+    public IReadOnlyList<MountainDraftPoint> MountainDraft => _mountainDraft;
+
+    /// <summary>The mountain point currently gathering an aligned handle.</summary>
+    public MountainDraftPoint? MountainPendingPoint => _mountainPending;
 
     public string? DraggedAnchorId => _draggedAnchorId;
     public AuthoringPoint? DraggedAnchorPosition => _draggedAnchorPosition;
@@ -104,6 +112,8 @@ public sealed class ToolInteraction
     {
         EditorMode.Terrain when ActiveTool == EditorTool.DrawRiver =>
             _riverPending is not null || _riverDraft.Count > 0,
+        EditorMode.Terrain when ActiveTool == EditorTool.DrawMountain =>
+            _mountainPending is not null || _mountainDraft.Count > 0,
         EditorMode.Props when ActiveTool == EditorTool.Line =>
             _propLineStart is not null || _propLineEnd is not null,
         _ => false,
@@ -121,7 +131,11 @@ public sealed class ToolInteraction
     public ToolOutcome? UndoDraftStep()
     {
         if (!HasUnfinishedDraft) return null;
-        return Mode == EditorMode.Terrain ? CancelRiverPoint() : CancelPropLineStep();
+        if (Mode == EditorMode.Terrain)
+            return ActiveTool == EditorTool.DrawMountain
+                ? CancelMountainPoint()
+                : CancelRiverPoint();
+        return CancelPropLineStep();
     }
 
     public void SelectProp(string? instanceId) => SelectedPropInstanceId = instanceId;
@@ -197,6 +211,8 @@ public sealed class ToolInteraction
                 return EraseTerrainRegion(cell, TerrainRegionEraseStroke);
             case EditorMode.Terrain when ActiveTool == EditorTool.DrawRiver && _riverPending is not null:
                 return DragRiverHandle(context, authoring);
+            case EditorMode.Terrain when ActiveTool == EditorTool.DrawMountain && _mountainPending is not null:
+                return DragMountainHandle(context, authoring);
             case EditorMode.Props when ActiveTool == EditorTool.Pencil && EraserEnabled:
                 return EraseProp(context, authoring, PropEraseStroke);
             case EditorMode.Templates when ActiveTool == EditorTool.AnchorMove
@@ -222,6 +238,7 @@ public sealed class ToolInteraction
         }
 
         if (_riverPending is not null) return CommitRiverPoint();
+        if (_mountainPending is not null) return CommitMountainPoint();
 
         if (_draggedAnchorId is { } anchorId && _draggedAnchorPosition is { } position)
         {
@@ -236,6 +253,8 @@ public sealed class ToolInteraction
         ArgumentNullException.ThrowIfNull(context);
         if (Mode == EditorMode.Terrain && ActiveTool == EditorTool.DrawRiver)
             return key == ToolKey.Enter ? FinishRiver(context) : CancelRiverPoint();
+        if (Mode == EditorMode.Terrain && ActiveTool == EditorTool.DrawMountain)
+            return key == ToolKey.Enter ? FinishMountain(context) : CancelMountainPoint();
         if (Mode != EditorMode.Props || ActiveTool != EditorTool.Line)
             return ToolOutcome.Idle.Instance;
 
@@ -298,8 +317,139 @@ public sealed class ToolInteraction
         EditorTool.Line => BeginTerrainLine(cell),
         EditorTool.DrawRiver when EraserEnabled => EraseWaterBody(context, authoring),
         EditorTool.DrawRiver => BeginRiverPoint(context, authoring, cell),
+        EditorTool.DrawMountain when EraserEnabled => EraseMountainBody(context, authoring),
+        EditorTool.DrawMountain => BeginMountainPoint(context, authoring),
         _ => ToolOutcome.Idle.Instance,
     };
+
+    private ToolOutcome BeginMountainPoint(ToolContext context, AuthoringPoint point)
+    {
+        if (context.Scene.SceneKind != SceneKind.Instance)
+            return new ToolOutcome.Message("Mountain: a Scene Template cannot carry mountain bodies.");
+        if (context.SelectedTerrainAssetKey is null)
+            return new ToolOutcome.Message("Mountain: choose a Terrain asset first.");
+
+        var snapped = new AuthoringPoint(
+            context.Metrics.SnapToTerrainGrid(point.X),
+            context.Metrics.SnapToTerrainGrid(point.Y));
+        if (!IsInsideScene(context, snapped))
+            return new ToolOutcome.Message("Mountain: a contour point has to sit inside the Scene.");
+        if (_mountainDraft.Count > 0
+            && _mountainDraft[^1].X == snapped.X
+            && _mountainDraft[^1].Y == snapped.Y)
+        {
+            return new ToolOutcome.Message(
+                "Mountain: that is the point you just placed; choose a different one.");
+        }
+
+        _mountainPending = new MountainDraftPoint(
+            snapped.X, snapped.Y, State.MountainPointMode);
+        var ordinal = _mountainDraft.Count + 1;
+        return new ToolOutcome.Message(State.MountainPointMode == MountainPointMode.Linear
+            ? $"Mountain: point {ordinal} at ({snapped.X}, {snapped.Y}) · top {context.ElevationMeters:0.###} m."
+            : $"Mountain: point {ordinal} at ({snapped.X}, {snapped.Y}) · top {context.ElevationMeters:0.###} m; drag to pull its handle.");
+    }
+
+    private ToolOutcome DragMountainHandle(ToolContext context, AuthoringPoint point)
+    {
+        if (_mountainPending is not { } pending) return ToolOutcome.Idle.Instance;
+        if (pending.Mode == MountainPointMode.Linear) return ToolOutcome.Idle.Instance;
+
+        var deltaX = point.X - pending.X;
+        var deltaY = point.Y - pending.Y;
+        var threshold = context.Metrics.AuthoringPixelsPerTerrainCell / 2;
+        var pulled = deltaX * deltaX + deltaY * deltaY >= threshold * threshold;
+        _mountainPending = pending with
+        {
+            DraggedHandleOut = pulled
+                ? new AuthoringPixelOffset { X = deltaX, Y = deltaY }
+                : null,
+        };
+        return ToolOutcome.Idle.Instance;
+    }
+
+    private ToolOutcome CommitMountainPoint()
+    {
+        if (_mountainPending is not { } pending) return ToolOutcome.Idle.Instance;
+        _mountainPending = null;
+        _mountainDraft.Add(pending);
+        return new ToolOutcome.Message(_mountainDraft.Count < 3
+            ? $"Mountain: {_mountainDraft.Count} point{Plural(_mountainDraft.Count)} placed; a contour needs at least three."
+            : $"Mountain: {_mountainDraft.Count} points. Enter closes it, Escape takes the last one back.");
+    }
+
+    private ToolOutcome FinishMountain(ToolContext context)
+    {
+        if (context.SelectedTerrainAssetKey is not { } assetKey)
+            return new ToolOutcome.Message("Mountain: choose a Terrain asset first.");
+        if (_mountainPending is { } pending)
+        {
+            _mountainDraft.Add(pending);
+            _mountainPending = null;
+        }
+        if (_mountainDraft.Count < 3)
+            return new ToolOutcome.Message("Mountain: a contour needs at least three points.");
+
+        var points = MountainEditing.ResolveContour(_mountainDraft);
+        try
+        {
+            var candidate = MountainEditing.Place(
+                context.Scene,
+                context.Metrics,
+                context.TerrainAssets,
+                points,
+                assetKey,
+                context.ElevationMeters);
+            _ = MountainGeometry.EffectiveTerrainCells(candidate, context.Metrics);
+        }
+        catch (SceneMakerDocumentException exception)
+        {
+            return new ToolOutcome.Message($"Mountain blocked: {exception.Message}");
+        }
+
+        var placed = _mountainDraft.Count;
+        var elevation = context.ElevationMeters;
+        var assetName = context.TerrainAssets.Resolve(assetKey).Name;
+        _mountainDraft.Clear();
+        return new ToolOutcome.Edit(
+            "Mountain",
+            document => MountainEditing.Place(
+                document, context.Metrics, context.TerrainAssets, points, assetKey, elevation),
+            Describe: (before, after) =>
+            {
+                var added = after.MountainBodies.FirstOrDefault(body =>
+                    before.MountainBodies.All(previous =>
+                        previous.MountainBodyId != body.MountainBodyId));
+                return $"Authored {added?.MountainBodyId ?? "mountain"} from {placed} points · {assetName} · top {elevation:0.###} m.";
+            });
+    }
+
+    private ToolOutcome CancelMountainPoint()
+    {
+        if (_mountainPending is not null)
+        {
+            _mountainPending = null;
+            return new ToolOutcome.Message("Mountain: point released.");
+        }
+        if (_mountainDraft.Count == 0)
+            return new ToolOutcome.Message("Mountain: nothing to take back.");
+
+        _mountainDraft.RemoveAt(_mountainDraft.Count - 1);
+        return new ToolOutcome.Message(_mountainDraft.Count == 0
+            ? "Mountain: draft cleared."
+            : $"Mountain: {_mountainDraft.Count} point{Plural(_mountainDraft.Count)} left.");
+    }
+
+    private static ToolOutcome EraseMountainBody(ToolContext context, AuthoringPoint point)
+    {
+        var body = MountainEditing.FindAt(context.Scene, point.X, point.Y);
+        if (body is null) return new ToolOutcome.Message("Mountain Eraser: no mountain here.");
+        var bodyId = body.MountainBodyId;
+        return new ToolOutcome.Edit(
+            "Mountain Eraser",
+            document => MountainEditing.Remove(document, bodyId),
+            Describe: (_, _) => $"Removed mountain body '{bodyId}'.");
+    }
 
     private ToolOutcome PropPressed(ToolContext context, AuthoringPoint point)
     {
@@ -777,12 +927,19 @@ public sealed class ToolInteraction
         ClearTerrainLine();
         ClearAnchorDrag();
         ClearRiverDraft();
+        ClearMountainDraft();
     }
 
     private void ClearRiverDraft()
     {
         _riverDraft.Clear();
         _riverPending = null;
+    }
+
+    private void ClearMountainDraft()
+    {
+        _mountainDraft.Clear();
+        _mountainPending = null;
     }
 
     private void ClearPropLine()
