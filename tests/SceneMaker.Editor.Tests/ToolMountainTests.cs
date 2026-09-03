@@ -121,10 +121,13 @@ public sealed class ToolMountainTests
         var interaction = Mountain();
         var context = Context(workspace, scene);
 
+        // Asymmetric on purpose: a symmetric bow tie encloses no net area, and
+        // the contour rule reaches ZeroArea before it ever looks for a crossing.
+        // This is the sequence the Core tests use to pin self-contact.
         Place(interaction, context, 32, 32);
         Place(interaction, context, 160, 160);
-        Place(interaction, context, 32, 160);
         Place(interaction, context, 160, 32);
+        Place(interaction, context, 32, 192);
 
         Assert.IsType<ToolOutcome.Message>(interaction.KeyPressed(context, ToolKey.Enter));
         Assert.Equal(4, interaction.MountainDraft.Count);
