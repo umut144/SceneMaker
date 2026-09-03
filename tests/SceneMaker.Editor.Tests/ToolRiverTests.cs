@@ -409,6 +409,32 @@ public sealed class ToolRiverTests
         Assert.False(interaction.HasUnfinishedDraft);
     }
 
+    /// <summary>
+    /// The Surface is the material and not the shape. Changing it while a river
+    /// is being drawn keeps the curve and decides only what the finished body
+    /// carries - which is why it can sit in the tool's context bar beside the
+    /// width and the heights.
+    /// </summary>
+    [Fact]
+    public void ChangingTheSurfaceWhileDrawingKeepsTheCurve()
+    {
+        using var workspace = TestWorkspace.Create(secondCurveAsset: true);
+        var scene = TestScenes.Instance(workspace);
+        var interaction = River();
+
+        Place(interaction, Context(workspace, scene), 32, 32);
+        Place(interaction, Context(workspace, scene), 160, 32);
+        var afterChange = Context(workspace, scene, surfaceAssetKey: "lava");
+
+        Assert.Equal(2, interaction.RiverDraft.Count);
+        Assert.True(interaction.HasUnfinishedDraft);
+        var edit = Assert.IsType<ToolOutcome.Edit>(
+            interaction.KeyPressed(afterChange, ToolKey.Enter));
+        var body = Assert.Single(edit.Apply(scene).WaterBodies);
+        Assert.Equal("lava", body.AssetKey);
+        Assert.Equal(2, body.Points.Count);
+    }
+
     private static ToolInteraction River()
     {
         var interaction = new ToolInteraction();
@@ -417,12 +443,15 @@ public sealed class ToolRiverTests
         return interaction;
     }
 
-    private static ToolContext Context(TestWorkspace workspace, SceneDocument scene) => new(
+    private static ToolContext Context(
+        TestWorkspace workspace,
+        SceneDocument scene,
+        string surfaceAssetKey = "river") => new(
         scene,
         workspace.Terrain,
         workspace.Props,
         workspace.Metrics,
-        SelectedTerrainAssetKey: "river",
+        SelectedTerrainAssetKey: surfaceAssetKey,
         SelectedPropAssetKey: "stone",
         TemplateAnchorGroupNumber: 1,
         ElevationMeters: scene.DefaultElevationMeters);

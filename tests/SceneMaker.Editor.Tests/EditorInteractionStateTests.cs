@@ -166,4 +166,88 @@ public sealed class EditorInteractionStateTests
         Assert.Throws<ArgumentOutOfRangeException>(() => state.SetPropLineOffset(-1));
         Assert.Equal(12, state.PropLineOffsetAuthoringPixels);
     }
+
+    /// <summary>
+    /// An area that paints cells hands the author a palette; an area that draws
+    /// a curve carries its material as one property of the body, beside width
+    /// and heights. The field therefore follows the authoring kind rather than a
+    /// list of areas, and a later closed-curve area gets it for the same reason.
+    /// </summary>
+    [Fact]
+    public void OnlyACurveAreaCarriesItsMaterialAsASurfaceField()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        Assert.NotNull(TerrainAreaAssets.SurfaceFieldFor(
+            EditorMode.River, workspace.Terrain, remembered: null));
+        Assert.Null(TerrainAreaAssets.SurfaceFieldFor(
+            EditorMode.Terrain, workspace.Terrain, remembered: null));
+        Assert.Null(TerrainAreaAssets.SurfaceFieldFor(
+            EditorMode.Mountain, workspace.Terrain, remembered: null));
+        Assert.Null(TerrainAreaAssets.SurfaceFieldFor(
+            EditorMode.Props, workspace.Terrain, remembered: null));
+        Assert.Null(TerrainAreaAssets.SurfaceFieldFor(
+            EditorMode.Templates, workspace.Terrain, remembered: null));
+    }
+
+    /// <summary>
+    /// One offered Asset is not a choice. The field stays - the tool has the
+    /// same shape either way - and says which Asset that is, but it cannot be
+    /// opened.
+    /// </summary>
+    [Fact]
+    public void ASingleOfferedSurfaceIsShownAndCannotBeChanged()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var field = Assert.IsType<TerrainSurfaceField>(TerrainAreaAssets.SurfaceFieldFor(
+            EditorMode.River, workspace.Terrain, remembered: null));
+
+        Assert.Equal(["river"], field.Options.Select(static asset => asset.AssetKey));
+        Assert.Equal("river", field.SelectedAssetKey);
+        Assert.False(field.Changeable);
+    }
+
+    /// <summary>
+    /// With more than one curve-authored Asset the field is a real choice, and
+    /// it offers exactly the Assets the area can author - never a cell-authored
+    /// one. The Surface is a choice of Asset; the runtime `surface` token is
+    /// never read here, and nothing about it says water.
+    /// </summary>
+    [Fact]
+    public void SeveralOfferedSurfacesMakeTheFieldAChoice()
+    {
+        using var workspace = TestWorkspace.Create(secondCurveAsset: true);
+
+        var field = Assert.IsType<TerrainSurfaceField>(TerrainAreaAssets.SurfaceFieldFor(
+            EditorMode.River, workspace.Terrain, remembered: null));
+
+        Assert.Equal(["lava", "river"], field.Options.Select(static asset => asset.AssetKey));
+        Assert.True(field.Changeable);
+        Assert.All(
+            field.Options,
+            static asset => Assert.Equal(TerrainAuthoring.Curve, asset.Authoring));
+    }
+
+    /// <summary>
+    /// The field gives the answer `Choose` gives: the Asset the area was left
+    /// with while it still suits, and otherwise the first it offers. One rule
+    /// for both, so a palette and a Surface field can never pick differently.
+    /// </summary>
+    [Fact]
+    public void TheSurfaceFieldKeepsTheRememberedAssetAndOtherwiseTakesTheFirst()
+    {
+        using var workspace = TestWorkspace.Create(secondCurveAsset: true);
+
+        Assert.Equal(
+            "river",
+            TerrainAreaAssets.SurfaceFieldFor(
+                EditorMode.River, workspace.Terrain, remembered: "river")?.SelectedAssetKey);
+        // A cell-authored Asset cannot surface a corridor, so it is refused and
+        // the field falls back rather than carrying it over.
+        Assert.Equal(
+            TerrainAreaAssets.Choose(EditorMode.River, workspace.Terrain, remembered: null),
+            TerrainAreaAssets.SurfaceFieldFor(
+                EditorMode.River, workspace.Terrain, remembered: "grass")?.SelectedAssetKey);
+    }
 }

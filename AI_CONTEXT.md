@@ -52,6 +52,24 @@ choosing a river silently ended a mountain contour being drawn. Now an Asset is
 only the material: changing it keeps the geometry, and only leaving the area
 gives it up - out loud.
 
+Where that material is asked for follows from what the area draws. Painting
+cells means switching Assets constantly, so Terrain carries them as a palette
+of chips above the canvas. Drawing a curve means choosing one Asset for the
+body being pulled out, once, beside its width and its heights - so River
+carries it as a `Surface` field in that tool's context bar, and there is no
+second navigation row repeating the area's own name. The rule is the authoring
+kind rather than a list of areas, which is why a later closed-curve area would
+get the field for the same reason. With one offered Asset the field still
+stands and cannot be opened: an area whose shape changes with how many Assets a
+Workspace happens to enable would be a different tool in every Workspace.
+
+None of this says water. A corridor carries whatever curve-authored Asset the
+Workspace offers - water, lava, mud - and what that means is the runtime's
+question: SceneMaker never reads the Asset's `surface` token, so the fields say
+`Surface` and `Surface level` rather than naming one of them. The stored types
+are still `water_bodies` and `water_raster`, which is document and export
+format and a separate question from what the editor calls its fields.
+
 The water grid is finer than the Terrain grid - `water_cell_meters` in the
 Workspace config, 0.5 m for `world01`, where a Terrain cell is 1 m - because a
 bank has to follow a curve and a whole Terrain cell cannot. It has to nest a

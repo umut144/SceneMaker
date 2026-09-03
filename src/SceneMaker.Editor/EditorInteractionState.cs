@@ -174,7 +174,47 @@ public static class TerrainAreaAssets
         }
         return offered.Count == 0 ? null : offered[0].AssetKey;
     }
+
+    /// <summary>
+    /// The Surface field an area shows, or null for an area that shows none.
+    ///
+    /// <para>An area that paints cells carries its material as a palette: a bar
+    /// of Assets to switch between while drawing. An area that draws a curve
+    /// carries it as one property of the body being drawn, beside its width and
+    /// its heights, which is why it belongs in that tool's context bar and not
+    /// in a second navigation row. So the field follows the authoring kind
+    /// rather than a list of areas, and a later closed-curve area gets it for
+    /// the same reason River does.</para>
+    ///
+    /// <para>The field is a choice of <c>asset_key</c>. It never reads or writes
+    /// the Asset's runtime <c>surface</c> token, and it does not assume water: a
+    /// corridor may carry lava, mud or anything else a Workspace authors as a
+    /// curve, and what that means is the runtime's question.</para>
+    /// </summary>
+    public static TerrainSurfaceField? SurfaceFieldFor(
+        EditorMode mode,
+        TerrainDisplayCatalog catalog,
+        string? remembered)
+    {
+        if (EditorToolRegistry.TerrainAuthoringFor(mode) != TerrainAuthoring.Curve) return null;
+        var offered = Offered(mode, catalog);
+        // One Asset is not a choice, and none is not a field to choose in - both
+        // stay visible so the tool keeps its shape, and neither can be opened.
+        return new TerrainSurfaceField(
+            offered,
+            Choose(mode, catalog, remembered),
+            Changeable: offered.Count > 1);
+    }
 }
+
+/// <summary>
+/// What an area's Surface control should show: the Assets to offer, the one
+/// that is chosen, and whether there is anything to choose between.
+/// </summary>
+public sealed record TerrainSurfaceField(
+    IReadOnlyList<TerrainDisplayAsset> Options,
+    string? SelectedAssetKey,
+    bool Changeable);
 
 public sealed class EditorInteractionState
 {

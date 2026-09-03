@@ -51,6 +51,18 @@ Die Navigation ist zweistufig, wie bei den übrigen Bereichen auch:
 Kontext:    [ ← ]  Landscape ›  ( River )  ( Mountain )
 ```
 
+Das Material erscheint dort nicht noch einmal. Ein Bereich, der Zellen malt,
+trägt es als **Palette** — eine Leiste von Assetknöpfen, zwischen denen man
+beim Malen wechselt. Ein Bereich, der eine Kurve zeichnet, trägt es als
+**Eigenschaft des Körpers**, den man gerade zieht, und damit in der
+Kontextleiste seines Werkzeugs neben Breite und Höhen:
+
+```text
+Terrain-Assetleiste:  Terrain ›  ( Grass ) ( Sand )
+River-Kontext:        Surface [ River ▾ ] · Point [ Linear ▾ ] · Width […]
+                      · Surface level […] · Snap · Depth […] · Clearance […]
+```
+
 `Landscape` ist der Weg hinein, kein Ort: ein Klick öffnet die Kontextleiste und
 landet direkt in einem der beiden Bereiche — in dem, in dem man zuletzt war —,
 der andere ist einen Klick daneben. `Landscape` ist deshalb **kein**
@@ -64,8 +76,8 @@ Surface-Token — aber gefragt wird es jetzt von der Assetleiste:
 
 | Bereich | Werkzeuge | angebotene Assets |
 | --- | --- | --- |
-| `Terrain` | `Pencil`, `Line`, `Terrain Fill` | `authoring: "cells"` |
-| `River` | `Draw River` | `authoring: "curve"` |
+| `Terrain` | `Pencil`, `Line`, `Terrain Fill` | `authoring: "cells"`, als Palette |
+| `River` | `Draw River` | `authoring: "curve"`, als `Surface`-Feld |
 | `Mountain` | `Draw Mountain` | — |
 | `Props` | `Selector`, `Pencil`, `Line` | — |
 | `Templates` | `Selector`, `Anchor Move` | — |
@@ -86,11 +98,11 @@ Zeichenknopf wird nie angeboten. Das gilt nur für Bereiche, die überhaupt ein
 Material brauchen: `Mountain` bietet keines an und ist deshalb nie aus diesem
 Grund deaktiviert.
 
-Ein Assetwechsel **innerhalb** eines Bereichs wechselt nur das Material: die
-Geometrie eines laufenden Entwurfs bleibt stehen, und kein Werkzeug wird unter
-der Hand getauscht. Das ersetzt die frühere automatische Werkzeugumschaltung,
-die einen halb gezeichneten Berg verschluckte, sobald man ein Curve-Asset
-wählte.
+Ein Assetwechsel **innerhalb** eines Bereichs wechselt nur das Material — ob
+über die Palette oder über das `Surface`-Feld: die Geometrie eines laufenden
+Entwurfs bleibt stehen, und kein Werkzeug wird unter der Hand getauscht. Das
+ersetzt die frühere automatische Werkzeugumschaltung, die einen halb
+gezeichneten Berg verschluckte, sobald man ein Curve-Asset wählte.
 
 Die Assetleisten oben zeigen jedes Asset in seiner eigenen Farbe. Die Auswahl
 liegt deshalb auf dem **Hintergrund** — eine gefüllte Fläche in der Assetfarbe
@@ -146,7 +158,26 @@ wieder vor, kann aber pro Strich davon abweichen, ohne dass das Dokument sich
 
 ### River:Draw River
 
-Das ContextMenu von `River:Draw River` enthält den Grundriss und den Schnitt.
+Das ContextMenu von `River:Draw River` enthält Material, Grundriss und Schnitt.
+
+`Surface` wählt das Terrain-Asset, aus dem der Korridor besteht — eines der
+curve-authorierten Assets des Workspace. Es steht hier und nicht in einer
+Assetleiste, weil es eine Eigenschaft des gezogenen Körpers ist wie `Width`:
+man wählt es einmal für diesen Fluss, nicht ständig wie einen Pinsel. Ein
+Wechsel mitten im Entwurf behält die Kurve und bestimmt nur, was der fertige
+Körper trägt. Bietet der Workspace genau ein passendes Asset an, bleibt das Feld
+sichtbar, zeigt dieses Asset und lässt sich nicht aufklappen; bietet er keines
+an, bleibt es ebenso sichtbar und leer, und die Statuszeile sagt, welcher
+Assettyp fehlt. Intern ist das eine Wahl des `asset_key`; das Runtime-`surface`
+eines Assets liest SceneMaker dabei nie.
+
+Ein Fluss ist deshalb auch nicht auf Wasser festgelegt. Was durch einen Korridor
+fließt — Wasser, Lava, Schlamm, Treibsand —, entscheidet das gewählte Asset und
+sein Profil in der Runtime; `Surface`, `Surface level`, `Depth`, `Clearance` und
+`Snap` bleiben materialneutral. Die persistierten Typen heißen weiterhin
+`water_bodies` und `water_raster`; das ist Dokument- und Exportformat und wird
+getrennt betrachtet.
+
 `Point` schaltet
 zwischen `Linear` und `Aligned` um: `Linear` macht die angrenzenden Segmente
 gerade, `Aligned` hält die beiden Handles eines Punktes kollinear. Fluss und Berg
@@ -166,12 +197,13 @@ anklickt, bekommt seine Handles automatisch aus seinen Nachbarn.
 Der erste Punkt ist die Quelle, der letzte die Mündung; mehr sagt das Dokument
 über die Fließrichtung nicht.
 
-Der Schnitt steht daneben: `Water` ist die Wasseroberfläche, `Depth` die Tiefe
-des Bettes darunter, `Clearance` die Kopfhöhe darüber, die aus dem Terrain
-ausgeschnitten wird. Alle drei gelten für den *nächsten* Punkt und werden
-zwischen gesetzten Punkten über die Bogenlänge interpoliert.
+Der Schnitt steht daneben: `Surface level` ist die Oberkante des Korridors,
+`Depth` die Tiefe des Bettes darunter, `Clearance` die Kopfhöhe darüber, die aus
+dem Terrain ausgeschnitten wird. Alle drei gelten für den *nächsten* Punkt und
+werden zwischen gesetzten Punkten über die Bogenlänge interpoliert.
 
-`Snap` ist standardmäßig an und nimmt die Wasserhöhe aus dem Terrain unter dem
+`Snap` steht direkt neben `Surface level`, weil er dessen Wert bestimmt: er ist
+standardmäßig an und nimmt die Oberflächenhöhe aus dem Terrain unter dem
 gesetzten Punkt — ein Fluss folgt damit seinem Tal, ohne dass man eine Zahl
 tippt. Für einen Tunnel schaltet man ihn ab, denn dort ist der ganze Sinn, dass
 das Wasser dem Berg gerade *nicht* folgt. Gespeichert wird auch dann nur die

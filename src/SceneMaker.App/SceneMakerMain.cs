@@ -36,6 +36,8 @@ public sealed partial class SceneMakerMain : Control
     private readonly VSeparator _toolContextSeparator = new();
     private readonly Label _propLineOffsetLabel = new();
     private readonly SpinBox _propLineOffsetEdit = new();
+    private readonly Label _surfaceLabel = new();
+    private readonly OptionButton _surfaceEdit = new();
     private readonly Label _curvePointModeLabel = new();
     private readonly OptionButton _curvePointModeEdit = new();
 
@@ -108,9 +110,6 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _anchorGroupEdit = new();
     private readonly Dictionary<EditorTool, Button> _drawingToolControlsByTool = [];
     private readonly Dictionary<string, Button> _terrainAssetControlsByKey = [];
-    // Rebuilt with the bar, because opening a Workspace frees every control in
-    // it and a kept reference would outlive the node it points at.
-    private Label? _terrainAssetBarLabel;
 
     private readonly FileDialog _workspaceDirectoryDialog = new();
     private readonly FileDialog _workspaceDirectoryLoadDialog = new();
@@ -369,6 +368,14 @@ public sealed partial class SceneMakerMain : Control
         _propLineOffsetEdit.CustomMinimumSize = new Vector2(130f, 0f);
         _propLineOffsetEdit.ValueChanged += SetPropLineOffset;
         _contextMenuBar.AddChild(_propLineOffsetEdit);
+        _surfaceLabel.Name = "SurfaceLabel";
+        _surfaceLabel.Text = "Surface";
+        _surfaceLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_surfaceLabel);
+        _surfaceEdit.Name = "Surface";
+        _surfaceEdit.CustomMinimumSize = new Vector2(130f, 0f);
+        _surfaceEdit.ItemSelected += SelectSurfaceItem;
+        _contextMenuBar.AddChild(_surfaceEdit);
         _curvePointModeLabel.Name = "CurvePointModeLabel";
         _curvePointModeLabel.Text = "Point";
         _curvePointModeLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -395,20 +402,20 @@ public sealed partial class SceneMakerMain : Control
         _snapWaterToggle.Text = "Snap";
         _snapWaterToggle.ButtonPressed = true;
         _snapWaterToggle.TooltipText =
-            "Take the water level from the Terrain under each placed point. "
-            + "Switch it off to drive a river into a mountain, where the water "
-            + "must not follow the ground. What gets stored is the height, not "
-            + "the relationship: repainting Terrain later never moves the river.";
+            "Take the surface height from the Terrain under each placed point. "
+            + "Switch it off to drive a corridor into a mountain, where it must "
+            + "not follow the ground. What gets stored is the height, not the "
+            + "relationship: repainting Terrain later never moves the body.";
         _snapWaterToggle.Toggled += SetSnapWaterToTerrain;
         _contextMenuBar.AddChild(_snapWaterToggle);
         _waterElevationLabel.Name = "WaterElevationLabel";
-        _waterElevationLabel.Text = "Water";
+        _waterElevationLabel.Text = "Surface level";
         _waterElevationLabel.VerticalAlignment = VerticalAlignment.Center;
         _contextMenuBar.AddChild(_waterElevationLabel);
         _waterElevationEdit.Name = "WaterElevation";
         ConfigureElevationInput(_waterElevationEdit);
         _waterElevationEdit.TooltipText =
-            "The water surface the next point takes with Snap off, and the fallback "
+            "The surface height the next point takes with Snap off, and the fallback "
             + "for the first point when Snap finds no Terrain.";
         _waterElevationEdit.ValueChanged += SetWaterElevation;
         _contextMenuBar.AddChild(_waterElevationEdit);
@@ -437,7 +444,7 @@ public sealed partial class SceneMakerMain : Control
         _waterDerivedSpanLabel.Name = "WaterDerivedSpan";
         _waterDerivedSpanLabel.VerticalAlignment = VerticalAlignment.Center;
         _waterDerivedSpanLabel.TooltipText =
-            "Derived boundaries only: bed = water - depth; cut top = water + clearance.";
+            "Derived boundaries only: bed = surface - depth; cut top = surface + clearance.";
         _contextMenuBar.AddChild(_waterDerivedSpanLabel);
         UpdateWaterDerivedSpan();
         _contextMenuBar.AddThemeConstantOverride("separation", 8);
@@ -576,8 +583,10 @@ public sealed partial class SceneMakerMain : Control
     private void BuildTerrainAssetBar()
     {
         _terrainAssetControlsByKey.Clear();
-        _terrainAssetBarLabel = new Label { Text = "Terrain  ›" };
-        _terrainAssetBar.AddChild(_terrainAssetBarLabel);
+        // The bar belongs to the one area that paints cells, so its label names
+        // that area once and stays. It used to be rewritten per area, which put
+        // a second `River ›` beside the River button in the navigation.
+        _terrainAssetBar.AddChild(new Label { Text = "Terrain  ›" });
         foreach (var asset in _controller.Session?.TerrainAssets.Assets ?? [])
         {
             var button = new Button
@@ -597,27 +606,99 @@ public sealed partial class SceneMakerMain : Control
     }
 
     /// <summary>
-    /// Shows the Assets the active area can author and marks the one it holds.
-    /// The area asks `TerrainAreaAssets`; this only reflects the answer.
+    /// Shows the Assets the active area can author and marks the one it holds -
+    /// as a palette of chips where cells are painted, and as the Surface field
+    /// of the tool's context bar where a curve is drawn. The area asks
+    /// `TerrainAreaAssets`; this only reflects the answer.
     /// </summary>
     private void ShowTerrainAssetsForArea()
     {
         if (_controller.Session is not { } session) return;
         var mode = _interaction.Mode;
+        // The area decides, the editor state takes the answer, and only then do
+        // the controls show it. A control that displayed an Asset the state does
+        // not hold would let the author draw with something else than the one
+        // they can see.
+        var field = TerrainAreaAssets.SurfaceFieldFor(
+            mode, session.TerrainAssets, _canvas.SelectedTerrainAssetKey);
+        var chosen = field is not null
+            ? field.SelectedAssetKey
+            : TerrainAreaAssets.Choose(
+                mode, session.TerrainAssets, _canvas.SelectedTerrainAssetKey);
+        _canvas.SelectedTerrainAssetKey = chosen;
+
         var offered = TerrainAreaAssets.Offered(mode, session.TerrainAssets)
             .Select(static asset => asset.AssetKey)
             .ToHashSet(StringComparer.Ordinal);
-        var chosen = TerrainAreaAssets.Choose(
-            mode, session.TerrainAssets, _canvas.SelectedTerrainAssetKey);
-        _canvas.SelectedTerrainAssetKey = chosen;
-        if (_terrainAssetBarLabel is { } label)
-            label.Text = $"{EditorToolRegistry.ModeDisplayName(mode)}  ›";
         foreach (var (assetKey, control) in _terrainAssetControlsByKey)
         {
             control.Visible = offered.Contains(assetKey);
             control.ButtonPressed = control.Visible
                 && string.Equals(assetKey, chosen, StringComparison.Ordinal);
         }
+        ShowSurfaceField(mode, field);
+    }
+
+    /// <summary>
+    /// Fills the Surface control from the area's answer and decides nothing of
+    /// its own - the Asset was chosen and written to the editor state above.
+    /// Adding items and setting `Selected` raises no `ItemSelected`, so showing
+    /// a Surface can never select one behind the state's back.
+    ///
+    /// <para>One offered Asset is not a choice and none is not a field to choose
+    /// in. Both keep the control in place, because the tool has the same shape
+    /// either way, and both say in the tooltip why it cannot be opened.</para>
+    /// </summary>
+    private void ShowSurfaceField(EditorMode mode, TerrainSurfaceField? field)
+    {
+        _surfaceEdit.Clear();
+        if (field is null) return;
+
+        foreach (var asset in field.Options)
+        {
+            _surfaceEdit.AddItem(asset.Name);
+            _surfaceEdit.SetItemMetadata(_surfaceEdit.ItemCount - 1, asset.AssetKey);
+        }
+        var selected = -1;
+        for (var index = 0; index < field.Options.Count; index++)
+        {
+            if (!string.Equals(
+                    field.Options[index].AssetKey,
+                    field.SelectedAssetKey,
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+            selected = index;
+            break;
+        }
+        _surfaceEdit.Selected = selected;
+        _surfaceEdit.Disabled = !field.Changeable;
+        var area = EditorToolRegistry.ModeDisplayName(mode);
+        _surfaceEdit.TooltipText = field switch
+        {
+            { Changeable: true } =>
+                $"The Terrain Asset this {area} is made of. It is the material and "
+                + "not the shape: changing it keeps the curve being drawn and "
+                + "decides what the finished body carries.",
+            { Options.Count: 1 } =>
+                $"This Workspace offers only one {area} Surface, so there is "
+                + "nothing to choose between.",
+            _ => "This Workspace enables no Terrain Asset authored as a curve, so "
+                + $"{area} has no Surface to offer.",
+        };
+    }
+
+    /// <summary>
+    /// The Surface control answers with an item index; the Asset it stands for
+    /// travels as that item's metadata rather than as its position, which
+    /// changes with what the Workspace offers.
+    /// </summary>
+    private void SelectSurfaceItem(long index)
+    {
+        if (index < 0 || index >= _surfaceEdit.ItemCount) return;
+        if (_surfaceEdit.GetItemMetadata((int)index).AsString() is { Length: > 0 } assetKey)
+            SelectTerrainAsset(assetKey);
     }
 
     /// <summary>
@@ -1514,7 +1595,8 @@ public sealed partial class SceneMakerMain : Control
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
         ShowLandscapeAreas(mode);
-        _terrainAssetBar.Visible = EditorToolRegistry.TerrainAuthoringFor(mode) is not null;
+        _terrainAssetBar.Visible =
+            EditorToolRegistry.TerrainAuthoringFor(mode) == TerrainAuthoring.Cells;
         _propAssetBar.Visible = mode == EditorMode.Props;
         _templateBar.Visible = mode == EditorMode.Templates;
         _mapBar.Visible = false;
@@ -1782,6 +1864,12 @@ public sealed partial class SceneMakerMain : Control
         _propLineOffsetEdit.Visible = propLineActive;
         _curvePointModeLabel.Visible = curveActive;
         _curvePointModeEdit.Visible = curveActive;
+        // The material of a curve-authored body is one of its properties, so it
+        // sits here beside its width and its heights rather than in a bar.
+        var surfaceActive =
+            EditorToolRegistry.TerrainAuthoringFor(_interaction.Mode) == TerrainAuthoring.Curve;
+        _surfaceLabel.Visible = surfaceActive;
+        _surfaceEdit.Visible = surfaceActive;
         // The two tools keep their own point mode; the shared control only
         // shows whichever one the active tool authors with.
         var aligned = mountainActive
@@ -1813,10 +1901,15 @@ public sealed partial class SceneMakerMain : Control
     private void SelectTerrainAsset(string assetKey)
     {
         var asset = _controller.Session!.TerrainAssets.Resolve(assetKey);
+        var mode = _interaction.Mode;
         _canvas.SelectedTerrainAssetKey = assetKey;
         UpdateDrawingToolAvailability();
         UpdateToolContextLabel();
-        SetStatus($"Selected Terrain '{asset.Name}' ({asset.AssetKey}).");
+        // One path, two ways of saying it: a palette hands the author a brush,
+        // a Surface field names what the body being drawn is made of.
+        SetStatus(EditorToolRegistry.TerrainAuthoringFor(mode) == TerrainAuthoring.Curve
+            ? $"Selected {EditorToolRegistry.ModeDisplayName(mode)} Surface '{asset.Name}' ({asset.AssetKey})."
+            : $"Selected Terrain '{asset.Name}' ({asset.AssetKey}).");
     }
 
     private void SelectPropAsset(string assetKey)

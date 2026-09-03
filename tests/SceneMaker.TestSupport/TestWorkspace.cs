@@ -20,7 +20,9 @@ namespace SceneMaker.TestSupport;
 /// Assets: <c>grass</c>, <c>river</c> and <c>sand</c> are PolyTools terrain with
 /// the surfaces <c>land</c>, <c>water</c> and <c>sand</c>; <c>stone</c> and
 /// <c>portal</c> are PolyTools props and therefore carry no surface. Only
-/// <c>river</c> is authored as a curve; the other two are painted as cells.
+/// <c>river</c> is authored as a curve; the other two are painted as cells. A
+/// second curve Asset, <c>lava</c>, is added only when <see cref="Create"/> is
+/// asked for it, so an area that draws curves offers a real choice.
 ///
 /// The Workspace directory is named after its key and carries the empty
 /// <c>scenes</c> and <c>templates</c> directories, so it satisfies everything
@@ -56,7 +58,15 @@ public sealed class TestWorkspace : IDisposable
     public PropDisplayCatalog Props { get; }
     public WorkspaceMetrics Metrics => Configuration.Metrics;
 
-    public static TestWorkspace Create(string worldKey = "test_world")
+    /// <summary>
+    /// The shared fixture. <paramref name="secondCurveAsset"/> adds a second
+    /// curve-authored Terrain Asset, <c>lava</c>, for the tests that need a
+    /// curve area to offer a real choice; it is off by default so that the
+    /// Workspace every other test reasons about stays the one described above.
+    /// </summary>
+    public static TestWorkspace Create(
+        string worldKey = "test_world",
+        bool secondCurveAsset = false)
     {
         var containerPath = Path.Combine(
             Path.GetTempPath(),
@@ -66,8 +76,8 @@ public sealed class TestWorkspace : IDisposable
         Directory.CreateDirectory(rootPath);
         Directory.CreateDirectory(Path.Combine(rootPath, WorkspaceStore.ScenesDirectoryName));
         Directory.CreateDirectory(Path.Combine(rootPath, WorkspaceStore.TemplatesDirectoryName));
-        WriteImport(rootPath, worldKey);
-        WriteConfiguration(rootPath, worldKey);
+        WriteImport(rootPath, worldKey, secondCurveAsset);
+        WriteConfiguration(rootPath, worldKey, secondCurveAsset);
         var catalog = PolyToolsCatalogImporter.Load(rootPath);
         var configuration = WorkspaceConfigurationStore.Load(rootPath, catalog);
         return new TestWorkspace(
@@ -81,8 +91,18 @@ public sealed class TestWorkspace : IDisposable
 
     public void Dispose() => Directory.Delete(_containerPath, recursive: true);
 
-    private static void WriteConfiguration(string rootPath, string worldKey)
+    private static void WriteConfiguration(
+        string rootPath,
+        string worldKey,
+        bool secondCurveAsset)
     {
+        // Appended rather than spliced into the middle: both catalogs sort by
+        // asset key when they load, so where the entry sits in the file changes
+        // nothing, and a suffix keeps the JSON below readable.
+        var lava = secondCurveAsset
+            ? ",\n    { \"asset_key\": \"lava\", \"color\": \"#FF6A3C\", "
+                + "\"surface\": \"lava\", \"authoring\": \"curve\" }"
+            : string.Empty;
         File.WriteAllText(
             Path.Combine(rootPath, WorkspaceConfigurationStore.FileName),
             $$"""
@@ -102,14 +122,22 @@ public sealed class TestWorkspace : IDisposable
                 { "asset_key": "portal", "color": "#8E6CFF" },
                 { "asset_key": "river", "color": "#3C7DD9", "surface": "water", "authoring": "curve" },
                 { "asset_key": "sand", "color": "#E5C07B", "surface": "sand", "authoring": "cells" },
-                { "asset_key": "stone", "color": "#808080" }
+                { "asset_key": "stone", "color": "#808080" }{{lava}}
               ]
             }
             """);
     }
 
-    private static void WriteImport(string rootPath, string worldKey)
+    private static void WriteImport(string rootPath, string worldKey, bool secondCurveAsset)
     {
+        var lava = secondCurveAsset
+            ? ",\n    {\n"
+                + "      \"asset_key\": \"lava\",\n"
+                + "      \"display_name\": \"Lava\",\n"
+                + "      \"asset_type\": \"terrain\",\n"
+                + "      \"runtime_package\": \"PolyToolsRuntimeExports/lava/manifest.json\"\n"
+                + "    }"
+            : string.Empty;
         var importDirectory = Path.Combine(
             rootPath,
             PolyToolsCatalogImporter.ImportDirectoryName,
@@ -152,12 +180,13 @@ public sealed class TestWorkspace : IDisposable
                   "display_name": "Stone",
                   "asset_type": "props",
                   "runtime_package": "PolyToolsRuntimeExports/stone/manifest.json"
-                }
+                }{{lava}}
               ]
             }
             """);
 
         WriteManifest(importDirectory, "grass", "terrain");
+        if (secondCurveAsset) WriteManifest(importDirectory, "lava", "terrain");
         WriteManifest(importDirectory, "portal", "props");
         WriteManifest(importDirectory, "river", "terrain");
         WriteManifest(importDirectory, "sand", "terrain");
