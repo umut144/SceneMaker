@@ -179,7 +179,6 @@ public sealed class ToolMountainTests
         workspace.Terrain,
         workspace.Props,
         workspace.Metrics,
-        TerrainCoverage.AuthoredCells(scene),
         SelectedTerrainAssetKey: "grass",
         SelectedPropAssetKey: "stone",
         TemplateAnchorGroupNumber: 1,

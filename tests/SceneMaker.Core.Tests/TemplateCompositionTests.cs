@@ -249,6 +249,34 @@ public sealed class TemplateCompositionTests
         Assert.Equal(4, template.TerrainCells.Count);
     }
 
+    /// <summary>
+    /// Composition moves Terrain cells and Props; it does not ask whether a Prop
+    /// has ground. A Prop standing free in the base Scene therefore survives
+    /// composition instead of failing it.
+    /// </summary>
+    [Fact]
+    public void ComposingKeepsAPropThatStandsOnNoTerrain()
+    {
+        using var workspace = TestWorkspace.Create();
+        var baseScene = WithAnchor(TestScenes.EmptyInstance(), workspace, 64, 64);
+        baseScene = PropEditing.Place(baseScene, workspace.Props, 0, 0, "stone", 4.0m);
+
+        var composed = Compose(
+            baseScene,
+            [TestScenes.Template(workspace, "tpl_a", 1)],
+            workspace,
+            seed: 7UL).ComposedScene;
+
+        var prop = Assert.Single(
+            composed.Props,
+            candidate => candidate.InstanceId == "stone_0001");
+        Assert.Equal(4.0m, prop.ElevationMeters);
+        // The Template brought the only Terrain there is, and none of it is
+        // under that Prop.
+        Assert.Equal(4, composed.TerrainCells.Count);
+        Assert.DoesNotContain(composed.TerrainCells, cell => cell is { X: 0, Y: 0 });
+    }
+
     private static TemplateCompositionResult Compose(
         SceneDocument baseScene,
         IEnumerable<SceneDocument> workspaceScenes,

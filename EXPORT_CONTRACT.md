@@ -5,9 +5,14 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 8**, embedded **scene 10**. A reader must reject any
+Current schemas: **export 9**, embedded **scene 10**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
+
+Export 9 differs from 8 in what it promises, not in what it contains: the
+guarantee that every Prop footprint is covered by Terrain is withdrawn. The JSON
+is byte-for-byte the same shape, which is exactly why the version had to move —
+a reader that relied on the old promise cannot tell the two apart by looking.
 
 The authored Scene currently has its own schema 11. It is deliberately newer
 than the embedded Scene: mountain contours are editor source, folded into the
@@ -44,7 +49,7 @@ purpose.
 ```jsonc
 {
   "format": "scene_maker_scene_export",
-  "version": 8,
+  "version": 9,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,        // edge length of one Terrain cell
@@ -399,8 +404,11 @@ treat a violation as a corrupt file rather than a case to handle:
 - `water_raster` lists the same bodies as `scene.water_bodies`, in the same
   order, and each body's `cells` are what the corridor rule above produces from
   its curve. A reader may recompute them and must get the same set.
-- Every Prop footprint is fully covered by Terrain. A Prop never floats over a
-  hole.
+- Nothing is promised about Terrain under a Prop. A Prop carries an absolute
+  `elevation_meters` and may stand over a hole, over water, or over nothing at
+  all; a footprint with no cells beneath it is authored intent, not a defect.
+  Whether an Actor can reach or stand on it is the consumer's question, and the
+  export carries the heights it needs to answer it.
 - `terrain_cells` and every body's `cells` are ordered by `y`, then `x`. `props`,
   `asset_profiles`, `scene.water_bodies` and `water_raster` are ordered by their
   id, ordinal. This ordering is a checked invariant, not a

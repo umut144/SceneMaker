@@ -23,7 +23,7 @@ public sealed class SceneExportContractTests
             ["format", "version", "workspace_key", "grid", "asset_profiles", "water_raster", "scene"],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(8, root.GetProperty("version").GetInt32());
+        Assert.Equal(9, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             [

@@ -286,7 +286,7 @@ public sealed class MountainGeometryTests
             Square(32, 32, 160, 160),
             "grass",
             10.0m);
-        // A Prop over mountain-only Terrain proves coverage also reads the fold.
+        // A Prop rides along: the fold must leave the Props beside it alone.
         scene = PropEditing.Place(scene, workspace.Props, 64, 64, "stone", 10.0m);
         var session = WorkspaceSession.Load(workspace.RootPath);
         var loaded = new LoadedScene(

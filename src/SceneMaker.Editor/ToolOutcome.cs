@@ -19,7 +19,6 @@ public sealed record ToolContext(
     TerrainDisplayCatalog TerrainAssets,
     PropDisplayCatalog PropAssets,
     WorkspaceMetrics Metrics,
-    IReadOnlySet<TerrainCellCoordinate> AuthoredTerrain,
     string? SelectedTerrainAssetKey,
     string? SelectedPropAssetKey,
     int TemplateAnchorGroupNumber,

@@ -394,7 +394,6 @@ public sealed class ToolRiverTests
         workspace.Terrain,
         workspace.Props,
         workspace.Metrics,
-        TerrainCoverage.AuthoredCells(scene),
         SelectedTerrainAssetKey: "river",
         SelectedPropAssetKey: "stone",
         TemplateAnchorGroupNumber: 1,

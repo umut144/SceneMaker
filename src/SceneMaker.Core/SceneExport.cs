@@ -13,13 +13,15 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 8;
+    public const int Version = 9;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
     // The embedded runtime Scene intentionally remains the shape export schema
-    // 8 already promised. Authoring schema 11 adds mountain contours, but the
-    // runtime receives their folded Terrain cells rather than editor sources.
+    // 8 already promised, and schema 9 does not change it. Authoring schema 11
+    // adds mountain contours, but the runtime receives their folded Terrain
+    // cells rather than editor sources. Schema 9 differs from 8 only in what it
+    // guarantees: a Prop footprint no longer has to be covered by Terrain.
     private const int EmbeddedSceneVersion = 10;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -201,7 +203,7 @@ public static class SceneExport
     /// <summary>
     /// The runtime Scene is a derived snapshot, not the authoring document.
     /// Mountain contours are folded into Terrain and deliberately omitted, so
-    /// adding an editor source does not change export schema 8 or its reader.
+    /// adding an editor source does not change the export shape or its reader.
     /// </summary>
     private static ExportSceneDocument ExportScene(
         SceneDocument scene,
@@ -264,26 +266,6 @@ public static class SceneExport
         MountainEditing.ValidateAssetReferences(scene, terrainAssets);
         PropEditing.ValidateAssetReferences(scene, propAssets);
         WaterEditing.ValidateAssetReferences(scene, terrainAssets);
-        var effective = scene with
-        {
-            TerrainCells = [.. MountainGeometry.EffectiveTerrainCells(
-                scene,
-                configuration.Metrics)],
-        };
-        var authored = TerrainCoverage.AuthoredCells(effective);
-        foreach (var prop in scene.Props)
-        {
-            var missing = TerrainCoverage.MissingCells(
-                authored,
-                PropEditing.BoundsFor(
-                    propAssets.Resolve(prop.AssetKey),
-                    prop.PositionAuthoringPx.X,
-                    prop.PositionAuthoringPx.Y),
-                configuration.Metrics);
-            if (missing.Count == 0) continue;
-            throw new SceneMakerDocumentException(
-                $"Cannot export Prop '{prop.InstanceId}': Terrain is missing at {TerrainCoverage.FormatMissingCells(missing)}.");
-        }
     }
 
     private sealed record ExportDocument

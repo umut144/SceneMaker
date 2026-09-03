@@ -338,6 +338,12 @@ public static class TerrainEditing
 
 public readonly record struct TerrainCellCoordinate(int X, int Y);
 
+/// <summary>
+/// Which Terrain cells a rectangle meets, and which of them a Scene has
+/// authored. Props no longer ask this — they hold an absolute height and may
+/// stand free — so what remains here serves the water export warning and the
+/// Template mask, both of which are about Terrain itself.
+/// </summary>
 public static class TerrainCoverage
 {
     public static IReadOnlyList<TerrainCellCoordinate> IntersectedCells(
@@ -363,10 +369,9 @@ public static class TerrainCoverage
     }
 
     /// <summary>
-    /// The set of Terrain cells the Scene has authored. Callers that check many
-    /// footprints against the same Scene — the drawing path checks one per Prop
-    /// and one per line preview anchor, every frame — build this once instead of
-    /// letting every check walk the whole cell list.
+    /// The set of Terrain cells the Scene has authored. Callers that test many
+    /// positions against the same Scene build this once instead of letting every
+    /// check walk the whole cell list.
     /// </summary>
     public static HashSet<TerrainCellCoordinate> AuthoredCells(SceneDocument scene)
     {

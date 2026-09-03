@@ -146,21 +146,25 @@ public sealed class EditorControllerTemplateTests
         Assert.Equal("This Workspace has no Scene to export.", report.Message);
     }
 
+    /// <summary>
+    /// A Prop needs no ground: it carries an absolute height and may stand
+    /// free, so a Scene whose only Prop has nothing under it still exports.
+    /// </summary>
     [Fact]
-    public void ExportingStopsAtASceneWithUncoveredProps()
+    public void ExportingAcceptsASceneWhoseOnlyPropStandsOnNothing()
     {
         using var workspace = TestWorkspace.Create();
         var controller = Opened(workspace);
         controller.CreateInstance("base", 6, 6);
-        // A Prop on a cell that has no Terrain under it.
         controller.Apply(new ToolOutcome.Edit(
             "Place",
             document => PropEditing.Place(document, workspace.Props, 0, 0, "stone")));
 
         var report = controller.ExportWorkspace();
 
-        Assert.False(report.Succeeded);
-        Assert.Contains("Terrain is missing", report.Message, StringComparison.Ordinal);
+        Assert.True(report.Succeeded, report.Message);
+        Assert.True(File.Exists(Path.Combine(
+            workspace.RootPath, SceneExport.DirectoryName, "base" + SceneExport.FileSuffix)));
     }
 
     private static EditorController Opened(TestWorkspace workspace)

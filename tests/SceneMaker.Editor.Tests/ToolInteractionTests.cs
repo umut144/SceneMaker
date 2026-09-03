@@ -272,6 +272,27 @@ public sealed class ToolInteractionTests
         Assert.Null(interaction.UndoDraftStep());
     }
 
+    /// <summary>
+    /// Bare ground is not a defect: a Prop holds an absolute height, so the
+    /// pencil authors it and says so plainly rather than attaching a warning.
+    /// </summary>
+    [Fact]
+    public void APropIsPlacedOnASceneWithoutTerrainWithoutAWarning()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.EmptyInstance();
+        var interaction = At(EditorMode.Props, EditorTool.Pencil);
+
+        var outcome = interaction.PointerPressed(Context(workspace, scene), Point(64, 64), Cell(2, 2));
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(outcome);
+        var after = edit.Apply(scene);
+        Assert.Equal("stone_0001", Assert.Single(after.Props).InstanceId);
+        Assert.Equal(
+            "Placed Stone anchor at (64, 64) authoring px.",
+            edit.Describe!(scene, after));
+    }
+
     private static ToolInteraction At(EditorMode mode, EditorTool tool)
     {
         var interaction = new ToolInteraction();
@@ -285,7 +306,6 @@ public sealed class ToolInteractionTests
         workspace.Terrain,
         workspace.Props,
         workspace.Metrics,
-        TerrainCoverage.AuthoredCells(scene),
         SelectedTerrainAssetKey: "grass",
         SelectedPropAssetKey: "stone",
         TemplateAnchorGroupNumber: 1,

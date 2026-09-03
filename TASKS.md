@@ -114,26 +114,7 @@ Core - a water body's points move by `translation_px` exactly like a Prop - and
 not small in the export contract, which would have to say what happens when a
 Template's water lands on an Instance's. Leave it until a Template needs water.
 
-## 7. A Prop over a cut is still exported as supported
-
-`src/SceneMaker.Core/SceneExport.cs`, the Prop coverage check
-
-The export guarantees that a Prop's footprint is covered by Terrain cells. Since
-a water body can cut a range out of those cells, that guarantee no longer says
-what it used to: a tree standing in the middle of a tunnel's cross-section
-passes it and floats in the game.
-
-Tightening it to "stands on solid ground at its own height" was considered and
-deliberately not done. A bridge is a Prop whose whole purpose is to span a place
-where the ground has been taken away, and a rule written now would have to be
-unwritten for it. What the support requirement is belongs to the Asset - a tree
-needs ground under it, a bridge needs ground at its two ends - so it waits for
-the Asset to be able to say so.
-
-Until then the gap is real and undetected. An author who plants something inside
-a tunnel gets no warning.
-
-## 8. Height analysis and a first-person Layered-3D preview
+## 7. Height analysis and a first-person Layered-3D preview
 
 The height view is currently a continuous colour ramp stretched automatically
 between the lowest and highest Terrain or Prop elevation in the Scene. It is a
@@ -189,6 +170,17 @@ boat or walker can actually pass beneath a bridge.
 
 ## Done
 
+- A Prop needs no Terrain under it. This used to be entry 7 here — the export
+  guaranteed footprint coverage, a cut could take that ground away, and the
+  guarantee quietly stopped meaning what it said. It is settled now by product
+  decision rather than by tightening the rule: a Prop holds an absolute height
+  and is allowed to stand free, neither the simulation nor the game wants a
+  general support rule, and SceneMaker treats a free-standing Prop as neither an
+  error nor a warning. Placement, preview, Template composition and the export
+  all stopped asking. No `requires_support` flag was added: nothing needs the
+  distinction today, and entry 5 still describes what a bridge would want if
+  something ever does. Export schema 8 promised the coverage, so withdrawing the
+  promise moved it to 9 even though the JSON did not change.
 - One factory per Scene kind, so `CreateInstance` no longer accepts Template
   parameters it would silently drop (`9c017be`).
 - The settings menu is a closed enum instead of seven hand-picked integers

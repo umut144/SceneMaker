@@ -16,11 +16,14 @@ public readonly record struct PropBoundsAuthoringPixels(
         && Bottom < other.Top && Top > other.Bottom;
 }
 
+/// <summary>
+/// Whether a Prop may be authored where it was asked for. Terrain is not part
+/// of the question: a Prop carries its own absolute height and is allowed to
+/// stand free, so nothing here looks at what is or is not under its footprint.
+/// </summary>
 public readonly record struct PropValidationResult(
     bool IsValid,
-    string? Reason,
-    bool HasCompleteTerrain = true,
-    string? Warning = null)
+    string? Reason)
 {
     public static PropValidationResult Valid { get; } = new(true, null);
 }
@@ -59,13 +62,18 @@ public static class PropEditing
         return placed;
     }
 
+    /// <summary>
+    /// The whole of what makes a Prop placeable: a representable footprint,
+    /// inside the Scene, meeting no other Prop. Terrain underneath is
+    /// deliberately not asked about — Props hold an absolute height and may
+    /// stand over a hole.
+    /// </summary>
     public static PropValidationResult ValidateCandidate(
         SceneDocument scene,
         PropDisplayCatalog propAssets,
         int anchorX,
         int anchorY,
-        string assetKey,
-        IReadOnlySet<TerrainCellCoordinate>? authoredTerrain = null)
+        string assetKey)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(propAssets);
@@ -95,17 +103,7 @@ public static class PropEditing
                     false,
                     $"Prop footprint overlaps '{existing.InstanceId}'.");
         }
-        var missingTerrain = TerrainCoverage.MissingCells(
-            authoredTerrain ?? TerrainCoverage.AuthoredCells(scene),
-            candidate,
-            propAssets.Metrics);
-        return missingTerrain.Count == 0
-            ? PropValidationResult.Valid
-            : new PropValidationResult(
-                IsValid: true,
-                Reason: null,
-                HasCompleteTerrain: false,
-                Warning: $"Prop footprint lacks Terrain at {TerrainCoverage.FormatMissingCells(missingTerrain)}.");
+        return PropValidationResult.Valid;
     }
 
     public static SceneDocument PlaceLine(

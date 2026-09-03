@@ -4,9 +4,10 @@ using Xunit;
 namespace SceneMaker.Core.Tests;
 
 /// <summary>
-/// Pins how a footprint maps onto Terrain cells. The mapping is about to be
-/// reused from the drawing path, where it currently rebuilds a set of every
-/// authored cell on every call.
+/// Pins how a rectangle maps onto Terrain cells. No Prop rule rests on this any
+/// more — a Prop needs no ground — but the mapping itself still answers the
+/// Template mask, and the set and formatting helpers still serve the water
+/// export warning, so it stays pinned here.
 /// </summary>
 public sealed class TerrainCoverageTests
 {

@@ -71,7 +71,7 @@ unrelated reasons.
 | --- | --- | --- |
 | Scene document | `SceneMakerSchemas.SceneVersion` | 11 |
 | Workspace config | `WorkspaceConfigurationStore.Version` | 7 |
-| Scene export | `SceneExport.Version` | 8 |
+| Scene export | `SceneExport.Version` | 9 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 1 |
 | PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 16 |
 | Recent session | `RecentSessionStore.Version` | 3 |

@@ -468,19 +468,16 @@ public sealed class ToolInteraction
 
             case EditorTool.Pencil:
                 var validation = PropEditing.ValidateCandidate(
-                    context.Scene, context.PropAssets, point.X, point.Y, assetKey, context.AuthoredTerrain);
+                    context.Scene, context.PropAssets, point.X, point.Y, assetKey);
                 if (!validation.IsValid)
                     return new ToolOutcome.Message($"Pencil Draw blocked: {validation.Reason}");
-                var warning = validation.HasCompleteTerrain
-                    ? null
-                    : $"Prop authored with export warning: {validation.Warning}";
                 var assetName = context.PropAssets.Resolve(assetKey).Name;
                 return new ToolOutcome.Edit(
                     "Pencil Draw",
                     document => PropEditing.Place(
                         document, context.PropAssets, point.X, point.Y, assetKey, context.ElevationMeters),
-                    Describe: (_, _) => warning
-                        ?? $"Placed {assetName} anchor at ({point.X}, {point.Y}) authoring px.");
+                    Describe: (_, _) =>
+                        $"Placed {assetName} anchor at ({point.X}, {point.Y}) authoring px.");
 
             case EditorTool.Line:
                 return ContinuePropLine(context, assetKey, point);
@@ -770,12 +767,9 @@ public sealed class ToolInteraction
         _propLineEnd = point;
         var preview = PropPreviews(context, assetKey, _propLineStart.Value, point);
         var blocked = ToolPreviewBuilder.CountOf(preview, PropPreviewKind.Blocked);
-        var warnings = ToolPreviewBuilder.CountOf(preview, PropPreviewKind.MissingTerrain);
         return new ToolOutcome.Message(blocked > 0
             ? $"Line Draw: end fixed; {blocked} of {preview.Count} previews are blocked. Press Escape to revise."
-            : warnings > 0
-                ? $"Line Draw: end fixed; {warnings} of {preview.Count} previews lack Terrain but may be authored. Enter confirms; Escape revises."
-                : $"Line Draw: end fixed; {preview.Count} previews ready. Press Enter to confirm or Escape to revise.");
+            : $"Line Draw: end fixed; {preview.Count} previews ready. Press Enter to confirm or Escape to revise.");
     }
 
     private ToolOutcome PaintTerrainCell(
@@ -798,8 +792,7 @@ public sealed class ToolInteraction
             "Eraser",
             document => TerrainEditing.Erase(document, cell.X, cell.Y),
             strokeKey,
-            Describe: (_, _) =>
-                $"Erased Terrain at cell ({cell.X}, {cell.Y}); uncovered spatial instances are export warnings.");
+            Describe: (_, _) => $"Erased Terrain at cell ({cell.X}, {cell.Y}).");
 
     private static ToolOutcome FillTerrainRegion(ToolContext context, TerrainCellCoordinate cell)
     {
@@ -907,7 +900,6 @@ public sealed class ToolInteraction
         ToolPreviewBuilder.BuildProps(
             context.Scene,
             context.PropAssets,
-            context.AuthoredTerrain,
             assetKey,
             EditorTool.Line,
             pointer: null,

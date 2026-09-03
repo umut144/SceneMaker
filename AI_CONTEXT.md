@@ -117,7 +117,7 @@ contour never cuts existing Terrain down. At the same height a contour owns the
 surface over a painted cell; two mountain bodies with different Assets are
 rejected where they tie, because geometry supplies no winner.
 
-Mountain contours are editor source and do not enter export schema 8. Export
+Mountain contours are editor source and do not enter export schema 9. Export
 folds them into the ordinary Terrain cells promised to the runtime. This also
 keeps mountains in the cuttable Terrain solid: a river cut can make a channel
 or tunnel through one, whereas modelling a mountain as a fill would incorrectly
@@ -165,6 +165,17 @@ may therefore have a surface that is not itself a multiple of the quantum.
 
 Cuts apply to Terrain and never to fills. That one sentence is what will let a
 bridge deck cross the river it spans without the river carving it away.
+
+A Prop needs no Terrain under it. Its `elevation_meters` is absolute, like every
+other authored height, so where it stands is already fully said and the ground
+below is a separate fact rather than a precondition. Standing free is therefore
+ordinary: a platform over a chasm, a lamp on a bridge deck, a rock ledge with
+nothing beneath it. SceneMaker checks what geometry can decide by itself - a
+representable footprint, inside the Scene, meeting no other Prop - and stops
+there. Support is a question about an Actor and its simulation, which is where
+it is answered; asking it here would have to be unasked for the first bridge.
+Nothing warns, nothing blocks, and no Asset flag records the difference, because
+no consumer needs the distinction today.
 
 `world01` renders water with marching squares over that raster. The raster is
 what the simulation reads; the smooth mesh is presentation, and the authored

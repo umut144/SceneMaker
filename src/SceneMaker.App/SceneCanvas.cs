@@ -61,10 +61,8 @@ public sealed partial class SceneCanvas : Control
     private WorkspaceMetrics? _metrics;
     private SceneDocument? _templatePreview;
     private IReadOnlyList<TemplateTerrainMask> _templatePreviewMasks = [];
-    // Terrain coverage is checked once per Prop and once per line preview anchor
-    // on every frame. Both sets are rebuilt only when their document changes.
-    private IReadOnlySet<TerrainCellCoordinate> _sceneTerrain = new HashSet<TerrainCellCoordinate>();
-    private IReadOnlySet<TerrainCellCoordinate> _previewTerrain = new HashSet<TerrainCellCoordinate>();
+    // Folding painted cells and mountain contours together is not free, so the
+    // result is rebuilt only when the document it was derived from changes.
     private SceneDocument? _effectiveTerrainDocument;
     private IReadOnlyList<TerrainCellDocument> _effectiveTerrain = [];
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
@@ -198,8 +196,6 @@ public sealed partial class SceneCanvas : Control
     {
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
         _effectiveTerrainDocument = null;
-        if (_scene is not null)
-            _sceneTerrain = EffectiveTerrainCoordinates(_scene.Document);
         QueueRedraw();
     }
 
@@ -213,10 +209,8 @@ public sealed partial class SceneCanvas : Control
     public void ShowScene(LoadedScene? scene)
     {
         _scene = scene;
-        _sceneTerrain = EffectiveTerrainCoordinates(scene?.Document);
         _templatePreview = null;
         _templatePreviewMasks = [];
-        _previewTerrain = EffectiveTerrainCoordinates(null);
         ViewState = new CanvasViewState();
         _interaction.ResetForScene();
         QueueRedraw();
@@ -226,16 +220,8 @@ public sealed partial class SceneCanvas : Control
     public void UpdateScene(LoadedScene scene)
     {
         _scene = scene;
-        _sceneTerrain = EffectiveTerrainCoordinates(scene.Document);
         QueueRedraw();
     }
-
-    private IReadOnlySet<TerrainCellCoordinate> EffectiveTerrainCoordinates(SceneDocument? document) =>
-        document is null
-            ? new HashSet<TerrainCellCoordinate>()
-            : EffectiveTerrain(document)
-                .Select(static cell => new TerrainCellCoordinate(cell.X, cell.Y))
-                .ToHashSet();
 
     private IReadOnlyList<TerrainCellDocument> EffectiveTerrain(SceneDocument document)
     {
@@ -252,7 +238,6 @@ public sealed partial class SceneCanvas : Control
         IReadOnlyList<TemplateTerrainMask>? effectiveTerrainMasks = null)
     {
         _templatePreview = scene;
-        _previewTerrain = EffectiveTerrainCoordinates(scene);
         _templatePreviewMasks = effectiveTerrainMasks ?? [];
         QueueRedraw();
     }
@@ -289,7 +274,6 @@ public sealed partial class SceneCanvas : Control
             _terrainAssets,
             _propAssets,
             _metrics,
-            _sceneTerrain,
             SelectedTerrainAssetKey,
             SelectedPropAssetKey,
             TemplateAnchorGroupNumber,
@@ -419,7 +403,6 @@ public sealed partial class SceneCanvas : Control
         var sceneRect = new Rect2(pan, sceneSize);
         DrawRect(sceneRect, SceneBackground);
 
-        var authoredTerrain = _templatePreview is null ? _sceneTerrain : _previewTerrain;
         var elevationRange = _heatmapEnabled ? ElevationRange(document) : null;
         DrawTerrain(
             document,
@@ -438,7 +421,6 @@ public sealed partial class SceneCanvas : Control
             pan,
             zoom,
             heightAuthoringPixels,
-            authoredTerrain,
             elevationRange,
             highlighted: Mode == EditorMode.Props);
         if (Mode == EditorMode.Props)
@@ -886,7 +868,6 @@ public sealed partial class SceneCanvas : Control
         Vector2 pan,
         float zoom,
         int sceneHeightAuthoringPixels,
-        IReadOnlySet<TerrainCellCoordinate> authoredTerrain,
         (decimal Low, decimal High)? range,
         bool highlighted)
     {
@@ -918,8 +899,6 @@ public sealed partial class SceneCanvas : Control
                 selected ? SelectionColor : outline,
                 filled: false,
                 width: selected ? 3f : highlighted ? 2f : 1f);
-            if (!TerrainCoverage.IsComplete(authoredTerrain, bounds, _metrics!))
-                DrawDashedRectangle(rectangle, InvalidPreviewColor, 2.5f);
             DrawAnchor(
                 prop.PositionAuthoringPx.X,
                 prop.PositionAuthoringPx.Y,
@@ -1070,17 +1049,11 @@ public sealed partial class SceneCanvas : Control
                 pan,
                 zoom,
                 sceneHeightAuthoringPixels);
-            var missingTerrain = candidate.Kind == PropPreviewKind.MissingTerrain;
             var color = candidate.Kind == PropPreviewKind.Ready
                 ? ValidPreviewColor
                 : InvalidPreviewColor;
-            DrawRect(
-                rectangle,
-                new Color(color.R, color.G, color.B, missingTerrain ? 0.08f : 0.22f));
-            if (missingTerrain)
-                DrawDashedRectangle(rectangle, color, 2f);
-            else
-                DrawRect(rectangle, color, filled: false, width: 2f);
+            DrawRect(rectangle, new Color(color.R, color.G, color.B, 0.22f));
+            DrawRect(rectangle, color, filled: false, width: 2f);
             DrawAnchor(
                 candidate.Anchor.X,
                 candidate.Anchor.Y,
@@ -1109,7 +1082,6 @@ public sealed partial class SceneCanvas : Control
             : ToolPreviewBuilder.BuildProps(
                 _scene.Document,
                 _propAssets,
-                _sceneTerrain,
                 SelectedPropAssetKey,
                 tool,
                 pointer,
@@ -1154,18 +1126,6 @@ public sealed partial class SceneCanvas : Control
                 anchor - new Vector2(anchorSize * 0.5f, anchorSize * 0.5f),
                 new Vector2(anchorSize, anchorSize)),
             color);
-    }
-
-    private void DrawDashedRectangle(Rect2 rectangle, Color color, float width)
-    {
-        var topLeft = rectangle.Position;
-        var topRight = new Vector2(rectangle.End.X, rectangle.Position.Y);
-        var bottomRight = rectangle.End;
-        var bottomLeft = new Vector2(rectangle.Position.X, rectangle.End.Y);
-        DrawDashedSegment(topLeft, topRight, color, width);
-        DrawDashedSegment(topRight, bottomRight, color, width);
-        DrawDashedSegment(bottomRight, bottomLeft, color, width);
-        DrawDashedSegment(bottomLeft, topLeft, color, width);
     }
 
     private void DrawDashedSegment(Vector2 from, Vector2 to, Color color, float width)

@@ -8,11 +8,8 @@ public readonly record struct AuthoringPoint(int X, int Y);
 /// <summary>How a previewed Prop would fare if it were authored right now.</summary>
 public enum PropPreviewKind
 {
-    /// <summary>Can be authored and stands on complete Terrain.</summary>
+    /// <summary>Can be authored here.</summary>
     Ready,
-
-    /// <summary>Can be authored, but lacks Terrain and would block the export.</summary>
-    MissingTerrain,
 
     /// <summary>Cannot be authored here at all.</summary>
     Blocked,
@@ -100,7 +97,6 @@ public static class ToolPreviewBuilder
     public static IReadOnlyList<PropPreview> BuildProps(
         SceneDocument scene,
         PropDisplayCatalog propAssets,
-        IReadOnlySet<TerrainCellCoordinate> authoredTerrain,
         string? selectedAssetKey,
         EditorTool tool,
         AuthoringPoint? pointer,
@@ -110,7 +106,6 @@ public static class ToolPreviewBuilder
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(propAssets);
-        ArgumentNullException.ThrowIfNull(authoredTerrain);
         if (selectedAssetKey is null) return [];
         if (tool is not (EditorTool.Pencil or EditorTool.Line)) return [];
 
@@ -136,13 +131,12 @@ public static class ToolPreviewBuilder
                 propAssets,
                 anchor.X,
                 anchor.Y,
-                selectedAssetKey,
-                authoredTerrain);
+                selectedAssetKey);
             previews.Add(new PropPreview(
                 anchor,
                 bounds,
-                Classify(validation),
-                validation.Reason ?? validation.Warning));
+                validation.IsValid ? PropPreviewKind.Ready : PropPreviewKind.Blocked,
+                validation.Reason));
         }
         return previews;
     }
@@ -273,13 +267,6 @@ public static class ToolPreviewBuilder
         }
         return pointer is { } point ? [point] : [];
     }
-
-    private static PropPreviewKind Classify(PropValidationResult validation) =>
-        !validation.IsValid
-            ? PropPreviewKind.Blocked
-            : validation.HasCompleteTerrain
-                ? PropPreviewKind.Ready
-                : PropPreviewKind.MissingTerrain;
 
     private static bool IsInsideScene(SceneDocument scene, TerrainCellCoordinate cell) =>
         cell.X >= 0 && cell.X < scene.SizeCells.Width

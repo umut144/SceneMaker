@@ -3,9 +3,10 @@ using SceneMaker.Core;
 namespace SceneMaker.TestSupport;
 
 /// <summary>
-/// Builders for the Scene documents the Core tests operate on. Every Scene is
-/// fully covered with Terrain, so spatial instances never trip the export-blocking
-/// Terrain coverage rule unless a test arranges that deliberately.
+/// Builders for the Scene documents the Core tests operate on. Most are fully
+/// covered with Terrain simply because that is the ordinary map; a Prop needs
+/// no ground, so <see cref="EmptyInstance"/> is an equally valid Scene rather
+/// than a deliberately broken one.
 /// </summary>
 public static class TestScenes
 {

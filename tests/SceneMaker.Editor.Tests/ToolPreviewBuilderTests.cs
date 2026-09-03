@@ -87,16 +87,20 @@ public sealed class ToolPreviewBuilderTests
         Assert.Null(preview.Explanation);
     }
 
+    /// <summary>
+    /// A Prop holds an absolute height and may stand free, so bare ground is
+    /// not a defect and the preview says nothing about it.
+    /// </summary>
     [Fact]
-    public void APropWithoutTerrainUnderneathIsFlaggedButStillAuthorable()
+    public void APropWithoutTerrainUnderneathPreviewsAsReady()
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.EmptyInstance();
 
         var preview = Assert.Single(Props(workspace, scene, EditorTool.Pencil, new AuthoringPoint(64, 64)));
 
-        Assert.Equal(PropPreviewKind.MissingTerrain, preview.Kind);
-        Assert.Contains("lacks Terrain", preview.Explanation ?? string.Empty, StringComparison.Ordinal);
+        Assert.Equal(PropPreviewKind.Ready, preview.Kind);
+        Assert.Null(preview.Explanation);
     }
 
     [Fact]
@@ -119,7 +123,7 @@ public sealed class ToolPreviewBuilderTests
         var scene = TestScenes.Instance(workspace);
 
         Assert.Empty(ToolPreviewBuilder.BuildProps(
-            scene, workspace.Props, TerrainCoverage.AuthoredCells(scene),
+            scene, workspace.Props,
             selectedAssetKey: null, EditorTool.Pencil,
             new AuthoringPoint(64, 64), null, null, 0));
         Assert.Empty(Props(workspace, scene, EditorTool.Selector, new AuthoringPoint(64, 64)));
@@ -132,7 +136,7 @@ public sealed class ToolPreviewBuilderTests
         var scene = TestScenes.Instance(workspace);
 
         var previews = ToolPreviewBuilder.BuildProps(
-            scene, workspace.Props, TerrainCoverage.AuthoredCells(scene),
+            scene, workspace.Props,
             "stone", EditorTool.Line,
             pointer: null,
             lineStart: new AuthoringPoint(0, 0),
@@ -152,7 +156,7 @@ public sealed class ToolPreviewBuilderTests
         var scene = TestScenes.Instance(workspace);
 
         var previews = ToolPreviewBuilder.BuildProps(
-            scene, workspace.Props, TerrainCoverage.AuthoredCells(scene),
+            scene, workspace.Props,
             "stone", EditorTool.Line,
             pointer: null,
             lineStart: new AuthoringPoint(0, 0),
@@ -182,15 +186,15 @@ public sealed class ToolPreviewBuilderTests
         var scene = TestScenes.EmptyInstance();
 
         var previews = ToolPreviewBuilder.BuildProps(
-            scene, workspace.Props, TerrainCoverage.AuthoredCells(scene),
+            scene, workspace.Props,
             "stone", EditorTool.Line,
             pointer: null,
             lineStart: new AuthoringPoint(0, 0),
             lineEnd: new AuthoringPoint(128, 0),
             lineOffsetAuthoringPixels: 0);
 
-        Assert.Equal(5, ToolPreviewBuilder.CountOf(previews, PropPreviewKind.MissingTerrain));
-        Assert.Equal(0, ToolPreviewBuilder.CountOf(previews, PropPreviewKind.Ready));
+        Assert.Equal(5, ToolPreviewBuilder.CountOf(previews, PropPreviewKind.Ready));
+        Assert.Equal(0, ToolPreviewBuilder.CountOf(previews, PropPreviewKind.Blocked));
     }
 
     private static IReadOnlyList<PropPreview> Props(
@@ -201,7 +205,6 @@ public sealed class ToolPreviewBuilderTests
         ToolPreviewBuilder.BuildProps(
             scene,
             workspace.Props,
-            TerrainCoverage.AuthoredCells(scene),
             "stone",
             tool,
             pointer,

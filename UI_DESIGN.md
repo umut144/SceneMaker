@@ -172,9 +172,20 @@ Berg ist ein Bearbeitungsschritt. Mit eingeschaltetem `Eraser` löscht ein Klick
 den obersten ganzen Bergkörper unter dem Zeiger, nie eine einzelne abgeleitete
 Zelle.
 
-Die Canvasdarstellung und die Terrainunterstützung für Props verwenden bereits
-das gefaltete Höhenfeld aus gemalten Zellen und Bergkörpern. Dadurch sieht und
-trifft der Autor genau die Terrainzellen, die auch der Export erhält.
+Die Canvasdarstellung verwendet bereits das gefaltete Höhenfeld aus gemalten
+Zellen und Bergkörpern. Dadurch sieht der Autor genau die Terrainzellen, die
+auch der Export erhält.
+
+### Props und Untergrund
+
+Ein Prop braucht kein Terrain unter sich. Seine Höhe ist absolut, also steht
+schon fest, wo er ist; der Boden darunter ist eine eigene Tatsache und keine
+Bedingung. Ein frei stehender Prop wird deshalb weder markiert noch gewarnt noch
+blockiert: die Vorschau ist normal gültig, der fertige Prop wird wie jeder
+andere gezeichnet, und Radieren von Terrain oder eines Bergkörpers unter ihm
+ändert an ihm nichts. Blockiert wird weiterhin nur, was die Geometrie allein
+entscheiden kann — ein Footprint außerhalb der Scene und ein Footprint, der
+einen anderen Prop berührt.
 
 ### Prop:Line
 

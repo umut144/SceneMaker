@@ -83,7 +83,6 @@ public sealed class RiverPersistenceTests
         workspace.Terrain,
         workspace.Props,
         workspace.Metrics,
-        TerrainCoverage.AuthoredCells(controller.Document!),
         SelectedTerrainAssetKey: "river",
         SelectedPropAssetKey: "stone",
         TemplateAnchorGroupNumber: 1,

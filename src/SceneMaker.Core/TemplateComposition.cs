@@ -115,7 +115,6 @@ public static class TemplateComposition
         };
         DocumentValidation.ValidateGrid(composed, propAssets.Metrics);
         PropEditing.ValidateAssetReferences(composed, propAssets);
-        ValidateTerrainCoverage(composed, propAssets);
         return new TemplateCompositionResult(
             composed,
             selected.Select(static value => new TemplateSelection(
@@ -252,24 +251,6 @@ public static class TemplateComposition
         IReadOnlySet<TerrainCellCoordinate> mask,
         WorkspaceMetrics metrics) =>
         TerrainCoverage.IntersectedCells(bounds, metrics).Any(mask.Contains);
-
-    private static void ValidateTerrainCoverage(
-        SceneDocument scene,
-        PropDisplayCatalog propAssets)
-    {
-        var authored = TerrainCoverage.AuthoredCells(scene);
-        foreach (var prop in scene.Props)
-        {
-            var bounds = PropEditing.BoundsFor(
-                propAssets.Resolve(prop.AssetKey),
-                prop.PositionAuthoringPx.X,
-                prop.PositionAuthoringPx.Y);
-            var missing = TerrainCoverage.MissingCells(authored, bounds, propAssets.Metrics);
-            if (missing.Count == 0) continue;
-            throw new SceneMakerDocumentException(
-                $"Composed Prop '{prop.InstanceId}' lacks Terrain at {TerrainCoverage.FormatMissingCells(missing)}.");
-        }
-    }
 
     private sealed record SelectedTemplate(
         TemplateAnchorDocument Anchor,

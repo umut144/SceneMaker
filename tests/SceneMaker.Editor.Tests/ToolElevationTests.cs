@@ -90,7 +90,6 @@ public sealed class ToolElevationTests
         workspace.Terrain,
         workspace.Props,
         workspace.Metrics,
-        TerrainCoverage.AuthoredCells(scene),
         SelectedTerrainAssetKey: terrain,
         SelectedPropAssetKey: "stone",
         TemplateAnchorGroupNumber: 1,
