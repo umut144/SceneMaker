@@ -290,7 +290,7 @@ public sealed class ToolMountainTests
     }
 
     [Fact]
-    public void SwitchingToolDiscardsTheDraftAndSaysSo()
+    public void LeavingTheAreaDiscardsTheDraftAndSaysSo()
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
@@ -299,11 +299,33 @@ public sealed class ToolMountainTests
         Place(interaction, context, 32, 32);
         Place(interaction, context, 160, 32);
 
-        var outcome = interaction.SelectTool(EditorTool.Pencil);
+        var outcome = interaction.SelectMode(EditorMode.Terrain);
 
         var message = Assert.IsType<ToolOutcome.Message>(outcome);
         Assert.Equal("The unfinished mountain contour of 2 points was discarded.", message.Text);
         Assert.Empty(interaction.MountainDraft);
+    }
+
+    /// <summary>
+    /// The Asset is the material, not the geometry. Since the area decides which
+    /// Assets are on offer, changing one no longer swaps the tool - and the
+    /// contour being drawn survives a change of mind about what it is made of.
+    /// </summary>
+    [Fact]
+    public void ChangingTheAssetKeepsTheDraft()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = Mountain();
+        Place(interaction, Context(workspace, scene), 32, 32);
+        Place(interaction, Context(workspace, scene), 160, 32);
+
+        interaction.State.SelectTerrainAsset("sand");
+
+        Assert.Equal("sand", interaction.State.SelectedTerrainAssetKey);
+        Assert.Equal(EditorTool.DrawMountain, interaction.ActiveTool);
+        Assert.Equal(2, interaction.MountainDraft.Count);
+        Assert.True(interaction.HasUnfinishedDraft);
     }
 
     [Fact]
@@ -327,11 +349,11 @@ public sealed class ToolMountainTests
     }
 
     [Fact]
-    public void SwitchingToolWithoutADraftSaysNothingExtra()
+    public void LeavingTheAreaWithoutADraftSaysNothingExtra()
     {
         var interaction = Mountain();
 
-        Assert.IsType<ToolOutcome.Idle>(interaction.SelectTool(EditorTool.Pencil));
+        Assert.IsType<ToolOutcome.Idle>(interaction.SelectMode(EditorMode.Terrain));
         Assert.IsType<ToolOutcome.Idle>(interaction.SetEraserEnabled(true));
     }
 
@@ -439,7 +461,7 @@ public sealed class ToolMountainTests
     private static ToolInteraction Mountain()
     {
         var interaction = new ToolInteraction();
-        interaction.SelectMode(EditorMode.Terrain);
+        interaction.SelectMode(EditorMode.Mountain);
         interaction.SelectTool(EditorTool.DrawMountain);
         return interaction;
     }

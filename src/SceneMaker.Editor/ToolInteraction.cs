@@ -96,18 +96,19 @@ public sealed class ToolInteraction
     }
 
     /// <summary>
-    /// Turning the eraser on ends the contour it interrupts. Keeping the draft
-    /// alive in the background would leave the next click meaning something the
-    /// canvas is no longer showing, and switching the eraser off again would
-    /// resurrect a drawing the author had stopped making. Turning it off starts
-    /// nothing.
+    /// Turning the eraser on ends the curve or contour it interrupts, in both
+    /// Landscape areas alike. Keeping the draft alive in the background would
+    /// leave the next click meaning something the canvas is no longer showing,
+    /// and switching the eraser off again would resurrect a drawing the author
+    /// had stopped making. Turning it off starts nothing.
     /// </summary>
     public ToolOutcome SetEraserEnabled(bool enabled)
     {
         string? discarded = null;
-        if (enabled && Mode == EditorMode.Terrain && ActiveTool == EditorTool.DrawMountain)
+        if (enabled && Mode is EditorMode.River or EditorMode.Mountain)
         {
             discarded = DiscardedDraftText();
+            ClearRiverDraft();
             ClearMountainDraft();
         }
         State.SetEraserEnabled(enabled);
@@ -122,14 +123,14 @@ public sealed class ToolInteraction
     /// </summary>
     private string? DiscardedDraftText()
     {
-        if (Mode == EditorMode.Terrain && ActiveTool == EditorTool.DrawMountain)
+        if (Mode == EditorMode.Mountain && ActiveTool == EditorTool.DrawMountain)
         {
             var placed = _mountainDraft.Count + (_mountainPending is null ? 0 : 1);
             return placed == 0
                 ? null
                 : $"The unfinished mountain contour of {placed} point{Plural(placed)} was discarded.";
         }
-        if (Mode == EditorMode.Terrain && ActiveTool == EditorTool.DrawRiver)
+        if (Mode == EditorMode.River && ActiveTool == EditorTool.DrawRiver)
         {
             var placed = _riverDraft.Count + (_riverPending is null ? 0 : 1);
             return placed == 0
@@ -172,9 +173,9 @@ public sealed class ToolInteraction
     /// </summary>
     public bool HasUnfinishedDraft => Mode switch
     {
-        EditorMode.Terrain when ActiveTool == EditorTool.DrawRiver =>
+        EditorMode.River when ActiveTool == EditorTool.DrawRiver =>
             _riverPending is not null || _riverDraft.Count > 0,
-        EditorMode.Terrain when ActiveTool == EditorTool.DrawMountain =>
+        EditorMode.Mountain when ActiveTool == EditorTool.DrawMountain =>
             _mountainPending is not null || _mountainDraft.Count > 0,
         EditorMode.Props when ActiveTool == EditorTool.Line =>
             _propLineStart is not null || _propLineEnd is not null,
@@ -193,10 +194,8 @@ public sealed class ToolInteraction
     public ToolOutcome? UndoDraftStep()
     {
         if (!HasUnfinishedDraft) return null;
-        if (Mode == EditorMode.Terrain)
-            return ActiveTool == EditorTool.DrawMountain
-                ? CancelMountainPoint()
-                : CancelRiverPoint();
+        if (Mode == EditorMode.Mountain) return CancelMountainPoint();
+        if (Mode == EditorMode.River) return CancelRiverPoint();
         return CancelPropLineStep();
     }
 
@@ -245,6 +244,8 @@ public sealed class ToolInteraction
         return Mode switch
         {
             EditorMode.Terrain => TerrainPressed(context, authoring, cell),
+            EditorMode.River => RiverPressed(context, authoring, cell),
+            EditorMode.Mountain => MountainPressed(context, authoring, cell),
             EditorMode.Props => PropPressed(context, authoring),
             EditorMode.Templates => TemplatePressed(context, authoring),
             _ => ToolOutcome.Idle.Instance,
@@ -271,9 +272,10 @@ public sealed class ToolInteraction
                 return PaintTerrainCell(context, cell, TerrainPaintStroke);
             case EditorMode.Terrain when ActiveTool == EditorTool.Fill && EraserEnabled:
                 return EraseTerrainRegion(cell, TerrainRegionEraseStroke);
-            case EditorMode.Terrain when ActiveTool == EditorTool.DrawRiver && _riverPending is not null:
+            case EditorMode.River when ActiveTool == EditorTool.DrawRiver && _riverPending is not null:
                 return DragRiverHandle(context, authoring);
-            case EditorMode.Terrain when ActiveTool == EditorTool.DrawMountain && _mountainPending is not null:
+            case EditorMode.Mountain when ActiveTool == EditorTool.DrawMountain
+                                          && _mountainPending is not null:
                 return DragMountainHandle(context, authoring);
             case EditorMode.Props when ActiveTool == EditorTool.Pencil && EraserEnabled:
                 return EraseProp(context, authoring, PropEraseStroke);
@@ -313,9 +315,9 @@ public sealed class ToolInteraction
     public ToolOutcome KeyPressed(ToolContext context, ToolKey key)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (Mode == EditorMode.Terrain && ActiveTool == EditorTool.DrawRiver)
+        if (Mode == EditorMode.River && ActiveTool == EditorTool.DrawRiver)
             return key == ToolKey.Enter ? FinishRiver(context) : CancelRiverPoint();
-        if (Mode == EditorMode.Terrain && ActiveTool == EditorTool.DrawMountain)
+        if (Mode == EditorMode.Mountain && ActiveTool == EditorTool.DrawMountain)
             return key == ToolKey.Enter ? FinishMountain(context) : CancelMountainPoint();
         if (Mode != EditorMode.Props || ActiveTool != EditorTool.Line)
             return ToolOutcome.Idle.Instance;
@@ -377,8 +379,24 @@ public sealed class ToolInteraction
         EditorTool.Fill when EraserEnabled => EraseTerrainRegion(cell, TerrainRegionEraseStroke),
         EditorTool.Fill when context.SelectedTerrainAssetKey is not null => FillTerrainRegion(context, cell),
         EditorTool.Line => BeginTerrainLine(cell),
+        _ => ToolOutcome.Idle.Instance,
+    };
+
+    private ToolOutcome RiverPressed(
+        ToolContext context,
+        AuthoringPoint authoring,
+        TerrainCellCoordinate cell) => ActiveTool switch
+    {
         EditorTool.DrawRiver when EraserEnabled => EraseWaterBody(context, authoring),
         EditorTool.DrawRiver => BeginRiverPoint(context, authoring, cell),
+        _ => ToolOutcome.Idle.Instance,
+    };
+
+    private ToolOutcome MountainPressed(
+        ToolContext context,
+        AuthoringPoint authoring,
+        TerrainCellCoordinate cell) => ActiveTool switch
+    {
         EditorTool.DrawMountain when EraserEnabled => EraseMountainBody(context, cell),
         EditorTool.DrawMountain => BeginMountainPoint(context, authoring),
         _ => ToolOutcome.Idle.Instance,

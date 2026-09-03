@@ -87,6 +87,7 @@ public sealed partial class SceneCanvas : Control
     // Its own cache with its own key: a contour depends on the bodies alone,
     // where the fold above depends on the whole document.
     private readonly MountainOutlineCache _mountainOutlines = new();
+    private bool _mapContextActive;
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
     private TerrainDisplayCatalog? _terrainAssets;
     private PropDisplayCatalog? _propAssets;
@@ -119,8 +120,36 @@ public sealed partial class SceneCanvas : Control
 
     public CanvasViewState ViewState { get; private set; } = new();
     public LoadedScene? Scene => _scene;
-    public string? SelectedTerrainAssetKey { get; set; }
+    /// <summary>
+    /// The Terrain Asset the active area authors with. Held per area in
+    /// `EditorInteractionState`, not here: which Asset an area shows is a
+    /// decision, and decisions do not live in the Godot node.
+    /// </summary>
+    public string? SelectedTerrainAssetKey
+    {
+        get => _interaction.State.SelectedTerrainAssetKey;
+        set
+        {
+            _interaction.State.SelectTerrainAsset(value);
+            QueueRedraw();
+        }
+    }
+
     public string? SelectedPropAssetKey { get; set; }
+
+    /// <summary>
+    /// Whether the Map context is open. It is a structural overview rather than
+    /// an authoring area, so mountain bodies stay fully drawn there.
+    /// </summary>
+    public bool MapContextActive
+    {
+        get => _mapContextActive;
+        set
+        {
+            _mapContextActive = value;
+            QueueRedraw();
+        }
+    }
     public EditorMode Mode => _interaction.Mode;
     public EditorTool ActiveTool => _interaction.ActiveTool;
     public bool EraserEnabled => _interaction.EraserEnabled;
@@ -439,21 +468,23 @@ public sealed partial class SceneCanvas : Control
             pan,
             zoom,
             elevationRange,
-            highlighted: Mode == EditorMode.Terrain);
+            highlighted: Mode is EditorMode.Terrain or EditorMode.Mountain);
         DrawWater(
             document,
             pan,
             zoom,
             elevationRange,
-            highlighted: Mode == EditorMode.Terrain);
+            highlighted: Mode is EditorMode.Terrain or EditorMode.River);
         DrawMountainOutlines(
             document,
             pan,
             zoom,
             heightAuthoringPixels,
-            // Mountains are authored inside Terrain today. When they get an area
-            // of their own, that area belongs in this predicate too.
-            highlighted: Mode == EditorMode.Terrain);
+            // Full where a mountain is authored, and full in Terrain too: with
+            // no other mark on the cells, the contour is the only thing that
+            // says an authored body lies there. The Map overview is structural
+            // rather than an area, so it keeps them as well.
+            highlighted: Mode is EditorMode.Terrain or EditorMode.Mountain || MapContextActive);
         DrawProps(
             document,
             pan,
@@ -461,13 +492,22 @@ public sealed partial class SceneCanvas : Control
             heightAuthoringPixels,
             elevationRange,
             highlighted: Mode == EditorMode.Props);
-        if (Mode == EditorMode.Props)
-            DrawPropToolPreview(pan, zoom, heightAuthoringPixels);
-        else if (Mode == EditorMode.Terrain)
+        switch (Mode)
         {
-            DrawTerrainToolPreview(document, pan, zoom);
-            DrawWaterToolPreview(document, pan, zoom, heightAuthoringPixels);
-            DrawMountainToolPreview(document, pan, zoom, heightAuthoringPixels);
+            case EditorMode.Props:
+                DrawPropToolPreview(pan, zoom, heightAuthoringPixels);
+                break;
+            case EditorMode.Terrain:
+                DrawTerrainToolPreview(document, pan, zoom);
+                break;
+            case EditorMode.River:
+                DrawWaterToolPreview(document, pan, zoom, heightAuthoringPixels);
+                break;
+            case EditorMode.Mountain:
+                DrawMountainToolPreview(document, pan, zoom, heightAuthoringPixels);
+                break;
+            default:
+                break;
         }
 
         var visible = new Rect2(Vector2.Zero, Size).Intersection(sceneRect);

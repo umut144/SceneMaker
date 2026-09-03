@@ -5,9 +5,18 @@ using SceneMaker.Core;
 
 namespace SceneMaker.Editor;
 
+/// <summary>
+/// The area of a Scene being authored. Terrain, River and Mountain are three
+/// areas rather than one, because they author three different things: painted
+/// cells, an open curve, and a closed contour. `Landscape` is not one of them -
+/// it is a caption the navigation draws around River and Mountain, and an area
+/// nobody can be in would have to answer what drawing in it means.
+/// </summary>
 public enum EditorMode
 {
     Terrain,
+    River,
+    Mountain,
     Props,
     Templates,
 }
@@ -25,19 +34,16 @@ public enum EditorTool
 }
 
 /// <summary>
-/// One tool in the tool bar. <paramref name="TerrainAuthoring"/> says which kind
-/// of Terrain Asset it authors - painted cells or a drawn curve - and is null
-/// for tools that have nothing to do with Terrain. It is what lets the tool bar
-/// offer a Pencil for grass and a Bezier for a river without either of them
-/// having to be explained away.
+/// One tool in the tool bar. Which Assets it can author is not its business any
+/// more: the area decides that, and a tool belongs to the area whose thing it
+/// draws.
 /// </summary>
 public sealed record EditorToolDefinition(
     EditorTool Tool,
     string DisplayName,
     string IconFileName,
     IReadOnlySet<EditorMode> SupportedModes,
-    bool ShowInToolBar = true,
-    TerrainAuthoring? TerrainAuthoring = null);
+    bool ShowInToolBar = true);
 
 public static class EditorToolRegistry
 {
@@ -46,15 +52,12 @@ public static class EditorToolRegistry
         Define(EditorTool.Selector, "Selector", "select.svg",
             EditorMode.Props, EditorMode.Templates),
         Define(EditorTool.Pencil, "Pencil", "pencil.svg",
-            TerrainAuthoring.Cells, EditorMode.Terrain, EditorMode.Props),
+            EditorMode.Terrain, EditorMode.Props),
         Define(EditorTool.Line, "Line", "line.svg",
-            TerrainAuthoring.Cells, EditorMode.Terrain, EditorMode.Props),
-        Define(EditorTool.Fill, "Fill", "fill.svg",
-            TerrainAuthoring.Cells, EditorMode.Terrain),
-        Define(EditorTool.DrawRiver, "Draw River", "river.svg",
-            TerrainAuthoring.Curve, EditorMode.Terrain),
-        Define(EditorTool.DrawMountain, "Draw Mountain", "mountain.svg",
-            TerrainAuthoring.Cells, EditorMode.Terrain),
+            EditorMode.Terrain, EditorMode.Props),
+        Define(EditorTool.Fill, "Fill", "fill.svg", EditorMode.Terrain),
+        Define(EditorTool.DrawRiver, "Draw River", "river.svg", EditorMode.River),
+        Define(EditorTool.DrawMountain, "Draw Mountain", "mountain.svg", EditorMode.Mountain),
         Define(EditorTool.AnchorMove, "Move Anchor", "move.svg", EditorMode.Templates),
         Define(EditorTool.AnchorPlace, "Place Anchor", string.Empty,
             false, EditorMode.Templates),
@@ -71,44 +74,41 @@ public static class EditorToolRegistry
     public static bool Supports(EditorMode mode, EditorTool tool) =>
         Resolve(tool).SupportedModes.Contains(mode);
 
-    /// <summary>
-    /// Whether a mode offers this tool for the Terrain Asset in hand. Outside
-    /// Terrain, and while no Asset is chosen, the authoring says nothing and
-    /// every supported tool is offered.
-    /// </summary>
-    public static bool Offers(EditorMode mode, EditorTool tool, TerrainAuthoring? terrainAuthoring)
-    {
-        if (!Supports(mode, tool)) return false;
-        if (mode != EditorMode.Terrain || terrainAuthoring is null) return true;
-        return Resolve(tool).TerrainAuthoring == terrainAuthoring;
-    }
-
     public static EditorTool DefaultTool(EditorMode mode) => mode switch
     {
         EditorMode.Terrain => EditorTool.Pencil,
+        EditorMode.River => EditorTool.DrawRiver,
+        EditorMode.Mountain => EditorTool.DrawMountain,
         EditorMode.Props => EditorTool.Pencil,
         EditorMode.Templates => EditorTool.Selector,
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 
     /// <summary>
-    /// The tool to fall back to when the active one is not offered for the
-    /// Asset in hand - the first one the tool bar shows for it, so choosing a
-    /// river never leaves the author holding a Pencil that cannot draw it.
+    /// How an area's Terrain Assets are authored, or null for an area that
+    /// authors no Terrain at all.
+    ///
+    /// <para>This is where the tool bar and the Asset bar used to pull in
+    /// opposite directions. The Asset used to decide the tool: choosing a river
+    /// swapped the Pencil out from under the author, and choosing grass swapped
+    /// it back. Now the area decides the Assets. Terrain and Mountain both offer
+    /// cell-authored Assets, because a mountain is a closed contour that carries
+    /// one as its surface - the difference between them is the geometry, not the
+    /// material.</para>
     /// </summary>
-    public static EditorTool DefaultTool(EditorMode mode, TerrainAuthoring? terrainAuthoring)
+    public static TerrainAuthoring? TerrainAuthoringFor(EditorMode mode) => mode switch
     {
-        if (mode != EditorMode.Terrain || terrainAuthoring is null) return DefaultTool(mode);
-        foreach (var definition in ToolBarDefinitions)
-        {
-            if (Offers(mode, definition.Tool, terrainAuthoring)) return definition.Tool;
-        }
-        return DefaultTool(mode);
-    }
+        EditorMode.Terrain => TerrainAuthoring.Cells,
+        EditorMode.Mountain => TerrainAuthoring.Cells,
+        EditorMode.River => TerrainAuthoring.Curve,
+        _ => null,
+    };
 
     public static string ModeDisplayName(EditorMode mode) => mode switch
     {
         EditorMode.Terrain => "Terrain",
+        EditorMode.River => "River",
+        EditorMode.Mountain => "Mountain",
         EditorMode.Props => "Prop",
         EditorMode.Templates => "Template",
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
@@ -125,22 +125,61 @@ public static class EditorToolRegistry
         EditorTool tool,
         string displayName,
         string iconFileName,
-        TerrainAuthoring terrainAuthoring,
-        params EditorMode[] modes) =>
-        new(tool, displayName, iconFileName, modes.ToHashSet(), true, terrainAuthoring);
-
-    private static EditorToolDefinition Define(
-        EditorTool tool,
-        string displayName,
-        string iconFileName,
         bool showInToolBar,
         params EditorMode[] modes) =>
         new(tool, displayName, iconFileName, modes.ToHashSet(), showInToolBar);
 }
 
+/// <summary>
+/// Which Terrain Assets an area offers, and which of them it should show.
+///
+/// <para>Both are decisions, not drawing, so they live here rather than in the
+/// code that builds buttons: the rule that River offers only curve-authored
+/// Assets is the kind of thing that has to be testable, and there are no tests
+/// against the Godot application.</para>
+/// </summary>
+public static class TerrainAreaAssets
+{
+    /// <summary>
+    /// The Assets this area can author, in the catalog's own order. Empty when
+    /// the Workspace enables none of that kind - an area with nothing to draw
+    /// with is a real state and is said out loud rather than filled with an
+    /// Asset it cannot use.
+    /// </summary>
+    public static IReadOnlyList<TerrainDisplayAsset> Offered(
+        EditorMode mode,
+        TerrainDisplayCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (EditorToolRegistry.TerrainAuthoringFor(mode) is not { } authoring) return [];
+        return catalog.Assets.Where(asset => asset.Authoring == authoring).ToList();
+    }
+
+    /// <summary>
+    /// The Asset an area shows on entry: the one it was left with, if that one
+    /// still suits it, and otherwise the first it offers. Null when it offers
+    /// none.
+    /// </summary>
+    public static string? Choose(
+        EditorMode mode,
+        TerrainDisplayCatalog catalog,
+        string? remembered)
+    {
+        var offered = Offered(mode, catalog);
+        if (remembered is not null
+            && offered.Any(asset => string.Equals(
+                asset.AssetKey, remembered, StringComparison.Ordinal)))
+        {
+            return remembered;
+        }
+        return offered.Count == 0 ? null : offered[0].AssetKey;
+    }
+}
+
 public sealed class EditorInteractionState
 {
     private readonly Dictionary<EditorMode, EditorTool> _activeToolByMode = [];
+    private readonly Dictionary<EditorMode, string?> _terrainAssetByMode = [];
 
     public EditorMode Mode { get; private set; } = EditorMode.Terrain;
     public EditorTool ActiveTool => _activeToolByMode.TryGetValue(Mode, out var tool)
@@ -148,6 +187,17 @@ public sealed class EditorInteractionState
         : EditorToolRegistry.DefaultTool(Mode);
     public bool EraserEnabled { get; private set; }
     public int PropLineOffsetAuthoringPixels { get; private set; }
+
+    /// <summary>
+    /// The Terrain Asset the active area is authoring with. Each area keeps its
+    /// own: Terrain and Mountain offer the same Assets and are still two
+    /// choices, because leaving one to paint a mountain and coming back should
+    /// find the brush where it was left.
+    /// </summary>
+    public string? SelectedTerrainAssetKey =>
+        _terrainAssetByMode.TryGetValue(Mode, out var assetKey) ? assetKey : null;
+
+    public void SelectTerrainAsset(string? assetKey) => _terrainAssetByMode[Mode] = assetKey;
 
     /// <summary>
     /// How the next curve point's handles behave. Session state, switchable

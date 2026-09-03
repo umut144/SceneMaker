@@ -35,29 +35,57 @@ Canvas und damit gegenüber der linken `ToolBar`.
 
 ## Werkzeugmodell
 
-Die Werkzeugauswahl besteht aus zwei unabhängigen, typisierten Dimensionen:
+Die Werkzeugauswahl besteht aus drei unabhängigen Dimensionen:
 
-- `EditorMode` bestimmt den bearbeiteten Inhaltsbereich: `Terrain`, `Props`
+- `EditorMode` bestimmt den **Bereich**: `Terrain`, `River`, `Mountain`, `Props`
   oder `Templates`.
-- `EditorTool` bestimmt das primäre Werkzeug innerhalb dieses Modus.
+- `EditorTool` bestimmt das primäre Werkzeug innerhalb dieses Bereichs.
+- Das gewählte Terrain-Asset bestimmt das **Material** und sonst nichts.
 
-Die linke Werkzeugleiste zeigt nur die Werkzeuge des aktiven Modus — und im
-Terrain-Modus zusätzlich nur die, die zum gewählten Asset passen. Ob ein
-Terrain-Asset gemalt oder gezeichnet wird, steht in der Workspace-Konfiguration
-(`authoring: "cells" | "curve"`), nicht in seinem Surface-Token. Bei `grass`
-stehen also `Pencil`, `Line`, `Terrain Fill` und `Draw Mountain` bereit, bei
-`river` `Draw River`.
-Ist das aktive Werkzeug für das neu gewählte Asset nicht vorgesehen, wechselt
-die Leiste selbst auf das erste passende — wer einen Fluss wählt, hält nie einen
-Stift in der Hand, der ihn nicht zeichnen kann.
+Die obere Navigation zeigt:
 
-- `Selector`
-- `Pencil`
-- `Line`
-- `Terrain Fill`
-- `Draw River`
-- `Draw Mountain`
-- Template-bezogene Werkzeuge wie `Anchor Move`
+```text
+[ Terrain ]  [ River ]  [ Mountain ]   [ Props ]  [ Scene Templates ]  [ Map ]
+               └──── Landscape ────┘
+```
+
+`Landscape` ist ausschließlich eine Beschriftung um River und Mountain, kein
+anklickbarer Zustand und kein `EditorMode`. Beide Bereiche bleiben mit einem
+Klick erreichbar; ein Zustand, in dem man nur „irgendwo in Landscape" wäre,
+müsste beantworten, was Zeichnen dort bedeutet, und die Antwort wäre immer
+„wähl erst River oder Mountain".
+
+**Der Bereich entscheidet über die Assets, nicht das Asset über das Werkzeug.**
+Ob ein Terrain-Asset gemalt oder gezeichnet wird, steht weiterhin in der
+Workspace-Konfiguration (`authoring: "cells" | "curve"`), nicht in seinem
+Surface-Token — aber gefragt wird es jetzt von der Assetleiste:
+
+| Bereich | Werkzeuge | angebotene Assets |
+| --- | --- | --- |
+| `Terrain` | `Pencil`, `Line`, `Terrain Fill` | `authoring: "cells"` |
+| `River` | `Draw River` | `authoring: "curve"` |
+| `Mountain` | `Draw Mountain` | `authoring: "cells"` |
+| `Props` | `Selector`, `Pencil`, `Line` | — |
+| `Templates` | `Selector`, `Anchor Move` | — |
+
+Mountain und Terrain bieten dieselben Assets an, und das ist richtig: ein
+Bergkörper *trägt* ein zellen-authoriertes Terrain-Asset als Oberfläche. Der
+Unterschied liegt in der Geometrie, nicht im Material. Jeder Bereich merkt sich
+sein zuletzt gewähltes Asset getrennt — auch Terrain und Mountain, damit man den
+Pinsel dort wiederfindet, wo man ihn abgelegt hat.
+
+Beim Betreten eines Bereichs bleibt das gemerkte Asset, wenn es zum Bereich
+passt; sonst wird das erste passende gewählt. Bietet ein Workspace für einen
+Bereich gar kein passendes Asset an, bleibt der Bereich erreichbar, sein
+Zeichenwerkzeug ist aber deaktiviert und die Statuszeile sagt, welcher Assettyp
+fehlt. Ein inkompatibles Asset wird nie gewählt, und ein toter aktiver
+Zeichenknopf wird nie angeboten.
+
+Ein Assetwechsel **innerhalb** eines Bereichs wechselt nur das Material: die
+Geometrie eines laufenden Entwurfs bleibt stehen, und kein Werkzeug wird unter
+der Hand getauscht. Das ersetzt die frühere automatische Werkzeugumschaltung,
+die einen halb gezeichneten Berg verschluckte, sobald man ein Curve-Asset
+wählte.
 
 Die Assetleisten oben zeigen jedes Asset in seiner eigenen Farbe. Die Auswahl
 liegt deshalb auf dem **Hintergrund** — eine gefüllte Fläche in der Assetfarbe
@@ -82,11 +110,11 @@ Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
   Ziehens alle betroffenen Tiles und führt die Linie beim Loslassen aus.
 - `Prop:Line` behält Startpunkt, Endpunkt und die Bestätigung mit Enter als
   getrennte Schritte.
-- `Terrain:Draw River` zeichnet eine offene Bezier-Kurve: Drücken legt einen
+- `River:Draw River` zeichnet eine offene Bezier-Kurve: Drücken legt einen
   Kurvenpunkt auf dem Wasserraster fest, Ziehen zieht sein Handle heraus,
   Loslassen setzt ihn. Enter schließt den Fluss ab, Escape nimmt Punkt für Punkt
   zurück.
-- `Terrain:Draw Mountain` zeichnet eine geschlossene Bezier-Kontur auf dem
+- `Mountain:Draw Mountain` zeichnet eine geschlossene Bezier-Kontur auf dem
   Terrainraster. Enter schließt und authoriert den ganzen Berg; Escape oder
   Rückgängig nimmt während des Entwurfs jeweils den letzten Punkt zurück.
 
@@ -111,9 +139,9 @@ Feld `Ground height` gesetzt hat. Damit findet man die Vorgabe der Scene immer
 wieder vor, kann aber pro Strich davon abweichen, ohne dass das Dokument sich
 ändert.
 
-### Terrain:Draw River
+### River:Draw River
 
-Das ContextMenu von `Terrain:Draw River` enthält den Grundriss und den Schnitt.
+Das ContextMenu von `River:Draw River` enthält den Grundriss und den Schnitt.
 `Point` schaltet
 zwischen `Linear` und `Aligned` um: `Linear` macht die angrenzenden Segmente
 gerade, `Aligned` hält die beiden Handles eines Punktes kollinear. Fluss und Berg
@@ -158,7 +186,7 @@ Kurve abgeleitet sind.
 Ein Scene Template kann kein Wasser tragen; das Werkzeug sagt das beim ersten
 Klick, statt es beim Speichern scheitern zu lassen.
 
-### Terrain:Draw Mountain
+### Mountain:Draw Mountain
 
 `Draw Mountain` steht für zellen-authorierte Terrain-Assets bereit. Jeder Klick
 setzt einen Konturpunkt auf das Terrainraster; `Point` schaltet wie beim Fluss
@@ -212,14 +240,18 @@ Die Farbe stammt aus einer kleinen festen Editorpalette und wird stabil aus der
 `mountain_body_id` abgeleitet: aufeinanderfolgend gezeichnete Berge bekommen
 verschiedene Farben, und derselbe Berg hat nach einem Neustart dieselbe. Sie ist
 reine Editorfarbe — sie steht nicht im Dokument, nicht im Export und bedeutet im
-Spiel nichts. Außerhalb der Perspektive, in der Berge authoriert werden, wird die
-Kontur wie alles andere gedimmt.
+Spiel nichts. In `Terrain` und `Mountain` ist die Kontur voll sichtbar — im Terrain-Bereich
+ist sie das einzige unmittelbare Signal, dass dort ein authorierter Bergkörper
+liegt. Der `Map`-Kontext ist eine strukturelle Übersicht und zeigt sie ebenfalls
+voll. In `River`, `Props` und `Templates` wird sie wie alles Bereichsfremde
+gedimmt.
 
-Ein begonnener Entwurf verschwindet nie stillschweigend. Ein Werkzeugwechsel,
-ein Perspektivwechsel, das Einschalten des `Eraser` und auch der automatische
-Werkzeugwechsel beim Wählen eines curve-authorierten Assets verwerfen den
-Entwurf — und sagen in der Statuszeile, wie viele Punkte dabei verloren gingen.
-Das Ausschalten des `Eraser` beginnt keinen neuen Entwurf.
+Ein begonnener Entwurf verschwindet nie stillschweigend. Ein Bereichswechsel,
+ein Werkzeugwechsel und das Einschalten des `Eraser` verwerfen den Entwurf — und
+sagen in der Statuszeile, wie viele Punkte dabei verloren gingen. Für Fluss und
+Berg gilt dieselbe Eraser-Regel: kein Entwurf bleibt im Hintergrund erhalten,
+während radiert wird. Das Ausschalten des `Eraser` beginnt keinen neuen Entwurf,
+und ein Assetwechsel verwirft nichts.
 
 Die Canvasdarstellung verwendet bereits das gefaltete Höhenfeld aus gemalten
 Zellen und Bergkörpern. Dadurch sieht der Autor genau die Terrainzellen, die

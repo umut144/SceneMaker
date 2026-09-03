@@ -22,7 +22,7 @@ public sealed class RiverPersistenceTests
         Assert.False(controller.IsDirty);
 
         var interaction = new ToolInteraction();
-        interaction.SelectMode(EditorMode.Terrain);
+        interaction.SelectMode(EditorMode.River);
         interaction.SelectTool(EditorTool.DrawRiver);
         var context = Context(workspace, controller);
 
@@ -63,7 +63,7 @@ public sealed class RiverPersistenceTests
         Assert.True(controller.CreateInstance("base", 6, 6).Succeeded);
 
         var interaction = new ToolInteraction();
-        interaction.SelectMode(EditorMode.Terrain);
+        interaction.SelectMode(EditorMode.River);
         interaction.SelectTool(EditorTool.DrawRiver);
         var context = Context(workspace, controller);
 

@@ -173,16 +173,19 @@ public sealed class ToolRiverTests
     }
 
     [Fact]
-    public void ChoosingAnotherToolDropsTheDraft()
+    public void LeavingTheAreaDropsTheDraft()
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
         var interaction = River();
 
         Place(interaction, Context(workspace, scene), 32, 32);
-        interaction.SelectTool(EditorTool.Pencil);
+        var outcome = interaction.SelectMode(EditorMode.Terrain);
 
         Assert.Empty(interaction.RiverDraft);
+        Assert.Equal(
+            "The unfinished river of 1 point was discarded.",
+            Assert.IsType<ToolOutcome.Message>(outcome).Text);
     }
 
     [Fact]
@@ -381,10 +384,35 @@ public sealed class ToolRiverTests
         interaction.PointerReleased(context);
     }
 
+    /// <summary>
+    /// The same rule the mountain contour follows: the eraser ends the curve it
+    /// interrupts rather than keeping it alive behind a mode that would give the
+    /// next click another meaning.
+    /// </summary>
+    [Fact]
+    public void EnablingTheEraserDiscardsTheDraftAndSaysSo()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = River();
+        Place(interaction, Context(workspace, scene), 32, 32);
+        Place(interaction, Context(workspace, scene), 160, 32);
+
+        var enabled = interaction.SetEraserEnabled(true);
+        var disabled = interaction.SetEraserEnabled(false);
+
+        Assert.Equal(
+            "The unfinished river of 2 points was discarded.",
+            Assert.IsType<ToolOutcome.Message>(enabled).Text);
+        Assert.IsType<ToolOutcome.Idle>(disabled);
+        Assert.Empty(interaction.RiverDraft);
+        Assert.False(interaction.HasUnfinishedDraft);
+    }
+
     private static ToolInteraction River()
     {
         var interaction = new ToolInteraction();
-        interaction.SelectMode(EditorMode.Terrain);
+        interaction.SelectMode(EditorMode.River);
         interaction.SelectTool(EditorTool.DrawRiver);
         return interaction;
     }

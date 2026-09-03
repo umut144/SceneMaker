@@ -37,9 +37,18 @@ rasterization exists exactly once, in `WaterGeometry`.
 
 Which Terrain Assets are drawn that way is authored Workspace data
 (`authoring: "cells" | "curve"`), not something SceneMaker works out from a
-surface token whose meaning it never reads. It is what the tool bar narrows
-itself by, and it makes two mistakes impossible: a river painted cell by cell,
-and a river made of grass.
+surface token whose meaning it never reads. It is what an authoring area offers
+its Assets by, and it makes two mistakes impossible: a river painted cell by
+cell, and a river made of grass.
+
+The editor asks that question of the area rather than of the Asset. Terrain,
+River and Mountain are three areas because they author three different things -
+painted cells, an open curve, a closed contour - and each offers the Assets its
+geometry can carry: cells for Terrain and Mountain, curves for River. It used to
+run the other way, with the chosen Asset swapping the tool out from under the
+author, which meant choosing a river silently ended a mountain contour being
+drawn. Now an Asset is only the material: changing it keeps the geometry, and
+only leaving the area gives it up - out loud.
 
 The water grid is finer than the Terrain grid - `water_cell_meters` in the
 Workspace config, 0.5 m for `world01`, where a Terrain cell is 1 m - because a

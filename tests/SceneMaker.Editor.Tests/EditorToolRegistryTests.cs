@@ -63,8 +63,13 @@ public sealed class EditorToolRegistryTests
             definition => definition.Tool == EditorTool.AnchorPlace);
     }
 
+    /// <summary>
+    /// Each area owns the tools that draw its own thing. A River is no longer a
+    /// tool inside Terrain that a chosen Asset switches to; it is an area, and
+    /// so is Mountain.
+    /// </summary>
     [Fact]
-    public void TerrainToolsAndPropToolsOverlapOnlyWhereIntended()
+    public void EachAreaOwnsTheToolsThatDrawItsOwnThing()
     {
         Assert.True(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.Fill));
         Assert.False(EditorToolRegistry.Supports(EditorMode.Props, EditorTool.Fill));
@@ -72,61 +77,48 @@ public sealed class EditorToolRegistryTests
         Assert.True(EditorToolRegistry.Supports(EditorMode.Props, EditorTool.Selector));
         Assert.True(EditorToolRegistry.Supports(EditorMode.Templates, EditorTool.AnchorMove));
         Assert.False(EditorToolRegistry.Supports(EditorMode.Templates, EditorTool.Pencil));
-        // Water is Terrain: a River is authored where Terrain is authored.
-        Assert.True(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawRiver));
-        Assert.False(EditorToolRegistry.Supports(EditorMode.Props, EditorTool.DrawRiver));
-        Assert.False(EditorToolRegistry.Supports(EditorMode.Templates, EditorTool.DrawRiver));
-        Assert.True(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawMountain));
-        Assert.False(EditorToolRegistry.Supports(EditorMode.Props, EditorTool.DrawMountain));
+
+        Assert.True(EditorToolRegistry.Supports(EditorMode.River, EditorTool.DrawRiver));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawRiver));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Mountain, EditorTool.DrawRiver));
+
+        Assert.True(EditorToolRegistry.Supports(EditorMode.Mountain, EditorTool.DrawMountain));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawMountain));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.DrawMountain));
+
+        // The cell tools stay where cells are painted.
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Mountain, EditorTool.Pencil));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.Pencil));
+    }
+
+    /// <summary>
+    /// The direction the whole slice turned around: the area says how its Assets
+    /// are authored, instead of the Asset saying which tool the author holds.
+    /// </summary>
+    [Fact]
+    public void AnAreaSaysHowItsTerrainAssetsAreAuthored()
+    {
+        Assert.Equal(
+            TerrainAuthoring.Cells, EditorToolRegistry.TerrainAuthoringFor(EditorMode.Terrain));
+        // A mountain is a closed contour carrying a cell-authored Asset as its
+        // surface, so it offers exactly what Terrain offers.
+        Assert.Equal(
+            TerrainAuthoring.Cells, EditorToolRegistry.TerrainAuthoringFor(EditorMode.Mountain));
+        Assert.Equal(
+            TerrainAuthoring.Curve, EditorToolRegistry.TerrainAuthoringFor(EditorMode.River));
+        Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.Props));
+        Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.Templates));
     }
 
     [Fact]
-    public void TerrainToolsAreOfferedByHowTheChosenAssetIsAuthored()
+    public void EveryAreaThatAuthorsTerrainHasAToolForIt()
     {
-        // A painted Asset has no Bezier, a drawn one has no Pencil and no Fill.
-        Assert.True(EditorToolRegistry.Offers(
-            EditorMode.Terrain, EditorTool.Pencil, TerrainAuthoring.Cells));
-        Assert.False(EditorToolRegistry.Offers(
-            EditorMode.Terrain, EditorTool.DrawRiver, TerrainAuthoring.Cells));
-        Assert.True(EditorToolRegistry.Offers(
-            EditorMode.Terrain, EditorTool.DrawMountain, TerrainAuthoring.Cells));
-        Assert.False(EditorToolRegistry.Offers(
-            EditorMode.Terrain, EditorTool.DrawMountain, TerrainAuthoring.Curve));
-        Assert.True(EditorToolRegistry.Offers(
-            EditorMode.Terrain, EditorTool.DrawRiver, TerrainAuthoring.Curve));
-        Assert.False(EditorToolRegistry.Offers(
-            EditorMode.Terrain, EditorTool.Fill, TerrainAuthoring.Curve));
-
-        // Outside Terrain the authoring says nothing at all.
-        Assert.True(EditorToolRegistry.Offers(
-            EditorMode.Props, EditorTool.Pencil, TerrainAuthoring.Curve));
-        // And while no Asset is chosen, nothing is narrowed away.
-        Assert.True(EditorToolRegistry.Offers(EditorMode.Terrain, EditorTool.Pencil, null));
-        Assert.True(EditorToolRegistry.Offers(EditorMode.Terrain, EditorTool.DrawRiver, null));
-    }
-
-    [Fact]
-    public void EveryAuthoringHasAToolToFallBackTo()
-    {
-        Assert.Equal(
-            EditorTool.Pencil,
-            EditorToolRegistry.DefaultTool(EditorMode.Terrain, TerrainAuthoring.Cells));
-        Assert.Equal(
-            EditorTool.DrawRiver,
-            EditorToolRegistry.DefaultTool(EditorMode.Terrain, TerrainAuthoring.Curve));
-        Assert.Equal(
-            EditorToolRegistry.DefaultTool(EditorMode.Props),
-            EditorToolRegistry.DefaultTool(EditorMode.Props, TerrainAuthoring.Curve));
-
         foreach (var mode in Enum.GetValues<EditorMode>())
         {
-            foreach (var authoring in Enum.GetValues<TerrainAuthoring>())
-            {
-                var tool = EditorToolRegistry.DefaultTool(mode, authoring);
-                Assert.True(
-                    EditorToolRegistry.Offers(mode, tool, authoring),
-                    $"Mode {mode} with {authoring} falls back to {tool}, which it does not offer.");
-            }
+            if (EditorToolRegistry.TerrainAuthoringFor(mode) is null) continue;
+            Assert.Contains(
+                EditorToolRegistry.ToolBarDefinitions,
+                definition => EditorToolRegistry.Supports(mode, definition.Tool));
         }
     }
 }

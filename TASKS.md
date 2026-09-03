@@ -28,28 +28,26 @@ free. Worth doing only if a Scene ever gets near that many Props of one asset;
 The allocation problem that used to sit alongside this one is fixed: naming a
 Prop no longer formats a candidate string per attempt.
 
-## 2. Building the asset bars selects an asset as a side effect
+## 2. Building the Prop asset bar selects an asset as a side effect
 
-`src/SceneMaker.App/SceneMakerMain.cs`, `BuildTerrainAssetBar` and
-`BuildPropAssetBar`
+`src/SceneMaker.App/SceneMakerMain.cs`, `BuildPropAssetBar`
 
-Both loops call `SelectTerrainAsset` / `SelectPropAsset` for the first asset
-they add, which writes to the canvas and sets the status line. Layout
-construction therefore also decides editor state, and the status message it
-writes is immediately overwritten by whatever called it.
+The loop calls `SelectPropAsset` for the first asset it adds, which writes to
+the canvas and sets the status line. Layout construction therefore also decides
+editor state, and the status message it writes is immediately overwritten by
+whatever called it.
 
 The effect is wanted — after loading a Workspace an asset must be selected —
-but it belongs to `AdoptSession`, not to the code that adds buttons. Building
-the bars should be pure; `AdoptSession` should choose the default afterwards
-and set the status once.
+but it belongs with adopting the session, not with the code that adds buttons.
 
-Watch the ordering when moving it: `_canvas.SelectedTerrainAssetKey is null` is
-what currently decides whether to select, so the choice has to happen after the
-bars exist but before the caller writes its own status.
+`BuildTerrainAssetBar` had the same shape and no longer does: entering an area
+has to choose an Asset anyway, because River cannot keep the one Terrain was
+holding, so the choice moved to `ShowTerrainAssetsForArea` and the bar became
+pure. The Prop bar has no areas to enter and therefore no such moment to move
+it to, which is why it is still here.
 
 This one is App code, which has no tests, and it changes when an asset gets
-selected. It is the entry here most likely to be noticed only while using the
-editor, so it wants a manual pass rather than a quick fix.
+selected. It wants a manual pass rather than a quick fix.
 
 ## 3. Height is authored only by painting over a cell
 

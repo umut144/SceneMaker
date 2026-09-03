@@ -96,6 +96,10 @@ public sealed partial class SceneMakerMain : Control
     private readonly VBoxContainer _templateRows = new();
     private readonly SpinBox _anchorGroupEdit = new();
     private readonly Dictionary<EditorTool, Button> _drawingToolControlsByTool = [];
+    private readonly Dictionary<string, Button> _terrainAssetControlsByKey = [];
+    // Rebuilt with the bar, because opening a Workspace frees every control in
+    // it and a kept reference would outlive the node it points at.
+    private Label? _terrainAssetBarLabel;
 
     private readonly FileDialog _workspaceDirectoryDialog = new();
     private readonly FileDialog _workspaceDirectoryLoadDialog = new();
@@ -200,6 +204,7 @@ public sealed partial class SceneMakerMain : Control
         _overviewNavigationBar.AddThemeFontSizeOverride("font_size", 14);
         root.AddChild(_overviewNavigationBar);
         AddPerspectiveButton(_overviewNavigationBar, "Terrain", available: true, "Terrain foundation view");
+        AddLandscapeGroup(_overviewNavigationBar);
         AddPerspectiveButton(_overviewNavigationBar, "Props", available: true, "Prop authoring view");
         AddPerspectiveButton(
             _overviewNavigationBar,
@@ -542,9 +547,17 @@ public sealed partial class SceneMakerMain : Control
         parent.AddChild(button);
     }
 
+    /// <summary>
+    /// Builds the buttons and nothing else. Choosing an Asset is a decision and
+    /// belongs to entering an area, not to the code that adds controls - a
+    /// layout pass that also sets editor state writes a status line that its own
+    /// caller immediately overwrites.
+    /// </summary>
     private void BuildTerrainAssetBar()
     {
-        _terrainAssetBar.AddChild(new Label { Text = "Terrain  ›" });
+        _terrainAssetControlsByKey.Clear();
+        _terrainAssetBarLabel = new Label { Text = "Terrain  ›" };
+        _terrainAssetBar.AddChild(_terrainAssetBarLabel);
         foreach (var asset in _controller.Session?.TerrainAssets.Assets ?? [])
         {
             var button = new Button
@@ -558,13 +571,33 @@ public sealed partial class SceneMakerMain : Control
             StyleAssetButton(button, Color.FromHtml(asset.Color));
             button.Pressed += () => SelectTerrainAsset(asset.AssetKey);
             _terrainAssetBar.AddChild(button);
-            if (_canvas.SelectedTerrainAssetKey is null)
-            {
-                button.ButtonPressed = true;
-                SelectTerrainAsset(asset.AssetKey);
-            }
+            _terrainAssetControlsByKey.Add(asset.AssetKey, button);
         }
         _terrainAssetBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
+    }
+
+    /// <summary>
+    /// Shows the Assets the active area can author and marks the one it holds.
+    /// The area asks `TerrainAreaAssets`; this only reflects the answer.
+    /// </summary>
+    private void ShowTerrainAssetsForArea()
+    {
+        if (_controller.Session is not { } session) return;
+        var mode = _interaction.Mode;
+        var offered = TerrainAreaAssets.Offered(mode, session.TerrainAssets)
+            .Select(static asset => asset.AssetKey)
+            .ToHashSet(StringComparer.Ordinal);
+        var chosen = TerrainAreaAssets.Choose(
+            mode, session.TerrainAssets, _canvas.SelectedTerrainAssetKey);
+        _canvas.SelectedTerrainAssetKey = chosen;
+        if (_terrainAssetBarLabel is { } label)
+            label.Text = $"{EditorToolRegistry.ModeDisplayName(mode)}  ›";
+        foreach (var (assetKey, control) in _terrainAssetControlsByKey)
+        {
+            control.Visible = offered.Contains(assetKey);
+            control.ButtonPressed = control.Visible
+                && string.Equals(assetKey, chosen, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>
@@ -1085,9 +1118,37 @@ public sealed partial class SceneMakerMain : Control
         parent.AddChild(button);
     }
 
+    /// <summary>
+    /// River and Mountain under one caption. `Landscape` is a bracket the
+    /// navigation draws, never something to be in: both areas stay one click
+    /// away, and there is no third state that would have to answer what drawing
+    /// in it means.
+    /// </summary>
+    private void AddLandscapeGroup(Container parent)
+    {
+        var group = new VBoxContainer { Name = "Landscape" };
+        group.AddThemeConstantOverride("separation", 0);
+        var buttons = new HBoxContainer();
+        group.AddChild(buttons);
+        AddPerspectiveButton(buttons, "River", available: true, "River authoring view");
+        AddPerspectiveButton(buttons, "Mountain", available: true, "Mountain authoring view");
+        var caption = new Label
+        {
+            Text = "Landscape",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        caption.AddThemeFontSizeOverride("font_size", 11);
+        caption.AddThemeColorOverride("font_color", Color.FromHtml("#96A1B2"));
+        group.AddChild(caption);
+        parent.AddChild(group);
+    }
+
     private static EditorMode EditorModeForPerspective(string perspective) => perspective switch
     {
         "Terrain" => EditorMode.Terrain,
+        "River" => EditorMode.River,
+        "Mountain" => EditorMode.Mountain,
         "Props" => EditorMode.Props,
         "Scene Templates" => EditorMode.Templates,
         _ => throw new ArgumentOutOfRangeException(nameof(perspective)),
@@ -1423,20 +1484,41 @@ public sealed partial class SceneMakerMain : Control
     private void SelectPerspective(EditorMode mode, string perspective)
     {
         var outcome = _canvas.SelectMode(mode);
+        _canvas.MapContextActive = false;
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
-        _terrainAssetBar.Visible = mode == EditorMode.Terrain;
+        _terrainAssetBar.Visible = EditorToolRegistry.TerrainAuthoringFor(mode) is not null;
         _propAssetBar.Visible = mode == EditorMode.Props;
         _templateBar.Visible = mode == EditorMode.Templates;
         _mapBar.Visible = false;
+        ShowTerrainAssetsForArea();
         UpdateDrawingToolAvailability();
         UpdateToolContextLabel();
         UpdateTemplateControls();
-        SetStatus(WithDiscardedDraft($"Selected {perspective} perspective.", outcome));
+        SetStatus(WithDiscardedDraft(
+            MissingTerrainAssetNotice() ?? $"Selected {perspective} perspective.", outcome));
+    }
+
+    /// <summary>
+    /// Why the active area cannot draw, when it cannot. A Workspace that enables
+    /// no Asset of the kind an area authors leaves that area reachable and its
+    /// tool disabled, and this is what the status line says instead of leaving
+    /// the author with a button that does nothing.
+    /// </summary>
+    private string? MissingTerrainAssetNotice()
+    {
+        if (_controller.Session is not { } session) return null;
+        var mode = _interaction.Mode;
+        if (EditorToolRegistry.TerrainAuthoringFor(mode) is not { } authoring) return null;
+        if (TerrainAreaAssets.Offered(mode, session.TerrainAssets).Count > 0) return null;
+        var kind = authoring == TerrainAuthoring.Curve ? "curve" : "cells";
+        return $"{EditorToolRegistry.ModeDisplayName(mode)} needs a Terrain Asset authored as "
+            + $"'{kind}', and this Workspace enables none. Drawing stays disabled here.";
     }
 
     private void SelectMapContext()
     {
+        _canvas.MapContextActive = true;
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
         _terrainAssetBar.Visible = false;
@@ -1449,6 +1531,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void ShowNavigationOverview()
     {
+        _canvas.MapContextActive = false;
         _overviewNavigationBar.Visible = true;
         _contextNavigationBar.Visible = false;
         UpdateDrawingToolAvailability();
@@ -1650,10 +1733,8 @@ public sealed partial class SceneMakerMain : Control
             + EditorToolRegistry.Resolve(_interaction.ActiveTool).DisplayName;
         var propLineActive = _interaction.Mode == EditorMode.Props
             && _interaction.ActiveTool == EditorTool.Line;
-        var riverActive = _interaction.Mode == EditorMode.Terrain
-            && _interaction.ActiveTool == EditorTool.DrawRiver;
-        var mountainActive = _interaction.Mode == EditorMode.Terrain
-            && _interaction.ActiveTool == EditorTool.DrawMountain;
+        var riverActive = _interaction.Mode == EditorMode.River;
+        var mountainActive = _interaction.Mode == EditorMode.Mountain;
         var curveActive = riverActive || mountainActive;
         _toolContextSeparator.Visible = propLineActive || curveActive;
         _propLineOffsetLabel.Visible = propLineActive;
@@ -1682,43 +1763,19 @@ public sealed partial class SceneMakerMain : Control
         _elevationEdit.Visible = !riverActive;
     }
 
+    /// <summary>
+    /// Choosing an Asset changes the material and nothing else. The area already
+    /// decided which Assets are on offer, so no tool has to be swapped out from
+    /// under the author - and an unfinished contour survives a change of mind
+    /// about what it is made of.
+    /// </summary>
     private void SelectTerrainAsset(string assetKey)
     {
         var asset = _controller.Session!.TerrainAssets.Resolve(assetKey);
         _canvas.SelectedTerrainAssetKey = assetKey;
-        // The tools follow the Asset. Grass is painted and has no Bezier; a
-        // river is drawn and has no Pencil or Fill, and offering them would be
-        // offering something that cannot work.
-        ToolOutcome switched = ToolOutcome.Idle.Instance;
-        if (_interaction.Mode == EditorMode.Terrain
-            && !EditorToolRegistry.Offers(EditorMode.Terrain, _interaction.ActiveTool, asset.Authoring))
-        {
-            switched = _canvas.SelectTool(
-                EditorToolRegistry.DefaultTool(EditorMode.Terrain, asset.Authoring));
-        }
         UpdateDrawingToolAvailability();
         UpdateToolContextLabel();
-        SetStatus(WithDiscardedDraft(
-            $"Selected Terrain '{asset.Name}' ({asset.AssetKey}).", switched));
-    }
-
-    /// <summary>
-    /// How the chosen Terrain Asset is authored, or null while none is chosen -
-    /// then the tool bar narrows nothing.
-    /// </summary>
-    private TerrainAuthoring? SelectedTerrainAuthoring()
-    {
-        if (_controller.Session is not { } session
-            || _canvas.SelectedTerrainAssetKey is not { } assetKey)
-        {
-            return null;
-        }
-        foreach (var asset in session.TerrainAssets.Assets)
-        {
-            if (string.Equals(asset.AssetKey, assetKey, StringComparison.Ordinal))
-                return asset.Authoring;
-        }
-        return null;
+        SetStatus($"Selected Terrain '{asset.Name}' ({asset.AssetKey}).");
     }
 
     private void SelectPropAsset(string assetKey)
@@ -2028,11 +2085,16 @@ public sealed partial class SceneMakerMain : Control
     {
         var templateMode = _interaction.Mode == EditorMode.Templates;
         var instanceActive = _controller.Document?.SceneKind == SceneKind.Instance;
+        // An area whose Asset kind the Workspace does not enable keeps its tools
+        // visible and dead rather than hiding them: the area exists, it just has
+        // nothing to draw with, and the status line says so.
+        var withoutAsset = EditorToolRegistry.TerrainAuthoringFor(_interaction.Mode) is not null
+            && _canvas.SelectedTerrainAssetKey is null;
         foreach (var (tool, control) in _drawingToolControlsByTool)
         {
-            control.Visible = EditorToolRegistry.Offers(
-                _interaction.Mode, tool, SelectedTerrainAuthoring());
+            control.Visible = EditorToolRegistry.Supports(_interaction.Mode, tool);
             control.Disabled = _controller.Scene is null
+                || withoutAsset
                 || templateMode && !instanceActive;
             control.ButtonPressed = control.Visible && tool == _interaction.ActiveTool;
         }
@@ -2104,6 +2166,10 @@ public sealed partial class SceneMakerMain : Control
         ConfigureElevationInputs(session.Metrics);
         UpdateSceneSizeMetrics();
         RebuildAssetBars();
+        // The bars only hold buttons now, so the Asset an area shows is chosen
+        // here - once, after they exist.
+        ShowTerrainAssetsForArea();
+        UpdateDrawingToolAvailability();
     }
 
     private void ConfigureElevationInputs(WorkspaceMetrics metrics)
