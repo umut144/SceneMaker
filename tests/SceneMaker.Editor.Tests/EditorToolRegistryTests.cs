@@ -100,10 +100,9 @@ public sealed class EditorToolRegistryTests
     {
         Assert.Equal(
             TerrainAuthoring.Cells, EditorToolRegistry.TerrainAuthoringFor(EditorMode.Terrain));
-        // A mountain is a closed contour carrying a cell-authored Asset as its
-        // surface, so it offers exactly what Terrain offers.
-        Assert.Equal(
-            TerrainAuthoring.Cells, EditorToolRegistry.TerrainAuthoringFor(EditorMode.Mountain));
+        // A mountain is a shape and a height. The painted Terrain under the
+        // contour is the material, so this area has nothing to offer.
+        Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.Mountain));
         Assert.Equal(
             TerrainAuthoring.Curve, EditorToolRegistry.TerrainAuthoringFor(EditorMode.River));
         Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.Props));
@@ -120,5 +119,20 @@ public sealed class EditorToolRegistryTests
                 EditorToolRegistry.ToolBarDefinitions,
                 definition => EditorToolRegistry.Supports(mode, definition.Tool));
         }
+    }
+
+    /// <summary>
+    /// Offering no Asset is not the same as having nothing to draw with. The
+    /// Mountain area authors geometry, so its tool is a real tool - the guard
+    /// that disables an area without a usable Asset must not catch it.
+    /// </summary>
+    [Fact]
+    public void MountainOffersNoAssetAndStillHasItsDrawingTool()
+    {
+        Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.Mountain));
+        Assert.Equal(EditorTool.DrawMountain, EditorToolRegistry.DefaultTool(EditorMode.Mountain));
+        Assert.Contains(
+            EditorToolRegistry.ToolBarDefinitions,
+            static definition => definition.Tool == EditorTool.DrawMountain);
     }
 }

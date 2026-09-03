@@ -2,8 +2,10 @@ namespace SceneMaker.Core;
 
 /// <summary>
 /// Derives solid Terrain from editable mountain contours. A mountain is not a
-/// separate fill: it raises the top of Terrain's solid column, so the existing
-/// cut rule can carve a river or tunnel through it.
+/// separate fill and carries no material of its own: it raises the top of
+/// painted Terrain's solid column, so the existing cut rule can carve a river or
+/// tunnel through it and the Asset underneath keeps saying what the surface is
+/// made of.
 /// </summary>
 public static class MountainGeometry
 {
@@ -32,21 +34,21 @@ public static class MountainGeometry
         ContourRaster.TerrainCells(scene, metrics, RequireContour(body));
 
     /// <summary>
-    /// Painted Terrain and every mountain folded into one canonical height
-    /// field. The highest top wins, and a mountain at the same height as painted
-    /// Terrain deliberately owns the surface there.
+    /// Painted Terrain and every mountain folded into one height field.
     ///
-    /// <para>Two mountain bodies may overlap at one elevation only when they
-    /// name the same Asset, because no geometric fact could otherwise choose
-    /// which surface that place presents. That is a question about the contours
-    /// and not about which of them happens to be visible, so it is asked of
-    /// every contribution a cell receives - including one buried under a third,
-    /// higher body that would hide the tie. Folding the bodies one after another
-    /// and comparing each against the winner so far cannot ask it: whether the
-    /// tie was ever compared would depend on the order the bodies were folded
-    /// in, which is their ID order and therefore the order they were drawn in.
-    /// A cell's contributions are collected first, checked per elevation, and
-    /// only then reduced to the one that shows.</para>
+    /// <para>A mountain contributes height and nothing else. It raises the top
+    /// of a painted cell's solid column and leaves its Asset alone, so a contour
+    /// drawn around a stretch of sand and grass lifts that pattern unchanged
+    /// rather than replacing it with one material. Which is why a contour over a
+    /// coordinate nobody painted produces no cell at all: there is no column to
+    /// raise, and a mountain has no material of its own to make one from. The
+    /// body stays authored and starts working the moment Terrain is painted
+    /// under it.</para>
+    ///
+    /// <para>Every contour is flattened and checked here, before any of that is
+    /// used, and unconditionally - a Scene with no Terrain cells at all must
+    /// still refuse an unusable contour. Skipping the walk when there is nothing
+    /// to raise would hide exactly that.</para>
     /// </summary>
     public static IReadOnlyList<TerrainCellDocument> EffectiveTerrainCells(
         SceneDocument scene,
@@ -55,103 +57,87 @@ public static class MountainGeometry
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
 
-        Dictionary<TerrainCellCoordinate, TerrainCellDocument> terrain = [];
+        var raised = RaisedTops(scene, metrics);
+        // The painted cells are already unique and canonically ordered by Y then
+        // X, so the fold is a mapping and needs no ordering of its own.
+        List<TerrainCellDocument> terrain = new(scene.TerrainCells.Count);
         foreach (var cell in scene.TerrainCells)
-            terrain.Add(new TerrainCellCoordinate(cell.X, cell.Y), cell);
-
-        foreach (var (coordinate, contributions) in MountainContributions(scene, metrics))
         {
-            RequireOneAssetPerElevation(coordinate, contributions);
-
-            var top = contributions[^1].ElevationMeters;
-            if (terrain.TryGetValue(coordinate, out var painted)
-                && painted.ElevationMeters > top)
-            {
-                continue;
-            }
-            terrain[coordinate] = new TerrainCellDocument
-            {
-                X = coordinate.X,
-                Y = coordinate.Y,
-                AssetKey = contributions
-                    .First(value => value.ElevationMeters == top)
-                    .AssetKey,
-                ElevationMeters = top,
-            };
+            terrain.Add(
+                raised.TryGetValue(new TerrainCellCoordinate(cell.X, cell.Y), out var top)
+                && top > cell.ElevationMeters
+                    ? cell with { ElevationMeters = top }
+                    : cell);
         }
-
-        return terrain
-            .OrderBy(static value => value.Key.Y)
-            .ThenBy(static value => value.Key.X)
-            .Select(static value => value.Value)
-            .ToList();
+        return terrain;
     }
 
     /// <summary>
-    /// Every mountain contribution each covered cell receives, cells in
-    /// canonical order and each cell's contributions ordered by elevation and
-    /// then by body ID. Both orders are derived from the contributions
-    /// themselves rather than from how the bodies were reached, which is what
-    /// makes the checks below answer the same way every time.
+    /// The painted cells this one body is currently responsible for lifting:
+    /// those where its top stands strictly above the painted height and above
+    /// every other body over them. Each is returned as the cell would look with
+    /// the body in place, Asset included, so a caller never has to look the
+    /// material up a second time.
+    ///
+    /// <para>One definition, read in both directions. For a body that is not in
+    /// the Scene yet it answers what placing it would raise; for one that is, it
+    /// answers what removing it would lower, because bodies are told apart by
+    /// ID and a body is never compared against itself. Ties fall out correctly
+    /// on their own: two bodies at one height each raise nothing over the other,
+    /// and removing either leaves the height where it is.</para>
     /// </summary>
-    private static List<(TerrainCellCoordinate Coordinate, List<MountainContribution> Contributions)>
-        MountainContributions(SceneDocument scene, WorkspaceMetrics metrics)
+    public static IReadOnlyList<TerrainCellDocument> CellsRaisedBy(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        MountainBodyDocument body)
     {
-        Dictionary<TerrainCellCoordinate, List<MountainContribution>> cells = [];
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentNullException.ThrowIfNull(body);
+
+        Dictionary<TerrainCellCoordinate, TerrainCellDocument> painted = [];
+        foreach (var cell in scene.TerrainCells)
+            painted[new TerrainCellCoordinate(cell.X, cell.Y)] = cell;
+
+        var others = RaisedTops(scene, metrics, exceptBodyId: body.MountainBodyId);
+
+        List<TerrainCellDocument> raised = [];
+        foreach (var coordinate in TerrainCells(scene, metrics, body))
+        {
+            if (!painted.TryGetValue(coordinate, out var cell)) continue;
+            var beneath = others.TryGetValue(coordinate, out var other) && other > cell.ElevationMeters
+                ? other
+                : cell.ElevationMeters;
+            if (body.ElevationMeters <= beneath) continue;
+            raised.Add(cell with { ElevationMeters = body.ElevationMeters });
+        }
+        return raised;
+    }
+
+    /// <summary>
+    /// The highest mountain top over each covered coordinate. Walks every body,
+    /// which is where each contour is flattened and checked.
+    /// </summary>
+    private static Dictionary<TerrainCellCoordinate, decimal> RaisedTops(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        string? exceptBodyId = null)
+    {
+        Dictionary<TerrainCellCoordinate, decimal> raised = [];
         foreach (var body in scene.MountainBodies)
         {
-            var contribution = new MountainContribution(
-                body.MountainBodyId,
-                body.AssetKey,
-                body.ElevationMeters);
+            if (exceptBodyId is not null
+                && string.Equals(body.MountainBodyId, exceptBodyId, StringComparison.Ordinal))
+            {
+                continue;
+            }
             foreach (var coordinate in TerrainCells(scene, metrics, body))
             {
-                if (!cells.TryGetValue(coordinate, out var found))
-                    cells[coordinate] = found = [];
-                found.Add(contribution);
+                if (!raised.TryGetValue(coordinate, out var top) || body.ElevationMeters > top)
+                    raised[coordinate] = body.ElevationMeters;
             }
         }
-
-        return cells
-            .OrderBy(static entry => entry.Key.Y)
-            .ThenBy(static entry => entry.Key.X)
-            .Select(static entry => (
-                Coordinate: entry.Key,
-                Contributions: entry.Value
-                    .OrderBy(static value => value.ElevationMeters)
-                    .ThenBy(static value => value.MountainBodyId, StringComparer.Ordinal)
-                    .ToList()))
-            .ToList();
-    }
-
-    /// <summary>
-    /// One elevation over one cell presents one surface. Two bodies tying there
-    /// with different Assets leave geometry no winner, so the Scene is refused
-    /// rather than resolved by an arbitrary rule. The contributions arrive
-    /// sorted, so which pair the message names is a fact about the Scene and not
-    /// about the order its bodies were authored in.
-    /// </summary>
-    private static void RequireOneAssetPerElevation(
-        TerrainCellCoordinate coordinate,
-        IReadOnlyList<MountainContribution> contributions)
-    {
-        var first = 0;
-        for (var index = 1; index < contributions.Count; index++)
-        {
-            var current = contributions[index];
-            var reference = contributions[first];
-            if (current.ElevationMeters != reference.ElevationMeters)
-            {
-                first = index;
-                continue;
-            }
-            if (string.Equals(current.AssetKey, reference.AssetKey, StringComparison.Ordinal))
-                continue;
-
-            throw new SceneMakerDocumentException(
-                FormattableString.Invariant(
-                    $"Mountain bodies '{reference.MountainBodyId}' and '{current.MountainBodyId}' overlap at Terrain cell ({coordinate.X}, {coordinate.Y}) on the same elevation {current.ElevationMeters:0.###} m with different Assets."));
-        }
+        return raised;
     }
 
     private static BezierChainPoint ToChainPoint(MountainCurvePointDocument point) => new(
@@ -169,10 +155,4 @@ public static class MountainGeometry
         ClosedChainDefectKind.SelfIntersecting => "in contact with itself",
         _ => throw new InvalidOperationException($"Unknown contour defect '{kind}'."),
     };
-
-    /// <summary>What one mountain body offers one cell.</summary>
-    private readonly record struct MountainContribution(
-        string MountainBodyId,
-        string AssetKey,
-        decimal ElevationMeters);
 }

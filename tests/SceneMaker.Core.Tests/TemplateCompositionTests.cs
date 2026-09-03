@@ -277,6 +277,50 @@ public sealed class TemplateCompositionTests
         Assert.DoesNotContain(composed.TerrainCells, cell => cell is { X: 0, Y: 0 });
     }
 
+    /// <summary>
+    /// The base Scene is folded before the Templates replace anything, and the
+    /// bodies do not survive into the composed Scene. A Template therefore
+    /// brings its own heights into a hole a mountain made and is not lifted
+    /// again afterwards - the replacement is the last word on the cells it
+    /// covers.
+    /// </summary>
+    [Fact]
+    public void TemplateCellsAreNotRaisedAgainByTheBaseScenesMountains()
+    {
+        using var workspace = TestWorkspace.Create();
+        var baseScene = MountainEditing.Place(
+            TestScenes.Instance(workspace),
+            workspace.Metrics,
+            [
+                MountainEditing.Point(32, 32),
+                MountainEditing.Point(160, 32),
+                MountainEditing.Point(160, 160),
+                MountainEditing.Point(32, 160),
+            ],
+            10.0m);
+        baseScene = WithAnchor(baseScene, workspace, 64, 64);
+        var templates = new[] { TestScenes.Template(workspace, "tpl_a", 1) };
+
+        var composed = Compose(baseScene, templates, workspace, seed: 3UL).ComposedScene;
+
+        Assert.Empty(composed.MountainBodies);
+        // Inside the mask: the Template's own sand at the Template's own height.
+        Assert.All(
+            composed.TerrainCells.Where(static cell =>
+                cell.X is 2 or 3 && cell.Y is 2 or 3),
+            static cell =>
+            {
+                Assert.Equal("sand", cell.AssetKey);
+                Assert.Equal(1.0m, cell.ElevationMeters);
+            });
+        // Outside it, the fold that happened first still stands.
+        Assert.Equal(
+            10.0m,
+            composed.TerrainCells.Single(static cell => cell is { X: 1, Y: 1 }).ElevationMeters);
+        Assert.Equal(12, composed.TerrainCells.Count(static cell => cell.ElevationMeters == 10.0m));
+        Assert.Equal(36, composed.TerrainCells.Count);
+    }
+
     private static TemplateCompositionResult Compose(
         SceneDocument baseScene,
         IEnumerable<SceneDocument> workspaceScenes,

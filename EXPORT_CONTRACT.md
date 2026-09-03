@@ -14,7 +14,7 @@ guarantee that every Prop footprint is covered by Terrain is withdrawn. The JSON
 is byte-for-byte the same shape, which is exactly why the version had to move —
 a reader that relied on the old promise cannot tell the two apart by looking.
 
-The authored Scene currently has its own schema 11. It is deliberately newer
+The authored Scene currently has its own schema 12. It is deliberately newer
 than the embedded Scene: mountain contours are editor source, folded into the
 ordinary `terrain_cells` below and omitted from export. The embedded version
 therefore stays 10 and the strict runtime shape does not change merely because
@@ -385,9 +385,11 @@ treat a violation as a corrupt file rather than a case to handle:
   Asset has none.
 - Every Terrain cell and every Prop carries `elevation_meters`. There is no
   cell without a height and no Prop without one.
-- Authored mountain contours never appear in this file. Their covered cells are
-  folded into `scene.terrain_cells`: the highest absolute top wins, and its
-  Terrain Asset supplies the cell's `asset_key`.
+- Authored mountain contours never appear in this file. They are folded into
+  `scene.terrain_cells` as height alone: a covered cell keeps the `asset_key`
+  the author painted, and its `elevation_meters` becomes the highest absolute
+  top over it. A mountain carries no material and creates no cell, so a contour
+  over a coordinate with no painted Terrain exports nothing there.
 - A `scene_id` names one Scene in the whole Workspace — never an Instance and a
   Template at once — and it does not change over the life of that Scene. The
   editor refuses to create a second Scene under an existing id, and an export

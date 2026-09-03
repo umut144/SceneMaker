@@ -48,7 +48,7 @@ Die Navigation ist zweistufig, wie bei den übrigen Bereichen auch:
 Übersicht:  [ Terrain ]  [ Landscape ]  [ Props ]  [ Scene Templates ]  [ Map ]
                               │
                               ▼
-Kontext:    [ ← ]  Landscape ›  ( River )  ( Mountain )    Terrain ›  ( Grass ) ( Sand )
+Kontext:    [ ← ]  Landscape ›  ( River )  ( Mountain )
 ```
 
 `Landscape` ist der Weg hinein, kein Ort: ein Klick öffnet die Kontextleiste und
@@ -66,22 +66,25 @@ Surface-Token — aber gefragt wird es jetzt von der Assetleiste:
 | --- | --- | --- |
 | `Terrain` | `Pencil`, `Line`, `Terrain Fill` | `authoring: "cells"` |
 | `River` | `Draw River` | `authoring: "curve"` |
-| `Mountain` | `Draw Mountain` | `authoring: "cells"` |
+| `Mountain` | `Draw Mountain` | — |
 | `Props` | `Selector`, `Pencil`, `Line` | — |
 | `Templates` | `Selector`, `Anchor Move` | — |
 
-Mountain und Terrain bieten dieselben Assets an, und das ist richtig: ein
-Bergkörper *trägt* ein zellen-authoriertes Terrain-Asset als Oberfläche. Der
-Unterschied liegt in der Geometrie, nicht im Material. Jeder Bereich merkt sich
-sein zuletzt gewähltes Asset getrennt — auch Terrain und Mountain, damit man den
-Pinsel dort wiederfindet, wo man ihn abgelegt hat.
+`Mountain` bietet keine Assets an, weil ein Bergkörper keines trägt: er
+bestimmt Form und Höhe, das Material bleibt Sache des gemalten Terrains. Wer
+die Oberfläche eines Berges ändern will, malt sie im Bereich `Terrain` — dort
+etwa Sand über das Grass des Bergrückens. Jeder Bereich merkt sich sein zuletzt
+gewähltes Asset getrennt, damit man den Pinsel dort wiederfindet, wo man ihn
+abgelegt hat.
 
 Beim Betreten eines Bereichs bleibt das gemerkte Asset, wenn es zum Bereich
 passt; sonst wird das erste passende gewählt. Bietet ein Workspace für einen
 Bereich gar kein passendes Asset an, bleibt der Bereich erreichbar, sein
 Zeichenwerkzeug ist aber deaktiviert und die Statuszeile sagt, welcher Assettyp
 fehlt. Ein inkompatibles Asset wird nie gewählt, und ein toter aktiver
-Zeichenknopf wird nie angeboten.
+Zeichenknopf wird nie angeboten. Das gilt nur für Bereiche, die überhaupt ein
+Material brauchen: `Mountain` bietet keines an und ist deshalb nie aus diesem
+Grund deaktiviert.
 
 Ein Assetwechsel **innerhalb** eines Bereichs wechselt nur das Material: die
 Geometrie eines laufenden Entwurfs bleibt stehen, und kein Werkzeug wird unter
@@ -190,7 +193,7 @@ Klick, statt es beim Speichern scheitern zu lassen.
 
 ### Mountain:Draw Mountain
 
-`Draw Mountain` steht für zellen-authorierte Terrain-Assets bereit. Jeder Klick
+`Draw Mountain` braucht kein Asset und ist deshalb immer verfügbar. Jeder Klick
 setzt einen Konturpunkt auf das Terrainraster; `Point` schaltet wie beim Fluss
 zwischen geraden Kanten und `Aligned`-Bezierpunkten. Die Kontur ist zyklisch:
 auch der erste und der letzte Punkt sind Nachbarn, und automatische Handles
@@ -202,15 +205,23 @@ Was passiert, wenn ich jetzt Enter drücke?
 - **Unfertig** — cyan, nur Umriss und Punkte, keine Füllung. Es sind noch keine
   drei Punkte gesetzt. Das ist kein Fehler, sondern der normale Zustand einer
   Kontur, die gerade entsteht; die Statuszeile sagt, was noch fehlt.
-- **Bereit** — gelber Umriss und die abgeleiteten Terrainzellen in der
-  Assetfarbe. Enter würde diesen Bergkörper tatsächlich anlegen. Gelb ist eine
-  Zusage: geprüft sind das gewählte Asset, die Höhe auf dem Workspace-Quantum,
-  die Kontur selbst und die Faltung mit den vorhandenen Bergen.
+- **Bereit** — gelber Umriss und genau die Terrainzellen, die dieser Berg
+  anheben würde, jede in der Farbe des dort gemalten Assets. Der Berg färbt
+  nichts um: eine Kontur über Sand und Grass zeigt Sand und Grass. Gezeigt wird
+  der Unterschied, den Enter macht, nicht die überdeckte Fläche — unbemalte
+  Zellen und Zellen, die ein höherer Berg schon hält, bleiben leer. Gelb ist
+  eine Zusage: geprüft sind die Höhe auf dem Workspace-Quantum, die Kontur
+  selbst und die Faltung mit den vorhandenen Bergen.
 - **Blockiert** — roter Umriss, keine Füllung. Enter würde scheitern, und der
-  Grund steht in der Vorschau und in der Statuszeile. Das gilt nicht nur für
-  Selbstkontakt oder eine Kontur ohne Fläche: auch eine geometrisch tadellose
-  Kontur ist blockiert, wenn sie mit einem vorhandenen Berg auf derselben Höhe
-  unter einem anderen Asset kollidiert.
+  Grund steht in der Vorschau und in der Statuszeile. Blockiert ist eine Frage
+  der Geometrie und der Höhe: Selbstkontakt, eine Kontur ohne Fläche, eine Höhe
+  außerhalb des Quantums.
+
+Eine gültige Kontur, die nichts anhebt, ist **nicht** blockiert. Sie bleibt
+bereit, ihre Füllung ist leer, und Vorschau wie Statuszeile sagen es aus:
+`Mountain is valid but currently raises no Terrain cells.` So bleibt die
+Reihenfolge „erst Kontur, dann Terrain" möglich, ohne dass eine leere Vorschau
+wie ein kaputtes Werkzeug aussieht.
 
 Vorschau und Enter fragen dieselbe Core-Operation, nicht zwei ähnliche. Eine
 gelbe Kontur kann deshalb nicht abgelehnt und eine rote nicht angenommen werden,
@@ -220,23 +231,27 @@ Das `Height`-Feld ist die absolute Oberkante des ganzen Bergkörpers. Ein fertig
 Berg ist ein Bearbeitungsschritt.
 
 Mit eingeschaltetem `Eraser` hebt schon das Überfahren den **ganzen** Bergkörper
-hervor, den ein Klick entfernen würde: alle seine abgeleiteten Terrainzellen in
-der Löschfarbe, nicht nur die Zelle unter dem Zeiger. Getroffen wird über die
-Terrainzelle unter dem Zeiger, nicht über die mathematische Zeigerposition —
-sonst könnten an einer Randzelle die gefüllte Zelle und der getroffene Körper um
-eine halbe Zelle auseinanderliegen. Liegen mehrere Berge übereinander, gewinnt
-der höchste sichtbare; ein Klick entfernt genau diesen einen ganzen Körper.
+hervor, den ein Klick entfernen würde: seine Kontur plus alle Terrainzellen, die
+er gerade anhebt, in der Löschfarbe — nicht nur die Zelle unter dem Zeiger, aber
+auch nicht jede überdeckte Zelle. Gezeigt wird, was tatsächlich absinkt; eine
+Zelle, die ein anderer Berg höher hält oder die niemand gemalt hat, sinkt nicht.
+Deshalb bleibt die Kontur auch dann sichtbar, wenn der Körper nichts anhebt.
+Getroffen wird über die Terrainzelle unter dem Zeiger, nicht über die
+mathematische Zeigerposition — sonst könnten an einer Randzelle die gefüllte
+Zelle und der getroffene Körper um eine halbe Zelle auseinanderliegen. Liegen
+mehrere Berge übereinander, gewinnt der höchste sichtbare; ein Klick entfernt
+genau diesen einen ganzen Körper.
 
 ### Fertige Bergkörper auf dem Canvas
 
 Jeder gespeicherte Bergkörper trägt eine dauerhaft sichtbare geschlossene
 Kontur in einer eigenen Farbe. Die Fläche bleibt, was die Faltung ergibt — das
-Terrain-Asset in seiner eigenen Farbe —, damit das Oberflächenmaterial lesbar
-bleibt; die Kontur sagt, **wo ein Körper aufhört**, und genau das können
-gefaltete Zellen nicht: zwei Berge desselben Assets sind ohne sie eine einzige
-Fläche. Die Höhenansicht war bisher der einzige Weg, ihre Grenzen zu erraten;
-sie bleibt eine Höhenanalyse und ist dafür nicht mehr nötig, weshalb die Kontur
-unabhängig davon gezeichnet wird, ob die Ansicht an ist.
+gemalte Terrain-Asset in seiner eigenen Farbe —, damit das Oberflächenmaterial
+lesbar bleibt; die Kontur sagt, **wo ein Körper aufhört**, und genau das können
+gefaltete Zellen nicht: zwei Berge über demselben gemalten Asset sind ohne sie
+eine einzige Fläche. Die Höhenansicht war bisher der einzige Weg, ihre Grenzen
+zu erraten; sie bleibt eine Höhenanalyse und ist dafür nicht mehr nötig, weshalb
+die Kontur unabhängig davon gezeichnet wird, ob die Ansicht an ist.
 
 Die Farbe stammt aus einer kleinen festen Editorpalette und wird stabil aus der
 `mountain_body_id` abgeleitet: aufeinanderfolgend gezeichnete Berge bekommen

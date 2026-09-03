@@ -224,8 +224,6 @@ public static partial class DocumentValidation
             previousBodyId = body.MountainBodyId;
 
             var label = $"Mountain body '{body.MountainBodyId}'";
-            if (string.IsNullOrWhiteSpace(body.AssetKey))
-                throw new SceneMakerDocumentException($"{label} requires an asset_key.");
             if (body.Points is null || body.Points.Count < 2)
             {
                 throw new SceneMakerDocumentException(

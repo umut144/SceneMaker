@@ -884,7 +884,6 @@ public sealed partial class SceneCanvas : Control
         float zoom,
         int sceneHeightAuthoringPixels)
     {
-        if (_terrainAssets is null) return;
         if (EraserEnabled)
         {
             DrawMountainEraserPreview(document, pan, zoom);
@@ -894,11 +893,9 @@ public sealed partial class SceneCanvas : Control
         var preview = ToolPreviewBuilder.BuildMountainDraft(
             document,
             _metrics!,
-            _terrainAssets,
             ActiveTool,
             _interaction.MountainDraft,
             _interaction.MountainPendingPoint,
-            SelectedTerrainAssetKey,
             ElevationMeters);
         if (preview.Points.Count == 0) return;
 
@@ -910,19 +907,18 @@ public sealed partial class SceneCanvas : Control
             MountainDraftKind.Blocked => InvalidPreviewColor,
             _ => DraftPreviewColor,
         };
-        var fill = SelectedTerrainAssetKey is { } assetKey
-            && _terrainColors.TryGetValue(assetKey, out var assetColor)
+        // Each raised cell in the colour of the Asset it already carries, which
+        // the preview hands over with it. A contour across a sand and grass
+        // boundary therefore previews as sand and grass, because that is what
+        // the mountain would lift: the height, not the material.
+        var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
+        foreach (var cell in preview.RaisedCells)
+        {
+            var fill = _terrainColors.TryGetValue(cell.AssetKey, out var assetColor)
                 ? assetColor
                 : outlineColor;
-        var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
-        foreach (var cell in preview.Cells)
-        {
             DrawRect(
-                new Rect2(
-                    pan + new Vector2(
-                        cell.X * cellSize,
-                        (document.SizeCells.Height - cell.Y - 1) * cellSize),
-                    new Vector2(cellSize, cellSize)),
+                CellRectangle(document, cell.X, cell.Y, pan, cellSize),
                 new Color(fill.R, fill.G, fill.B, 0.55f));
         }
 
@@ -956,8 +952,11 @@ public sealed partial class SceneCanvas : Control
     }
 
     /// <summary>
-    /// The whole body a click would remove, in the erase colour. Marking only
-    /// the cell under the pointer would say that one cell goes, and a mountain
+    /// What a click would remove, said in two marks because it is two things.
+    /// The contour in the erase colour is the body itself, all of it, including
+    /// the part standing over unpainted ground; the filled cells are the painted
+    /// Terrain whose height this body is holding up, and only those drop.
+    /// Marking one cell under the pointer would say a cell goes, and a mountain
     /// is erased whole.
     /// </summary>
     private void DrawMountainEraserPreview(SceneDocument document, Vector2 pan, float zoom)
@@ -968,16 +967,12 @@ public sealed partial class SceneCanvas : Control
             ActiveTool,
             EraserEnabled,
             _interaction.PointerCell);
-        if (preview.Cells.Count == 0) return;
+        if (preview.MountainBodyId is not { } bodyId) return;
 
         var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
-        foreach (var cell in preview.Cells)
+        foreach (var cell in preview.LoweredCells)
         {
-            var rectangle = new Rect2(
-                pan + new Vector2(
-                    cell.X * cellSize,
-                    (document.SizeCells.Height - cell.Y - 1) * cellSize),
-                new Vector2(cellSize, cellSize));
+            var rectangle = CellRectangle(document, cell.X, cell.Y, pan, cellSize);
             DrawRect(
                 rectangle,
                 new Color(
@@ -987,7 +982,36 @@ public sealed partial class SceneCanvas : Control
                     0.35f));
             DrawRect(rectangle, InvalidPreviewColor, filled: false, width: 2f);
         }
+
+        // The outline the canvas already derived for every body, picked out by
+        // ID rather than flattened again.
+        var outline = _mountainOutlines.For(document)
+            .FirstOrDefault(candidate => string.Equals(
+                candidate.MountainBodyId, bodyId, StringComparison.Ordinal));
+        if (outline is null || outline.Points.Count < 2) return;
+
+        var sceneHeightAuthoringPixels = _metrics.SceneHeightAuthoringPixels(document);
+        var line = new Vector2[outline.Points.Count + 1];
+        for (var index = 0; index < outline.Points.Count; index++)
+        {
+            line[index] = pan + new Vector2(
+                (float)outline.Points[index].X * zoom,
+                (sceneHeightAuthoringPixels - (float)outline.Points[index].Y) * zoom);
+        }
+        line[^1] = line[0];
+        DrawPolyline(line, InvalidPreviewColor, 2.5f);
     }
+
+    /// <summary>One Terrain cell's rectangle on screen, y flipped to Godot's.</summary>
+    private static Rect2 CellRectangle(
+        SceneDocument document,
+        int cellX,
+        int cellY,
+        Vector2 pan,
+        float cellSize) =>
+        new(
+            pan + new Vector2(cellX * cellSize, (document.SizeCells.Height - cellY - 1) * cellSize),
+            new Vector2(cellSize, cellSize));
 
     private void DrawHandle(
         Vector2 centre,

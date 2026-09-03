@@ -12,19 +12,20 @@ public readonly record struct MountainDraftPoint(
 /// <summary>Pure edits for closed, level-topped mountain bodies.</summary>
 public static class MountainEditing
 {
+    /// <summary>
+    /// Authors one closed contour at one absolute top. No Asset is asked for: a
+    /// mountain raises painted Terrain and the painted cell keeps saying what
+    /// the surface is made of.
+    /// </summary>
     public static SceneDocument Place(
         SceneDocument scene,
         WorkspaceMetrics metrics,
-        TerrainDisplayCatalog terrainAssets,
         IReadOnlyList<MountainCurvePointDocument> points,
-        string assetKey,
         decimal elevationMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
-        ArgumentNullException.ThrowIfNull(terrainAssets);
         ArgumentNullException.ThrowIfNull(points);
-        _ = RequireDrawable(terrainAssets, assetKey);
         if (!metrics.IsElevationAligned(elevationMeters))
         {
             throw new SceneMakerDocumentException(
@@ -35,7 +36,6 @@ public static class MountainEditing
         var body = new MountainBodyDocument
         {
             MountainBodyId = NextMountainBodyId(scene),
-            AssetKey = assetKey,
             ElevationMeters = elevationMeters,
             Points = [.. points],
         };
@@ -103,9 +103,10 @@ public static class MountainEditing
 
     /// <summary>
     /// Everything that has to hold for a contour to become a mountain, asked
-    /// once and answered without throwing: the Asset is a cell-authored Terrain
-    /// Asset, the elevation sits on the Workspace quantum, the ring is a usable
-    /// contour, and the Scene it lands in still folds into one height field.
+    /// once and answered without throwing: the elevation sits on the Workspace
+    /// quantum and the ring is a usable contour. That is the whole list - a
+    /// mountain no longer brings a material that could disagree with anything
+    /// already in the Scene, so the fold has nothing left to refuse.
     ///
     /// <para>Both the preview and the key that commits it go through here. Two
     /// separate implementations of "would this work" is how a preview comes to
@@ -114,19 +115,13 @@ public static class MountainEditing
     public static MountainPlacement TryPlace(
         SceneDocument scene,
         WorkspaceMetrics metrics,
-        TerrainDisplayCatalog terrainAssets,
         IReadOnlyList<MountainCurvePointDocument> points,
-        string assetKey,
         decimal elevationMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
         try
         {
-            var placed = Place(scene, metrics, terrainAssets, points, assetKey, elevationMeters);
-            // The fold is part of the question: a contour that ties with an
-            // existing body at one elevation under a different Asset is refused
-            // there and nowhere earlier.
-            _ = MountainGeometry.EffectiveTerrainCells(placed, metrics);
+            var placed = Place(scene, metrics, points, elevationMeters);
             var authored = placed.MountainBodies.Single(candidate => !scene.MountainBodies.Any(
                 existing => string.Equals(
                     existing.MountainBodyId,
@@ -190,31 +185,6 @@ public static class MountainEditing
             ? AuthoringPixelOffset.Zero
             : handleOut ?? AuthoringPixelOffset.Zero,
     };
-
-    /// <summary>Checks every persisted mountain Asset at an IO boundary.</summary>
-    public static void ValidateAssetReferences(
-        SceneDocument scene,
-        TerrainDisplayCatalog terrainAssets)
-    {
-        ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(terrainAssets);
-        DocumentValidation.Validate(scene);
-        foreach (var body in scene.MountainBodies)
-            _ = RequireDrawable(terrainAssets, body.AssetKey);
-    }
-
-    private static TerrainDisplayAsset RequireDrawable(
-        TerrainDisplayCatalog terrainAssets,
-        string assetKey)
-    {
-        var asset = terrainAssets.Resolve(assetKey);
-        if (asset.Authoring != TerrainAuthoring.Cells)
-        {
-            throw new SceneMakerDocumentException(
-                $"Terrain Asset '{assetKey}' is authored as a curve and cannot surface a mountain body.");
-        }
-        return asset;
-    }
 
     private static AuthoringPixelOffset Orient(
         AuthoringPixelOffset handleOut,

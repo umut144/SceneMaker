@@ -53,16 +53,24 @@ public enum MountainDraftKind
 }
 
 /// <summary>
-/// The closed mountain contour being drawn. <see cref="Cells"/> is filled only
-/// for <see cref="MountainDraftKind.Ready"/>, because a fill is a picture of
-/// what the author would get and a blocked draft gets nothing;
-/// <see cref="Explanation"/> is set for everything but Ready.
+/// The closed mountain contour being drawn.
+///
+/// <para><see cref="RaisedCells"/> is the difference the commit would make, not
+/// the ground the contour covers: only painted cells whose visible height would
+/// actually rise. Each carries the Asset it already has, so whoever draws the
+/// fill paints the material that is really there and never works it out a second
+/// time. A contour over unpainted ground, over cells that already stand as high,
+/// or under a taller body raises nothing and fills nothing.</para>
+///
+/// <para><see cref="Explanation"/> carries the reason a draft is Incomplete or
+/// Blocked - and, on a Ready draft that raises nothing, the note that says so.
+/// </para>
 /// </summary>
 public sealed record MountainDraftPreview(
     IReadOnlyList<MountainDraftPoint> Points,
     IReadOnlyList<MountainCurvePointDocument> Curve,
     IReadOnlyList<ChainPoint> Outline,
-    IReadOnlyList<TerrainCellCoordinate> Cells,
+    IReadOnlyList<TerrainCellDocument> RaisedCells,
     MountainDraftKind Kind,
     string? Explanation)
 {
@@ -71,13 +79,18 @@ public sealed record MountainDraftPreview(
 }
 
 /// <summary>
-/// The whole mountain body the eraser would remove, and the Terrain cells it
-/// surfaces. Both come from the one picking function the erase itself uses, so
-/// what is highlighted and what disappears cannot be two different bodies.
+/// The mountain body the eraser would remove, and separately what removing it
+/// would change.
+///
+/// <para>The two are not the same and must not be drawn as if they were: the
+/// body is the whole contour, including the part of it over unpainted ground,
+/// while <see cref="LoweredCells"/> is only the painted cells whose height this
+/// body is currently holding up. The ID picks the contour out of the outlines
+/// the canvas already has; the cells say what actually drops.</para>
 /// </summary>
 public sealed record MountainEraserPreview(
     string? MountainBodyId,
-    IReadOnlyList<TerrainCellCoordinate> Cells)
+    IReadOnlyList<TerrainCellDocument> LoweredCells)
 {
     public static MountainEraserPreview Empty { get; } = new(null, []);
 }
@@ -228,33 +241,45 @@ public static class ToolPreviewBuilder
     /// </summary>
     public const string IncompleteMountainDraft = "a contour needs at least three points.";
 
-    /// <summary>Said when no Terrain Asset is chosen to give the contour a surface.</summary>
-    public const string NoTerrainAsset = "choose a Terrain asset first.";
+    /// <summary>
+    /// Said about a contour that is perfectly authorable and would, right now,
+    /// lift nothing: it covers no painted Terrain, or none that is not already
+    /// standing at least as high. The body is still worth authoring - painting
+    /// under it later puts it to work.
+    /// </summary>
+    /// <summary>
+    /// The clause that says a mountain is doing nothing yet, in two shapes: one
+    /// to append to a sentence that already named the body, and one that stands
+    /// on its own as the draft's explanation. Both say the same thing, so a
+    /// reader who saw one recognises the other.
+    /// </summary>
+    public const string RaisesNoTerrain = "currently raises no Terrain cells.";
+
+    public const string ValidButRaisesNoTerrain =
+        "Mountain is valid but " + RaisesNoTerrain;
 
     /// <summary>
     /// What the mountain draft would author, and whether Enter would take it.
     ///
     /// <para>Ready means the whole attempt has already been made against this
-    /// Scene, Asset and height and succeeded - the Asset is drawable, the height
-    /// sits on the Workspace quantum, the ring is a usable contour, and the fold
-    /// has no tie it cannot settle. Anything the commit would refuse is Blocked
-    /// here with the same sentence, because both ask
+    /// Scene and height and succeeded - the height sits on the Workspace
+    /// quantum and the ring is a usable contour. Anything the commit would
+    /// refuse is Blocked here with the same sentence, because both ask
     /// <see cref="MountainEditing.TryPlace"/> and neither decides anything of
-    /// its own.</para>
+    /// its own. A Ready contour that would lift nothing stays Ready and says so:
+    /// it is authorable, and refusing it would refuse a body the author means to
+    /// paint under later.</para>
     /// </summary>
     public static MountainDraftPreview BuildMountainDraft(
         SceneDocument scene,
         WorkspaceMetrics metrics,
-        TerrainDisplayCatalog terrainAssets,
         EditorTool tool,
         IReadOnlyList<MountainDraftPoint> draft,
         MountainDraftPoint? pending,
-        string? selectedTerrainAssetKey,
         decimal elevationMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
-        ArgumentNullException.ThrowIfNull(terrainAssets);
         ArgumentNullException.ThrowIfNull(draft);
         if (tool != EditorTool.DrawMountain) return MountainDraftPreview.Empty;
 
@@ -278,32 +303,27 @@ public static class ToolPreviewBuilder
         var outline = MountainGeometry.Flatten(new MountainBodyDocument
         {
             MountainBodyId = "mountain_preview",
-            AssetKey = "preview",
             ElevationMeters = 0m,
             Points = [.. curve],
         }).Points;
 
-        if (selectedTerrainAssetKey is not { } assetKey)
-        {
-            return new MountainDraftPreview(
-                points, curve, outline, [], MountainDraftKind.Blocked, NoTerrainAsset);
-        }
-
-        var placement = MountainEditing.TryPlace(
-            scene, metrics, terrainAssets, curve, assetKey, elevationMeters);
-        if (placement is not { Scene: { } placed, Body: { } body })
+        var placement = MountainEditing.TryPlace(scene, metrics, curve, elevationMeters);
+        if (placement is not { Body: { } body })
         {
             return new MountainDraftPreview(
                 points, curve, outline, [], MountainDraftKind.Blocked, placement.Reason);
         }
 
+        // Asked of the Scene the body is not in yet, which is what makes this
+        // the difference the commit would make rather than the ground it covers.
+        var raised = MountainGeometry.CellsRaisedBy(scene, metrics, body);
         return new MountainDraftPreview(
             points,
             curve,
             outline,
-            MountainGeometry.TerrainCells(placed, metrics, body),
+            raised,
             MountainDraftKind.Ready,
-            Explanation: null);
+            raised.Count == 0 ? ValidButRaisesNoTerrain : null);
     }
 
     /// <summary>
@@ -325,9 +345,11 @@ public static class ToolPreviewBuilder
         if (MountainEditing.FindAtCell(scene, metrics, cell) is not { } body)
             return MountainEraserPreview.Empty;
 
+        // The body is in the Scene, so this reads the other direction of the
+        // same question: what it is holding up, and therefore what drops.
         return new MountainEraserPreview(
             body.MountainBodyId,
-            MountainGeometry.TerrainCells(scene, metrics, body));
+            MountainGeometry.CellsRaisedBy(scene, metrics, body));
     }
 
     public static int CountOf(IReadOnlyList<PropPreview> previews, PropPreviewKind kind)

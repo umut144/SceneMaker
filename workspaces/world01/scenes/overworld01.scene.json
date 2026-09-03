@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 11,
+  "version": 12,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60078,7 +60078,6 @@
   "mountain_bodies": [
     {
       "mountain_body_id": "mountain_0001",
-      "asset_key": "grass",
       "elevation_meters": 10.000,
       "points": [
         {

@@ -37,9 +37,8 @@ public sealed class EditorInteractionStateTests
     }
 
     /// <summary>
-    /// Terrain and Mountain offer the same Assets and are still two choices:
-    /// leaving one to draw a mountain and coming back should find the brush
-    /// where it was left.
+    /// Each area keeps its own brush: leaving one and coming back should find
+    /// it where it was left.
     /// </summary>
     [Fact]
     public void EveryAreaRemembersItsOwnTerrainAsset()
@@ -52,16 +51,30 @@ public sealed class EditorInteractionStateTests
         Assert.Null(state.SelectedTerrainAssetKey);
         state.SelectTerrainAsset("river");
 
-        state.SelectMode(EditorMode.Mountain);
+        state.SelectMode(EditorMode.Props);
         Assert.Null(state.SelectedTerrainAssetKey);
-        state.SelectTerrainAsset("sand");
 
         state.SelectMode(EditorMode.Terrain);
         Assert.Equal("grass", state.SelectedTerrainAssetKey);
         state.SelectMode(EditorMode.River);
         Assert.Equal("river", state.SelectedTerrainAssetKey);
+    }
+
+    /// <summary>
+    /// Mountain is an area that draws and still holds no Asset: the contour
+    /// says where and how high, the painted Terrain says what of.
+    /// </summary>
+    [Fact]
+    public void TheMountainAreaHoldsNoTerrainAsset()
+    {
+        using var workspace = TestWorkspace.Create();
+        var state = new EditorInteractionState();
         state.SelectMode(EditorMode.Mountain);
-        Assert.Equal("sand", state.SelectedTerrainAssetKey);
+
+        Assert.Null(state.SelectedTerrainAssetKey);
+        Assert.Empty(TerrainAreaAssets.Offered(EditorMode.Mountain, workspace.Terrain));
+        Assert.Null(
+            TerrainAreaAssets.Choose(EditorMode.Mountain, workspace.Terrain, remembered: "grass"));
     }
 
     [Fact]
@@ -81,9 +94,7 @@ public sealed class EditorInteractionStateTests
         Assert.All(
             TerrainAreaAssets.Offered(EditorMode.Terrain, workspace.Terrain),
             asset => Assert.Equal(TerrainAuthoring.Cells, asset.Authoring));
-        Assert.All(
-            TerrainAreaAssets.Offered(EditorMode.Mountain, workspace.Terrain),
-            asset => Assert.Equal(TerrainAuthoring.Cells, asset.Authoring));
+        Assert.Empty(TerrainAreaAssets.Offered(EditorMode.Mountain, workspace.Terrain));
         Assert.Equal(
             ["river"],
             TerrainAreaAssets.Offered(EditorMode.River, workspace.Terrain)
@@ -114,9 +125,6 @@ public sealed class EditorInteractionStateTests
         Assert.Equal(
             "river",
             TerrainAreaAssets.Choose(EditorMode.River, workspace.Terrain, "grass"));
-        Assert.Equal(
-            offeredByTerrain,
-            TerrainAreaAssets.Choose(EditorMode.Mountain, workspace.Terrain, remembered: null));
         Assert.Null(TerrainAreaAssets.Choose(EditorMode.Props, workspace.Terrain, "grass"));
     }
 

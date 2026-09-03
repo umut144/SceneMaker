@@ -263,7 +263,6 @@ public static class SceneExport
     {
         DocumentValidation.ValidateGrid(scene, configuration.Metrics);
         TerrainEditing.ValidateAssetReferences(scene, terrainAssets);
-        MountainEditing.ValidateAssetReferences(scene, terrainAssets);
         PropEditing.ValidateAssetReferences(scene, propAssets);
         WaterEditing.ValidateAssetReferences(scene, terrainAssets);
     }

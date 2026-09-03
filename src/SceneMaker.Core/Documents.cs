@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 11;
+    public const int SceneVersion = 12;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -99,14 +99,18 @@ public sealed record MountainCurvePointDocument
 }
 
 /// <summary>
-/// One level-topped solid Terrain region. The contour is authored truth and
+/// One level-topped region of raised Terrain. The contour is authored truth and
 /// its covered cells are derived; keeping it lets the outline be edited and a
 /// later route generator follow the actual mountain instead of a baked raster.
+///
+/// <para>It holds a shape and a height and no material. What the raised surface
+/// is made of is the painted Terrain cell's own Asset, which is why a contour
+/// over unpainted ground raises nothing and why repainting underneath changes
+/// what the mountain shows.</para>
 /// </summary>
 public sealed record MountainBodyDocument
 {
     public required string MountainBodyId { get; init; }
-    public required string AssetKey { get; init; }
 
     /// <summary>The absolute top of the solid column inside the contour.</summary>
     public required decimal ElevationMeters { get; init; }

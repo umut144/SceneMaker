@@ -119,11 +119,9 @@ public sealed class PropEditingTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = MountainEditing.Place(
-            TestScenes.EmptyInstance(),
+            TestScenes.Instance(workspace),
             workspace.Metrics,
-            workspace.Terrain,
             Square(32, 32, 160, 160),
-            "grass",
             10.0m);
         scene = PropEditing.Place(scene, workspace.Props, 64, 64, "stone", 10.0m);
 

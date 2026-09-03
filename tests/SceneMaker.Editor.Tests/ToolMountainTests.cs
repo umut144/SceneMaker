@@ -28,7 +28,6 @@ public sealed class ToolMountainTests
 
         var body = Assert.Single(edit.Apply(scene).MountainBodies);
         Assert.Equal("mountain_0001", body.MountainBodyId);
-        Assert.Equal("grass", body.AssetKey);
         Assert.Equal(4.0m, body.ElevationMeters);
         Assert.Equal(3, body.Points.Count);
         Assert.Empty(interaction.MountainDraft);
@@ -89,13 +88,13 @@ public sealed class ToolMountainTests
 
         Assert.Equal(MountainDraftKind.Incomplete, preview.Kind);
         Assert.Equal(ToolPreviewBuilder.IncompleteMountainDraft, preview.Explanation);
-        Assert.Empty(preview.Cells);
+        Assert.Empty(preview.RaisedCells);
         Assert.Empty(preview.Outline);
         Assert.Equal(2, preview.Points.Count);
     }
 
     [Fact]
-    public void AClosedContourWithAnAssetAndAHeightIsReady()
+    public void AClosedContourOverPaintedTerrainIsReady()
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
@@ -109,8 +108,89 @@ public sealed class ToolMountainTests
 
         Assert.Equal(MountainDraftKind.Ready, preview.Kind);
         Assert.Null(preview.Explanation);
-        Assert.NotEmpty(preview.Cells);
+        Assert.NotEmpty(preview.RaisedCells);
         Assert.NotEmpty(preview.Outline);
+    }
+
+    /// <summary>
+    /// The preview shows the difference the commit would make, in the material
+    /// that is already there. A contour over sand and grass previews sand and
+    /// grass - the mountain brings no colour of its own.
+    /// </summary>
+    [Fact]
+    public void ThePreviewCarriesThePaintedMaterialOfEveryRaisedCell()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TerrainEditing.Paint(
+            TestScenes.Instance(workspace), workspace.Terrain, 2, 2, "sand");
+        var interaction = Mountain();
+        var context = Context(workspace, scene);
+
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+        Place(interaction, context, 160, 160);
+        Place(interaction, context, 32, 160);
+        var preview = interaction.MountainPreview(context);
+
+        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Equal(16, preview.RaisedCells.Count);
+        var sand = Assert.Single(preview.RaisedCells, static cell => cell.AssetKey == "sand");
+        Assert.Equal(new TerrainCellCoordinate(2, 2), new TerrainCellCoordinate(sand.X, sand.Y));
+        Assert.Equal(15, preview.RaisedCells.Count(static cell => cell.AssetKey == "grass"));
+        Assert.All(preview.RaisedCells, static cell => Assert.Equal(4.0m, cell.ElevationMeters));
+    }
+
+    /// <summary>
+    /// A contour over ground nobody painted is authorable and stays Ready. It
+    /// lifts nothing yet, and the preview says exactly that instead of showing
+    /// an empty fill and leaving the author to guess.
+    /// </summary>
+    [Fact]
+    public void AContourOverUnpaintedGroundIsReadyAndSaysItRaisesNothing()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.EmptyInstance();
+        var interaction = Mountain();
+        var context = Context(workspace, scene);
+
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+        interaction.PointerPressed(context, Point(96, 160), Cell(3, 5));
+        var closed = Assert.IsType<ToolOutcome.Message>(interaction.PointerReleased(context));
+        var preview = interaction.MountainPreview(context);
+
+        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Empty(preview.RaisedCells);
+        Assert.Equal(ToolPreviewBuilder.ValidButRaisesNoTerrain, preview.Explanation);
+        Assert.NotEmpty(preview.Outline);
+        // Said before Enter, on the input path that was already there.
+        Assert.Contains(ToolPreviewBuilder.RaisesNoTerrain, closed.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And Enter takes it. The body is saved, and the message says both things:
+    /// what was authored, and that it does nothing yet.
+    /// </summary>
+    [Fact]
+    public void EnterAuthorsAContourThatRaisesNothingAndSaysBoth()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.EmptyInstance();
+        var interaction = Mountain();
+        var context = Context(workspace, scene);
+
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+        Place(interaction, context, 96, 160);
+        var edit = Assert.IsType<ToolOutcome.Edit>(
+            interaction.KeyPressed(context, ToolKey.Enter));
+        var after = edit.Apply(scene);
+
+        Assert.Single(after.MountainBodies);
+        Assert.Equal(
+            "Authored mountain_0001 from 3 points · top 4 m; "
+                + ToolPreviewBuilder.RaisesNoTerrain,
+            edit.Describe!(scene, after));
     }
 
     [Fact]
@@ -134,25 +214,22 @@ public sealed class ToolMountainTests
         var preview = interaction.MountainPreview(context);
         Assert.Equal(MountainDraftKind.Blocked, preview.Kind);
         Assert.Contains("contact with itself", preview.Explanation!, StringComparison.Ordinal);
-        Assert.Empty(preview.Cells);
+        Assert.Empty(preview.RaisedCells);
         Assert.NotEmpty(preview.Outline);
     }
 
     /// <summary>
-    /// Yellow has to mean more than "the ring closes". This contour is perfectly
-    /// good geometry and still cannot be authored, because it would tie with an
-    /// existing body at one height under a different Asset.
+    /// A body already sitting there at the same height is no longer a reason to
+    /// refuse: the two agree about the only thing a mountain says.
     /// </summary>
     [Fact]
-    public void AGoodContourIsBlockedByAnEqualTopWithAnotherAsset()
+    public void AnEqualTopOverAnExistingBodyIsReady()
     {
         using var workspace = TestWorkspace.Create();
         var scene = MountainEditing.Place(
-            TestScenes.EmptyInstance(),
+            TestScenes.Instance(workspace),
             workspace.Metrics,
-            workspace.Terrain,
             Square(32, 32, 160, 160),
-            "sand",
             4.0m);
         var interaction = Mountain();
         var context = Context(workspace, scene);
@@ -162,28 +239,25 @@ public sealed class ToolMountainTests
         Place(interaction, context, 96, 160);
         var preview = interaction.MountainPreview(context);
 
-        Assert.Equal(MountainDraftKind.Blocked, preview.Kind);
-        Assert.Contains("different Assets", preview.Explanation!, StringComparison.Ordinal);
-        Assert.Empty(preview.Cells);
+        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        // Ready, and honest about lifting nothing the other body was not
+        // already holding at that height.
+        Assert.Empty(preview.RaisedCells);
+        Assert.Equal(ToolPreviewBuilder.ValidButRaisesNoTerrain, preview.Explanation);
     }
 
     [Fact]
     public void ThePreviewAndEnterGiveTheSameReason()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
-            TestScenes.EmptyInstance(),
-            workspace.Metrics,
-            workspace.Terrain,
-            Square(32, 32, 160, 160),
-            "sand",
-            4.0m);
+        var scene = TestScenes.Instance(workspace);
         var interaction = Mountain();
         var context = Context(workspace, scene);
 
         Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 160);
         Place(interaction, context, 160, 32);
-        Place(interaction, context, 96, 160);
+        Place(interaction, context, 32, 192);
         var preview = interaction.MountainPreview(context);
         var message = Assert.IsType<ToolOutcome.Message>(
             interaction.KeyPressed(context, ToolKey.Enter));
@@ -235,11 +309,9 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = MountainEditing.Place(
-            TestScenes.EmptyInstance(),
+            TestScenes.Instance(workspace),
             workspace.Metrics,
-            workspace.Terrain,
             Triangle(32, 32, 128),
-            "grass",
             2.0m);
         var interaction = Mountain();
         interaction.SetEraserEnabled(true);
@@ -272,8 +344,39 @@ public sealed class ToolMountainTests
         Assert.Equal("mountain_0002", preview.MountainBodyId);
         Assert.Equal("mountain_0002", Assert.Single(removed));
         Assert.Equal(
-            MountainGeometry.TerrainCells(scene, workspace.Metrics, scene.MountainBodies[^1]),
-            preview.Cells);
+            MountainGeometry.CellsRaisedBy(scene, workspace.Metrics, scene.MountainBodies[^1]),
+            preview.LoweredCells);
+        Assert.NotEmpty(preview.LoweredCells);
+    }
+
+    /// <summary>
+    /// Covering a cell and holding it up are two different things, and the
+    /// eraser preview shows the second. Here half the contour lies over ground
+    /// nobody painted: those cells cannot drop, so they are not highlighted -
+    /// while the body itself is still picked, and the canvas still has its
+    /// outline to draw.
+    /// </summary>
+    [Fact]
+    public void TheEraserPreviewShowsWhatDropsRatherThanWhatIsCovered()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TerrainEditing.Paint(
+            TestScenes.EmptyInstance(), workspace.Terrain, 2, 2, "grass");
+        scene = MountainEditing.Place(
+            scene, workspace.Metrics, Square(32, 32, 160, 160), 4.0m);
+
+        var preview = ToolPreviewBuilder.BuildMountainEraser(
+            scene, workspace.Metrics, EditorTool.DrawMountain, eraserEnabled: true, Cell(2, 2));
+
+        Assert.Equal(
+            16,
+            MountainGeometry.TerrainCells(
+                scene, workspace.Metrics, scene.MountainBodies[0]).Count);
+        Assert.Equal("mountain_0001", preview.MountainBodyId);
+        var lowered = Assert.Single(preview.LoweredCells);
+        Assert.Equal(
+            new TerrainCellCoordinate(2, 2),
+            new TerrainCellCoordinate(lowered.X, lowered.Y));
     }
 
     [Fact]
@@ -286,7 +389,7 @@ public sealed class ToolMountainTests
             scene, workspace.Metrics, EditorTool.DrawMountain, eraserEnabled: true, Cell(0, 0));
 
         Assert.Null(preview.MountainBodyId);
-        Assert.Empty(preview.Cells);
+        Assert.Empty(preview.LoweredCells);
     }
 
     [Fact]
@@ -307,25 +410,26 @@ public sealed class ToolMountainTests
     }
 
     /// <summary>
-    /// The Asset is the material, not the geometry. Since the area decides which
-    /// Assets are on offer, changing one no longer swaps the tool - and the
-    /// contour being drawn survives a change of mind about what it is made of.
+    /// Mountain offers no Asset, so `Draw Mountain` may not need one. The whole
+    /// path runs with nothing selected: placing points, the preview, and Enter.
     /// </summary>
     [Fact]
-    public void ChangingTheAssetKeepsTheDraft()
+    public void DrawMountainNeedsNoSelectedAsset()
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
         var interaction = Mountain();
-        Place(interaction, Context(workspace, scene), 32, 32);
-        Place(interaction, Context(workspace, scene), 160, 32);
+        var context = Context(workspace, scene);
 
-        interaction.State.SelectTerrainAsset("sand");
+        Assert.Null(context.SelectedTerrainAssetKey);
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+        Place(interaction, context, 96, 160);
 
-        Assert.Equal("sand", interaction.State.SelectedTerrainAssetKey);
-        Assert.Equal(EditorTool.DrawMountain, interaction.ActiveTool);
-        Assert.Equal(2, interaction.MountainDraft.Count);
-        Assert.True(interaction.HasUnfinishedDraft);
+        Assert.Equal(MountainDraftKind.Ready, interaction.MountainPreview(context).Kind);
+        var edit = Assert.IsType<ToolOutcome.Edit>(
+            interaction.KeyPressed(context, ToolKey.Enter));
+        Assert.Single(edit.Apply(scene).MountainBodies);
     }
 
     [Fact]
@@ -392,24 +496,21 @@ public sealed class ToolMountainTests
         var preview = ToolPreviewBuilder.BuildMountainDraft(
             scene,
             workspace.Metrics,
-            workspace.Terrain,
             EditorTool.DrawMountain,
             draft,
             pending: null,
-            selectedTerrainAssetKey: "grass",
             elevationMeters: 4m);
         var authored = MountainEditing.Place(
             scene,
             workspace.Metrics,
-            workspace.Terrain,
             MountainEditing.ResolveContour(draft),
-            "grass",
             4m);
 
         Assert.Equal(MountainDraftKind.Ready, preview.Kind);
         Assert.Equal(
-            MountainGeometry.TerrainCells(scene, workspace.Metrics, authored.MountainBodies[^1]),
-            preview.Cells);
+            MountainGeometry.CellsRaisedBy(
+                authored, workspace.Metrics, authored.MountainBodies[^1]),
+            preview.RaisedCells);
     }
 
     /// <summary>The fixtures above are Scenes the IO boundary would accept.</summary>
@@ -425,14 +526,11 @@ public sealed class ToolMountainTests
     private static SceneDocument Nested(TestWorkspace workspace)
     {
         var lower = MountainEditing.Place(
-            TestScenes.EmptyInstance(),
+            TestScenes.Instance(workspace),
             workspace.Metrics,
-            workspace.Terrain,
             Triangle(32, 32, 128),
-            "grass",
             2m);
-        return MountainEditing.Place(
-            lower, workspace.Metrics, workspace.Terrain, Triangle(64, 64, 64), "grass", 4m);
+        return MountainEditing.Place(lower, workspace.Metrics, Triangle(64, 64, 64), 4m);
     }
 
     /// <summary>
@@ -474,7 +572,7 @@ public sealed class ToolMountainTests
         workspace.Terrain,
         workspace.Props,
         workspace.Metrics,
-        SelectedTerrainAssetKey: "grass",
+        SelectedTerrainAssetKey: null,
         SelectedPropAssetKey: "stone",
         TemplateAnchorGroupNumber: 1,
         ElevationMeters: elevation);

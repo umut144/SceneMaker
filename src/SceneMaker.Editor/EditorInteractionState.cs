@@ -91,16 +91,16 @@ public static class EditorToolRegistry
     /// <para>This is where the tool bar and the Asset bar used to pull in
     /// opposite directions. The Asset used to decide the tool: choosing a river
     /// swapped the Pencil out from under the author, and choosing grass swapped
-    /// it back. Now the area decides the Assets. Terrain and Mountain both offer
-    /// cell-authored Assets, because a mountain is a closed contour that carries
-    /// one as its surface - the difference between them is the geometry, not the
-    /// material.</para>
+    /// it back. Now the area decides the Assets - and Mountain decides that it
+    /// has none, because a contour raises whatever is painted under it.</para>
     /// </summary>
     public static TerrainAuthoring? TerrainAuthoringFor(EditorMode mode) => mode switch
     {
         EditorMode.Terrain => TerrainAuthoring.Cells,
-        EditorMode.Mountain => TerrainAuthoring.Cells,
         EditorMode.River => TerrainAuthoring.Curve,
+        // Mountain authors a shape and a height, never a material: the painted
+        // Terrain under the contour says what the raised surface is made of, so
+        // there is nothing to choose here and no Asset to remember.
         _ => null,
     };
 
@@ -190,9 +190,8 @@ public sealed class EditorInteractionState
 
     /// <summary>
     /// The Terrain Asset the active area is authoring with. Each area keeps its
-    /// own: Terrain and Mountain offer the same Assets and are still two
-    /// choices, because leaving one to paint a mountain and coming back should
-    /// find the brush where it was left.
+    /// own, so leaving one and coming back finds the brush where it was left.
+    /// Null for an area that offers no Assets at all, which Mountain now does.
     /// </summary>
     public string? SelectedTerrainAssetKey =>
         _terrainAssetByMode.TryGetValue(Mode, out var assetKey) ? assetKey : null;

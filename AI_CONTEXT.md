@@ -44,11 +44,13 @@ cell, and a river made of grass.
 The editor asks that question of the area rather than of the Asset. Terrain,
 River and Mountain are three areas because they author three different things -
 painted cells, an open curve, a closed contour - and each offers the Assets its
-geometry can carry: cells for Terrain and Mountain, curves for River. It used to
-run the other way, with the chosen Asset swapping the tool out from under the
-author, which meant choosing a river silently ended a mountain contour being
-drawn. Now an Asset is only the material: changing it keeps the geometry, and
-only leaving the area gives it up - out loud.
+geometry can carry, or none. Terrain offers the cell-authored Assets; River is
+made of water and offers nothing to choose; Mountain authors shape and height
+only and so has no material to offer either. It used to run the other way, with
+the chosen Asset swapping the tool out from under the author, which meant
+choosing a river silently ended a mountain contour being drawn. Now an Asset is
+only the material: changing it keeps the geometry, and only leaving the area
+gives it up - out loud.
 
 The water grid is finer than the Terrain grid - `water_cell_meters` in the
 Workspace config, 0.5 m for `world01`, where a Terrain cell is 1 m - because a
@@ -117,23 +119,25 @@ row can meet is an optimisation and only that: a segment on one side of a row
 cannot cross its ray, and one further off than the tolerance cannot be within
 it.
 
-A mountain body keeps that closed contour, one cell-authored Terrain Asset and
-one absolute top elevation in the Scene document. Its raster is derived rather
-than stored. Painted Terrain and every mountain contribution form the same
-solid column: the highest top wins, so a second contour at 15 m inside one at
-10 m is a mountain on a mountain without an offset or parent link. A lower
-contour never cuts existing Terrain down. At the same height a contour owns the
-surface over a painted cell; two mountain bodies with different Assets are
-rejected where they tie, because geometry supplies no winner.
+A mountain body keeps that closed contour and one absolute top elevation in the
+Scene document, and nothing else. It carries no material. Painted Terrain
+decides two things a mountain never does: whether there is a cell at a
+coordinate at all, and what its surface is made of. A mountain decides only how
+high that cell's solid column reaches. So a contour drawn around a stretch of
+sand and grass lifts that pattern onto the mountain unchanged, and Terrain
+painted afterwards under an existing contour comes up already raised - the same
+one rule read from either side. Where nobody painted, a contour produces no
+cell: there is no column to raise and no material to invent one from. Such a
+body is valid and stays authored; it simply has no effect yet.
 
-That tie is a question about the contours rather than about which of them
-happens to show, so it is asked of every contribution a cell receives - a tie
-buried under a third, higher body is refused exactly like a visible one. Every
-contribution is therefore collected before any of them is compared: folding
-body after body and testing each against the winner so far would make the
-answer depend on the order the bodies were folded in, which is their ID order
-and therefore the order they were drawn in. The same document has to be refused
-whichever way round it was authored, and with the same message.
+Its raster is derived rather than stored. Painted Terrain and every mountain
+contribution form the same solid column: the highest top wins, so a second
+contour at 15 m inside one at 10 m is a mountain on a mountain without an offset
+or parent link. A lower contour never cuts existing Terrain down. Two bodies
+that meet at one height are no conflict - a height is a number and both name the
+same one. Overlap used to be refused when the two bodies named different Assets,
+because geometry supplied no winner for the material; with the material gone
+from the body, so is the question.
 
 A mountain point's anchor is checked at the IO boundary against the two rules
 `Draw Mountain` authors by: it lies inside the Scene and on the Terrain grid.
@@ -153,7 +157,8 @@ or tunnel through one, whereas modelling a mountain as a fill would incorrectly
 make it immune to cuts. Scene Templates cannot carry mountain bodies until
 composition knows how to translate their source contours.
 
-The `Draw Mountain` Terrain tool is the authoring entry point for those bodies.
+The `Draw Mountain` tool is the authoring entry point for those bodies. It
+needs no Asset and is therefore always available in the Mountain area.
 It uses the same `ToolInteraction -> ToolOutcome` path as every other tool:
 points snap to the Terrain grid, handles remain unsnapped, Enter closes the
 contour as one undoable body, and Escape or draft undo removes one point. Point
@@ -163,20 +168,22 @@ closing Bezier edge has no special endpoint behaviour.
 The draft has three states and they answer one question - what would Enter do.
 Too few points is Incomplete and drawn neutrally, because a contour that is not
 finished being asked for is not a contour that was refused. Ready is a promise:
-the whole attempt has already been made against this Scene, Asset and height by
+the whole attempt has already been made against this Scene and height by
 `MountainEditing.TryPlace`, which is the same call the commit makes, so a ready
 contour cannot then be refused and a refused one cannot slip through. Everything
-else is Blocked and carries the reason, including a contour that is perfect
-geometry and still ties with an existing body at one elevation under a different
-Asset - a preview that only checked the ring would call that one ready and lie.
+else is Blocked and carries the reason. Ready is not the same as visible: a
+contour over unpainted ground is a valid body and stays Ready, and says in the
+same breath that it currently raises no Terrain cells. Refusing it would refuse
+a legitimate order of work - contour first, paint second - and staying silent
+would let an author take an empty preview for a broken tool.
 
 A finished body also carries a contour on the canvas, derived from its points
 and drawn in a colour taken from a small editor palette by a stable rule over
 its `mountain_body_id`. Both are derived: neither the contour nor the colour is
 in the Scene document or the export, and neither means anything to a consumer.
-It exists because folded cells cannot say where one body ends - two mountains of
-one Asset are one surface without it - and the height view should stay an
-analysis rather than the only way to see a boundary.
+It exists because folded cells cannot say where one body ends - two mountains
+over the same painted Asset are one surface without it - and the height view
+should stay an analysis rather than the only way to see a boundary.
 
 The eraser asks about the Terrain cell under the pointer rather than the exact
 position in it, because the raster asks about a cell's centre and two different
@@ -184,6 +191,11 @@ sample points would let the body the author sees filled and the body the click
 removes differ by half a cell near an edge. `MountainEditing.FindAtCell` answers
 once for both the hover highlight and the removal, so what lights up is what
 disappears: the whole topmost body over that cell, never a single derived cell.
+What the highlight fills is the cells that body is actually lifting -
+`MountainGeometry.CellsRaisedBy`, the same definition read backwards - rather
+than everything its ring covers, because a cell that another body holds higher,
+or that nobody painted, does not drop when this one goes. Its outline is drawn
+too, so the body being erased stays recognisable even where it lifts nothing.
 
 ## Height is a stack, not a number
 

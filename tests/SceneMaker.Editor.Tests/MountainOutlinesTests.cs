@@ -182,13 +182,11 @@ public sealed class MountainOutlinesTests
         MountainEditing.Place(
             scene,
             workspace.Metrics,
-            workspace.Terrain,
             [
                 MountainEditing.Point(left, bottom),
                 MountainEditing.Point(right, bottom),
                 MountainEditing.Point(right, top),
                 MountainEditing.Point(left, top),
             ],
-            "grass",
             elevationMeters);
 }

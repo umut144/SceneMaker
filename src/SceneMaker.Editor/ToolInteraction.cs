@@ -302,7 +302,7 @@ public sealed class ToolInteraction
         }
 
         if (_riverPending is not null) return CommitRiverPoint();
-        if (_mountainPending is not null) return CommitMountainPoint();
+        if (_mountainPending is not null) return CommitMountainPoint(context);
 
         if (_draggedAnchorId is { } anchorId && _draggedAnchorPosition is { } position)
         {
@@ -406,8 +406,6 @@ public sealed class ToolInteraction
     {
         if (context.Scene.SceneKind != SceneKind.Instance)
             return new ToolOutcome.Message("Mountain: a Scene Template cannot carry mountain bodies.");
-        if (context.SelectedTerrainAssetKey is null)
-            return new ToolOutcome.Message("Mountain: choose a Terrain asset first.");
 
         var snapped = new AuthoringPoint(
             context.Metrics.SnapToTerrainGrid(point.X),
@@ -448,14 +446,26 @@ public sealed class ToolInteraction
         return ToolOutcome.Idle.Instance;
     }
 
-    private ToolOutcome CommitMountainPoint()
+    private ToolOutcome CommitMountainPoint(ToolContext context)
     {
         if (_mountainPending is not { } pending) return ToolOutcome.Idle.Instance;
         _mountainPending = null;
         _mountainDraft.Add(pending);
-        return new ToolOutcome.Message(_mountainDraft.Count < 3
-            ? $"Mountain: {_mountainDraft.Count} point{Plural(_mountainDraft.Count)} placed; a contour needs at least three."
-            : $"Mountain: {_mountainDraft.Count} points. Enter closes it, Escape takes the last one back.");
+        if (_mountainDraft.Count < ToolPreviewBuilder.MinimumMountainDraftPoints)
+        {
+            return new ToolOutcome.Message(
+                $"Mountain: {_mountainDraft.Count} point{Plural(_mountainDraft.Count)} placed; a contour needs at least three.");
+        }
+
+        // Said before Enter rather than after it: a contour that would lift
+        // nothing is worth authoring, and the author should know that is what
+        // they are about to author.
+        var preview = MountainPreview(context);
+        var closes = $"Mountain: {_mountainDraft.Count} points. Enter closes it, Escape takes the last one back.";
+        return new ToolOutcome.Message(
+            preview is { Kind: MountainDraftKind.Ready, RaisedCells.Count: 0 }
+                ? $"{closes} It {ToolPreviewBuilder.RaisesNoTerrain}"
+                : closes);
     }
 
     /// <summary>
@@ -469,11 +479,9 @@ public sealed class ToolInteraction
         return ToolPreviewBuilder.BuildMountainDraft(
             context.Scene,
             context.Metrics,
-            context.TerrainAssets,
             ActiveTool,
             _mountainDraft,
             _mountainPending,
-            context.SelectedTerrainAssetKey,
             context.ElevationMeters);
     }
 
@@ -492,21 +500,25 @@ public sealed class ToolInteraction
             return new ToolOutcome.Message($"Mountain blocked: {preview.Explanation}");
 
         var points = preview.Curve;
-        var assetKey = context.SelectedTerrainAssetKey!;
         var placed = _mountainDraft.Count;
         var elevation = context.ElevationMeters;
-        var assetName = context.TerrainAssets.Resolve(assetKey).Name;
+        var raisesNothing = preview.RaisedCells.Count == 0;
         _mountainDraft.Clear();
         return new ToolOutcome.Edit(
             "Mountain",
-            document => MountainEditing.Place(
-                document, context.Metrics, context.TerrainAssets, points, assetKey, elevation),
+            document => MountainEditing.Place(document, context.Metrics, points, elevation),
             Describe: (before, after) =>
             {
                 var added = after.MountainBodies.FirstOrDefault(body =>
                     before.MountainBodies.All(previous =>
                         previous.MountainBodyId != body.MountainBodyId));
-                return $"Authored {added?.MountainBodyId ?? "mountain"} from {placed} points · {assetName} · top {elevation:0.###} m.";
+                var authored =
+                    $"Authored {added?.MountainBodyId ?? "mountain"} from {placed} points · top {elevation:0.###} m";
+                // Saved either way. The note says the body is doing nothing yet,
+                // not that anything went wrong.
+                return raisesNothing
+                    ? $"{authored}; {ToolPreviewBuilder.RaisesNoTerrain}"
+                    : $"{authored}.";
             });
     }
 
@@ -529,7 +541,9 @@ public sealed class ToolInteraction
     /// <summary>
     /// Removes the body the hover preview highlighted. Both ask
     /// <see cref="MountainEditing.FindAtCell"/> about the cell under the
-    /// pointer, so what lights up and what disappears are one answer.
+    /// pointer, so what lights up and what disappears are one answer. What the
+    /// body covers and what it is holding up are two different sets, and only
+    /// the second one changes height when it goes.
     /// </summary>
     private static ToolOutcome EraseMountainBody(ToolContext context, TerrainCellCoordinate cell)
     {

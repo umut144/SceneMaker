@@ -139,9 +139,11 @@ tool may later distribute a start and end elevation across cells in
 quantum-sized increments; the height view itself should remain inspection
 rather than silently editing the Scene.
 
-The Core persists a level-topped mountain as a closed Bezier contour and folds
-nested bodies into Terrain by their absolute top elevation. The runtime sees
-only the resulting Terrain cells. `Draw Mountain` now authors, previews, closes,
+The Core persists a level-topped mountain as a closed Bezier contour and an
+absolute top elevation, and folds nested bodies into Terrain by that top. A body
+carries no material: painted Terrain decides whether a cell exists and what it
+is made of, the contour decides only how high it reaches. The runtime sees only
+the resulting Terrain cells. `Draw Mountain` now authors, previews, closes,
 cancels and erases those bodies through the existing `ToolInteraction` path.
 Manual UX acceptance of this contour slice is required before route or helix
 work starts.
@@ -168,6 +170,18 @@ boat or walker can actually pass beneath a bridge.
 
 ## Done
 
+- A mountain carries no material. `MountainBodyDocument` lost its `asset_key`
+  and Scene schema moved 11 to 12; the four authored documents under
+  `workspaces/world01` were rewritten by hand, as the no-migration rule
+  requires. The fold now raises the top of a painted cell and leaves its Asset
+  alone, so a contour over sand and grass lifts that pattern unchanged and a
+  contour over unpainted ground produces no cell at all — valid, saved, and
+  without effect until Terrain is painted under it. The overlap rule that
+  refused two bodies tying at one elevation under different Assets went with
+  it: with no material on the body there is nothing left to disagree about. The
+  export did not move — the JSON and every promise it makes are unchanged, only
+  where a cell's `asset_key` comes from, which was never something the export
+  said.
 - A Prop needs no Terrain under it. This used to be entry 7 here — the export
   guaranteed footprint coverage, a cut could take that ground away, and the
   guarantee quietly stopped meaning what it said. It is settled now by product
