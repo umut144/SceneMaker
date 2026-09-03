@@ -1240,20 +1240,29 @@ public sealed partial class SceneMakerMain : Control
         input.Suffix = " m";
         input.CustomMinimumSize = new Vector2(130f, 0f);
         input.Value = (double)SceneDocument.GroundElevationMeters;
+        input.Editable = false;
     }
 
     /// <summary>
-    /// Godot counts in doubles, the documents in decimals. Going through the
-    /// shortest form that keeps one decimal writes 1.1 as 1.1 and 2 as 2.0,
-    /// rather than 1.1000000000000001 and a bare 2. Heights then read the same
-    /// everywhere and repainting a Scene does not churn its file.
+    /// Godot counts in doubles, the documents in decimals. An authored absolute
+    /// height is canonical only after the open Workspace has snapped it to its
+    /// vertical grid; setting the control without a signal makes typed values
+    /// visibly agree with the number that will be stored.
     /// </summary>
-    private static decimal ElevationOf(double value) => DecimalOf(value);
+    private decimal ElevationOf(SpinBox input, double value)
+    {
+        var metrics = _controller.Session?.Metrics
+            ?? throw new InvalidOperationException(
+                "An absolute height requires an open Workspace.");
+        var elevation = metrics.SnapElevation((decimal)value);
+        input.SetValueNoSignal((double)elevation);
+        return elevation;
+    }
 
     /// <summary>
-    /// The same for every measurement the context bar authors in metres - a
-    /// height, a width - so none of them churns a document with a value that is
-    /// only nearly what was typed.
+    /// Widths and vertical extents are not absolute elevations and therefore do
+    /// not use the Workspace's vertical grid. Keep their compact decimal form
+    /// so they do not churn a document with a value only nearly what was typed.
     /// </summary>
     private static decimal DecimalOf(double value) => decimal.Parse(
         value.ToString("0.0##", CultureInfo.InvariantCulture),
@@ -1274,7 +1283,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void SetAuthoringElevation(double value)
     {
-        var elevation = ElevationOf(value);
+        var elevation = ElevationOf(_elevationEdit, value);
         _canvas.ElevationMeters = elevation;
         SetStatus($"Drawing at {elevation:0.###} m.");
     }
@@ -1365,7 +1374,7 @@ public sealed partial class SceneMakerMain : Control
         var sceneId = _sceneIdEdit.Text.Trim();
         var widthCells = checked((int)_sceneWidthEdit.Value);
         var heightCells = checked((int)_sceneHeightEdit.Value);
-        var groundHeight = ElevationOf(_sceneElevationEdit.Value);
+        var groundHeight = ElevationOf(_sceneElevationEdit, _sceneElevationEdit.Value);
         var report = SelectedSceneKind() == SceneKind.Template
             ? _controller.CreateTemplate(
                 sceneId,
@@ -1561,7 +1570,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void SetWaterElevation(double value)
     {
-        var elevation = DecimalOf(value);
+        var elevation = ElevationOf(_waterElevationEdit, value);
         _interaction.State.SetWaterElevation(elevation);
         UpdateWaterDerivedSpan();
         SetStatus($"Water level set to {elevation:0.###} m.");
@@ -1923,6 +1932,7 @@ public sealed partial class SceneMakerMain : Control
             : $"Scene: {_controller.Document!.SceneId}  ·  {(_controller.Document!.SceneKind == SceneKind.Instance ? "Instance" : "Template")}  ·  {_controller.Document!.SizeCells.Width} × {_controller.Document!.SizeCells.Height} cells";
 
         var sceneActionsAvailable = _controller.Session is not null;
+        SetElevationInputsEditable(sceneActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.WorkspaceAssets, !sceneActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.CreateScene, !sceneActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.LoadScene, !sceneActionsAvailable);
@@ -2028,14 +2038,45 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     private void ShowSession()
     {
-        if (_controller.Session is not { } session) return;
+        if (_controller.Session is not { } session)
+        {
+            SetElevationInputsEditable(false);
+            return;
+        }
         _canvas.ConfigureMetrics(session.Metrics);
         _canvas.ConfigureTerrainAssets(session.TerrainAssets);
         _canvas.ConfigurePropAssets(session.PropAssets);
         ConfigureRiverWidthInput(_riverWidthEdit);
         _interaction.State.SetRiverWidth(DecimalOf(_riverWidthEdit.Value));
+        ConfigureElevationInputs(session.Metrics);
         UpdateSceneSizeMetrics();
         RebuildAssetBars();
+    }
+
+    private void ConfigureElevationInputs(WorkspaceMetrics metrics)
+    {
+        ConfigureElevationInput(_elevationEdit, metrics);
+        ConfigureElevationInput(_waterElevationEdit, metrics);
+        ConfigureElevationInput(_sceneElevationEdit, metrics);
+
+        var authoringElevation = ElevationOf(_elevationEdit, _elevationEdit.Value);
+        _canvas.ElevationMeters = authoringElevation;
+        _interaction.State.SetWaterElevation(
+            ElevationOf(_waterElevationEdit, _waterElevationEdit.Value));
+        _ = ElevationOf(_sceneElevationEdit, _sceneElevationEdit.Value);
+    }
+
+    private static void ConfigureElevationInput(SpinBox input, WorkspaceMetrics metrics)
+    {
+        input.Step = (double)metrics.ElevationQuantumMeters;
+        input.Editable = true;
+    }
+
+    private void SetElevationInputsEditable(bool editable)
+    {
+        _elevationEdit.Editable = editable;
+        _waterElevationEdit.Editable = editable;
+        _sceneElevationEdit.Editable = editable;
     }
 
     private void RebuildAssetBars()

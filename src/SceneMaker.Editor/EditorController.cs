@@ -209,8 +209,12 @@ public sealed class EditorController
         decimal defaultElevationMeters = SceneDocument.GroundElevationMeters) =>
         CreateScene(
             "Scene Instance",
-            workspace => SceneStore.CreateInstance(
-                workspace, sceneId, widthCells, heightCells, defaultElevationMeters));
+            session => SceneStore.CreateInstance(
+                session.Workspace,
+                sceneId,
+                widthCells,
+                heightCells,
+                session.Metrics.SnapElevation(defaultElevationMeters)));
 
     /// <summary>Creates a Scene Template in the open Workspace and opens it.</summary>
     public EditorReport CreateTemplate(
@@ -223,15 +227,15 @@ public sealed class EditorController
         decimal defaultElevationMeters = SceneDocument.GroundElevationMeters) =>
         CreateScene(
             "Scene Template",
-            workspace => SceneStore.CreateTemplate(
-                workspace,
+            session => SceneStore.CreateTemplate(
+                session.Workspace,
                 sceneId,
                 widthCells,
                 heightCells,
                 groupNumber,
                 insertionAnchorX,
                 insertionAnchorY,
-                defaultElevationMeters));
+                session.Metrics.SnapElevation(defaultElevationMeters)));
 
     /// <summary>
     /// Opens a Scene out of the current Workspace, after checking that it still
@@ -393,14 +397,14 @@ public sealed class EditorController
         }
     }
 
-    private EditorReport CreateScene(string kind, Func<LoadedWorkspace, LoadedScene> create)
+    private EditorReport CreateScene(string kind, Func<WorkspaceSession, LoadedScene> create)
     {
         if (Session is not { } session) return EditorReport.Failed("No Workspace is open.");
         var pending = SaveScene();
         if (!pending.Succeeded) return pending;
         try
         {
-            var created = create(session.Workspace);
+            var created = create(session);
             Open(created);
             return EditorReport.Ok($"Created {kind} '{created.Document.SceneId}'.");
         }

@@ -27,6 +27,22 @@ public sealed class EditorControllerSceneTests
     }
 
     [Fact]
+    public void SceneCreationSnapsItsGroundHeightToTheWorkspaceQuantum()
+    {
+        using var workspace = TestWorkspace.Create();
+        var controller = Opened(workspace);
+
+        var report = controller.CreateInstance("base", 6, 6, 1.1m);
+
+        Assert.True(report.Succeeded);
+        Assert.Equal(1.125m, controller.Document?.DefaultElevationMeters);
+        Assert.Equal(
+            1.125m,
+            SceneStore.Load(controller.Session!.Workspace, controller.Scene!.FilePath)
+                .Document.DefaultElevationMeters);
+    }
+
+    [Fact]
     public void ACreatedTemplateLandsInTheTemplatesDirectory()
     {
         using var workspace = TestWorkspace.Create();

@@ -90,9 +90,15 @@ Auswirkung vor dem Ausführen sichtbar ist.
 
 ### Höhe
 
-Das ContextMenu enthält durchgehend `Height` in Metern, in Schritten von 0,1 m.
-Der Wert gilt für Terrain und Props gleichermaßen: gemalte Zellen und gesetzte
-Props entstehen auf dieser Höhe.
+Das ContextMenu enthält durchgehend `Height` in Metern. Seine Schrittweite ist
+`elevation_quantum_meters` aus dem offenen Workspace; direkt eingegebene Werte
+werden ebenfalls darauf gerundet. Der Wert gilt für Terrain und Props
+gleichermaßen: gemalte Zellen und gesetzte Props entstehen auf dieser Höhe.
+
+Ohne offenen Workspace sind `Height`, `Water` und das `Ground height` des
+Scene-Dialogs deaktiviert, weil es ohne Workspace kein gültiges Höhenquantum
+gibt. Beim Workspace-Wechsel werden Schrittweite und sichtbarer Wert aller drei
+Eingaben neu gesetzt, auch wenn eine davon im aktuellen Werkzeug verborgen ist.
 
 Er ist Session-Zustand, kein Dokumentfeld. Beim Öffnen einer Scene startet er
 auf deren `default_elevation_meters` — dem Wert, den der Autor beim Anlegen im

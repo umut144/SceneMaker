@@ -220,7 +220,10 @@ public sealed record SceneDocument
     /// </summary>
     public required decimal DefaultElevationMeters { get; init; }
 
-    /// <summary>The height a Scene starts at when the author names none.</summary>
+    /// <summary>
+    /// The initial height suggested when the author names none. Workspace-aware
+    /// creation snaps it to that Workspace's elevation quantum before storing it.
+    /// </summary>
     public const decimal GroundElevationMeters = 1.0m;
 
     /// <summary>An empty Scene Instance.</summary>

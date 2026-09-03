@@ -132,7 +132,23 @@ public static partial class DocumentValidation
                 "Scene size_cells exceeds the Workspace authoring coordinate range.", exception);
         }
 
-        if (document!.SceneKind == SceneKind.Template)
+        ValidateElevation("Scene default_elevation_meters", document!.DefaultElevationMeters, metrics);
+        foreach (var cell in document.TerrainCells)
+        {
+            ValidateElevation(
+                $"Terrain cell ({cell.X}, {cell.Y}) elevation_meters",
+                cell.ElevationMeters,
+                metrics);
+        }
+        foreach (var prop in document.Props)
+        {
+            ValidateElevation(
+                $"Prop '{prop.InstanceId}' elevation_meters",
+                prop.ElevationMeters,
+                metrics);
+        }
+
+        if (document.SceneKind == SceneKind.Template)
         {
             ValidateGridAnchor(
                 "Scene Template insertion anchor",
@@ -152,6 +168,10 @@ public static partial class DocumentValidation
         {
             for (var index = 0; index < body.Points.Count; index++)
             {
+                ValidateElevation(
+                    $"Water body '{body.WaterBodyId}' point {index} elevation_meters",
+                    body.Points[index].ElevationMeters,
+                    metrics);
                 ValidateGridPosition(
                     $"Water body '{body.WaterBodyId}' point {index}",
                     body.Points[index].PositionAuthoringPx,
@@ -159,6 +179,19 @@ public static partial class DocumentValidation
                     metrics.AuthoringPixelsPerTerrainCell,
                     metrics.AuthoringPixelsPerWaterCell);
             }
+        }
+    }
+
+    private static void ValidateElevation(
+        string label,
+        decimal elevationMeters,
+        WorkspaceMetrics metrics)
+    {
+        if (!metrics.IsElevationAligned(elevationMeters))
+        {
+            throw new SceneMakerDocumentException(
+                FormattableString.Invariant(
+                    $"{label} must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m; found {elevationMeters:0.############################} m."));
         }
     }
 

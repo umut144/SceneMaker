@@ -271,6 +271,12 @@ pull in a whole row wherever half the width falls exactly on a cell centre's
 distance. A reader recomputing the raster has to interpolate the width at full
 precision to arrive at the same set.
 
+That millimetre precision belongs to the derived raster, not to authoring.
+Directly authored absolute heights align to the Workspace's
+`elevation_quantum_meters`, which is not exported; a consumer receives the
+actual heights. Depth, clearance and values interpolated between valid authored
+points need not align to that quantum.
+
 Heights are absolute. Nothing stores a relationship to the ground, so repainting
 Terrain under a river never moves the water.
 
@@ -295,9 +301,10 @@ authoring one is refused instead.
 in the same unit as everything else here. With no water over it that is also its
 walking surface, which is what it always was; under a cut it is not, and the
 section above says how to resolve it. Ground level in `world01` is `1.0`, water
-`0.0`, a bridge deck `1.1`, a hill `2.0`; ramp cells step between them. The
-values are authored, not derived, and SceneMaker never constrains their range or
-step - a consumer's simulation decides which step an Actor can take.
+`0.0`, a bridge deck `1.125`, a hill `2.0`; ramp cells step between them. The
+values are authored, not derived, and their step is the Workspace's authoring
+quantum. A consumer's simulation independently decides which difference an
+Actor can traverse.
 
 It is authored per cell, not per Asset, because one grass Asset covers valley
 floor and hill alike. `default_elevation_meters` on the Scene is the height a
@@ -308,7 +315,7 @@ A Prop carries its own `elevation_meters`, usually the height of the Terrain
 under it. It is a separate field because a bridge deck sits above the water it
 crosses - and that is the case that shows why a place does not have one
 surface. Over a river there are two: `(water, 0.0)` for what swims and
-`(land, 1.1)` for what walks across. Nothing in the export resolves that. The
+`(land, 1.125)` for what walks across. Nothing in the export resolves that. The
 Actor's domain picks the surface, the height difference decides whether the step
 is possible, and both happen in the simulation.
 

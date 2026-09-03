@@ -131,6 +131,13 @@ points that both fall. The editor can snap a point to the Terrain under it while
 drawing, but what it writes is the number: no offset is stored, so repainting
 the ground later leaves the river where the author put it.
 
+Directly authored absolute heights sit on the open Workspace's
+`elevation_quantum_meters`: the Scene default, Terrain and Prop elevations, and
+water-point surfaces all share that vertical authoring grid. It does not
+quantize widths or vertical extents such as channel depth and clearance, and it
+does not turn interpolation into steps. A water cell between two valid points
+may therefore have a surface that is not itself a multiple of the quantum.
+
 Cuts apply to Terrain and never to fills. That one sentence is what will let a
 bridge deck cross the river it spans without the river carving it away.
 

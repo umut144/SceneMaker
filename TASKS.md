@@ -150,14 +150,15 @@ The intended next form of the height view has three independent capabilities:
 - a traversal overlay that compares neighbouring floor spans, available
   headroom and surface compatibility for a selected Actor profile.
 
-For `world01`, authored elevations should eventually snap to a Workspace-owned
-quantum of `0.125 m`. That is half of its ordinary `0.25 m` step capability, so
-two elevation increments make the largest ordinary step. The quantum is a
-Workspace metric, not a SceneMaker constant. Likewise, `0.25 m` is an Actor or
-simulation capability rather than a property of the geometry: another Actor
-may accept a different step. A separate grade tool may later distribute a
-start and end elevation across cells in quantum-sized increments; the height
-view itself should remain inspection rather than silently editing the Scene.
+Authored absolute elevations now snap to the Workspace-owned
+`elevation_quantum_meters`; `world01` sets it to `0.125 m`. That is half of its
+ordinary `0.25 m` step capability, so two elevation increments make the largest
+ordinary step. The quantum is a Workspace metric, not a SceneMaker constant.
+Likewise, `0.25 m` is an Actor or simulation capability rather than a property
+of the geometry: another Actor may accept a different step. A separate grade
+tool may later distribute a start and end elevation across cells in
+quantum-sized increments; the height view itself should remain inspection
+rather than silently editing the Scene.
 
 Do not call adjacent flat cell tops a slope without fixing the mesh rule.
 Different cell elevations form terraces and vertical steps. A visually smooth
