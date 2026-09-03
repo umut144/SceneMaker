@@ -73,6 +73,7 @@ public static partial class DocumentValidation
             previousInstanceId = prop.InstanceId;
         }
 
+        ValidateMountainBodies(document);
         ValidateWaterBodies(document);
 
         if (document.TemplateAnchors is null)
@@ -99,6 +100,8 @@ public static partial class DocumentValidation
             // author one until composition knows what to do with it.
             if (document.WaterBodies.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own water bodies.");
+            if (document.MountainBodies.Count > 0)
+                throw new SceneMakerDocumentException("Scene Template cannot own mountain bodies.");
             ValidateGroupNumber("Scene Template", document.TemplateDefinition.GroupNumber);
         }
 
@@ -147,6 +150,14 @@ public static partial class DocumentValidation
                 prop.ElevationMeters,
                 metrics);
         }
+        foreach (var body in document.MountainBodies)
+        {
+            ValidateElevation(
+                $"Mountain body '{body.MountainBodyId}' elevation_meters",
+                body.ElevationMeters,
+                metrics);
+        }
+        _ = MountainGeometry.EffectiveTerrainCells(document, metrics);
 
         if (document.SceneKind == SceneKind.Template)
         {
@@ -179,6 +190,50 @@ public static partial class DocumentValidation
                     metrics.AuthoringPixelsPerTerrainCell,
                     metrics.AuthoringPixelsPerWaterCell);
             }
+        }
+    }
+
+    private static void ValidateMountainBodies(SceneDocument document)
+    {
+        if (document.MountainBodies is null)
+            throw new SceneMakerDocumentException("Scene requires mountain_bodies.");
+
+        string? previousBodyId = null;
+        foreach (var body in document.MountainBodies)
+        {
+            ValidateStableId("mountain_body_id", body.MountainBodyId);
+            if (previousBodyId is not null
+                && string.CompareOrdinal(body.MountainBodyId, previousBodyId) <= 0)
+            {
+                throw new SceneMakerDocumentException(
+                    "Mountain bodies must have unique IDs in canonical ordinal order.");
+            }
+            previousBodyId = body.MountainBodyId;
+
+            var label = $"Mountain body '{body.MountainBodyId}'";
+            if (string.IsNullOrWhiteSpace(body.AssetKey))
+                throw new SceneMakerDocumentException($"{label} requires an asset_key.");
+            if (body.Points is null || body.Points.Count < 2)
+            {
+                throw new SceneMakerDocumentException(
+                    $"{label} requires at least two curve points to close a contour.");
+            }
+            foreach (var point in body.Points)
+            {
+                if (point.PositionAuthoringPx is null)
+                    throw new SceneMakerDocumentException($"{label} requires position_authoring_px on every point.");
+                if (point.HandleInAuthoringPx is null || point.HandleOutAuthoringPx is null)
+                    throw new SceneMakerDocumentException($"{label} requires both handles on every point.");
+                if (!Enum.IsDefined(point.Mode))
+                    throw new SceneMakerDocumentException($"{label} requires a supported point mode.");
+                if (point.Mode == MountainPointMode.Linear
+                    && !(point.HandleInAuthoringPx.IsZero() && point.HandleOutAuthoringPx.IsZero()))
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} has a linear point carrying handles; a linear point's handles are zero.");
+                }
+            }
+            _ = MountainGeometry.RequireContour(body);
         }
     }
 

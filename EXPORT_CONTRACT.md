@@ -5,9 +5,15 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 6**, embedded **scene 8**. A reader must reject any
+Current schemas: **export 8**, embedded **scene 10**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
+
+The authored Scene currently has its own schema 11. It is deliberately newer
+than the embedded Scene: mountain contours are editor source, folded into the
+ordinary `terrain_cells` below and omitted from export. The embedded version
+therefore stays 10 and the strict runtime shape does not change merely because
+the editor learned a new source representation.
 
 ## What is on disk
 
@@ -38,7 +44,7 @@ purpose.
 ```jsonc
 {
   "format": "scene_maker_scene_export",
-  "version": 5,
+  "version": 8,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,        // edge length of one Terrain cell
@@ -82,7 +88,7 @@ purpose.
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
     "size_cells": { "width": 100, "height": 100 },
-    "terrain_cells": [
+    "terrain_cells": [                 // painted Terrain plus folded mountains
       { "x": 0, "y": 0, "asset_key": "grass", "elevation_meters": 1.0 }
     ],
     "props": [
@@ -374,6 +380,9 @@ treat a violation as a corrupt file rather than a case to handle:
   Asset has none.
 - Every Terrain cell and every Prop carries `elevation_meters`. There is no
   cell without a height and no Prop without one.
+- Authored mountain contours never appear in this file. Their covered cells are
+  folded into `scene.terrain_cells`: the highest absolute top wins, and its
+  Terrain Asset supplies the cell's `asset_key`.
 - A `scene_id` names one Scene in the whole Workspace — never an Instance and a
   Template at once — and it does not change over the life of that Scene. The
   editor refuses to create a second Scene under an existing id, and an export

@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 10;
+    public const int SceneVersion = 11;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -76,6 +76,42 @@ public sealed record AuthoringPixelOffset
     // A method rather than a property: a computed property would be serialized
     // into every document as a field nobody authored.
     public bool IsZero() => X == 0 && Y == 0;
+}
+
+/// <summary>How one point shapes a closed mountain contour.</summary>
+public enum MountainPointMode
+{
+    Linear,
+    Aligned,
+}
+
+/// <summary>
+/// One point of a mountain's closed outline. It has its own persisted record:
+/// sharing the water record would make a mountain carry river fields and tie
+/// two unrelated document schemas together.
+/// </summary>
+public sealed record MountainCurvePointDocument
+{
+    public required AuthoringPixelPosition PositionAuthoringPx { get; init; }
+    public required MountainPointMode Mode { get; init; }
+    public required AuthoringPixelOffset HandleInAuthoringPx { get; init; }
+    public required AuthoringPixelOffset HandleOutAuthoringPx { get; init; }
+}
+
+/// <summary>
+/// One level-topped solid Terrain region. The contour is authored truth and
+/// its covered cells are derived; keeping it lets the outline be edited and a
+/// later route generator follow the actual mountain instead of a baked raster.
+/// </summary>
+public sealed record MountainBodyDocument
+{
+    public required string MountainBodyId { get; init; }
+    public required string AssetKey { get; init; }
+
+    /// <summary>The absolute top of the solid column inside the contour.</summary>
+    public required decimal ElevationMeters { get; init; }
+
+    public required List<MountainCurvePointDocument> Points { get; init; }
 }
 
 /// <summary>
@@ -204,6 +240,12 @@ public sealed record SceneDocument
     public required List<PropDocument> Props { get; init; }
 
     /// <summary>
+    /// Closed, editable Terrain regions whose effective cells are derived.
+    /// Their absolute tops fold with painted Terrain; they are not voxel data.
+    /// </summary>
+    public required List<MountainBodyDocument> MountainBodies { get; init; }
+
+    /// <summary>
     /// The authored water of this Scene. Its raster is derived at export time,
     /// which is why nothing here counts cells.
     /// </summary>
@@ -285,6 +327,7 @@ public sealed record SceneDocument
         SizeCells = new SceneSizeCells { Width = widthCells, Height = heightCells },
         TerrainCells = [],
         Props = [],
+        MountainBodies = [],
         WaterBodies = [],
         TemplateDefinition = templateDefinition,
         TemplateAnchors = [],

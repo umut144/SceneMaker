@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 10,
+  "version": 11,
   "scene_id": "cave01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -2411,6 +2411,7 @@
     }
   ],
   "props": [],
+  "mountain_bodies": [],
   "water_bodies": [],
   "template_definition": null,
   "template_anchors": [],

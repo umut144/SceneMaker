@@ -171,6 +171,7 @@ public sealed class EditorController
             {
                 DocumentValidation.ValidateGrid(openScene, candidate.Metrics);
                 TerrainEditing.ValidateAssetReferences(openScene, candidate.TerrainAssets);
+                MountainEditing.ValidateAssetReferences(openScene, candidate.TerrainAssets);
                 PropEditing.ValidateAssetReferences(openScene, candidate.PropAssets);
             }
             WorkspaceConfigurationStore.Save(candidate.DirectoryPath, candidate.Configuration);
@@ -251,6 +252,7 @@ public sealed class EditorController
             var loaded = SceneStore.Load(session.Workspace, absolutePath);
             DocumentValidation.ValidateGrid(loaded.Document, session.Metrics);
             TerrainEditing.ValidateAssetReferences(loaded.Document, session.TerrainAssets);
+            MountainEditing.ValidateAssetReferences(loaded.Document, session.TerrainAssets);
             PropEditing.ValidateAssetReferences(loaded.Document, session.PropAssets);
             Open(loaded);
             return EditorReport.Ok($"Loaded Scene '{loaded.Document.SceneId}'.");
@@ -385,6 +387,7 @@ public sealed class EditorController
                 Path.Combine(session.DirectoryPath, recent.SceneRelativePath));
             DocumentValidation.ValidateGrid(loaded.Document, session.Metrics);
             TerrainEditing.ValidateAssetReferences(loaded.Document, session.TerrainAssets);
+            MountainEditing.ValidateAssetReferences(loaded.Document, session.TerrainAssets);
             PropEditing.ValidateAssetReferences(loaded.Document, session.PropAssets);
             Open(loaded);
             return EditorReport.Ok(

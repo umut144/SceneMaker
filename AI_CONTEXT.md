@@ -108,6 +108,22 @@ row can meet is an optimisation and only that: a segment on one side of a row
 cannot cross its ray, and one further off than the tolerance cannot be within
 it.
 
+A mountain body keeps that closed contour, one cell-authored Terrain Asset and
+one absolute top elevation in the Scene document. Its raster is derived rather
+than stored. Painted Terrain and every mountain contribution form the same
+solid column: the highest top wins, so a second contour at 15 m inside one at
+10 m is a mountain on a mountain without an offset or parent link. A lower
+contour never cuts existing Terrain down. At the same height a contour owns the
+surface over a painted cell; two mountain bodies with different Assets are
+rejected where they tie, because geometry supplies no winner.
+
+Mountain contours are editor source and do not enter export schema 8. Export
+folds them into the ordinary Terrain cells promised to the runtime. This also
+keeps mountains in the cuttable Terrain solid: a river cut can make a channel
+or tunnel through one, whereas modelling a mountain as a fill would incorrectly
+make it immune to cuts. Scene Templates cannot carry mountain bodies until
+composition knows how to translate their source contours.
+
 ## Height is a stack, not a number
 
 A place is not one height. Terrain says how high its solid column reaches;

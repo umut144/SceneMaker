@@ -17,6 +17,11 @@ public static class SceneExport
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
+    // The embedded runtime Scene intentionally remains the shape export schema
+    // 8 already promised. Authoring schema 11 adds mountain contours, but the
+    // runtime receives their folded Terrain cells rather than editor sources.
+    private const int EmbeddedSceneVersion = 10;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -63,7 +68,7 @@ public static class SceneExport
             },
             AssetProfiles = ExportProfiles(configuration, propAssets),
             WaterRaster = ExportWaterRaster(scene.Document, configuration.Metrics),
-            Scene = scene.Document,
+            Scene = ExportScene(scene.Document, configuration.Metrics),
         };
         var directory = Path.Combine(workspace.DirectoryPath, DirectoryName);
         var path = Path.Combine(directory, scene.Document.SceneId + FileSuffix);
@@ -111,8 +116,11 @@ public static class SceneExport
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
-        var authored = TerrainCoverage.AuthoredCells(scene);
-        var tops = scene.TerrainCells.ToDictionary(
+        var effectiveTerrain = MountainGeometry.EffectiveTerrainCells(scene, metrics);
+        var authored = effectiveTerrain
+            .Select(static cell => new TerrainCellCoordinate(cell.X, cell.Y))
+            .ToHashSet();
+        var tops = effectiveTerrain.ToDictionary(
             static cell => new TerrainCellCoordinate(cell.X, cell.Y),
             static cell => cell.ElevationMeters);
         List<string> warnings = [];
@@ -190,6 +198,29 @@ public static class SceneExport
             })
             .ToList();
 
+    /// <summary>
+    /// The runtime Scene is a derived snapshot, not the authoring document.
+    /// Mountain contours are folded into Terrain and deliberately omitted, so
+    /// adding an editor source does not change export schema 8 or its reader.
+    /// </summary>
+    private static ExportSceneDocument ExportScene(
+        SceneDocument scene,
+        WorkspaceMetrics metrics) => new()
+    {
+        Schema = scene.Schema,
+        Version = EmbeddedSceneVersion,
+        SceneId = scene.SceneId,
+        SceneKind = scene.SceneKind,
+        CoordinateSpace = scene.CoordinateSpace,
+        SizeCells = scene.SizeCells,
+        TerrainCells = [.. MountainGeometry.EffectiveTerrainCells(scene, metrics)],
+        Props = scene.Props,
+        WaterBodies = scene.WaterBodies,
+        TemplateDefinition = scene.TemplateDefinition,
+        TemplateAnchors = scene.TemplateAnchors,
+        DefaultElevationMeters = scene.DefaultElevationMeters,
+    };
+
     private static List<ExportAssetProfileDocument> ExportProfiles(
         WorkspaceConfiguration configuration,
         PropDisplayCatalog propAssets)
@@ -230,9 +261,16 @@ public static class SceneExport
     {
         DocumentValidation.ValidateGrid(scene, configuration.Metrics);
         TerrainEditing.ValidateAssetReferences(scene, terrainAssets);
+        MountainEditing.ValidateAssetReferences(scene, terrainAssets);
         PropEditing.ValidateAssetReferences(scene, propAssets);
         WaterEditing.ValidateAssetReferences(scene, terrainAssets);
-        var authored = TerrainCoverage.AuthoredCells(scene);
+        var effective = scene with
+        {
+            TerrainCells = [.. MountainGeometry.EffectiveTerrainCells(
+                scene,
+                configuration.Metrics)],
+        };
+        var authored = TerrainCoverage.AuthoredCells(effective);
         foreach (var prop in scene.Props)
         {
             var missing = TerrainCoverage.MissingCells(
@@ -262,7 +300,28 @@ public static class SceneExport
         /// </summary>
         public required List<ExportWaterBodyDocument> WaterRaster { get; init; }
 
-        public required SceneDocument Scene { get; init; }
+        public required ExportSceneDocument Scene { get; init; }
+    }
+
+    /// <summary>
+    /// The exact Scene shape export schema 8 promised. It is separate from the
+    /// authoring record so editor-only source geometry cannot leak into a
+    /// strict runtime reader merely because the authoring schema grows.
+    /// </summary>
+    private sealed record ExportSceneDocument
+    {
+        public required string Schema { get; init; }
+        public required int Version { get; init; }
+        public required string SceneId { get; init; }
+        public required SceneKind SceneKind { get; init; }
+        public required string CoordinateSpace { get; init; }
+        public required SceneSizeCells SizeCells { get; init; }
+        public required List<TerrainCellDocument> TerrainCells { get; init; }
+        public required List<PropDocument> Props { get; init; }
+        public required List<WaterBodyDocument> WaterBodies { get; init; }
+        public required TemplateDefinitionDocument? TemplateDefinition { get; init; }
+        public required List<TemplateAnchorDocument> TemplateAnchors { get; init; }
+        public required decimal DefaultElevationMeters { get; init; }
     }
 
     private sealed record ExportGridDocument

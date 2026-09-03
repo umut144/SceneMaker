@@ -160,6 +160,13 @@ tool may later distribute a start and end elevation across cells in
 quantum-sized increments; the height view itself should remain inspection
 rather than silently editing the Scene.
 
+The Core now persists a level-topped mountain as a closed Bezier contour and
+folds nested bodies into Terrain by their absolute top elevation. The runtime
+sees only the resulting Terrain cells. There is deliberately no canvas tool
+for it yet: the next UI slice has to author, preview, close and cancel a contour
+through the existing `ToolInteraction` path, and needs manual UX acceptance
+before route or helix work starts.
+
 Do not call adjacent flat cell tops a slope without fixing the mesh rule.
 Different cell elevations form terraces and vertical steps. A visually smooth
 ramp requires an explicit derived meshing rule or a separately authored ramp;
