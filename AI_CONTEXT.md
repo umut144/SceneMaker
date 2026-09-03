@@ -117,6 +117,26 @@ contour never cuts existing Terrain down. At the same height a contour owns the
 surface over a painted cell; two mountain bodies with different Assets are
 rejected where they tie, because geometry supplies no winner.
 
+That tie is a question about the contours rather than about which of them
+happens to show, so it is asked of every contribution a cell receives - a tie
+buried under a third, higher body is refused exactly like a visible one. Every
+contribution is therefore collected before any of them is compared: folding
+body after body and testing each against the winner so far would make the
+answer depend on the order the bodies were folded in, which is their ID order
+and therefore the order they were drawn in. The same document has to be refused
+whichever way round it was authored, and with the same message.
+
+A mountain point's anchor is checked at the IO boundary against the two rules
+`Draw Mountain` authors by: it lies inside the Scene and on the Terrain grid.
+Its handles are not. A handle shapes the curve rather than naming a place, so
+snapping it would snap the shape, and the curve it shapes may bulge past the
+edge of the map - the raster stops at the Scene, the document does not fail.
+How many points a contour needs is not a count either: two anchors whose
+handles bow the closing edges apart already enclose an area, so the document
+rule stays at two and `MountainGeometry.RequireContour` decides whether the
+flattened ring is usable. That the canvas tool asks for three placed points is
+a tool decision about drawing, not a rule about geometry.
+
 Mountain contours are editor source and do not enter export schema 9. Export
 folds them into the ordinary Terrain cells promised to the runtime. This also
 keeps mountains in the cuttable Terrain solid: a river cut can make a channel

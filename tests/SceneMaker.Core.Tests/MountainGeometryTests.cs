@@ -328,6 +328,218 @@ public sealed class MountainGeometryTests
         Assert.Contains("Template cannot own mountain bodies", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The tie that the old step-by-step fold could not see: a third, higher
+    /// body covers the same cell, so comparing each body only against the
+    /// winner so far never brought the two lower ones together.
+    /// </summary>
+    [Fact]
+    public void EqualTopsWithDifferentAssetsAreAmbiguousEvenUnderAHigherMountain()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Bodies(
+            Body("mountain_0001", "grass", 15.0m, Square(32, 32, 160, 160)),
+            Body("mountain_0002", "grass", 10.0m, Square(32, 32, 160, 160)),
+            Body("mountain_0003", "sand", 10.0m, Square(64, 64, 128, 128)));
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            DocumentValidation.ValidateGrid(scene, workspace.Metrics));
+
+        Assert.Contains("mountain_0002", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("mountain_0003", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("different Assets", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The same three bodies in any list order are the same Scene, so they are
+    /// refused with the same message. The order a body was drawn or named in is
+    /// not a geometric fact and must not decide whether a tie is seen.
+    /// </summary>
+    [Fact]
+    public void TheAmbiguityAndItsMessageDoNotDependOnTheOrderOfTheBodies()
+    {
+        using var workspace = TestWorkspace.Create();
+        var tall = Body("mountain_0001", "grass", 15.0m, Square(32, 32, 160, 160));
+        var grass = Body("mountain_0002", "grass", 10.0m, Square(32, 32, 160, 160));
+        var sand = Body("mountain_0003", "sand", 10.0m, Square(64, 64, 128, 128));
+
+        var messages = new[]
+        {
+            Refusal(workspace, tall, grass, sand),
+            Refusal(workspace, sand, grass, tall),
+            Refusal(workspace, grass, sand, tall),
+            Refusal(workspace, sand, tall, grass),
+        };
+
+        Assert.Single(messages.Distinct(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void EqualTopsSharingOneAssetMayOverlap()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Bodies(
+            Body("mountain_0001", "grass", 10.0m, Square(32, 32, 160, 160)),
+            Body("mountain_0002", "grass", 10.0m, Square(64, 64, 192, 192)));
+
+        DocumentValidation.ValidateGrid(scene, workspace.Metrics);
+
+        var terrain = MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
+        Assert.All(terrain, cell => Assert.Equal(10.0m, cell.ElevationMeters));
+        Assert.All(terrain, cell => Assert.Equal("grass", cell.AssetKey));
+    }
+
+    /// <summary>
+    /// Checking the ties changes nothing about which contribution shows: the
+    /// highest top still wins, over a tie and over painted Terrain alike.
+    /// </summary>
+    [Fact]
+    public void HighestTopStillWinsOverATiedPairBeneathIt()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TerrainEditing.Paint(
+            TestScenes.EmptyInstance(), workspace.Terrain, 3, 3, "sand", 1.0m);
+        scene = scene with
+        {
+            MountainBodies =
+            [
+                Body("mountain_0001", "grass", 15.0m, Square(64, 64, 128, 128)),
+                Body("mountain_0002", "grass", 10.0m, Square(32, 32, 160, 160)),
+                Body("mountain_0003", "grass", 10.0m, Square(32, 32, 160, 160)),
+            ],
+        };
+
+        var terrain = MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
+
+        var covered = terrain.Single(cell => cell is { X: 3, Y: 3 });
+        Assert.Equal(15.0m, covered.ElevationMeters);
+        Assert.Equal("grass", covered.AssetKey);
+        Assert.Equal(16, terrain.Count);
+        Assert.Equal(4, terrain.Count(cell => cell.ElevationMeters == 15.0m));
+        Assert.Equal(12, terrain.Count(cell => cell.ElevationMeters == 10.0m));
+        // The painted cell was covered, so its own height is gone from the fold.
+        Assert.DoesNotContain(terrain, cell => cell.ElevationMeters == 1.0m);
+    }
+
+    [Fact]
+    public void AMountainAnchorOutsideTheSceneIsRefused()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Bodies(
+            Body("mountain_0001", "grass", 10.0m, Square(32, 32, 224, 160)));
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            DocumentValidation.ValidateGrid(scene, workspace.Metrics));
+
+        Assert.Contains(
+            "Mountain body 'mountain_0001' point 1 lies outside Scene bounds",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AMountainAnchorBetweenGridLinesIsRefused()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Bodies(
+            Body("mountain_0001", "grass", 10.0m, Square(32, 32, 160, 144)));
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            DocumentValidation.ValidateGrid(scene, workspace.Metrics));
+
+        Assert.Contains(
+            "Mountain body 'mountain_0001' point 2 must align to the 32-authoring-pixel grid",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Only the anchor is a place. A handle shapes the curve, so it stays
+    /// unsnapped and may push the curve past the edge of the map, where the
+    /// raster stops rather than the document failing.
+    /// </summary>
+    [Fact]
+    public void UnsnappedHandlesReachingBeyondTheSceneStayValid()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Bodies(Body("mountain_0001", "grass", 10.0m, Lens(200)));
+
+        DocumentValidation.ValidateGrid(scene, workspace.Metrics);
+
+        Assert.NotEmpty(MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics));
+    }
+
+    /// <summary>
+    /// Two authored anchors are enough when the handles bow the closing edges
+    /// apart, so the document rule stays at two points and the contour rule
+    /// decides whether they enclose anything.
+    /// </summary>
+    [Fact]
+    public void TheCurvedTwoAnchorLensStaysValidAtTheIoBoundary()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Bodies(Body("mountain_0001", "grass", 10.0m, Lens(96)));
+
+        DocumentValidation.ValidateGrid(scene, workspace.Metrics);
+
+        Assert.Equal(2, Assert.Single(scene.MountainBodies).Points.Count);
+    }
+
+    [Fact]
+    public void AGridAlignedMountainStaysValid()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Bodies(
+            Body("mountain_0001", "grass", 10.0m, Square(0, 0, 192, 192)),
+            Body("mountain_0002", "sand", 12.0m, Square(64, 64, 128, 128)));
+
+        DocumentValidation.ValidateGrid(scene, workspace.Metrics);
+
+        Assert.Equal(36, MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics).Count);
+    }
+
+    private static string Refusal(TestWorkspace workspace, params MountainBodyDocument[] bodies) =>
+        Assert.Throws<SceneMakerDocumentException>(() =>
+            MountainGeometry.EffectiveTerrainCells(
+                TestScenes.EmptyInstance() with { MountainBodies = [.. bodies] },
+                workspace.Metrics)).Message;
+
+    private static SceneDocument Bodies(params MountainBodyDocument[] bodies) =>
+        TestScenes.EmptyInstance() with { MountainBodies = [.. bodies] };
+
+    private static MountainBodyDocument Body(
+        string mountainBodyId,
+        string assetKey,
+        decimal elevationMeters,
+        IReadOnlyList<MountainCurvePointDocument> points) => new()
+    {
+        MountainBodyId = mountainBodyId,
+        AssetKey = assetKey,
+        ElevationMeters = elevationMeters,
+        Points = [.. points],
+    };
+
+    /// <summary>
+    /// Two anchors whose handles bow the two closing edges apart into a lens.
+    /// <paramref name="reach"/> is the handle length in authoring pixels; large
+    /// values push the curve outside the Scene without moving an anchor.
+    /// </summary>
+    private static IReadOnlyList<MountainCurvePointDocument> Lens(int reach) =>
+    [
+        MountainEditing.Point(
+            32,
+            96,
+            MountainPointMode.Aligned,
+            new AuthoringPixelOffset { X = 0, Y = -reach },
+            new AuthoringPixelOffset { X = 0, Y = reach }),
+        MountainEditing.Point(
+            160,
+            96,
+            MountainPointMode.Aligned,
+            new AuthoringPixelOffset { X = 0, Y = reach },
+            new AuthoringPixelOffset { X = 0, Y = -reach }),
+    ];
+
     private static IReadOnlyList<MountainCurvePointDocument> Square(
         int left,
         int bottom,

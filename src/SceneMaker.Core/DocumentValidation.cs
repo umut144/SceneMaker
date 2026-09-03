@@ -156,6 +156,19 @@ public static partial class DocumentValidation
                 $"Mountain body '{body.MountainBodyId}' elevation_meters",
                 body.ElevationMeters,
                 metrics);
+            for (var index = 0; index < body.Points.Count; index++)
+            {
+                // The same two rules `Draw Mountain` authors by, and only for
+                // the anchor. A handle is a curve control rather than a place:
+                // snapping one would snap the shape of the curve, and the curve
+                // it shapes is allowed to bulge past the edge of the map, where
+                // the raster simply stops.
+                ValidateGridAnchor(
+                    $"Mountain body '{body.MountainBodyId}' point {index}",
+                    body.Points[index].PositionAuthoringPx,
+                    document.SizeCells,
+                    metrics);
+            }
         }
         _ = MountainGeometry.EffectiveTerrainCells(document, metrics);
 
