@@ -116,7 +116,9 @@ wieder vor, kann aber pro Strich davon abweichen, ohne dass das Dokument sich
 Das ContextMenu von `Terrain:Draw River` enthält den Grundriss und den Schnitt.
 `Point` schaltet
 zwischen `Linear` und `Aligned` um: `Linear` macht die angrenzenden Segmente
-gerade, `Aligned` hält die beiden Handles eines Punktes kollinear. Wie beim
+gerade, `Aligned` hält die beiden Handles eines Punktes kollinear. Fluss und Berg
+teilen sich dieses eine Bedienelement, aber nicht seinen Wert: jedes Werkzeug
+merkt sich seinen eigenen Punktmodus, und der Dropdown zeigt den des aktiven. Wie beim
 Bezier-Werkzeug von PolyTools ist das Sitzungszustand und gilt für den *nächsten*
 Punkt — es lässt sich also mitten im Zeichnen umschalten und rührt die bereits
 gesetzten Punkte nicht an. `Width` ist die Breite des Korridors am nächsten
@@ -164,13 +166,42 @@ zwischen geraden Kanten und `Aligned`-Bezierpunkten. Die Kontur ist zyklisch:
 auch der erste und der letzte Punkt sind Nachbarn, und automatische Handles
 formen deshalb die Schließkante genauso wie jede andere Kante.
 
-Die Vorschau zeigt die abgeleiteten Terrainzellen in der Assetfarbe. Eine
-gültige geschlossene Kontur hat einen gelben Umriss; Selbstkontakt oder eine
-Kontur ohne Fläche wird rot und kann mit Enter nicht abgeschlossen werden. Das
-`Height`-Feld ist die absolute Oberkante des ganzen Bergkörpers. Ein fertiger
-Berg ist ein Bearbeitungsschritt. Mit eingeschaltetem `Eraser` löscht ein Klick
-den obersten ganzen Bergkörper unter dem Zeiger, nie eine einzelne abgeleitete
-Zelle.
+Die Vorschau kennt genau drei Zustände, und sie beantworten dieselbe Frage:
+Was passiert, wenn ich jetzt Enter drücke?
+
+- **Unfertig** — cyan, nur Umriss und Punkte, keine Füllung. Es sind noch keine
+  drei Punkte gesetzt. Das ist kein Fehler, sondern der normale Zustand einer
+  Kontur, die gerade entsteht; die Statuszeile sagt, was noch fehlt.
+- **Bereit** — gelber Umriss und die abgeleiteten Terrainzellen in der
+  Assetfarbe. Enter würde diesen Bergkörper tatsächlich anlegen. Gelb ist eine
+  Zusage: geprüft sind das gewählte Asset, die Höhe auf dem Workspace-Quantum,
+  die Kontur selbst und die Faltung mit den vorhandenen Bergen.
+- **Blockiert** — roter Umriss, keine Füllung. Enter würde scheitern, und der
+  Grund steht in der Vorschau und in der Statuszeile. Das gilt nicht nur für
+  Selbstkontakt oder eine Kontur ohne Fläche: auch eine geometrisch tadellose
+  Kontur ist blockiert, wenn sie mit einem vorhandenen Berg auf derselben Höhe
+  unter einem anderen Asset kollidiert.
+
+Vorschau und Enter fragen dieselbe Core-Operation, nicht zwei ähnliche. Eine
+gelbe Kontur kann deshalb nicht abgelehnt und eine rote nicht angenommen werden,
+und beide nennen denselben Grund.
+
+Das `Height`-Feld ist die absolute Oberkante des ganzen Bergkörpers. Ein fertiger
+Berg ist ein Bearbeitungsschritt.
+
+Mit eingeschaltetem `Eraser` hebt schon das Überfahren den **ganzen** Bergkörper
+hervor, den ein Klick entfernen würde: alle seine abgeleiteten Terrainzellen in
+der Löschfarbe, nicht nur die Zelle unter dem Zeiger. Getroffen wird über die
+Terrainzelle unter dem Zeiger, nicht über die mathematische Zeigerposition —
+sonst könnten an einer Randzelle die gefüllte Zelle und der getroffene Körper um
+eine halbe Zelle auseinanderliegen. Liegen mehrere Berge übereinander, gewinnt
+der höchste sichtbare; ein Klick entfernt genau diesen einen ganzen Körper.
+
+Ein begonnener Entwurf verschwindet nie stillschweigend. Ein Werkzeugwechsel,
+ein Perspektivwechsel, das Einschalten des `Eraser` und auch der automatische
+Werkzeugwechsel beim Wählen eines curve-authorierten Assets verwerfen den
+Entwurf — und sagen in der Statuszeile, wie viele Punkte dabei verloren gingen.
+Das Ausschalten des `Eraser` beginnt keinen neuen Entwurf.
 
 Die Canvasdarstellung verwendet bereits das gefaltete Höhenfeld aus gemalten
 Zellen und Bergkörpern. Dadurch sieht der Autor genau die Terrainzellen, die
@@ -272,6 +303,9 @@ Jede Bearbeitung landet in einer Historie unveränderlicher Scene-Dokumente:
   der Entwurf leer ist, greifen beide wieder auf die Historie zu. Andernfalls
   würde ein Rückgängig mitten im Zeichnen eine längst abgeschlossene Bearbeitung
   zurücknehmen und den halben Fluss stehen lassen.
+- Wird ein Entwurf durch einen Werkzeug-, Perspektiv- oder Eraserwechsel
+  verworfen, sagt die Statuszeile das ausdrücklich. Die Entscheidung darüber
+  liegt in `ToolInteraction`; die Godot-Oberfläche zeigt nur das Ergebnis.
 - Ein zusammenhängender Zug ist genau ein Schritt: Wer den Pencil über vierzig
   Zellen zieht, nimmt ihn mit einem einzigen Rückgängig zurück. Der Zug endet
   beim Loslassen der Maustaste.

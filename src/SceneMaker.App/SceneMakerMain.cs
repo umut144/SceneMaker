@@ -36,8 +36,19 @@ public sealed partial class SceneMakerMain : Control
     private readonly VSeparator _toolContextSeparator = new();
     private readonly Label _propLineOffsetLabel = new();
     private readonly SpinBox _propLineOffsetEdit = new();
-    private readonly Label _waterPointModeLabel = new();
-    private readonly OptionButton _waterPointModeEdit = new();
+    private readonly Label _curvePointModeLabel = new();
+    private readonly OptionButton _curvePointModeEdit = new();
+
+    /// <summary>
+    /// One control for two tools, and two document enums that stay apart. The
+    /// items carry these IDs rather than either enum's numbers: an OptionButton
+    /// is addressed by item index and answers with one, and assuming index,
+    /// item ID and enum value are the same integer is a coincidence that holds
+    /// until someone reorders the items or numbers an enum.
+    /// </summary>
+    private const int CurvePointModeLinear = 1;
+    private const int CurvePointModeAligned = 2;
+
     private readonly Label _riverWidthLabel = new();
     private readonly SpinBox _riverWidthEdit = new();
     private readonly CheckBox _snapWaterToggle = new();
@@ -333,19 +344,19 @@ public sealed partial class SceneMakerMain : Control
         _propLineOffsetEdit.CustomMinimumSize = new Vector2(130f, 0f);
         _propLineOffsetEdit.ValueChanged += SetPropLineOffset;
         _contextMenuBar.AddChild(_propLineOffsetEdit);
-        _waterPointModeLabel.Name = "CurvePointModeLabel";
-        _waterPointModeLabel.Text = "Point";
-        _waterPointModeLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_waterPointModeLabel);
-        _waterPointModeEdit.Name = "CurvePointMode";
-        _waterPointModeEdit.AddItem("Linear", (int)WaterPointMode.Linear);
-        _waterPointModeEdit.AddItem("Aligned", (int)WaterPointMode.Aligned);
-        _waterPointModeEdit.Selected = (int)WaterPointMode.Linear;
-        _waterPointModeEdit.TooltipText =
+        _curvePointModeLabel.Name = "CurvePointModeLabel";
+        _curvePointModeLabel.Text = "Point";
+        _curvePointModeLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_curvePointModeLabel);
+        _curvePointModeEdit.Name = "CurvePointMode";
+        _curvePointModeEdit.AddItem("Linear", CurvePointModeLinear);
+        _curvePointModeEdit.AddItem("Aligned", CurvePointModeAligned);
+        SelectCurvePointModeItem(CurvePointModeLinear);
+        _curvePointModeEdit.TooltipText =
             "How the next curve point's handles behave. Switchable while drawing; "
             + "it decides what the next point does and leaves the placed ones alone.";
-        _waterPointModeEdit.ItemSelected += SetWaterPointMode;
-        _contextMenuBar.AddChild(_waterPointModeEdit);
+        _curvePointModeEdit.ItemSelected += SetCurvePointMode;
+        _contextMenuBar.AddChild(_curvePointModeEdit);
         _riverWidthLabel.Name = "RiverWidthLabel";
         _riverWidthLabel.Text = "Width";
         _riverWidthLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -1411,7 +1422,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void SelectPerspective(EditorMode mode, string perspective)
     {
-        _canvas.SelectMode(mode);
+        var outcome = _canvas.SelectMode(mode);
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
         _terrainAssetBar.Visible = mode == EditorMode.Terrain;
@@ -1421,7 +1432,7 @@ public sealed partial class SceneMakerMain : Control
         UpdateDrawingToolAvailability();
         UpdateToolContextLabel();
         UpdateTemplateControls();
-        SetStatus($"Selected {perspective} perspective.");
+        SetStatus(WithDiscardedDraft($"Selected {perspective} perspective.", outcome));
     }
 
     private void SelectMapContext()
@@ -1462,17 +1473,25 @@ public sealed partial class SceneMakerMain : Control
 
     private void SelectDrawingTool(EditorTool tool)
     {
-        _canvas.SelectTool(tool);
+        var outcome = _canvas.SelectTool(tool);
         UpdateDrawingToolAvailability();
         UpdateToolContextLabel();
-        SetStatus($"Selected {EditorToolRegistry.Resolve(tool).DisplayName}.");
+        SetStatus(WithDiscardedDraft(
+            $"Selected {EditorToolRegistry.Resolve(tool).DisplayName}.", outcome));
     }
 
     private void SetEraserEnabled(bool enabled)
     {
-        _canvas.SetEraserEnabled(enabled);
-        SetStatus(enabled ? "Eraser enabled." : "Eraser disabled.");
+        var outcome = _canvas.SetEraserEnabled(enabled);
+        SetStatus(WithDiscardedDraft(enabled ? "Eraser enabled." : "Eraser disabled.", outcome));
     }
+
+    /// <summary>
+    /// Appends what the tools gave up, if anything. `ToolInteraction` decides
+    /// whether a draft is lost and says so; the application only shows it.
+    /// </summary>
+    private static string WithDiscardedDraft(string status, ToolOutcome outcome) =>
+        outcome is ToolOutcome.Message discarded ? $"{status} {discarded.Text}" : status;
 
     private void SetHeatmapEnabled(bool enabled)
     {
@@ -1543,24 +1562,35 @@ public sealed partial class SceneMakerMain : Control
         input.Value = (double)EditorInteractionState.DefaultRiverWidthMeters;
     }
 
-    private void SetWaterPointMode(long item)
+    private void SetCurvePointMode(long item)
     {
-        var mode = _waterPointModeEdit.GetItemId((int)item);
+        var aligned = _curvePointModeEdit.GetItemId((int)item) == CurvePointModeAligned;
         if (_interaction.ActiveTool == EditorTool.DrawMountain)
         {
-            var mountainMode = (MountainPointMode)mode;
-            _interaction.State.SetMountainPointMode(mountainMode);
-            SetStatus(mountainMode == MountainPointMode.Linear
-                ? "Mountain: the next contour point makes straight edges."
-                : "Mountain: drag the next point to pull its handle, or click for an automatic one.");
+            _interaction.State.SetMountainPointMode(
+                aligned ? MountainPointMode.Aligned : MountainPointMode.Linear);
+            SetStatus(aligned
+                ? "Mountain: drag the next point to pull its handle, or click for an automatic one."
+                : "Mountain: the next contour point makes straight edges.");
             return;
         }
 
-        var waterMode = (WaterPointMode)mode;
-        _interaction.State.SetWaterPointMode(waterMode);
-        SetStatus(waterMode == WaterPointMode.Linear
-            ? "River: the next point makes its segments straight."
-            : "River: drag the next point to pull its handle, or click for an automatic one.");
+        _interaction.State.SetWaterPointMode(
+            aligned ? WaterPointMode.Aligned : WaterPointMode.Linear);
+        SetStatus(aligned
+            ? "River: drag the next point to pull its handle, or click for an automatic one."
+            : "River: the next point makes its segments straight.");
+    }
+
+    /// <summary>Shows the item with this ID, whatever index it happens to sit at.</summary>
+    private void SelectCurvePointModeItem(int itemId)
+    {
+        for (var index = 0; index < _curvePointModeEdit.ItemCount; index++)
+        {
+            if (_curvePointModeEdit.GetItemId(index) != itemId) continue;
+            _curvePointModeEdit.Selected = index;
+            return;
+        }
     }
 
     private void SetRiverWidth(double value)
@@ -1628,11 +1658,14 @@ public sealed partial class SceneMakerMain : Control
         _toolContextSeparator.Visible = propLineActive || curveActive;
         _propLineOffsetLabel.Visible = propLineActive;
         _propLineOffsetEdit.Visible = propLineActive;
-        _waterPointModeLabel.Visible = curveActive;
-        _waterPointModeEdit.Visible = curveActive;
-        _waterPointModeEdit.Selected = mountainActive
-            ? (int)_interaction.State.MountainPointMode
-            : (int)_interaction.State.WaterPointMode;
+        _curvePointModeLabel.Visible = curveActive;
+        _curvePointModeEdit.Visible = curveActive;
+        // The two tools keep their own point mode; the shared control only
+        // shows whichever one the active tool authors with.
+        var aligned = mountainActive
+            ? _interaction.State.MountainPointMode == MountainPointMode.Aligned
+            : _interaction.State.WaterPointMode == WaterPointMode.Aligned;
+        SelectCurvePointModeItem(aligned ? CurvePointModeAligned : CurvePointModeLinear);
         _riverWidthLabel.Visible = riverActive;
         _riverWidthEdit.Visible = riverActive;
         _snapWaterToggle.Visible = riverActive;
@@ -1656,14 +1689,17 @@ public sealed partial class SceneMakerMain : Control
         // The tools follow the Asset. Grass is painted and has no Bezier; a
         // river is drawn and has no Pencil or Fill, and offering them would be
         // offering something that cannot work.
+        ToolOutcome switched = ToolOutcome.Idle.Instance;
         if (_interaction.Mode == EditorMode.Terrain
             && !EditorToolRegistry.Offers(EditorMode.Terrain, _interaction.ActiveTool, asset.Authoring))
         {
-            _canvas.SelectTool(EditorToolRegistry.DefaultTool(EditorMode.Terrain, asset.Authoring));
+            switched = _canvas.SelectTool(
+                EditorToolRegistry.DefaultTool(EditorMode.Terrain, asset.Authoring));
         }
         UpdateDrawingToolAvailability();
         UpdateToolContextLabel();
-        SetStatus($"Selected Terrain '{asset.Name}' ({asset.AssetKey}).");
+        SetStatus(WithDiscardedDraft(
+            $"Selected Terrain '{asset.Name}' ({asset.AssetKey}).", switched));
     }
 
     /// <summary>

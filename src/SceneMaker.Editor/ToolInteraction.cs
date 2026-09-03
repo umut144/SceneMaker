@@ -68,19 +68,81 @@ public sealed class ToolInteraction
     public string? DraggedAnchorId => _draggedAnchorId;
     public AuthoringPoint? DraggedAnchorPosition => _draggedAnchorPosition;
 
-    public void SelectMode(EditorMode mode)
+    /// <summary>
+    /// Switches mode and drops whatever the old tool was still holding. What was
+    /// dropped is said out loud: a half-drawn contour that vanishes without a
+    /// word is indistinguishable from one the editor lost.
+    /// </summary>
+    public ToolOutcome SelectMode(EditorMode mode)
     {
+        var discarded = DiscardedDraftText();
         State.SelectMode(mode);
         ResetTransient();
+        return Discarded(discarded);
     }
 
-    public void SelectTool(EditorTool tool)
+    /// <summary>
+    /// Switches tool and drops the unfinished draft, reporting it. This is also
+    /// the path the tool bar takes on its own when a chosen Asset does not suit
+    /// the active tool, which is exactly when an unannounced loss would be most
+    /// confusing - the author changed Asset, not tool.
+    /// </summary>
+    public ToolOutcome SelectTool(EditorTool tool)
     {
+        var discarded = DiscardedDraftText();
         State.SelectTool(tool);
         ResetTransient();
+        return Discarded(discarded);
     }
 
-    public void SetEraserEnabled(bool enabled) => State.SetEraserEnabled(enabled);
+    /// <summary>
+    /// Turning the eraser on ends the contour it interrupts. Keeping the draft
+    /// alive in the background would leave the next click meaning something the
+    /// canvas is no longer showing, and switching the eraser off again would
+    /// resurrect a drawing the author had stopped making. Turning it off starts
+    /// nothing.
+    /// </summary>
+    public ToolOutcome SetEraserEnabled(bool enabled)
+    {
+        string? discarded = null;
+        if (enabled && Mode == EditorMode.Terrain && ActiveTool == EditorTool.DrawMountain)
+        {
+            discarded = DiscardedDraftText();
+            ClearMountainDraft();
+        }
+        State.SetEraserEnabled(enabled);
+        return Discarded(discarded);
+    }
+
+    private static ToolOutcome Discarded(string? text) =>
+        text is null ? ToolOutcome.Idle.Instance : new ToolOutcome.Message(text);
+
+    /// <summary>
+    /// What the active tool would lose right now, or null when it holds nothing.
+    /// </summary>
+    private string? DiscardedDraftText()
+    {
+        if (Mode == EditorMode.Terrain && ActiveTool == EditorTool.DrawMountain)
+        {
+            var placed = _mountainDraft.Count + (_mountainPending is null ? 0 : 1);
+            return placed == 0
+                ? null
+                : $"The unfinished mountain contour of {placed} point{Plural(placed)} was discarded.";
+        }
+        if (Mode == EditorMode.Terrain && ActiveTool == EditorTool.DrawRiver)
+        {
+            var placed = _riverDraft.Count + (_riverPending is null ? 0 : 1);
+            return placed == 0
+                ? null
+                : $"The unfinished river of {placed} point{Plural(placed)} was discarded.";
+        }
+        if (Mode == EditorMode.Props && ActiveTool == EditorTool.Line
+            && (_propLineStart is not null || _propLineEnd is not null))
+        {
+            return "The unfinished Prop line was discarded.";
+        }
+        return null;
+    }
 
     /// <summary>Forgets pointer state and selection, for a new or closed Scene.</summary>
     public void ResetForScene()
@@ -317,7 +379,7 @@ public sealed class ToolInteraction
         EditorTool.Line => BeginTerrainLine(cell),
         EditorTool.DrawRiver when EraserEnabled => EraseWaterBody(context, authoring),
         EditorTool.DrawRiver => BeginRiverPoint(context, authoring, cell),
-        EditorTool.DrawMountain when EraserEnabled => EraseMountainBody(context, authoring),
+        EditorTool.DrawMountain when EraserEnabled => EraseMountainBody(context, cell),
         EditorTool.DrawMountain => BeginMountainPoint(context, authoring),
         _ => ToolOutcome.Idle.Instance,
     };
@@ -378,35 +440,41 @@ public sealed class ToolInteraction
             : $"Mountain: {_mountainDraft.Count} points. Enter closes it, Escape takes the last one back.");
     }
 
+    /// <summary>
+    /// The draft the canvas is showing, asked the same way the canvas asks it.
+    /// Enter reads this and nothing else, so a yellow contour cannot be refused
+    /// and a red one cannot slip through.
+    /// </summary>
+    public MountainDraftPreview MountainPreview(ToolContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return ToolPreviewBuilder.BuildMountainDraft(
+            context.Scene,
+            context.Metrics,
+            context.TerrainAssets,
+            ActiveTool,
+            _mountainDraft,
+            _mountainPending,
+            context.SelectedTerrainAssetKey,
+            context.ElevationMeters);
+    }
+
     private ToolOutcome FinishMountain(ToolContext context)
     {
-        if (context.SelectedTerrainAssetKey is not { } assetKey)
-            return new ToolOutcome.Message("Mountain: choose a Terrain asset first.");
         if (_mountainPending is { } pending)
         {
             _mountainDraft.Add(pending);
             _mountainPending = null;
         }
-        if (_mountainDraft.Count < 3)
-            return new ToolOutcome.Message("Mountain: a contour needs at least three points.");
 
-        var points = MountainEditing.ResolveContour(_mountainDraft);
-        try
-        {
-            var candidate = MountainEditing.Place(
-                context.Scene,
-                context.Metrics,
-                context.TerrainAssets,
-                points,
-                assetKey,
-                context.ElevationMeters);
-            _ = MountainGeometry.EffectiveTerrainCells(candidate, context.Metrics);
-        }
-        catch (SceneMakerDocumentException exception)
-        {
-            return new ToolOutcome.Message($"Mountain blocked: {exception.Message}");
-        }
+        var preview = MountainPreview(context);
+        if (preview.Kind == MountainDraftKind.Incomplete)
+            return new ToolOutcome.Message($"Mountain: {preview.Explanation}");
+        if (preview.Kind == MountainDraftKind.Blocked)
+            return new ToolOutcome.Message($"Mountain blocked: {preview.Explanation}");
 
+        var points = preview.Curve;
+        var assetKey = context.SelectedTerrainAssetKey!;
         var placed = _mountainDraft.Count;
         var elevation = context.ElevationMeters;
         var assetName = context.TerrainAssets.Resolve(assetKey).Name;
@@ -440,9 +508,14 @@ public sealed class ToolInteraction
             : $"Mountain: {_mountainDraft.Count} point{Plural(_mountainDraft.Count)} left.");
     }
 
-    private static ToolOutcome EraseMountainBody(ToolContext context, AuthoringPoint point)
+    /// <summary>
+    /// Removes the body the hover preview highlighted. Both ask
+    /// <see cref="MountainEditing.FindAtCell"/> about the cell under the
+    /// pointer, so what lights up and what disappears are one answer.
+    /// </summary>
+    private static ToolOutcome EraseMountainBody(ToolContext context, TerrainCellCoordinate cell)
     {
-        var body = MountainEditing.FindAt(context.Scene, point.X, point.Y);
+        var body = MountainEditing.FindAtCell(context.Scene, context.Metrics, cell);
         if (body is null) return new ToolOutcome.Message("Mountain Eraser: no mountain here.");
         var bodyId = body.MountainBodyId;
         return new ToolOutcome.Edit(

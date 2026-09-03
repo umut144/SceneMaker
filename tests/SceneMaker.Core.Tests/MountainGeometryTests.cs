@@ -47,9 +47,16 @@ public sealed class MountainGeometryTests
             "grass",
             4m);
 
-        Assert.Equal("mountain_0002", MountainEditing.FindAt(scene, 96, 96)?.MountainBodyId);
-        Assert.Equal("mountain_0001", MountainEditing.FindAt(scene, 48, 48)?.MountainBodyId);
-        Assert.Null(MountainEditing.FindAt(scene, 8, 8));
+        Assert.Equal(
+            "mountain_0002",
+            MountainEditing.FindAtCell(scene, workspace.Metrics, new TerrainCellCoordinate(3, 3))
+                ?.MountainBodyId);
+        Assert.Equal(
+            "mountain_0001",
+            MountainEditing.FindAtCell(scene, workspace.Metrics, new TerrainCellCoordinate(1, 1))
+                ?.MountainBodyId);
+        Assert.Null(
+            MountainEditing.FindAtCell(scene, workspace.Metrics, new TerrainCellCoordinate(0, 0)));
     }
 
     [Fact]

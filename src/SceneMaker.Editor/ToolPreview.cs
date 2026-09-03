@@ -36,15 +36,50 @@ public sealed record WaterDraftPreview(
     public static WaterDraftPreview Empty { get; } = new([], [], [], []);
 }
 
-/// <summary>The closed mountain contour being drawn and its derived Terrain fill.</summary>
+/// <summary>
+/// What the mountain draft on the canvas would do if it were committed now.
+///
+/// <para><c>Incomplete</c> is not a refusal: the author has simply not placed
+/// enough points yet, and the drawing so far is neither promised nor refused.
+/// <c>Ready</c> is a promise - the same attempt the commit makes has already
+/// succeeded against this Scene, Asset and height. <c>Blocked</c> carries the
+/// reason it would fail.</para>
+/// </summary>
+public enum MountainDraftKind
+{
+    Incomplete,
+    Ready,
+    Blocked,
+}
+
+/// <summary>
+/// The closed mountain contour being drawn. <see cref="Cells"/> is filled only
+/// for <see cref="MountainDraftKind.Ready"/>, because a fill is a picture of
+/// what the author would get and a blocked draft gets nothing;
+/// <see cref="Explanation"/> is set for everything but Ready.
+/// </summary>
 public sealed record MountainDraftPreview(
     IReadOnlyList<MountainDraftPoint> Points,
     IReadOnlyList<MountainCurvePointDocument> Curve,
     IReadOnlyList<ChainPoint> Outline,
     IReadOnlyList<TerrainCellCoordinate> Cells,
-    bool IsValid)
+    MountainDraftKind Kind,
+    string? Explanation)
 {
-    public static MountainDraftPreview Empty { get; } = new([], [], [], [], false);
+    public static MountainDraftPreview Empty { get; } = new(
+        [], [], [], [], MountainDraftKind.Incomplete, ToolPreviewBuilder.IncompleteMountainDraft);
+}
+
+/// <summary>
+/// The whole mountain body the eraser would remove, and the Terrain cells it
+/// surfaces. Both come from the one picking function the erase itself uses, so
+/// what is highlighted and what disappears cannot be two different bodies.
+/// </summary>
+public sealed record MountainEraserPreview(
+    string? MountainBodyId,
+    IReadOnlyList<TerrainCellCoordinate> Cells)
+{
+    public static MountainEraserPreview Empty { get; } = new(null, []);
 }
 
 public sealed record TerrainPreview(
@@ -181,20 +216,45 @@ public static class ToolPreviewBuilder
             WaterGeometry.Corridor(scene, metrics, curve));
     }
 
+    /// <summary>The points the canvas tool asks for before a contour may close.</summary>
+    public const int MinimumMountainDraftPoints = 3;
+
     /// <summary>
-    /// What the mountain draft would author. The outline is shown even when it
-    /// crosses itself; the fill appears only when the exact Core contour rule
-    /// accepts it.
+    /// Why a draft is not ready yet. It is a count the drawing tool asks for
+    /// rather than a geometric rule: two anchors whose handles bow the closing
+    /// edges apart already enclose an area, and the document accepts that. What
+    /// the canvas cannot offer is a way to author those handles without a third
+    /// click to aim them, so the tool asks for three placed points.
+    /// </summary>
+    public const string IncompleteMountainDraft = "a contour needs at least three points.";
+
+    /// <summary>Said when no Terrain Asset is chosen to give the contour a surface.</summary>
+    public const string NoTerrainAsset = "choose a Terrain asset first.";
+
+    /// <summary>
+    /// What the mountain draft would author, and whether Enter would take it.
+    ///
+    /// <para>Ready means the whole attempt has already been made against this
+    /// Scene, Asset and height and succeeded - the Asset is drawable, the height
+    /// sits on the Workspace quantum, the ring is a usable contour, and the fold
+    /// has no tie it cannot settle. Anything the commit would refuse is Blocked
+    /// here with the same sentence, because both ask
+    /// <see cref="MountainEditing.TryPlace"/> and neither decides anything of
+    /// its own.</para>
     /// </summary>
     public static MountainDraftPreview BuildMountainDraft(
         SceneDocument scene,
         WorkspaceMetrics metrics,
+        TerrainDisplayCatalog terrainAssets,
         EditorTool tool,
         IReadOnlyList<MountainDraftPoint> draft,
-        MountainDraftPoint? pending)
+        MountainDraftPoint? pending,
+        string? selectedTerrainAssetKey,
+        decimal elevationMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentNullException.ThrowIfNull(terrainAssets);
         ArgumentNullException.ThrowIfNull(draft);
         if (tool != EditorTool.DrawMountain) return MountainDraftPreview.Empty;
 
@@ -207,30 +267,67 @@ public static class ToolPreviewBuilder
         if (points.Count == 0) return MountainDraftPreview.Empty;
 
         var curve = MountainEditing.ResolveContour(points);
-        if (points.Count < 3)
-            return new MountainDraftPreview(points, curve, [], [], false);
+        if (points.Count < MinimumMountainDraftPoints)
+        {
+            return new MountainDraftPreview(
+                points, curve, [], [], MountainDraftKind.Incomplete, IncompleteMountainDraft);
+        }
 
-        var body = new MountainBodyDocument
+        // Drawn from the resolved curve alone, so a contour that crosses itself
+        // is still visible while it is being fixed.
+        var outline = MountainGeometry.Flatten(new MountainBodyDocument
         {
             MountainBodyId = "mountain_preview",
             AssetKey = "preview",
             ElevationMeters = 0m,
             Points = [.. curve],
-        };
-        var outline = MountainGeometry.Flatten(body).Points;
-        try
+        }).Points;
+
+        if (selectedTerrainAssetKey is not { } assetKey)
         {
             return new MountainDraftPreview(
-                points,
-                curve,
-                outline,
-                MountainGeometry.TerrainCells(scene, metrics, body),
-                true);
+                points, curve, outline, [], MountainDraftKind.Blocked, NoTerrainAsset);
         }
-        catch (SceneMakerDocumentException)
+
+        var placement = MountainEditing.TryPlace(
+            scene, metrics, terrainAssets, curve, assetKey, elevationMeters);
+        if (placement is not { Scene: { } placed, Body: { } body })
         {
-            return new MountainDraftPreview(points, curve, outline, [], false);
+            return new MountainDraftPreview(
+                points, curve, outline, [], MountainDraftKind.Blocked, placement.Reason);
         }
+
+        return new MountainDraftPreview(
+            points,
+            curve,
+            outline,
+            MountainGeometry.TerrainCells(placed, metrics, body),
+            MountainDraftKind.Ready,
+            Explanation: null);
+    }
+
+    /// <summary>
+    /// The mountain body the eraser would remove where the pointer is, and the
+    /// cells it surfaces - so the author sees the whole body go before the click
+    /// rather than the one cell under the cursor.
+    /// </summary>
+    public static MountainEraserPreview BuildMountainEraser(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        EditorTool tool,
+        bool eraserEnabled,
+        TerrainCellCoordinate? pointer)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+        if (tool != EditorTool.DrawMountain || !eraserEnabled) return MountainEraserPreview.Empty;
+        if (pointer is not { } cell) return MountainEraserPreview.Empty;
+        if (MountainEditing.FindAtCell(scene, metrics, cell) is not { } body)
+            return MountainEraserPreview.Empty;
+
+        return new MountainEraserPreview(
+            body.MountainBodyId,
+            MountainGeometry.TerrainCells(scene, metrics, body));
     }
 
     public static int CountOf(IReadOnlyList<PropPreview> previews, PropPreviewKind kind)

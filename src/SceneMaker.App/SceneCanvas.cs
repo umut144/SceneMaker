@@ -25,6 +25,9 @@ public sealed partial class SceneCanvas : Control
     private static readonly Color SelectionColor = Color.FromHtml("#FFD866");
     private static readonly Color ValidPreviewColor = Color.FromHtml("#FFD866");
     private static readonly Color InvalidPreviewColor = Color.FromHtml("#FF5C5C");
+    // A draft that is neither promised nor refused yet. Cyan rather than red:
+    // too few points is the ordinary state of a contour being drawn.
+    private static readonly Color DraftPreviewColor = Color.FromHtml("#8FE3FF");
     private static readonly Color TemplateAnchorFill = Color.FromHtml("#FFFFFF");
     private static readonly Color TemplateAnchorBorder = Color.FromHtml("#7B8491");
     private static readonly Color TemplateAnchorText = Color.FromHtml("#252A31");
@@ -163,22 +166,30 @@ public sealed partial class SceneCanvas : Control
         QueueRedraw();
     }
 
-    public void SelectMode(EditorMode mode)
+    /// <summary>
+    /// Switches mode and answers with whatever the tools had to give up for it,
+    /// so the caller can put it in the status line. The canvas decides nothing
+    /// about transient tool state; it only redraws and passes the answer on.
+    /// </summary>
+    public ToolOutcome SelectMode(EditorMode mode)
     {
-        _interaction.SelectMode(mode);
+        var outcome = _interaction.SelectMode(mode);
         QueueRedraw();
+        return outcome;
     }
 
-    public void SelectTool(EditorTool tool)
+    public ToolOutcome SelectTool(EditorTool tool)
     {
-        _interaction.SelectTool(tool);
+        var outcome = _interaction.SelectTool(tool);
         QueueRedraw();
+        return outcome;
     }
 
-    public void SetEraserEnabled(bool enabled)
+    public ToolOutcome SetEraserEnabled(bool enabled)
     {
-        _interaction.SetEraserEnabled(enabled);
+        var outcome = _interaction.SetEraserEnabled(enabled);
         QueueRedraw();
+        return outcome;
     }
 
     public void ConfigureTerrainAssets(TerrainDisplayCatalog catalog)
@@ -769,15 +780,32 @@ public sealed partial class SceneCanvas : Control
         float zoom,
         int sceneHeightAuthoringPixels)
     {
+        if (_terrainAssets is null) return;
+        if (EraserEnabled)
+        {
+            DrawMountainEraserPreview(document, pan, zoom);
+            return;
+        }
+
         var preview = ToolPreviewBuilder.BuildMountainDraft(
             document,
             _metrics!,
+            _terrainAssets,
             ActiveTool,
             _interaction.MountainDraft,
-            _interaction.MountainPendingPoint);
+            _interaction.MountainPendingPoint,
+            SelectedTerrainAssetKey,
+            ElevationMeters);
         if (preview.Points.Count == 0) return;
 
-        var outlineColor = preview.IsValid ? ValidPreviewColor : InvalidPreviewColor;
+        // Yellow is a promise that Enter would take this contour, red that it
+        // would refuse it, and cyan that the author is not finished asking.
+        var outlineColor = preview.Kind switch
+        {
+            MountainDraftKind.Ready => ValidPreviewColor,
+            MountainDraftKind.Blocked => InvalidPreviewColor,
+            _ => DraftPreviewColor,
+        };
         var fill = SelectedTerrainAssetKey is { } assetKey
             && _terrainColors.TryGetValue(assetKey, out var assetColor)
                 ? assetColor
@@ -820,6 +848,40 @@ public sealed partial class SceneCanvas : Control
             DrawHandle(centre, point.PositionAuthoringPx, point.HandleInAuthoringPx, Screen);
             DrawHandle(centre, point.PositionAuthoringPx, point.HandleOutAuthoringPx, Screen);
             DrawCircle(centre, 4.0f, outlineColor);
+        }
+    }
+
+    /// <summary>
+    /// The whole body a click would remove, in the erase colour. Marking only
+    /// the cell under the pointer would say that one cell goes, and a mountain
+    /// is erased whole.
+    /// </summary>
+    private void DrawMountainEraserPreview(SceneDocument document, Vector2 pan, float zoom)
+    {
+        var preview = ToolPreviewBuilder.BuildMountainEraser(
+            document,
+            _metrics!,
+            ActiveTool,
+            EraserEnabled,
+            _interaction.PointerCell);
+        if (preview.Cells.Count == 0) return;
+
+        var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
+        foreach (var cell in preview.Cells)
+        {
+            var rectangle = new Rect2(
+                pan + new Vector2(
+                    cell.X * cellSize,
+                    (document.SizeCells.Height - cell.Y - 1) * cellSize),
+                new Vector2(cellSize, cellSize));
+            DrawRect(
+                rectangle,
+                new Color(
+                    InvalidPreviewColor.R,
+                    InvalidPreviewColor.G,
+                    InvalidPreviewColor.B,
+                    0.35f));
+            DrawRect(rectangle, InvalidPreviewColor, filled: false, width: 2f);
         }
     }
 

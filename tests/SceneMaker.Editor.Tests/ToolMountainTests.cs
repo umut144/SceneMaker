@@ -5,6 +5,11 @@ using Xunit;
 
 namespace SceneMaker.Editor.Tests;
 
+/// <summary>
+/// `Draw Mountain` on the canvas. Every anchor here sits on the 32-pixel
+/// Terrain grid, because a fixture that builds a Scene the IO boundary would
+/// reject is a trap for the next persistence test rather than a shortcut.
+/// </summary>
 public sealed class ToolMountainTests
 {
     [Fact]
@@ -65,8 +70,51 @@ public sealed class ToolMountainTests
         Assert.False(points[^1].HandleOutAuthoringPx.IsZero());
     }
 
+    /// <summary>
+    /// Not enough points yet is not a refusal. The draft is drawn, nothing is
+    /// filled, and the preview says what is still missing instead of claiming
+    /// the contour is wrong.
+    /// </summary>
     [Fact]
-    public void InvalidContourStaysADraftAndShowsNoFill()
+    public void ADraftBelowThreePointsIsIncomplete()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = Mountain();
+        var context = Context(workspace, scene);
+
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+        var preview = interaction.MountainPreview(context);
+
+        Assert.Equal(MountainDraftKind.Incomplete, preview.Kind);
+        Assert.Equal(ToolPreviewBuilder.IncompleteMountainDraft, preview.Explanation);
+        Assert.Empty(preview.Cells);
+        Assert.Empty(preview.Outline);
+        Assert.Equal(2, preview.Points.Count);
+    }
+
+    [Fact]
+    public void AClosedContourWithAnAssetAndAHeightIsReady()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = Mountain();
+        var context = Context(workspace, scene);
+
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+        Place(interaction, context, 96, 160);
+        var preview = interaction.MountainPreview(context);
+
+        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Null(preview.Explanation);
+        Assert.NotEmpty(preview.Cells);
+        Assert.NotEmpty(preview.Outline);
+    }
+
+    [Fact]
+    public void ASelfTouchingContourIsBlockedAndStaysADraft()
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
@@ -80,15 +128,64 @@ public sealed class ToolMountainTests
 
         Assert.IsType<ToolOutcome.Message>(interaction.KeyPressed(context, ToolKey.Enter));
         Assert.Equal(4, interaction.MountainDraft.Count);
-        var preview = ToolPreviewBuilder.BuildMountainDraft(
-            scene,
-            workspace.Metrics,
-            interaction.ActiveTool,
-            interaction.MountainDraft,
-            interaction.MountainPendingPoint);
-        Assert.False(preview.IsValid);
+        var preview = interaction.MountainPreview(context);
+        Assert.Equal(MountainDraftKind.Blocked, preview.Kind);
+        Assert.Contains("contact with itself", preview.Explanation!, StringComparison.Ordinal);
         Assert.Empty(preview.Cells);
         Assert.NotEmpty(preview.Outline);
+    }
+
+    /// <summary>
+    /// Yellow has to mean more than "the ring closes". This contour is perfectly
+    /// good geometry and still cannot be authored, because it would tie with an
+    /// existing body at one height under a different Asset.
+    /// </summary>
+    [Fact]
+    public void AGoodContourIsBlockedByAnEqualTopWithAnotherAsset()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = MountainEditing.Place(
+            TestScenes.EmptyInstance(),
+            workspace.Metrics,
+            workspace.Terrain,
+            Square(32, 32, 160, 160),
+            "sand",
+            4.0m);
+        var interaction = Mountain();
+        var context = Context(workspace, scene);
+
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+        Place(interaction, context, 96, 160);
+        var preview = interaction.MountainPreview(context);
+
+        Assert.Equal(MountainDraftKind.Blocked, preview.Kind);
+        Assert.Contains("different Assets", preview.Explanation!, StringComparison.Ordinal);
+        Assert.Empty(preview.Cells);
+    }
+
+    [Fact]
+    public void ThePreviewAndEnterGiveTheSameReason()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = MountainEditing.Place(
+            TestScenes.EmptyInstance(),
+            workspace.Metrics,
+            workspace.Terrain,
+            Square(32, 32, 160, 160),
+            "sand",
+            4.0m);
+        var interaction = Mountain();
+        var context = Context(workspace, scene);
+
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+        Place(interaction, context, 96, 160);
+        var preview = interaction.MountainPreview(context);
+        var message = Assert.IsType<ToolOutcome.Message>(
+            interaction.KeyPressed(context, ToolKey.Enter));
+
+        Assert.Equal($"Mountain blocked: {preview.Explanation}", message.Text);
     }
 
     [Fact]
@@ -113,20 +210,147 @@ public sealed class ToolMountainTests
     public void EraserRemovesTheTopmostWholeMountain()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = TestScenes.EmptyInstance();
-        var lower = MountainEditing.Place(
-            scene, workspace.Metrics, workspace.Terrain, Triangle(32, 32, 160), "grass", 2m);
-        var upper = MountainEditing.Place(
-            lower, workspace.Metrics, workspace.Terrain, Triangle(64, 64, 96), "grass", 4m);
+        var scene = Nested(workspace);
         var interaction = Mountain();
         interaction.SetEraserEnabled(true);
 
         var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerPressed(
-            Context(workspace, upper), Point(96, 80), Cell(3, 2)));
-        var erased = edit.Apply(upper);
+            Context(workspace, scene), Point(80, 80), Cell(2, 2)));
+        var erased = edit.Apply(scene);
 
         Assert.Single(erased.MountainBodies);
         Assert.Equal("mountain_0001", erased.MountainBodies[0].MountainBodyId);
+    }
+
+    /// <summary>
+    /// The pointer sits in a cell the contour fills but outside the contour
+    /// itself - the raster asks about the cell's centre, and picking now asks
+    /// the same question instead of testing the exact position.
+    /// </summary>
+    [Fact]
+    public void TheEraserPicksByCellRatherThanByPointerPosition()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = MountainEditing.Place(
+            TestScenes.EmptyInstance(),
+            workspace.Metrics,
+            workspace.Terrain,
+            Triangle(32, 32, 128),
+            "grass",
+            2.0m);
+        var interaction = Mountain();
+        interaction.SetEraserEnabled(true);
+
+        Assert.Contains(
+            Cell(2, 3),
+            MountainGeometry.TerrainCells(scene, workspace.Metrics, scene.MountainBodies[0]));
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerPressed(
+            Context(workspace, scene), Point(74, 120), Cell(2, 3)));
+
+        Assert.Empty(edit.Apply(scene).MountainBodies);
+    }
+
+    [Fact]
+    public void TheEraserPreviewAndTheClickChooseTheSameBody()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Nested(workspace);
+        var interaction = Mountain();
+        interaction.SetEraserEnabled(true);
+
+        var preview = ToolPreviewBuilder.BuildMountainEraser(
+            scene, workspace.Metrics, interaction.ActiveTool, eraserEnabled: true, Cell(2, 2));
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerPressed(
+            Context(workspace, scene), Point(80, 80), Cell(2, 2)));
+        var removed = scene.MountainBodies
+            .Select(static body => body.MountainBodyId)
+            .Except(edit.Apply(scene).MountainBodies.Select(static body => body.MountainBodyId));
+
+        Assert.Equal("mountain_0002", preview.MountainBodyId);
+        Assert.Equal("mountain_0002", Assert.Single(removed));
+        Assert.Equal(
+            MountainGeometry.TerrainCells(scene, workspace.Metrics, scene.MountainBodies[^1]),
+            preview.Cells);
+    }
+
+    [Fact]
+    public void WithoutAMountainUnderThePointerTheEraserPreviewIsEmpty()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Nested(workspace);
+
+        var preview = ToolPreviewBuilder.BuildMountainEraser(
+            scene, workspace.Metrics, EditorTool.DrawMountain, eraserEnabled: true, Cell(0, 0));
+
+        Assert.Null(preview.MountainBodyId);
+        Assert.Empty(preview.Cells);
+    }
+
+    [Fact]
+    public void SwitchingToolDiscardsTheDraftAndSaysSo()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = Mountain();
+        var context = Context(workspace, scene);
+        Place(interaction, context, 32, 32);
+        Place(interaction, context, 160, 32);
+
+        var outcome = interaction.SelectTool(EditorTool.Pencil);
+
+        var message = Assert.IsType<ToolOutcome.Message>(outcome);
+        Assert.Equal("The unfinished mountain contour of 2 points was discarded.", message.Text);
+        Assert.Empty(interaction.MountainDraft);
+    }
+
+    [Fact]
+    public void EnablingTheEraserDiscardsTheDraftAndDisablingItStartsNone()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = Mountain();
+        var context = Context(workspace, scene);
+        Place(interaction, context, 32, 32);
+
+        var enabled = interaction.SetEraserEnabled(true);
+        var disabled = interaction.SetEraserEnabled(false);
+
+        Assert.Equal(
+            "The unfinished mountain contour of 1 point was discarded.",
+            Assert.IsType<ToolOutcome.Message>(enabled).Text);
+        Assert.IsType<ToolOutcome.Idle>(disabled);
+        Assert.Empty(interaction.MountainDraft);
+        Assert.False(interaction.HasUnfinishedDraft);
+    }
+
+    [Fact]
+    public void SwitchingToolWithoutADraftSaysNothingExtra()
+    {
+        var interaction = Mountain();
+
+        Assert.IsType<ToolOutcome.Idle>(interaction.SelectTool(EditorTool.Pencil));
+        Assert.IsType<ToolOutcome.Idle>(interaction.SetEraserEnabled(true));
+    }
+
+    /// <summary>
+    /// One control in the context bar, two independent session values. A river
+    /// and a mountain never share a point mode, only the widget that shows one.
+    /// </summary>
+    [Fact]
+    public void RiverAndMountainPointModesStayIndependent()
+    {
+        var interaction = Mountain();
+
+        interaction.State.SetMountainPointMode(MountainPointMode.Aligned);
+
+        Assert.Equal(MountainPointMode.Aligned, interaction.State.MountainPointMode);
+        Assert.Equal(WaterPointMode.Linear, interaction.State.WaterPointMode);
+
+        interaction.State.SetWaterPointMode(WaterPointMode.Aligned);
+        interaction.State.SetMountainPointMode(MountainPointMode.Linear);
+
+        Assert.Equal(WaterPointMode.Aligned, interaction.State.WaterPointMode);
+        Assert.Equal(MountainPointMode.Linear, interaction.State.MountainPointMode);
     }
 
     [Fact]
@@ -141,7 +365,14 @@ public sealed class ToolMountainTests
             new MountainDraftPoint(96, 160, MountainPointMode.Linear),
         };
         var preview = ToolPreviewBuilder.BuildMountainDraft(
-            scene, workspace.Metrics, EditorTool.DrawMountain, draft, pending: null);
+            scene,
+            workspace.Metrics,
+            workspace.Terrain,
+            EditorTool.DrawMountain,
+            draft,
+            pending: null,
+            selectedTerrainAssetKey: "grass",
+            elevationMeters: 4m);
         var authored = MountainEditing.Place(
             scene,
             workspace.Metrics,
@@ -150,17 +381,56 @@ public sealed class ToolMountainTests
             "grass",
             4m);
 
-        Assert.True(preview.IsValid);
+        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
         Assert.Equal(
             MountainGeometry.TerrainCells(scene, workspace.Metrics, authored.MountainBodies[^1]),
             preview.Cells);
     }
 
+    /// <summary>The fixtures above are Scenes the IO boundary would accept.</summary>
+    [Fact]
+    public void TheTestMountainsSitOnTheTerrainGrid()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        DocumentValidation.ValidateGrid(Nested(workspace), workspace.Metrics);
+    }
+
+    /// <summary>A small mountain inside a larger, lower one.</summary>
+    private static SceneDocument Nested(TestWorkspace workspace)
+    {
+        var lower = MountainEditing.Place(
+            TestScenes.EmptyInstance(),
+            workspace.Metrics,
+            workspace.Terrain,
+            Triangle(32, 32, 128),
+            "grass",
+            2m);
+        return MountainEditing.Place(
+            lower, workspace.Metrics, workspace.Terrain, Triangle(64, 64, 64), "grass", 4m);
+    }
+
+    /// <summary>
+    /// An isosceles triangle whose three anchors land on the Terrain grid.
+    /// <paramref name="size"/> is therefore a multiple of two Terrain cells.
+    /// </summary>
     private static IReadOnlyList<MountainCurvePointDocument> Triangle(int x, int y, int size) =>
     [
         MountainEditing.Point(x, y),
         MountainEditing.Point(x + size, y),
-        MountainEditing.Point(x + size / 2, y + size),
+        MountainEditing.Point(x + (size / 2), y + size),
+    ];
+
+    private static IReadOnlyList<MountainCurvePointDocument> Square(
+        int left,
+        int bottom,
+        int right,
+        int top) =>
+    [
+        MountainEditing.Point(left, bottom),
+        MountainEditing.Point(right, bottom),
+        MountainEditing.Point(right, top),
+        MountainEditing.Point(left, top),
     ];
 
     private static ToolInteraction Mountain()

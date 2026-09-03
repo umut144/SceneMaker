@@ -149,9 +149,24 @@ It uses the same `ToolInteraction -> ToolOutcome` path as every other tool:
 points snap to the Terrain grid, handles remain unsnapped, Enter closes the
 contour as one undoable body, and Escape or draft undo removes one point. Point
 modes are per next point and the aligned automatic handles are cyclic, so the
-closing Bezier edge has no special endpoint behaviour. Invalid contours remain
-visible in red but cannot be committed. The eraser picks with the same contour
-predicate used by rasterization and removes the topmost whole body.
+closing Bezier edge has no special endpoint behaviour.
+
+The draft has three states and they answer one question - what would Enter do.
+Too few points is Incomplete and drawn neutrally, because a contour that is not
+finished being asked for is not a contour that was refused. Ready is a promise:
+the whole attempt has already been made against this Scene, Asset and height by
+`MountainEditing.TryPlace`, which is the same call the commit makes, so a ready
+contour cannot then be refused and a refused one cannot slip through. Everything
+else is Blocked and carries the reason, including a contour that is perfect
+geometry and still ties with an existing body at one elevation under a different
+Asset - a preview that only checked the ring would call that one ready and lie.
+
+The eraser asks about the Terrain cell under the pointer rather than the exact
+position in it, because the raster asks about a cell's centre and two different
+sample points would let the body the author sees filled and the body the click
+removes differ by half a cell near an edge. `MountainEditing.FindAtCell` answers
+once for both the hover highlight and the removal, so what lights up is what
+disappears: the whole topmost body over that cell, never a single derived cell.
 
 ## Height is a stack, not a number
 

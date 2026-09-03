@@ -64,22 +64,80 @@ public static class MountainEditing
     }
 
     /// <summary>
-    /// The topmost mountain contour containing an authoring position. Picking
-    /// follows the same containment rule as rasterization, so the body the
-    /// eraser sees is the one whose cells the author sees.
+    /// The topmost mountain body that surfaces a Terrain cell.
+    ///
+    /// <para>The question is asked of the cell, not of the exact position
+    /// inside it. Asking the contour whether it contains the pointer would use
+    /// the same rule as the raster but a different sample point - the raster
+    /// asks about a cell's centre - so near an edge the body the author sees
+    /// filled and the body the pointer hits could differ by up to half a cell.
+    /// Picking the cell first makes the two the same question.</para>
+    ///
+    /// <para>Among the bodies covering the cell the highest top wins, because
+    /// that is the one whose surface shows. Equal tops are settled by ordinal
+    /// body ID, so the answer is the same every time rather than depending on
+    /// document order.</para>
     /// </summary>
-    public static MountainBodyDocument? FindAt(
+    public static MountainBodyDocument? FindAtCell(
         SceneDocument scene,
-        int authoringX,
-        int authoringY)
+        WorkspaceMetrics metrics,
+        TerrainCellCoordinate cell)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
         return scene.MountainBodies
-            .Where(body => ContourRaster.Contains(
-                MountainGeometry.RequireContour(body), authoringX, authoringY))
+            .Where(body => MountainGeometry.TerrainCells(scene, metrics, body).Contains(cell))
             .OrderBy(static body => body.ElevationMeters)
             .ThenBy(static body => body.MountainBodyId, StringComparer.Ordinal)
             .LastOrDefault();
+    }
+
+    /// <summary>
+    /// One attempt at authoring a mountain: the Scene it would produce and the
+    /// body it would add, or the reason it cannot be done.
+    /// </summary>
+    public sealed record MountainPlacement(
+        SceneDocument? Scene,
+        MountainBodyDocument? Body,
+        string? Reason);
+
+    /// <summary>
+    /// Everything that has to hold for a contour to become a mountain, asked
+    /// once and answered without throwing: the Asset is a cell-authored Terrain
+    /// Asset, the elevation sits on the Workspace quantum, the ring is a usable
+    /// contour, and the Scene it lands in still folds into one height field.
+    ///
+    /// <para>Both the preview and the key that commits it go through here. Two
+    /// separate implementations of "would this work" is how a preview comes to
+    /// promise something the commit then refuses.</para>
+    /// </summary>
+    public static MountainPlacement TryPlace(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        TerrainDisplayCatalog terrainAssets,
+        IReadOnlyList<MountainCurvePointDocument> points,
+        string assetKey,
+        decimal elevationMeters)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        try
+        {
+            var placed = Place(scene, metrics, terrainAssets, points, assetKey, elevationMeters);
+            // The fold is part of the question: a contour that ties with an
+            // existing body at one elevation under a different Asset is refused
+            // there and nowhere earlier.
+            _ = MountainGeometry.EffectiveTerrainCells(placed, metrics);
+            var authored = placed.MountainBodies.Single(candidate => !scene.MountainBodies.Any(
+                existing => string.Equals(
+                    existing.MountainBodyId,
+                    candidate.MountainBodyId,
+                    StringComparison.Ordinal)));
+            return new MountainPlacement(placed, authored, Reason: null);
+        }
+        catch (SceneMakerDocumentException exception)
+        {
+            return new MountainPlacement(Scene: null, Body: null, exception.Message);
+        }
     }
 
     /// <summary>
