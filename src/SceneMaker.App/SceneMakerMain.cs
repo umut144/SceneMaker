@@ -76,12 +76,23 @@ public sealed partial class SceneMakerMain : Control
     private readonly HBoxContainer _propAssetBar = new();
     private readonly HBoxContainer _templateBar = new();
     private readonly HBoxContainer _mapBar = new();
+    private readonly HBoxContainer _landscapeBar = new();
+    private readonly ButtonGroup _landscapeAreaButtons = new();
+    private readonly Dictionary<EditorMode, Button> _landscapeAreaControls = [];
     private readonly HBoxContainer _overviewNavigationBar = new();
     private readonly HBoxContainer _contextNavigationBar = new();
     private readonly HBoxContainer _contextMenuBar = new();
     private readonly VBoxContainer _toolOptionsBar = new();
     private readonly Button _returnNavigationButton = new();
     private readonly Button _mapNavigationButton = new();
+    private readonly Button _landscapeNavigationButton = new();
+
+    /// <summary>
+    /// Which Landscape area the group opens on. River and Mountain are two
+    /// areas behind one entry, and coming back should land where the author
+    /// left off rather than always on the first of them.
+    /// </summary>
+    private EditorMode _landscapeArea = EditorMode.River;
     private readonly Label _mapDimensionsLabel = new();
     private readonly SpinBox _mapExtensionCellsEdit = new();
     private readonly Label _mapExtensionMetricsLabel = new();
@@ -204,7 +215,12 @@ public sealed partial class SceneMakerMain : Control
         _overviewNavigationBar.AddThemeFontSizeOverride("font_size", 14);
         root.AddChild(_overviewNavigationBar);
         AddPerspectiveButton(_overviewNavigationBar, "Terrain", available: true, "Terrain foundation view");
-        AddLandscapeGroup(_overviewNavigationBar);
+        _landscapeNavigationButton.Text = "Landscape";
+        _landscapeNavigationButton.TooltipText =
+            "River and Mountain: the shapes a landscape is made of.";
+        _landscapeNavigationButton.CustomMinimumSize = new Vector2(130f, 0f);
+        _landscapeNavigationButton.Pressed += SelectLandscapeContext;
+        _overviewNavigationBar.AddChild(_landscapeNavigationButton);
         AddPerspectiveButton(_overviewNavigationBar, "Props", available: true, "Prop authoring view");
         AddPerspectiveButton(
             _overviewNavigationBar,
@@ -243,6 +259,10 @@ public sealed partial class SceneMakerMain : Control
         _returnNavigationButton.AddThemeFontSizeOverride("font_size", 16);
         _returnNavigationButton.Pressed += ShowNavigationOverview;
         _contextNavigationBar.AddChild(_returnNavigationButton);
+
+        _landscapeBar.Name = "LandscapeAreas";
+        _contextNavigationBar.AddChild(_landscapeBar);
+        BuildLandscapeBar();
 
         _terrainAssetBar.Name = "TerrainAssets";
         _terrainAssetBar.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -1119,30 +1139,36 @@ public sealed partial class SceneMakerMain : Control
     }
 
     /// <summary>
-    /// River and Mountain under one caption. `Landscape` is a bracket the
-    /// navigation draws, never something to be in: both areas stay one click
-    /// away, and there is no third state that would have to answer what drawing
-    /// in it means.
+    /// The two Landscape areas, side by side inside the context bar. Landscape
+    /// is a way in, not a place to be: opening it lands in one of them, and the
+    /// other is one click away.
     /// </summary>
-    private void AddLandscapeGroup(Container parent)
+    private void BuildLandscapeBar()
     {
-        var group = new VBoxContainer { Name = "Landscape" };
-        group.AddThemeConstantOverride("separation", 0);
-        var buttons = new HBoxContainer();
-        group.AddChild(buttons);
-        AddPerspectiveButton(buttons, "River", available: true, "River authoring view");
-        AddPerspectiveButton(buttons, "Mountain", available: true, "Mountain authoring view");
-        var caption = new Label
-        {
-            Text = "Landscape",
-            HorizontalAlignment = HorizontalAlignment.Center,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        };
-        caption.AddThemeFontSizeOverride("font_size", 11);
-        caption.AddThemeColorOverride("font_color", Color.FromHtml("#96A1B2"));
-        group.AddChild(caption);
-        parent.AddChild(group);
+        _landscapeBar.AddChild(new Label { Text = "Landscape  ›" });
+        AddLandscapeAreaButton(EditorMode.River, "River", "Draw and erase rivers.");
+        AddLandscapeAreaButton(EditorMode.Mountain, "Mountain", "Draw and erase mountain bodies.");
     }
+
+    private void AddLandscapeAreaButton(EditorMode mode, string name, string tooltip)
+    {
+        var button = new Button
+        {
+            Name = name,
+            Text = name,
+            ToggleMode = true,
+            ButtonGroup = _landscapeAreaButtons,
+            TooltipText = tooltip,
+            CustomMinimumSize = new Vector2(110f, 0f),
+        };
+        button.Pressed += () => SelectPerspective(mode, name);
+        _landscapeBar.AddChild(button);
+        _landscapeAreaControls.Add(mode, button);
+    }
+
+    /// <summary>Opens Landscape on the area it was last left in.</summary>
+    private void SelectLandscapeContext() =>
+        SelectPerspective(_landscapeArea, EditorToolRegistry.ModeDisplayName(_landscapeArea));
 
     private static EditorMode EditorModeForPerspective(string perspective) => perspective switch
     {
@@ -1487,6 +1513,7 @@ public sealed partial class SceneMakerMain : Control
         _canvas.MapContextActive = false;
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
+        ShowLandscapeAreas(mode);
         _terrainAssetBar.Visible = EditorToolRegistry.TerrainAuthoringFor(mode) is not null;
         _propAssetBar.Visible = mode == EditorMode.Props;
         _templateBar.Visible = mode == EditorMode.Templates;
@@ -1497,6 +1524,19 @@ public sealed partial class SceneMakerMain : Control
         UpdateTemplateControls();
         SetStatus(WithDiscardedDraft(
             MissingTerrainAssetNotice() ?? $"Selected {perspective} perspective.", outcome));
+    }
+
+    /// <summary>
+    /// Shows the Landscape areas while one of them is open, and marks the one
+    /// that is. Entering a Landscape area is also what it remembers.
+    /// </summary>
+    private void ShowLandscapeAreas(EditorMode mode)
+    {
+        var inLandscape = _landscapeAreaControls.ContainsKey(mode);
+        if (inLandscape) _landscapeArea = mode;
+        _landscapeBar.Visible = inLandscape;
+        foreach (var (area, control) in _landscapeAreaControls)
+            control.ButtonPressed = inLandscape && area == mode;
     }
 
     /// <summary>
@@ -1521,6 +1561,7 @@ public sealed partial class SceneMakerMain : Control
         _canvas.MapContextActive = true;
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
+        _landscapeBar.Visible = false;
         _terrainAssetBar.Visible = false;
         _propAssetBar.Visible = false;
         _templateBar.Visible = false;

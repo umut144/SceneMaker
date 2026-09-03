@@ -42,18 +42,20 @@ Die Werkzeugauswahl besteht aus drei unabhängigen Dimensionen:
 - `EditorTool` bestimmt das primäre Werkzeug innerhalb dieses Bereichs.
 - Das gewählte Terrain-Asset bestimmt das **Material** und sonst nichts.
 
-Die obere Navigation zeigt:
+Die Navigation ist zweistufig, wie bei den übrigen Bereichen auch:
 
 ```text
-[ Terrain ]  [ River ]  [ Mountain ]   [ Props ]  [ Scene Templates ]  [ Map ]
-               └──── Landscape ────┘
+Übersicht:  [ Terrain ]  [ Landscape ]  [ Props ]  [ Scene Templates ]  [ Map ]
+                              │
+                              ▼
+Kontext:    [ ← ]  Landscape ›  ( River )  ( Mountain )    Terrain ›  ( Grass ) ( Sand )
 ```
 
-`Landscape` ist ausschließlich eine Beschriftung um River und Mountain, kein
-anklickbarer Zustand und kein `EditorMode`. Beide Bereiche bleiben mit einem
-Klick erreichbar; ein Zustand, in dem man nur „irgendwo in Landscape" wäre,
-müsste beantworten, was Zeichnen dort bedeutet, und die Antwort wäre immer
-„wähl erst River oder Mountain".
+`Landscape` ist der Weg hinein, kein Ort: ein Klick öffnet die Kontextleiste und
+landet direkt in einem der beiden Bereiche — in dem, in dem man zuletzt war —,
+der andere ist einen Klick daneben. `Landscape` ist deshalb **kein**
+`EditorMode`; es gibt keinen Zustand „irgendwo in Landscape", der beantworten
+müsste, was Zeichnen dort bedeutet.
 
 **Der Bereich entscheidet über die Assets, nicht das Asset über das Werkzeug.**
 Ob ein Terrain-Asset gemalt oder gezeichnet wird, steht weiterhin in der
