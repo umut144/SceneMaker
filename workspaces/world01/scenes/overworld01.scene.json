@@ -60075,7 +60075,90 @@
       "elevation_meters": 1.0
     }
   ],
-  "mountain_bodies": [],
+  "mountain_bodies": [
+    {
+      "mountain_body_id": "mountain_0001",
+      "asset_key": "grass",
+      "elevation_meters": 10.000,
+      "points": [
+        {
+          "position_authoring_px": {
+            "x": 1824,
+            "y": 608
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "position_authoring_px": {
+            "x": 2208,
+            "y": 288
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "position_authoring_px": {
+            "x": 2880,
+            "y": 608
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "position_authoring_px": {
+            "x": 2816,
+            "y": 1120
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "position_authoring_px": {
+            "x": 2176,
+            "y": 1088
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ]
+    }
+  ],
   "water_bodies": [
     {
       "water_body_id": "river_0001",
