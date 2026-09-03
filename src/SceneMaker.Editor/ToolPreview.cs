@@ -42,8 +42,8 @@ public sealed record WaterDraftPreview(
 /// <para><c>Incomplete</c> is not a refusal: the author has simply not placed
 /// enough points yet, and the drawing so far is neither promised nor refused.
 /// <c>Ready</c> is a promise - the same attempt the commit makes has already
-/// succeeded against this Scene, Asset and height. <c>Blocked</c> carries the
-/// reason it would fail.</para>
+/// succeeded against this Scene and height. <c>Blocked</c> carries the reason
+/// it would fail.</para>
 /// </summary>
 public enum MountainDraftKind
 {
@@ -246,12 +246,11 @@ public static class ToolPreviewBuilder
     /// lift nothing: it covers no painted Terrain, or none that is not already
     /// standing at least as high. The body is still worth authoring - painting
     /// under it later puts it to work.
-    /// </summary>
-    /// <summary>
-    /// The clause that says a mountain is doing nothing yet, in two shapes: one
-    /// to append to a sentence that already named the body, and one that stands
-    /// on its own as the draft's explanation. Both say the same thing, so a
-    /// reader who saw one recognises the other.
+    ///
+    /// <para>Two shapes of the one clause: one to append to a sentence that has
+    /// already named the body, and one that stands on its own as the draft's
+    /// explanation. They say the same thing, so a reader who saw one recognises
+    /// the other.</para>
     /// </summary>
     public const string RaisesNoTerrain = "currently raises no Terrain cells.";
 
@@ -328,8 +327,14 @@ public static class ToolPreviewBuilder
 
     /// <summary>
     /// The mountain body the eraser would remove where the pointer is, and the
-    /// cells it surfaces - so the author sees the whole body go before the click
-    /// rather than the one cell under the cursor.
+    /// painted cells that would drop with it - so the author sees the whole
+    /// body go before the click rather than the one cell under the cursor.
+    ///
+    /// <para>The two are answered separately on purpose. The body is picked by
+    /// the contour covering the cell, whether or not anything is painted there;
+    /// the cells are only those whose height this body is currently holding
+    /// up. A body can therefore be picked and lower nothing, which is why the
+    /// canvas draws its outline as well as the cells.</para>
     /// </summary>
     public static MountainEraserPreview BuildMountainEraser(
         SceneDocument scene,

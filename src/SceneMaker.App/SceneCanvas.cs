@@ -785,10 +785,11 @@ public sealed partial class SceneCanvas : Control
     /// <summary>
     /// Every authored mountain as its own closed contour in its own colour.
     ///
-    /// <para>The fill stays what the fold produced - the Terrain Asset's colour -
-    /// so the surface material is still readable; the contour says where one
-    /// body ends, which folded cells alone never could. Two mountains of the same
-    /// Asset are indistinguishable without it, and the height view was the only
+    /// <para>The fill stays what the fold produced - the painted Terrain
+    /// Asset's colour - so the surface material is still readable; the contour
+    /// says where one body ends, which folded cells alone never could. A
+    /// mountain carries no material, so two of them over the same paint are one
+    /// indistinguishable surface without it, and the height view was the only
     /// way to guess at their edges. It is not an analysis, so it is drawn
     /// whether or not that view is on.</para>
     /// </summary>

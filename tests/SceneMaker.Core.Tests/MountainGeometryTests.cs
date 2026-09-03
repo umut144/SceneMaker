@@ -563,8 +563,9 @@ public sealed class MountainGeometryTests
 
         DocumentValidation.ValidateGrid(scene, workspace.Metrics);
 
-        Assert.NotEmpty(MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics)
-            .Where(static cell => cell.ElevationMeters == 10.0m));
+        Assert.Contains(
+            MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics),
+            static cell => cell.ElevationMeters == 10.0m);
     }
 
     /// <summary>

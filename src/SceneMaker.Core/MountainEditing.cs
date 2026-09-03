@@ -64,7 +64,7 @@ public static class MountainEditing
     }
 
     /// <summary>
-    /// The topmost mountain body that surfaces a Terrain cell.
+    /// The topmost mountain body whose contour covers a Terrain cell.
     ///
     /// <para>The question is asked of the cell, not of the exact position
     /// inside it. Asking the contour whether it contains the pointer would use
@@ -74,9 +74,13 @@ public static class MountainEditing
     /// Picking the cell first makes the two the same question.</para>
     ///
     /// <para>Among the bodies covering the cell the highest top wins, because
-    /// that is the one whose surface shows. Equal tops are settled by ordinal
-    /// body ID, so the answer is the same every time rather than depending on
-    /// document order.</para>
+    /// that is the one an author would take themselves to be pointing at.
+    /// Coverage is the whole question: a body over ground nobody painted has no
+    /// visible surface there and is still picked, because it is still the body
+    /// that is there. What it is holding up, if anything, is a second
+    /// question - see <see cref="MountainGeometry.CellsRaisedBy"/>. Equal tops
+    /// are settled by ordinal body ID, so the answer is the same every time
+    /// rather than depending on document order.</para>
     /// </summary>
     public static MountainBodyDocument? FindAtCell(
         SceneDocument scene,
