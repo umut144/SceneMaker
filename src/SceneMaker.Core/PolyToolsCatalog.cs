@@ -437,24 +437,31 @@ public static class PolyToolsCatalogImporter
 
     private static bool IsLowerSnakeCase(string value)
     {
-        var requiresLetter = true;
+        if (string.IsNullOrEmpty(value)
+            || value[0] is < 'a' or > 'z'
+            || value[^1] == '_')
+        {
+            return false;
+        }
+
+        var previousWasUnderscore = false;
         foreach (var character in value)
         {
-            if (requiresLetter)
+            if (character == '_')
             {
-                if (character is < 'a' or > 'z') return false;
-                requiresLetter = false;
-            }
-            else if (character == '_')
-            {
-                requiresLetter = true;
+                if (previousWasUnderscore) return false;
+                previousWasUnderscore = true;
             }
             else if (character is not (>= 'a' and <= 'z') and not (>= '0' and <= '9'))
             {
                 return false;
             }
+            else
+            {
+                previousWasUnderscore = false;
+            }
         }
-        return !requiresLetter;
+        return true;
     }
 
     private static Transform RequireTransform(JsonElement owner, string propertyName, string label)

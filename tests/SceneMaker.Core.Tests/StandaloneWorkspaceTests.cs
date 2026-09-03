@@ -404,6 +404,25 @@ public sealed class StandaloneWorkspaceTests
         Assert.Equal(2.03m, tree.BoundsMeters.MaximumY);
     }
 
+    [Fact]
+    public void ImportAcceptsARegionNameWhoseSnakeCaseSegmentStartsWithADigit()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game08_digits", regions: """
+            [{
+              "region_id": "region_component",
+              "name": "collision_region_2",
+              "role": "collision",
+              "geometry_source": "component",
+              "source_component_id": "body"
+            }]
+        """);
+
+        var tree = PolyToolsCatalogImporter.Load(directory.Path).Resolve("tree");
+
+        Assert.Equal("tree", tree.AssetKey);
+    }
+
     [Theory]
     [MemberData(nameof(InvalidRegions))]
     public void ImportRejectsInvalidRegionVariants(string regions, string expectedMessage)
