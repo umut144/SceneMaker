@@ -197,6 +197,24 @@ sonst könnten an einer Randzelle die gefüllte Zelle und der getroffene Körper
 eine halbe Zelle auseinanderliegen. Liegen mehrere Berge übereinander, gewinnt
 der höchste sichtbare; ein Klick entfernt genau diesen einen ganzen Körper.
 
+### Fertige Bergkörper auf dem Canvas
+
+Jeder gespeicherte Bergkörper trägt eine dauerhaft sichtbare geschlossene
+Kontur in einer eigenen Farbe. Die Fläche bleibt, was die Faltung ergibt — das
+Terrain-Asset in seiner eigenen Farbe —, damit das Oberflächenmaterial lesbar
+bleibt; die Kontur sagt, **wo ein Körper aufhört**, und genau das können
+gefaltete Zellen nicht: zwei Berge desselben Assets sind ohne sie eine einzige
+Fläche. Die Höhenansicht war bisher der einzige Weg, ihre Grenzen zu erraten;
+sie bleibt eine Höhenanalyse und ist dafür nicht mehr nötig, weshalb die Kontur
+unabhängig davon gezeichnet wird, ob die Ansicht an ist.
+
+Die Farbe stammt aus einer kleinen festen Editorpalette und wird stabil aus der
+`mountain_body_id` abgeleitet: aufeinanderfolgend gezeichnete Berge bekommen
+verschiedene Farben, und derselbe Berg hat nach einem Neustart dieselbe. Sie ist
+reine Editorfarbe — sie steht nicht im Dokument, nicht im Export und bedeutet im
+Spiel nichts. Außerhalb der Perspektive, in der Berge authoriert werden, wird die
+Kontur wie alles andere gedimmt.
+
 Ein begonnener Entwurf verschwindet nie stillschweigend. Ein Werkzeugwechsel,
 ein Perspektivwechsel, das Einschalten des `Eraser` und auch der automatische
 Werkzeugwechsel beim Wählen eines curve-authorierten Assets verwerfen den

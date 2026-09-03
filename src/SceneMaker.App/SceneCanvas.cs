@@ -28,6 +28,22 @@ public sealed partial class SceneCanvas : Control
     // A draft that is neither promised nor refused yet. Cyan rather than red:
     // too few points is the ordinary state of a contour being drawn.
     private static readonly Color DraftPreviewColor = Color.FromHtml("#8FE3FF");
+    // One colour per authored mountain, so two bodies that meet are still two
+    // bodies. Earth, orange, violet and magenta on purpose: they have to read
+    // apart from the Assets underneath them - world01's grass is #99E550 and its
+    // river #3C7DD9 - and from the four colours that already mean something
+    // here: #FFD866 ready and selected, #FF5C5C blocked and erasing, #8FE3FF an
+    // unfinished draft and its handles, #FFFFFF a Template preview. One entry
+    // per MountainPalette.Size, indexed by MountainOutline.PaletteIndex.
+    private static readonly Color[] MountainOutlineColors =
+    [
+        Color.FromHtml("#D9801F"),
+        Color.FromHtml("#8A5A33"),
+        Color.FromHtml("#AE72E0"),
+        Color.FromHtml("#D4508C"),
+        Color.FromHtml("#A03A22"),
+        Color.FromHtml("#5B4396"),
+    ];
     private static readonly Color TemplateAnchorFill = Color.FromHtml("#FFFFFF");
     private static readonly Color TemplateAnchorBorder = Color.FromHtml("#7B8491");
     private static readonly Color TemplateAnchorText = Color.FromHtml("#252A31");
@@ -68,6 +84,9 @@ public sealed partial class SceneCanvas : Control
     // result is rebuilt only when the document it was derived from changes.
     private SceneDocument? _effectiveTerrainDocument;
     private IReadOnlyList<TerrainCellDocument> _effectiveTerrain = [];
+    // Its own cache with its own key: a contour depends on the bodies alone,
+    // where the fold above depends on the whole document.
+    private readonly MountainOutlineCache _mountainOutlines = new();
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
     private TerrainDisplayCatalog? _terrainAssets;
     private PropDisplayCatalog? _propAssets;
@@ -427,6 +446,14 @@ public sealed partial class SceneCanvas : Control
             zoom,
             elevationRange,
             highlighted: Mode == EditorMode.Terrain);
+        DrawMountainOutlines(
+            document,
+            pan,
+            zoom,
+            heightAuthoringPixels,
+            // Mountains are authored inside Terrain today. When they get an area
+            // of their own, that area belongs in this predicate too.
+            highlighted: Mode == EditorMode.Terrain);
         DrawProps(
             document,
             pan,
@@ -713,6 +740,43 @@ public sealed partial class SceneCanvas : Control
         _waterOverlayDocument = document;
         _waterOverlays = overlays;
         return _waterOverlays;
+    }
+
+    /// <summary>
+    /// Every authored mountain as its own closed contour in its own colour.
+    ///
+    /// <para>The fill stays what the fold produced - the Terrain Asset's colour -
+    /// so the surface material is still readable; the contour says where one
+    /// body ends, which folded cells alone never could. Two mountains of the same
+    /// Asset are indistinguishable without it, and the height view was the only
+    /// way to guess at their edges. It is not an analysis, so it is drawn
+    /// whether or not that view is on.</para>
+    /// </summary>
+    private void DrawMountainOutlines(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        bool highlighted)
+    {
+        var outlines = _mountainOutlines.For(document);
+        if (outlines.Count == 0) return;
+
+        Vector2 Screen(double authoringX, double authoringY) => pan + new Vector2(
+            (float)authoringX * zoom,
+            (sceneHeightAuthoringPixels - (float)authoringY) * zoom);
+
+        foreach (var outline in outlines)
+        {
+            var color = MountainOutlineColors[outline.PaletteIndex];
+            if (!highlighted) color = new Color(color.R, color.G, color.B, 0.32f);
+            // The ring does not repeat its first point, so the line closes here.
+            var line = new Vector2[outline.Points.Count + 1];
+            for (var index = 0; index < outline.Points.Count; index++)
+                line[index] = Screen(outline.Points[index].X, outline.Points[index].Y);
+            line[^1] = line[0];
+            DrawPolyline(line, color, 2.0f);
+        }
     }
 
     /// <summary>

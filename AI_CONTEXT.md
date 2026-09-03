@@ -161,6 +161,14 @@ else is Blocked and carries the reason, including a contour that is perfect
 geometry and still ties with an existing body at one elevation under a different
 Asset - a preview that only checked the ring would call that one ready and lie.
 
+A finished body also carries a contour on the canvas, derived from its points
+and drawn in a colour taken from a small editor palette by a stable rule over
+its `mountain_body_id`. Both are derived: neither the contour nor the colour is
+in the Scene document or the export, and neither means anything to a consumer.
+It exists because folded cells cannot say where one body ends - two mountains of
+one Asset are one surface without it - and the height view should stay an
+analysis rather than the only way to see a boundary.
+
 The eraser asks about the Terrain cell under the pointer rather than the exact
 position in it, because the raster asks about a cell's centre and two different
 sample points would let the body the author sees filled and the body the click
