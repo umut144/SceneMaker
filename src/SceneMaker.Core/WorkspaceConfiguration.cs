@@ -14,7 +14,8 @@ public sealed record WorkspaceGridConfiguration(
     decimal TerrainCellMeters,
     decimal AuthoringPixelsPerMeter,
     decimal GamePixelsPerMeter,
-    decimal WaterCellMeters);
+    decimal WaterCellMeters,
+    decimal ElevationQuantumMeters);
 
 /// <summary>
 /// How a Terrain Asset is authored. This is editor knowledge rather than game
@@ -85,7 +86,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 6;
+    public const int Version = 7;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -141,6 +142,7 @@ public static class WorkspaceConfigurationStore
                 AuthoringPixelsPerMeter = grid.AuthoringPixelsPerMeter,
                 GamePixelsPerMeter = grid.GamePixelsPerMeter,
                 WaterCellMeters = grid.WaterCellMeters,
+                ElevationQuantumMeters = grid.ElevationQuantumMeters,
             },
             Assets = profiles.Select(profile => new AssetProfileDocument
             {
@@ -168,6 +170,7 @@ public static class WorkspaceConfigurationStore
                 AuthoringPixelsPerMeter = configuration.Grid.AuthoringPixelsPerMeter,
                 GamePixelsPerMeter = configuration.Grid.GamePixelsPerMeter,
                 WaterCellMeters = configuration.Grid.WaterCellMeters,
+                ElevationQuantumMeters = configuration.Grid.ElevationQuantumMeters,
             },
             Assets = configuration.AssetProfiles.Select(profile => new AssetProfileDocument
             {
@@ -197,7 +200,8 @@ public static class WorkspaceConfigurationStore
             "terrain_cell_meters": 1.0,
             "authoring_pixels_per_meter": 32,
             "game_pixels_per_meter": 192,
-            "water_cell_meters": 0.5
+            "water_cell_meters": 0.5,
+            "elevation_quantum_meters": 0.125
           },
           "assets": []
         }
@@ -279,16 +283,18 @@ public static class WorkspaceConfigurationStore
         }
         if (document.Grid is null || document.Grid.TerrainCellMeters <= 0m
             || document.Grid.AuthoringPixelsPerMeter <= 0m || document.Grid.GamePixelsPerMeter <= 0m
-            || document.Grid.WaterCellMeters <= 0m)
+            || document.Grid.WaterCellMeters <= 0m
+            || document.Grid.ElevationQuantumMeters is not > 0m)
         {
             throw new SceneMakerDocumentException(
-                "Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, game_pixels_per_meter, and water_cell_meters.");
+                "Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, game_pixels_per_meter, water_cell_meters, and elevation_quantum_meters.");
         }
         var grid = new WorkspaceGridConfiguration(
             document.Grid.TerrainCellMeters,
             document.Grid.AuthoringPixelsPerMeter,
             document.Grid.GamePixelsPerMeter,
-            document.Grid.WaterCellMeters);
+            document.Grid.WaterCellMeters,
+            document.Grid.ElevationQuantumMeters.Value);
         _ = new WorkspaceMetrics(grid);
         if (document.Assets is null)
             throw new SceneMakerDocumentException("Workspace config requires an assets array.");
@@ -324,6 +330,7 @@ public static class WorkspaceConfigurationStore
         public required decimal AuthoringPixelsPerMeter { get; init; }
         public required decimal GamePixelsPerMeter { get; init; }
         public required decimal WaterCellMeters { get; init; }
+        public decimal? ElevationQuantumMeters { get; init; }
     }
 
     private sealed record AssetProfileDocument

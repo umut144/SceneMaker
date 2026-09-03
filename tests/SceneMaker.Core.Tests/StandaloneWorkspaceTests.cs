@@ -191,7 +191,7 @@ public sealed class StandaloneWorkspaceTests
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var configuration = WorkspaceConfigurationStore.Create(
             "game03",
-            new WorkspaceGridConfiguration(1m, 10m, 40m, 0.5m),
+            new WorkspaceGridConfiguration(1m, 10m, 40m, 0.5m, 0.125m),
             [
                 new WorkspaceAssetProfile("grass", "#99E550", "land", TerrainAuthoring.Cells),
                 new WorkspaceAssetProfile("portal", "#8E6CFF"),
@@ -203,6 +203,8 @@ public sealed class StandaloneWorkspaceTests
         var restored = WorkspaceConfigurationStore.Load(directory.Path, catalog);
 
         Assert.Equal("#8E6CFF", restored.ResolveAssetProfile("portal").Color);
+        Assert.Equal(0.125m, restored.Metrics.ElevationQuantumMeters);
+        Assert.Contains("\"elevation_quantum_meters\": 0.125", json, StringComparison.Ordinal);
         Assert.DoesNotContain("footprint", json, StringComparison.Ordinal);
         Assert.DoesNotContain("anchor", json, StringComparison.Ordinal);
         Assert.DoesNotContain("authoring_role", json, StringComparison.Ordinal);
@@ -218,6 +220,68 @@ public sealed class StandaloneWorkspaceTests
             PolyToolsCatalogImporter.Load(workspace.DirectoryPath));
 
         Assert.Contains("synchronized PolyTools catalog", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("null")]
+    [InlineData("0")]
+    [InlineData("-0.125")]
+    public void WorkspaceRejectsMissingOrNonPositiveElevationQuantum(
+        string? elevationQuantumJson)
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "quantum01");
+        WriteConfig(
+            directory.Path,
+            "quantum01",
+            1m,
+            32m,
+            192m,
+            """{ "asset_key": "grass", "color": "#99E550", "surface": "land", "authoring": "cells" }""",
+            elevationQuantumJson: elevationQuantumJson);
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            WorkspaceConfigurationStore.Load(directory.Path, catalog));
+
+        Assert.Contains("positive", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("elevation_quantum_meters", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WorkspaceRejectsTheReplacedConfigurationSchema()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "quantum02");
+        WriteConfig(
+            directory.Path,
+            "quantum02",
+            1m,
+            32m,
+            192m,
+            """{ "asset_key": "grass", "color": "#99E550", "surface": "land", "authoring": "cells" }""",
+            version: 6);
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            WorkspaceConfigurationStore.Load(directory.Path, catalog));
+
+        Assert.Contains("version 7", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WorkspaceMetricsSnapElevationsSymmetricallyToTheirQuantum()
+    {
+        var metrics = new WorkspaceMetrics(
+            new WorkspaceGridConfiguration(1m, 32m, 192m, 0.5m, 0.125m));
+
+        Assert.True(metrics.IsElevationAligned(1.125m));
+        Assert.False(metrics.IsElevationAligned(1.1m));
+        Assert.Equal(1.125m, metrics.SnapElevation(1.1m));
+        Assert.Equal(-1.125m, metrics.SnapElevation(-1.1m));
+        Assert.Equal(0.125m, metrics.SnapElevation(0.0625m));
+        Assert.Equal(-0.125m, metrics.SnapElevation(-0.0625m));
     }
 
     [Fact]
@@ -464,18 +528,24 @@ public sealed class StandaloneWorkspaceTests
         decimal authoringPixelsPerMeter,
         decimal gamePixelsPerMeter,
         string assets,
-        decimal? waterCellMeters = null)
+        decimal? waterCellMeters = null,
+        int version = WorkspaceConfigurationStore.Version,
+        string? elevationQuantumJson = "0.125")
     {
         var waterCell = waterCellMeters ?? terrainCellMeters;
+        var quantumProperty = elevationQuantumJson is null
+            ? string.Empty
+            : $"\"elevation_quantum_meters\": {elevationQuantumJson},";
         File.WriteAllText(Path.Combine(directory, WorkspaceConfigurationStore.FileName), $$"""
         {
           "format": "scene_maker_workspace",
-          "version": 6,
+          "version": {{version}},
           "workspace_key": "{{workspaceKey}}",
           "grid": {
             "terrain_cell_meters": {{terrainCellMeters.ToString(CultureInfo.InvariantCulture)}},
             "authoring_pixels_per_meter": {{authoringPixelsPerMeter.ToString(CultureInfo.InvariantCulture)}},
             "game_pixels_per_meter": {{gamePixelsPerMeter.ToString(CultureInfo.InvariantCulture)}},
+            {{quantumProperty}}
             "water_cell_meters": {{waterCell.ToString(CultureInfo.InvariantCulture)}}
           },
           "assets": [

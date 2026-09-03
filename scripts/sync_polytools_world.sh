@@ -71,15 +71,16 @@ fi
 world_key="$(jq -r '.world_key' "$source_catalog")"
 if ! jq -e --arg world "$world_key" '
   .format == "scene_maker_workspace"
-  and .version == 6
+  and .version == 7
   and .workspace_key == $world
   and (.grid.terrain_cell_meters | type == "number" and . > 0)
   and (.grid.authoring_pixels_per_meter | type == "number" and . > 0)
   and (.grid.game_pixels_per_meter | type == "number" and . > 0)
   and (.grid.water_cell_meters | type == "number" and . > 0)
+  and (.grid.elevation_quantum_meters | type == "number" and . > 0)
   and (.assets | type == "array")
 ' "$config_path" >/dev/null; then
-  printf 'ERROR: SceneMaker config must be version 6 for PolyTools world %s.\n' "$world_key" >&2
+  printf 'ERROR: SceneMaker config must be version 7 for PolyTools world %s.\n' "$world_key" >&2
   exit 1
 fi
 if ! jq -e --slurpfile catalog "$source_catalog" '

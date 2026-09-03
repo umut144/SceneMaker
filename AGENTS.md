@@ -70,7 +70,7 @@ unrelated reasons.
 | Schema | Constant | Current |
 | --- | --- | --- |
 | Scene document | `SceneMakerSchemas.SceneVersion` | 10 |
-| Workspace config | `WorkspaceConfigurationStore.Version` | 6 |
+| Workspace config | `WorkspaceConfigurationStore.Version` | 7 |
 | Scene export | `SceneExport.Version` | 8 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 1 |
 | PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 16 |

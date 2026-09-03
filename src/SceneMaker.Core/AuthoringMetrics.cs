@@ -13,6 +13,10 @@ public sealed class WorkspaceMetrics
         AuthoringPixelsPerMeter = grid.AuthoringPixelsPerMeter;
         GamePixelsPerMeter = grid.GamePixelsPerMeter;
         WaterCellMeters = grid.WaterCellMeters;
+        ElevationQuantumMeters = grid.ElevationQuantumMeters;
+        if (ElevationQuantumMeters <= 0m)
+            throw new SceneMakerDocumentException(
+                "elevation_quantum_meters must be positive.");
         var pixelsPerCell = TerrainCellMeters * AuthoringPixelsPerMeter;
         if (pixelsPerCell <= 0m || pixelsPerCell != decimal.Truncate(pixelsPerCell))
             throw new SceneMakerDocumentException(
@@ -42,10 +46,24 @@ public sealed class WorkspaceMetrics
     public decimal AuthoringPixelsPerMeter { get; }
     public decimal GamePixelsPerMeter { get; }
     public decimal WaterCellMeters { get; }
+    public decimal ElevationQuantumMeters { get; }
     public int AuthoringPixelsPerTerrainCell { get; }
     public int AuthoringPixelsPerWaterCell { get; }
     public int WaterCellsPerTerrainCell { get; }
     public decimal MetersPerAuthoringPixel => 1m / AuthoringPixelsPerMeter;
+
+    /// <summary>Whether an absolute authored height lies on this Workspace's vertical grid.</summary>
+    public bool IsElevationAligned(decimal elevationMeters) =>
+        elevationMeters % ElevationQuantumMeters == 0m;
+
+    /// <summary>
+    /// The nearest height on the Workspace's vertical grid. An exact half-step
+    /// rounds away from zero, matching the spatial grid rule.
+    /// </summary>
+    public decimal SnapElevation(decimal elevationMeters) =>
+        Math.Round(
+            elevationMeters / ElevationQuantumMeters,
+            MidpointRounding.AwayFromZero) * ElevationQuantumMeters;
 
     public int SceneWidthAuthoringPixels(SceneDocument scene) =>
         checked(scene.SizeCells.Width * AuthoringPixelsPerTerrainCell);
