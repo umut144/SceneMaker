@@ -356,6 +356,13 @@ The height map's water-boundary selector is contextual too; `Surface`, `Bed`
 and `Cut top` appear in the ContextMenu only while the height map is active,
 not as a third permanent control in the right-hand ToolOptionsBar.
 
+Section has two transient inspection shapes. `Cut at` is the original upper
+plane. `Cut between` stores a start and a positive offset and inspects the
+inclusive band `[start, start + offset]`; moving start therefore translates the
+whole band without editing a second absolute endpoint. After clipping at the
+upper boundary, a resolved surface below start is omitted. Both controls step
+on the Workspace elevation quantum, but neither enters a document or export.
+
 This first horizontal Section deliberately draws only what the shared column
 model resolves today: painted Terrain after Elevation Regions, plus water cuts
 and fills. Persisted Paths and Props are omitted rather than drawn over roofs

@@ -79,6 +79,23 @@ public sealed class LayeredSceneColumn
         return visible;
     }
 
+    /// <summary>
+    /// Returns the top-down surface visible inside an inclusive finite height
+    /// band. Geometry above the upper plane is clipped as usual; a surface
+    /// below the lower plane is outside the inspected band and therefore absent.
+    /// </summary>
+    public VisibleLayeredSurface? VisibleBetween(
+        decimal lowerElevationMeters,
+        decimal upperElevationMeters)
+    {
+        if (upperElevationMeters < lowerElevationMeters)
+            throw new ArgumentOutOfRangeException(nameof(upperElevationMeters));
+        var visible = VisibleAt(upperElevationMeters);
+        return visible is not null && visible.ElevationMeters >= lowerElevationMeters
+            ? visible
+            : null;
+    }
+
     private static bool IsAbove(
         VisibleLayeredSurface candidate,
         VisibleLayeredSurface? current)

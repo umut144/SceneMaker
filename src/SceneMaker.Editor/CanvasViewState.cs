@@ -8,6 +8,13 @@ public enum CanvasPresentationMode
     Section,
 }
 
+/// <summary>Whether a Section has only an upper plane or a finite visible band.</summary>
+public enum SectionCutKind
+{
+    At,
+    Between,
+}
+
 public sealed class CanvasViewState
 {
     public const double MinimumZoom = 0.25;
@@ -22,7 +29,9 @@ public sealed class CanvasViewState
         double panY = 32.0,
         double zoom = 1.0,
         CanvasPresentationMode presentationMode = CanvasPresentationMode.Normal,
-        decimal sectionElevationMeters = 0m)
+        decimal sectionElevationMeters = 0m,
+        SectionCutKind sectionCutKind = SectionCutKind.At,
+        decimal sectionOffsetMeters = 1m)
     {
         if (!double.IsFinite(panX) || !double.IsFinite(panY))
             throw new ArgumentOutOfRangeException(nameof(panX), "Canvas pan must be finite.");
@@ -30,11 +39,17 @@ public sealed class CanvasViewState
             throw new ArgumentOutOfRangeException(nameof(zoom), "Canvas zoom is outside its view range.");
         if (!Enum.IsDefined(presentationMode))
             throw new ArgumentOutOfRangeException(nameof(presentationMode));
+        if (!Enum.IsDefined(sectionCutKind))
+            throw new ArgumentOutOfRangeException(nameof(sectionCutKind));
+        if (sectionOffsetMeters <= 0m)
+            throw new ArgumentOutOfRangeException(nameof(sectionOffsetMeters));
         PanX = panX;
         PanY = panY;
         Zoom = zoom;
         PresentationMode = presentationMode;
         SectionElevationMeters = sectionElevationMeters;
+        SectionCutKind = sectionCutKind;
+        SectionOffsetMeters = sectionOffsetMeters;
     }
 
     public double PanX { get; private set; }
@@ -42,6 +57,8 @@ public sealed class CanvasViewState
     public double Zoom { get; private set; }
     public CanvasPresentationMode PresentationMode { get; private set; }
     public decimal SectionElevationMeters { get; private set; }
+    public SectionCutKind SectionCutKind { get; private set; }
+    public decimal SectionOffsetMeters { get; private set; }
     public double KeyboardPanVelocityX => _keyboardPanVelocityX;
     public double KeyboardPanVelocityY => _keyboardPanVelocityY;
 
@@ -53,6 +70,18 @@ public sealed class CanvasViewState
 
     public void SetSectionElevation(decimal elevationMeters) =>
         SectionElevationMeters = elevationMeters;
+
+    public void SelectSectionCut(SectionCutKind kind)
+    {
+        if (!Enum.IsDefined(kind)) throw new ArgumentOutOfRangeException(nameof(kind));
+        SectionCutKind = kind;
+    }
+
+    public void SetSectionOffset(decimal offsetMeters)
+    {
+        if (offsetMeters <= 0m) throw new ArgumentOutOfRangeException(nameof(offsetMeters));
+        SectionOffsetMeters = offsetMeters;
+    }
 
     public void PanBy(double screenDeltaX, double screenDeltaY)
     {

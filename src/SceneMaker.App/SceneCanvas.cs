@@ -188,6 +188,26 @@ public sealed partial class SceneCanvas : Control
         }
     }
 
+    public SectionCutKind SectionCutKind
+    {
+        get => ViewState.SectionCutKind;
+        set
+        {
+            ViewState.SelectSectionCut(value);
+            QueueRedraw();
+        }
+    }
+
+    public decimal SectionOffsetMeters
+    {
+        get => ViewState.SectionOffsetMeters;
+        set
+        {
+            ViewState.SetSectionOffset(value);
+            QueueRedraw();
+        }
+    }
+
     /// <summary>
     /// Water has three useful heights rather than one. Terrain and Props keep
     /// showing their elevation while this chooses which water-span boundary is
@@ -306,13 +326,17 @@ public sealed partial class SceneCanvas : Control
         ViewState = restoredView is null
             ? new CanvasViewState(
                 presentationMode: ViewState.PresentationMode,
-                sectionElevationMeters: ViewState.SectionElevationMeters)
+                sectionElevationMeters: ViewState.SectionElevationMeters,
+                sectionCutKind: ViewState.SectionCutKind,
+                sectionOffsetMeters: ViewState.SectionOffsetMeters)
             : new CanvasViewState(
                 restoredView.PanX,
                 restoredView.PanY,
                 restoredView.Zoom,
                 ViewState.PresentationMode,
-                ViewState.SectionElevationMeters);
+                ViewState.SectionElevationMeters,
+                ViewState.SectionCutKind,
+                ViewState.SectionOffsetMeters);
         _interaction.ResetForScene();
         QueueRedraw();
         ViewChanged?.Invoke();
@@ -855,7 +879,12 @@ public sealed partial class SceneCanvas : Control
                     continue;
                 }
 
-                var surface = columns.AtWaterCell(x, y).VisibleAt(SectionElevationMeters);
+                var column = columns.AtWaterCell(x, y);
+                var surface = SectionCutKind == SectionCutKind.Between
+                    ? column.VisibleBetween(
+                        SectionElevationMeters,
+                        SectionElevationMeters + SectionOffsetMeters)
+                    : column.VisibleAt(SectionElevationMeters);
                 if (surface is null
                     || !_terrainColors.TryGetValue(surface.AssetKey, out var color))
                 {

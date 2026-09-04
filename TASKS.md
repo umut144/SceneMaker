@@ -224,6 +224,11 @@ upper clip. The Section elevation is transient view state, steps in the open
 Workspace's `elevation_quantum_meters`, displays enough decimal places for
 `0.125 m`, and is never written to a Scene or export.
 
+The view offers both `Cut at` and `Cut between`. The finite form stores `Start`
+plus a positive `Offset`, not two absolute endpoints, and displays only the
+inclusive band `[Start, Start + Offset]`; moving Start moves the whole band.
+Both values are transient and follow the Workspace elevation quantum.
+
 Its first Canvas projection is intentionally limited to the contents already
 resolved by `LayeredSceneColumns`: Terrain after Hill folding and River cuts
 and fills. Persisted Paths and Placements are hidden in Section rather than

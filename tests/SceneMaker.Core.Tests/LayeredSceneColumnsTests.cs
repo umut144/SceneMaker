@@ -99,6 +99,55 @@ public sealed class LayeredSceneColumnsTests
         Assert.Equal(expectedSectionFace, visible.IsSectionFace);
     }
 
+    [Theory]
+    [InlineData("1", "1", "2", "2", LayeredColumnSpanKind.IndependentFill)]
+    [InlineData("2", "1", "3", "2", LayeredColumnSpanKind.IndependentFill)]
+    [InlineData("2.125", "1", "3.125", null, null)]
+    [InlineData("6", "1", "7", "7", LayeredColumnSpanKind.TerrainSolid)]
+    [InlineData("7", "1", "8", "8", LayeredColumnSpanKind.TerrainSolid)]
+    public void AFiniteSectionBandShowsNothingBelowItsStart(
+        string startText,
+        string offsetText,
+        string upperText,
+        string? expectedElevationText,
+        LayeredColumnSpanKind? expectedKind)
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = River(
+            Hill(TestScenes.Instance(workspace), workspace, 10m),
+            WaterBody("river_0001", surface: 2m, depth: 0.5m, clearance: 5m));
+        var column = LayeredSceneColumns.Prepare(scene, workspace.Metrics).AtWaterCell(0, 0);
+        var start = decimal.Parse(startText, CultureInfo.InvariantCulture);
+        var offset = decimal.Parse(offsetText, CultureInfo.InvariantCulture);
+
+        Assert.Equal(
+            decimal.Parse(upperText, CultureInfo.InvariantCulture),
+            start + offset);
+        var visible = column.VisibleBetween(start, start + offset);
+
+        if (expectedElevationText is null)
+        {
+            Assert.Null(visible);
+            return;
+        }
+        Assert.NotNull(visible);
+        Assert.Equal(
+            decimal.Parse(expectedElevationText, CultureInfo.InvariantCulture),
+            visible.ElevationMeters);
+        Assert.Equal(expectedKind, visible.Kind);
+    }
+
+    [Fact]
+    public void AFiniteSectionBandRejectsReversedBounds()
+    {
+        using var workspace = TestWorkspace.Create();
+        var column = LayeredSceneColumns
+            .Prepare(TestScenes.Instance(workspace), workspace.Metrics)
+            .AtWaterCell(0, 0);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => column.VisibleBetween(2m, 1m));
+    }
+
     [Fact]
     public void AFillWinsAnExactTieWithTheTerrainAtItsBed()
     {

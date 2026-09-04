@@ -34,8 +34,11 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _sceneLabel = new();
     private readonly Label _toolContextLabel = new();
     private readonly VSeparator _toolContextSeparator = new();
+    private readonly OptionButton _sectionCutEdit = new();
     private readonly Label _sectionElevationLabel = new();
     private readonly SpinBox _sectionElevationEdit = new();
+    private readonly Label _sectionOffsetLabel = new();
+    private readonly SpinBox _sectionOffsetEdit = new();
     private readonly Label _waterHeatmapValueLabel = new();
     private readonly Label _propLineOffsetLabel = new();
     private readonly SpinBox _propLineOffsetEdit = new();
@@ -58,6 +61,8 @@ public sealed partial class SceneMakerMain : Control
     private const int PathGradeLevel = 3;
     private const int PathGradeUpTwentyFive = 4;
     private const int PathGradeUpFifty = 5;
+    private const int SectionCutAtItem = 1;
+    private const int SectionCutBetweenItem = 2;
 
     private readonly Label _riverWidthLabel = new();
     private readonly SpinBox _riverWidthEdit = new();
@@ -368,8 +373,17 @@ public sealed partial class SceneMakerMain : Control
         _contextMenuBar.AddChild(_toolContextLabel);
         _toolContextSeparator.Name = "ToolContextSeparator";
         _contextMenuBar.AddChild(_toolContextSeparator);
+        _sectionCutEdit.Name = "SectionCut";
+        _sectionCutEdit.AddItem("Cut at", SectionCutAtItem);
+        _sectionCutEdit.AddItem("Cut between", SectionCutBetweenItem);
+        _sectionCutEdit.Selected = _sectionCutEdit.GetItemIndex(SectionCutAtItem);
+        _sectionCutEdit.CustomMinimumSize = new Vector2(130f, 0f);
+        _sectionCutEdit.TooltipText =
+            "Use one upper clipping plane or inspect a finite band starting at one elevation.";
+        _sectionCutEdit.ItemSelected += SetSectionCut;
+        _contextMenuBar.AddChild(_sectionCutEdit);
         _sectionElevationLabel.Name = "SectionElevationLabel";
-        _sectionElevationLabel.Text = "Cut at";
+        _sectionElevationLabel.Text = "Start";
         _sectionElevationLabel.VerticalAlignment = VerticalAlignment.Center;
         _contextMenuBar.AddChild(_sectionElevationLabel);
         _sectionElevationEdit.Name = "SectionElevation";
@@ -378,6 +392,16 @@ public sealed partial class SceneMakerMain : Control
             "Remove geometry strictly above this elevation, then look down on what remains.";
         _sectionElevationEdit.ValueChanged += SetSectionElevation;
         _contextMenuBar.AddChild(_sectionElevationEdit);
+        _sectionOffsetLabel.Name = "SectionOffsetLabel";
+        _sectionOffsetLabel.Text = "Offset";
+        _sectionOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_sectionOffsetLabel);
+        _sectionOffsetEdit.Name = "SectionOffset";
+        ConfigureSectionOffsetInput(_sectionOffsetEdit);
+        _sectionOffsetEdit.TooltipText =
+            "Positive height of the inspected band; its upper plane is Start + Offset.";
+        _sectionOffsetEdit.ValueChanged += SetSectionOffset;
+        _contextMenuBar.AddChild(_sectionOffsetEdit);
         _waterHeatmapValueLabel.Name = "WaterHeatmapValueLabel";
         _waterHeatmapValueLabel.Text = "Water";
         _waterHeatmapValueLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -1541,6 +1565,21 @@ public sealed partial class SceneMakerMain : Control
         input.Editable = false;
     }
 
+    private static void ConfigureSectionOffsetInput(SpinBox input)
+    {
+        input.MinValue = 0.001;
+        input.MaxValue = 1000;
+        input.Step = 0.001;
+        input.CustomArrowStep = 0.1;
+        input.CustomArrowRound = true;
+        input.AllowGreater = false;
+        input.AllowLesser = false;
+        input.Suffix = " m";
+        input.CustomMinimumSize = new Vector2(130f, 0f);
+        input.Value = 1.0;
+        input.Editable = false;
+    }
+
     /// <summary>
     /// Godot counts in doubles, the documents in decimals. An authored absolute
     /// height is canonical only after the open Workspace has snapped it to its
@@ -1555,6 +1594,17 @@ public sealed partial class SceneMakerMain : Control
         var elevation = metrics.SnapElevation((decimal)value);
         input.SetValueNoSignal((double)elevation);
         return elevation;
+    }
+
+    private decimal SectionOffsetOf(double value)
+    {
+        var metrics = _controller.Session?.Metrics
+            ?? throw new InvalidOperationException(
+                "A Section offset requires an open Workspace.");
+        var offset = metrics.SnapElevation((decimal)value);
+        if (offset <= 0m) offset = metrics.ElevationQuantumMeters;
+        _sectionOffsetEdit.SetValueNoSignal((double)offset);
+        return offset;
     }
 
     /// <summary>
@@ -1852,7 +1902,7 @@ public sealed partial class SceneMakerMain : Control
             ? CanvasPresentationMode.Section
             : CanvasPresentationMode.Normal);
         SetStatus(enabled
-            ? $"Section view at {_canvas.SectionElevationMeters:0.###} m."
+            ? SectionStatus()
             : "Section view off.");
     }
 
@@ -1869,8 +1919,37 @@ public sealed partial class SceneMakerMain : Control
     {
         var elevation = ElevationOf(_sectionElevationEdit, value);
         _canvas.SectionElevationMeters = elevation;
-        SetStatus($"Section elevation set to {elevation:0.###} m.");
+        SetStatus(SectionStatus());
     }
+
+    private void SetSectionCut(long itemIndex)
+    {
+        var kind = _sectionCutEdit.GetItemId((int)itemIndex) switch
+        {
+            SectionCutAtItem => SectionCutKind.At,
+            SectionCutBetweenItem => SectionCutKind.Between,
+            _ => throw new InvalidOperationException("Unknown Section cut kind."),
+        };
+        _canvas.SectionCutKind = kind;
+        UpdateToolContextLabel();
+        SetStatus(SectionStatus());
+    }
+
+    private void SetSectionOffset(double value)
+    {
+        _canvas.SectionOffsetMeters = SectionOffsetOf(value);
+        SetStatus(SectionStatus());
+    }
+
+    private string SectionStatus() => _canvas.SectionCutKind switch
+    {
+        SectionCutKind.At => $"Section view: cut at {_canvas.SectionElevationMeters:0.###} m.",
+        SectionCutKind.Between =>
+            $"Section view: {_canvas.SectionElevationMeters:0.###}–"
+            + $"{_canvas.SectionElevationMeters + _canvas.SectionOffsetMeters:0.###} m "
+            + $"(offset {_canvas.SectionOffsetMeters:0.###} m).",
+        _ => throw new InvalidOperationException("Unknown Section cut kind."),
+    };
 
     /// <summary>Marks one radio item and clears the rest.</summary>
     private void CheckWaterHeatmapItem(WaterHeatmapValue value)
@@ -2122,8 +2201,14 @@ public sealed partial class SceneMakerMain : Control
         var heatmapActive = _canvas.PresentationMode == CanvasPresentationMode.Heightmap;
         _toolContextSeparator.Visible =
             propLineActive || curveActive || sectionActive || heatmapActive;
-        _sectionElevationLabel.Visible = sectionActive;
+        var sectionBetween = _canvas.SectionCutKind == SectionCutKind.Between;
+        _sectionCutEdit.Visible = sectionActive;
+        _sectionCutEdit.Selected = _sectionCutEdit.GetItemIndex(
+            sectionBetween ? SectionCutBetweenItem : SectionCutAtItem);
+        _sectionElevationLabel.Visible = sectionActive && sectionBetween;
         _sectionElevationEdit.Visible = sectionActive;
+        _sectionOffsetLabel.Visible = sectionActive && sectionBetween;
+        _sectionOffsetEdit.Visible = sectionActive && sectionBetween;
         _waterHeatmapValueLabel.Visible = heatmapActive;
         _waterHeatmapValueEdit.Visible = heatmapActive;
         _propLineOffsetLabel.Visible = propLineActive;
@@ -2632,6 +2717,7 @@ public sealed partial class SceneMakerMain : Control
         ConfigureElevationInput(_pathStartElevationEdit, metrics);
         ConfigureElevationInput(_sceneElevationEdit, metrics);
         ConfigureElevationInput(_sectionElevationEdit, metrics);
+        ConfigureSectionOffsetInput(_sectionOffsetEdit, metrics);
 
         var authoringElevation = ElevationOf(_elevationEdit, _elevationEdit.Value);
         _canvas.ElevationMeters = authoringElevation;
@@ -2641,6 +2727,7 @@ public sealed partial class SceneMakerMain : Control
         _canvas.SectionElevationMeters = ElevationOf(
             _sectionElevationEdit,
             _sectionElevationEdit.Value);
+        _canvas.SectionOffsetMeters = SectionOffsetOf(_sectionOffsetEdit.Value);
     }
 
     private static void ConfigureElevationInput(SpinBox input, WorkspaceMetrics metrics)
@@ -2651,6 +2738,17 @@ public sealed partial class SceneMakerMain : Control
         // the display step at the smallest decimal place the quantum uses, and
         // give the arrows the actual quantum. ElevationOf remains the authority
         // that snaps typed values to that same quantum.
+        input.Step = ElevationDisplayStep(metrics.ElevationQuantumMeters);
+        input.CustomArrowStep = (double)metrics.ElevationQuantumMeters;
+        input.CustomArrowRound = true;
+        input.Editable = true;
+    }
+
+    private static void ConfigureSectionOffsetInput(
+        SpinBox input,
+        WorkspaceMetrics metrics)
+    {
+        input.MinValue = (double)metrics.ElevationQuantumMeters;
         input.Step = ElevationDisplayStep(metrics.ElevationQuantumMeters);
         input.CustomArrowStep = (double)metrics.ElevationQuantumMeters;
         input.CustomArrowRound = true;
@@ -2674,6 +2772,7 @@ public sealed partial class SceneMakerMain : Control
         _pathStartElevationEdit.Editable = editable && !_pathAutoStartToggle.ButtonPressed;
         _sceneElevationEdit.Editable = editable;
         _sectionElevationEdit.Editable = editable;
+        _sectionOffsetEdit.Editable = editable;
     }
 
     private void RebuildAssetBars()

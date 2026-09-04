@@ -438,9 +438,15 @@ eine Spanne zu zeigen.
 
 Die Schnittansicht (`S`) entfernt alles strikt oberhalb einer horizontalen Ebene
 und blickt anschließend von oben auf die höchste verbleibende Oberfläche. Ihre
-Höhe steht als `Cut at` im ContextMenu, folgt dem
-`elevation_quantum_meters` des offenen Workspace und zeigt auch ein Quantum von
-`0.125 m` vollständig an. Eine Ebene innerhalb eines Hills zeigt dessen
+erste Auswahl im ContextMenu ist `Cut at` oder `Cut between`. `Cut at` zeigt
+daneben nur seine obere Schnitthöhe. `Cut between` zeigt `Start` und einen
+positiven `Offset`; das untersuchte inklusive Höhenfenster ist
+`[Start, Start + Offset]`. Eine Oberfläche, die nach dem oberen Schnitt unter
+`Start` liegt, bleibt unsichtbar. Start und Offset folgen dem
+`elevation_quantum_meters` des offenen Workspace und zeigen auch ein Quantum von
+`0.125 m` vollständig an. Weil kein zweiter absoluter Endwert gespeichert wird,
+verschiebt eine Änderung an `Start` das gesamte Fenster unverändert nach oben
+oder unten. Eine Ebene innerhalb eines Hills zeigt dessen
 Schnittfläche; am oder über dem höchsten Punkt bleibt seine volle Oberfläche
 sichtbar. Liegt die Ebene in einem ausgeschnittenen River-Korridor, kann darunter
 der River, sein Bett oder ein tieferer Terrain-Span sichtbar werden.
@@ -455,7 +461,7 @@ sichtbar.
 Höhen- und Schnittansicht sind Sichten, keine Arbeitsmodi: Zeichnen, Platzieren,
 Radieren und Auswählen funktionieren unverändert weiter. Das allgemeine
 Authoring-Feld `Height` ist während der Schnittansicht ausgeblendet, damit es
-nicht mit der rein visuellen Schnitthöhe `Cut at` verwechselt wird; sein
+nicht mit den rein visuellen Schnittwerten verwechselt wird; sein
 gespeicherter Session-Wert bleibt dabei unverändert.
 
 Die `ToolOptionsBar` ist eine feste, vertikale Optionsleiste rechts neben dem

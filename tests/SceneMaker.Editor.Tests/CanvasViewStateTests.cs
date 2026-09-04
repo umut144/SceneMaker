@@ -8,18 +8,27 @@ public sealed class CanvasViewStateTests
     [Fact]
     public void PresentationIsAThreeWayTransientChoiceWithASectionElevation()
     {
-        var view = new CanvasViewState(sectionElevationMeters: 1.125m);
+        var view = new CanvasViewState(
+            sectionElevationMeters: 1.125m,
+            sectionOffsetMeters: 0.5m);
 
         Assert.Equal(CanvasPresentationMode.Normal, view.PresentationMode);
         Assert.Equal(1.125m, view.SectionElevationMeters);
+        Assert.Equal(SectionCutKind.At, view.SectionCutKind);
+        Assert.Equal(0.5m, view.SectionOffsetMeters);
 
         view.SelectPresentation(CanvasPresentationMode.Heightmap);
         Assert.Equal(CanvasPresentationMode.Heightmap, view.PresentationMode);
 
         view.SelectPresentation(CanvasPresentationMode.Section);
         view.SetSectionElevation(8.25m);
+        Assert.Equal(0.5m, view.SectionOffsetMeters);
+        view.SelectSectionCut(SectionCutKind.Between);
+        view.SetSectionOffset(2.25m);
         Assert.Equal(CanvasPresentationMode.Section, view.PresentationMode);
         Assert.Equal(8.25m, view.SectionElevationMeters);
+        Assert.Equal(SectionCutKind.Between, view.SectionCutKind);
+        Assert.Equal(2.25m, view.SectionOffsetMeters);
     }
 
     [Fact]
@@ -31,6 +40,14 @@ public sealed class CanvasViewStateTests
             view.SelectPresentation((CanvasPresentationMode)99));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new CanvasViewState(presentationMode: (CanvasPresentationMode)99));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            view.SelectSectionCut((SectionCutKind)99));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new CanvasViewState(sectionCutKind: (SectionCutKind)99));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            view.SetSectionOffset(0m));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new CanvasViewState(sectionOffsetMeters: -1m));
     }
 
     [Fact]
