@@ -231,12 +231,13 @@ Both values are transient and follow the Workspace elevation quantum.
 
 Its Canvas projection is limited to the contents resolved by
 `LayeredSceneColumns`: Terrain after Hill folding, River cuts and fills, and
-additive Path surfaces. `RouteSurfaceRaster` samples the same baked triangles
-used by Canvas and export at water-cell centres, preserving continuous height,
-stacked surfaces and Terrain occlusion. Placements stay hidden rather than
+Path surfaces. `RouteSurfaceRaster` samples the same baked triangles used by
+Canvas and export at water-cell centres, preserving continuous height, stacked
+surfaces and Terrain occlusion. Subtractive intervals now contribute cuts from
+only their own baked quads and shared portal joins; these cuts affect Terrain
+alone and retain every Path floor. Placements stay hidden rather than
 painted over a clipped roof with a false draw-order answer until they acquire
-an actual layered-surface or occlusion rule. Integrating subtractive Path cuts
-and their retained floors into these columns is the next slice.
+an actual layered-surface or occlusion rule.
 
 The engine-neutral column-resolution foundation now exists instead of a second
 Canvas-only interpretation. `LayeredSceneColumns` prepares painted Terrain
@@ -260,7 +261,8 @@ whether Terrain currently happens to overlap the Path.
 Scene schema 16 now persists that per-segment operation and clearance, and the
 Draw Path context applies both to the next point pair. Export schema 10 refuses
 subtractive segments rather than discarding their meaning. The actual column
-cut, red authoring wire and advanced export are still the next slice.
+cut and retained floor are implemented; red authoring wire and advanced export
+remain separate slices.
 
 Every subtractive segment carries a positive `clearance_above_meters`. At each
 station its floor is the existing interpolated Path elevation and its Terrain
@@ -282,11 +284,10 @@ been clipped away and the real Path floor becomes visible. Exactly overlapping
 Paths remain ambiguous from above; do not hide that with an arbitrary semantic
 choice.
 
-Implement the remaining work as focused slices: subtractive segment documents
-and editing; integrate their cuts and floors into the shared columns; cut
-bake/export with a corresponding consumer-version bump; then
-wire picking and manual acceptance of an additive-to-tunnel-to-additive Path
-through a hill. Export must never silently omit excavation.
+Implement the remaining work as focused slices: cut bake/export with a
+corresponding consumer-version bump; then wire picking and manual acceptance of
+an additive-to-tunnel-to-additive Path through a hill. Export must never
+silently omit excavation.
 
 A later, separate profile-section tool may project a marked region onto X-Z or
 Y-Z. Its purpose is to inspect stacked tunnels, floors, ceilings, clearance,

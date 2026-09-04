@@ -147,10 +147,10 @@ centerline, while the height view colours that band from its interpolated
 surface elevation rather than rasterizing it into steps. The eraser removes
 the whole authored route under the pointer.
 
-Subtractive authoring deliberately leads its runtime contract by one focused
-slice: export schema 10 rejects such a segment instead of silently serializing
-it as an additive Path. Terrain cutting and the matching export version follow
-next.
+Subtractive authoring deliberately leads its runtime contract: export schema
+10 rejects such a segment instead of silently serializing it as an additive
+Path. The shared layered columns already subtract its baked corridor from
+Terrain and retain the Path floor; the matching export version follows next.
 
 A flattened loop comes back as a ring whose first point is not repeated at the
 end, with the way home carried in its own `TotalLength` rather than in the last
@@ -333,20 +333,22 @@ bridge deck cross the river it spans without the river carving it away.
 
 `LayeredSceneColumns.Prepare` is the engine-neutral implementation of that
 vertical rule for Terrain and authored water. It folds Elevation Regions once,
-rasters every water corridor once, merges overlapping cut intervals without
-depending on body order, subtracts them from the Terrain solid and retains
-every fill independently. A column can then answer the top surface in the
-unlimited ordinary view or after a finite horizontal clip: when the plane lies
-inside a span the plane is its section face, and when it lies in a void the
-highest remaining boundary below it is visible. Exact Terrain/fill ties choose
-the fill. Spans are closed at both ends, matching the export contract. The clip
-removes only geometry strictly above its plane: exactly at a fill bed the fill
-wins its tie with the floor, and exactly at a cut top the Terrain roof boundary
-remains as a section face. This is also why clipping exactly at a hill top keeps
-the hill visible. The current lookup quantizes an arbitrary authoring position
-to the Workspace water grid because that is the finest authored volumetric
-raster; the authoring-position entry keeps the query engine-neutral for later
-continuous Path cuts.
+rasters every water corridor once, and samples Path surfaces and subtractive
+intervals from their shared bake. It merges overlapping water and Path cut
+intervals without depending on body order, subtracts them from the Terrain
+solid and retains every fill and Path surface independently. A column can then
+answer the top surface in the unlimited ordinary view or after a finite
+horizontal clip: when the plane lies inside a span the plane is its section
+face, and when it lies in a void the highest remaining boundary below it is
+visible. Exact Terrain/fill ties choose the fill. Spans are closed at both ends,
+matching the export contract. The clip removes only geometry strictly above
+its plane: exactly at a fill bed the fill wins its tie with the floor, and
+exactly at a cut top the Terrain roof boundary remains as a section face. This
+is also why clipping exactly at a hill top keeps the hill visible. The current
+lookup quantizes an arbitrary authoring position to the Workspace water grid
+because that is the finest authored volumetric raster. The authoring-position
+entry keeps that query engine-neutral while continuous Path cuts use the same
+cell centres.
 
 The Canvas now exposes that answer as a third, transient presentation beside
 the ordinary Asset view and the blue height map. `CanvasViewState` owns the

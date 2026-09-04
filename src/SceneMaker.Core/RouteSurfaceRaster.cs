@@ -11,6 +11,19 @@ public readonly record struct RouteSurfaceRasterCell(
     string AssetKey,
     string RouteSurfaceId);
 
+/// <summary>One Terrain cut sampled from a subtractive authored Path segment.</summary>
+public readonly record struct RouteSurfaceRasterCut(
+    int X,
+    int Y,
+    decimal BottomMeters,
+    decimal TopMeters,
+    string RouteSurfaceId,
+    string SegmentId);
+
+internal sealed record PreparedRouteSurfaceRaster(
+    IReadOnlyList<RouteSurfaceRasterCell> Cells,
+    IReadOnlyList<RouteSurfaceRasterCut> Cuts);
+
 /// <summary>
 /// Samples the runtime Path bake onto the finest authored volumetric raster.
 /// The Canvas and layered queries therefore use the same triangles, joins,
@@ -20,38 +33,83 @@ public static class RouteSurfaceRaster
 {
     public static IReadOnlyList<RouteSurfaceRasterCell> Cells(
         SceneDocument scene,
+        WorkspaceMetrics metrics) => Prepare(scene, metrics).Cells;
+
+    /// <summary>
+    /// Samples only subtractive authored intervals from the same baked
+    /// triangles used by <see cref="Cells"/>. Their Path surface remains a
+    /// separate cell; this answer is only the Terrain volume above it.
+    /// </summary>
+    public static IReadOnlyList<RouteSurfaceRasterCut> Cuts(
+        SceneDocument scene,
+        WorkspaceMetrics metrics) => Prepare(scene, metrics).Cuts;
+
+    internal static PreparedRouteSurfaceRaster Prepare(
+        SceneDocument scene,
         WorkspaceMetrics metrics)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
 
         HashSet<RouteSurfaceRasterCell> cells = [];
+        HashSet<RouteSurfaceRasterCut> cuts = [];
         foreach (var route in scene.RouteSurfaces)
         {
             var bake = RouteSurfaceBake.Build(metrics, route);
             for (var index = 0; index < bake.TriangleIndices.Count; index += 3)
             {
-                var first = bake.Vertices[bake.TriangleIndices[index]];
-                var second = bake.Vertices[bake.TriangleIndices[index + 1]];
-                var third = bake.Vertices[bake.TriangleIndices[index + 2]];
                 AddTriangleCells(
                     cells,
                     scene,
                     metrics,
                     bake.RouteSurfaceId,
                     bake.AssetKey,
-                    first,
-                    second,
-                    third);
+                    bake.Vertices[bake.TriangleIndices[index]],
+                    bake.Vertices[bake.TriangleIndices[index + 1]],
+                    bake.Vertices[bake.TriangleIndices[index + 2]]);
+            }
+            for (var segmentIndex = 0; segmentIndex < route.Segments.Count; segmentIndex++)
+            {
+                var authored = route.Segments[segmentIndex];
+                if (authored.Operation != RouteSegmentOperation.Subtractive) continue;
+                if (authored.ClearanceAboveMeters is not > 0m)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"Path segment '{authored.SegmentId}' needs positive clearance_above_meters.");
+                }
+
+                var baked = bake.Segments[segmentIndex];
+                foreach (var triangleOffset in
+                         RouteSurfaceBake.TriangleOffsetsForSegment(bake, baked))
+                {
+                    AddTriangleCuts(
+                        cuts,
+                        scene,
+                        metrics,
+                        route.RouteSurfaceId,
+                        authored.SegmentId,
+                        authored.ClearanceAboveMeters.Value,
+                        bake.Vertices[bake.TriangleIndices[triangleOffset]],
+                        bake.Vertices[bake.TriangleIndices[triangleOffset + 1]],
+                        bake.Vertices[bake.TriangleIndices[triangleOffset + 2]]);
+                }
             }
         }
 
-        return [.. cells
-            .OrderBy(static cell => cell.Y)
-            .ThenBy(static cell => cell.X)
-            .ThenBy(static cell => cell.ElevationMeters)
-            .ThenBy(static cell => cell.RouteSurfaceId, StringComparer.Ordinal)
-            .ThenBy(static cell => cell.AssetKey, StringComparer.Ordinal)];
+        return new PreparedRouteSurfaceRaster(
+            [.. cells
+                .OrderBy(static cell => cell.Y)
+                .ThenBy(static cell => cell.X)
+                .ThenBy(static cell => cell.ElevationMeters)
+                .ThenBy(static cell => cell.RouteSurfaceId, StringComparer.Ordinal)
+                .ThenBy(static cell => cell.AssetKey, StringComparer.Ordinal)],
+            [.. cuts
+                .OrderBy(static cut => cut.Y)
+                .ThenBy(static cut => cut.X)
+                .ThenBy(static cut => cut.BottomMeters)
+                .ThenBy(static cut => cut.TopMeters)
+                .ThenBy(static cut => cut.RouteSurfaceId, StringComparer.Ordinal)
+                .ThenBy(static cut => cut.SegmentId, StringComparer.Ordinal)]);
     }
 
     private static void AddTriangleCells(
@@ -60,6 +118,24 @@ public static class RouteSurfaceRaster
         WorkspaceMetrics metrics,
         string routeSurfaceId,
         string assetKey,
+        RouteSurfaceBakeVertex first,
+        RouteSurfaceBakeVertex second,
+        RouteSurfaceBakeVertex third)
+    {
+        foreach (var sample in TriangleSamples(scene, metrics, first, second, third))
+        {
+            cells.Add(new RouteSurfaceRasterCell(
+                sample.X,
+                sample.Y,
+                sample.ElevationMeters,
+                assetKey,
+                routeSurfaceId));
+        }
+    }
+
+    private static IEnumerable<TriangleSample> TriangleSamples(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
         RouteSurfaceBakeVertex first,
         RouteSurfaceBakeVertex second,
         RouteSurfaceBakeVertex third)
@@ -74,7 +150,7 @@ public static class RouteSurfaceRaster
         var lastX = CellAtOrBefore(maxX, step, half, metrics.SceneWidthWaterCells(scene));
         var firstY = CellAtOrAfter(minY, step, half, metrics.SceneHeightWaterCells(scene));
         var lastY = CellAtOrBefore(maxY, step, half, metrics.SceneHeightWaterCells(scene));
-        if (firstX > lastX || firstY > lastY) return;
+        if (firstX > lastX || firstY > lastY) yield break;
 
         for (var y = firstY; y <= lastY; y++)
         {
@@ -91,13 +167,31 @@ public static class RouteSurfaceRaster
                 {
                     continue;
                 }
-                cells.Add(new RouteSurfaceRasterCell(
-                    x,
-                    y,
-                    elevation,
-                    assetKey,
-                    routeSurfaceId));
+                yield return new TriangleSample(x, y, elevation);
             }
+        }
+    }
+
+    private static void AddTriangleCuts(
+        HashSet<RouteSurfaceRasterCut> cuts,
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        string routeSurfaceId,
+        string segmentId,
+        decimal clearanceAboveMeters,
+        RouteSurfaceBakeVertex first,
+        RouteSurfaceBakeVertex second,
+        RouteSurfaceBakeVertex third)
+    {
+        foreach (var sample in TriangleSamples(scene, metrics, first, second, third))
+        {
+            cuts.Add(new RouteSurfaceRasterCut(
+                sample.X,
+                sample.Y,
+                sample.ElevationMeters,
+                sample.ElevationMeters + clearanceAboveMeters,
+                routeSurfaceId,
+                segmentId));
         }
     }
 
@@ -156,4 +250,6 @@ public static class RouteSurfaceRaster
 
     private static decimal Cross(decimal ax, decimal ay, decimal bx, decimal by) =>
         ax * by - ay * bx;
+
+    private readonly record struct TriangleSample(int X, int Y, decimal ElevationMeters);
 }

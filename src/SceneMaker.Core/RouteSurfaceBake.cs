@@ -135,6 +135,46 @@ public static class RouteSurfaceBake
         };
     }
 
+    /// <summary>
+    /// Triangle offsets belonging to one authored interval. The bake writes
+    /// every flattened-segment quad first and then every interior round join;
+    /// a join on an authored boundary belongs to both adjacent intervals. That
+    /// shared ownership closes a subtractive corridor cleanly at a portal.
+    /// </summary>
+    internal static IEnumerable<int> TriangleOffsetsForSegment(
+        BakedRouteSurface bake,
+        RouteSurfaceBakeSegment segment)
+    {
+        ArgumentNullException.ThrowIfNull(bake);
+        ArgumentNullException.ThrowIfNull(segment);
+        var flattenedSegmentCount = bake.CenterlineSamples.Count - 1;
+        if (segment.StartSampleIndex < 0
+            || segment.EndSampleIndex > flattenedSegmentCount
+            || segment.StartSampleIndex >= segment.EndSampleIndex)
+        {
+            throw new SceneMakerDocumentException(
+                $"Path segment '{segment.SegmentId}' has an invalid baked sample range.");
+        }
+
+        for (var sample = segment.StartSampleIndex; sample < segment.EndSampleIndex; sample++)
+        {
+            var quadOffset = sample * 6;
+            yield return quadOffset;
+            yield return quadOffset + 3;
+        }
+
+        var joinsOffset = flattenedSegmentCount * 6;
+        var firstJoin = Math.Max(1, segment.StartSampleIndex);
+        var lastJoin = Math.Min(flattenedSegmentCount - 1, segment.EndSampleIndex);
+        for (var sample = firstJoin; sample <= lastJoin; sample++)
+        {
+            var joinOffset = joinsOffset
+                + (sample - 1) * RoundJoinSides * 3;
+            for (var side = 0; side < RoundJoinSides; side++)
+                yield return joinOffset + side * 3;
+        }
+    }
+
     private static void AddQuad(
         List<RouteSurfaceBakeVertex> vertices,
         List<int> triangles,

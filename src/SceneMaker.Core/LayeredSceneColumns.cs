@@ -132,8 +132,9 @@ public sealed class LayeredSceneColumn
 /// <summary>
 /// A prepared, engine-neutral Layered-3D view of one Scene. Terrain is folded
 /// through every Elevation Region once, each water corridor is rasterized once,
-/// and additive Paths are sampled from their shared runtime bake; repeated
-/// column questions then only inspect prepared spans.
+/// and Paths are sampled from their shared runtime bake. Subtractive intervals
+/// cut Terrain while every Path keeps its independent surface; repeated column
+/// questions then only inspect prepared spans.
 /// </summary>
 public sealed class LayeredSceneColumns
 {
@@ -145,6 +146,7 @@ public sealed class LayeredSceneColumns
     private readonly IReadOnlyDictionary<TerrainCellCoordinate, TerrainCellDocument> _terrain;
     private readonly IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<WaterLayer>> _water;
     private readonly IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<RouteLayer>> _routes;
+    private readonly IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<RouteCutLayer>> _routeCuts;
     // Section drawing asks every visible cell again on every redraw. Resolve a
     // column only once for this immutable prepared Scene instead of allocating
     // its interval lists per frame.
@@ -155,7 +157,8 @@ public sealed class LayeredSceneColumns
         WorkspaceMetrics metrics,
         IReadOnlyDictionary<TerrainCellCoordinate, TerrainCellDocument> terrain,
         IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<WaterLayer>> water,
-        IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<RouteLayer>> routes)
+        IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<RouteLayer>> routes,
+        IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<RouteCutLayer>> routeCuts)
     {
         _metrics = metrics;
         _sceneWidthWaterCells = metrics.SceneWidthWaterCells(scene);
@@ -165,6 +168,7 @@ public sealed class LayeredSceneColumns
         _terrain = terrain;
         _water = water;
         _routes = routes;
+        _routeCuts = routeCuts;
     }
 
     public static LayeredSceneColumns Prepare(SceneDocument scene, WorkspaceMetrics metrics)
@@ -204,7 +208,8 @@ public sealed class LayeredSceneColumns
                 .ThenBy(static layer => layer.SurfaceMeters)
                 .ThenBy(static layer => layer.CutTopMeters)
                 .ThenBy(static layer => layer.WaterBodyId, StringComparer.Ordinal)]);
-        var routes = RouteSurfaceRaster.Cells(scene, metrics)
+        var routeRaster = RouteSurfaceRaster.Prepare(scene, metrics);
+        var routes = routeRaster.Cells
             .GroupBy(static cell => new WaterCellCoordinate(cell.X, cell.Y))
             .ToDictionary(
                 static group => group.Key,
@@ -216,14 +221,33 @@ public sealed class LayeredSceneColumns
                     .OrderBy(static layer => layer.ElevationMeters)
                     .ThenBy(static layer => layer.RouteSurfaceId, StringComparer.Ordinal)
                     .ThenBy(static layer => layer.AssetKey, StringComparer.Ordinal)]);
-        return new LayeredSceneColumns(scene, metrics, terrain, orderedWater, routes);
+        var routeCuts = routeRaster.Cuts
+            .GroupBy(static cut => new WaterCellCoordinate(cut.X, cut.Y))
+            .ToDictionary(
+                static group => group.Key,
+                static group => (IReadOnlyList<RouteCutLayer>)[.. group
+                    .Select(static cut => new RouteCutLayer(
+                        cut.RouteSurfaceId,
+                        cut.SegmentId,
+                        cut.BottomMeters,
+                        cut.TopMeters))
+                    .OrderBy(static cut => cut.BottomMeters)
+                    .ThenBy(static cut => cut.TopMeters)
+                    .ThenBy(static cut => cut.RouteSurfaceId, StringComparer.Ordinal)
+                    .ThenBy(static cut => cut.SegmentId, StringComparer.Ordinal)]);
+        return new LayeredSceneColumns(
+            scene,
+            metrics,
+            terrain,
+            orderedWater,
+            routes,
+            routeCuts);
     }
 
     /// <summary>
     /// Resolves the water-grid cell containing an arbitrary Scene-local
     /// authoring position. The water grid is the finest authored volumetric
-    /// raster today; later continuous Path cuts can join the same query without
-    /// changing its coordinate space.
+    /// raster today; continuous Path cuts use that same coordinate space.
     /// </summary>
     public LayeredSceneColumn AtAuthoringPosition(double x, double y)
     {
@@ -254,13 +278,15 @@ public sealed class LayeredSceneColumns
         water ??= [];
         _routes.TryGetValue(coordinate, out var routes);
         routes ??= [];
+        _routeCuts.TryGetValue(coordinate, out var routeCuts);
+        routeCuts ??= [];
         var terrainCoordinate = new TerrainCellCoordinate(
             WorkspaceMetrics.FloorDivide(x, _metrics.WaterCellsPerTerrainCell),
             WorkspaceMetrics.FloorDivide(y, _metrics.WaterCellsPerTerrainCell));
         _terrain.TryGetValue(terrainCoordinate, out var terrain);
 
         resolved = new LayeredSceneColumn(
-            ResolveTerrain(terrain, water),
+            ResolveTerrain(terrain, water, routeCuts),
             [.. water.Select(static layer => new LayeredColumnSpan(
                     layer.BedMeters,
                     layer.SurfaceMeters,
@@ -279,10 +305,11 @@ public sealed class LayeredSceneColumns
 
     private static IReadOnlyList<LayeredColumnSpan> ResolveTerrain(
         TerrainCellDocument? terrain,
-        IReadOnlyList<WaterLayer> water)
+        IReadOnlyList<WaterLayer> water,
+        IReadOnlyList<RouteCutLayer> routeCuts)
     {
         if (terrain is null) return [];
-        if (water.Count == 0)
+        if (water.Count == 0 && routeCuts.Count == 0)
         {
             return
             [
@@ -295,7 +322,7 @@ public sealed class LayeredSceneColumns
             ];
         }
 
-        var cuts = MergeCuts(water);
+        var cuts = MergeCuts(water, routeCuts);
         List<LayeredColumnSpan> solids = [];
         decimal? bottom = null;
         foreach (var cut in cuts)
@@ -320,10 +347,14 @@ public sealed class LayeredSceneColumns
         return solids;
     }
 
-    private static IReadOnlyList<CutSpan> MergeCuts(IReadOnlyList<WaterLayer> water)
+    private static IReadOnlyList<CutSpan> MergeCuts(
+        IReadOnlyList<WaterLayer> water,
+        IReadOnlyList<RouteCutLayer> routeCuts)
     {
         var ordered = water
             .Select(static layer => new CutSpan(layer.BedMeters, layer.CutTopMeters))
+            .Concat(routeCuts.Select(static layer =>
+                new CutSpan(layer.BottomMeters, layer.TopMeters)))
             .OrderBy(static cut => cut.BottomMeters)
             .ThenBy(static cut => cut.TopMeters)
             .ToList();
@@ -355,4 +386,9 @@ public sealed class LayeredSceneColumns
         string RouteSurfaceId,
         string AssetKey,
         decimal ElevationMeters);
+    private sealed record RouteCutLayer(
+        string RouteSurfaceId,
+        string SegmentId,
+        decimal BottomMeters,
+        decimal TopMeters);
 }

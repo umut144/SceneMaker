@@ -439,18 +439,171 @@ public sealed class LayeredSceneColumnsTests
         Assert.Equal("grass", visible.AssetKey);
     }
 
+    [Fact]
+    public void ASubtractivePathCutsTerrainAndLeavesItsOwnFloor()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Hill(TestScenes.Instance(workspace), workspace, 10m) with
+        {
+            RouteSurfaces =
+            [
+                Route(
+                    "route_0001",
+                    RoutePoint(0, 8, 2m, 0.5m),
+                    RoutePoint(32, 8, 2m, 0.5m),
+                    operation: RouteSegmentOperation.Subtractive,
+                    clearance: 3m),
+            ],
+        };
+
+        var column = LayeredSceneColumns.Prepare(scene, workspace.Metrics).AtWaterCell(0, 0);
+
+        Assert.Equal(
+            [
+                new LayeredColumnSpan(
+                    null, 2m, "grass", LayeredColumnSpanKind.TerrainSolid, null),
+                new LayeredColumnSpan(
+                    5m, 10m, "grass", LayeredColumnSpanKind.TerrainSolid, null),
+            ],
+            column.TerrainSolids);
+        Assert.Equal(2m, Assert.Single(column.Surfaces).TopMeters);
+        Assert.Equal(LayeredColumnSpanKind.IndependentSurface, column.VisibleAt(4m)!.Kind);
+        Assert.Equal(2m, column.VisibleAt(4m)!.ElevationMeters);
+        Assert.Equal(LayeredColumnSpanKind.TerrainSolid, column.VisibleAt(6m)!.Kind);
+    }
+
+    [Fact]
+    public void AnAdditiveSegmentAfterAPortalDoesNotContinueExcavating()
+    {
+        using var workspace = TestWorkspace.Create();
+        var route = new RouteSurfaceDocument
+        {
+            RouteSurfaceId = "route_0001",
+            AssetKey = "grass",
+            Points =
+            [
+                RoutePoint(0, 8, 2m, 0.5m),
+                RoutePoint(32, 8, 2m, 0.5m),
+                RoutePoint(64, 8, 2m, 0.5m),
+            ],
+            Segments =
+            [
+                Segment("route_0001", 1, RouteSegmentOperation.Subtractive, 3m),
+                Segment("route_0001", 2, RouteSegmentOperation.Additive),
+            ],
+        };
+        var scene = Hill(TestScenes.Instance(workspace), workspace, 10m, 64) with
+        {
+            RouteSurfaces = [route],
+        };
+        var columns = LayeredSceneColumns.Prepare(scene, workspace.Metrics);
+
+        Assert.Equal(2, columns.AtWaterCell(0, 0).TerrainSolids.Count);
+        Assert.Equal(2, columns.AtWaterCell(2, 0).TerrainSolids.Count);
+        Assert.Single(columns.AtWaterCell(3, 0).TerrainSolids);
+        Assert.Equal(10m, columns.AtWaterCell(3, 0).TerrainSolids[0].TopMeters);
+        Assert.Equal(10m, columns.AtWaterCell(3, 0).VisibleAt()!.ElevationMeters);
+    }
+
+    [Fact]
+    public void APathCutNeverRemovesWaterOrAnotherIndependentSurface()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = River(
+            Hill(TestScenes.Instance(workspace), workspace, 10m),
+            WaterBody("river_0001", surface: 4m, depth: 0.5m, clearance: 0m)) with
+        {
+            RouteSurfaces =
+            [
+                Route(
+                    "route_0001",
+                    RoutePoint(0, 8, 2m, 0.5m),
+                    RoutePoint(32, 8, 2m, 0.5m),
+                    operation: RouteSegmentOperation.Subtractive,
+                    clearance: 3m),
+                Route(
+                    "route_0002",
+                    RoutePoint(0, 8, 3m, 0.5m),
+                    RoutePoint(32, 8, 3m, 0.5m)),
+            ],
+        };
+
+        var column = LayeredSceneColumns.Prepare(scene, workspace.Metrics).AtWaterCell(0, 0);
+
+        Assert.Single(column.Fills);
+        Assert.Equal("river_0001", column.Fills[0].SourceId);
+        Assert.Equal(2, column.Surfaces.Count);
+        Assert.Equal(["route_0001", "route_0002"],
+            column.Surfaces.Select(static surface => surface.SourceId));
+        Assert.Equal(
+            [(null, 2m), (5m, 10m)],
+            column.TerrainSolids.Select(static span => (span.BottomMeters, span.TopMeters)));
+    }
+
+    [Fact]
+    public void ASubtractivePathOverEmptySpaceStillPresentsItsFloor()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.EmptyInstance() with
+        {
+            RouteSurfaces =
+            [
+                Route(
+                    "route_0001",
+                    RoutePoint(0, 8, 2m, 0.5m),
+                    RoutePoint(32, 8, 2m, 0.5m),
+                    operation: RouteSegmentOperation.Subtractive,
+                    clearance: 3m),
+            ],
+        };
+
+        var column = LayeredSceneColumns.Prepare(scene, workspace.Metrics).AtWaterCell(0, 0);
+
+        Assert.Empty(column.TerrainSolids);
+        Assert.Equal(2m, column.VisibleAt()!.ElevationMeters);
+        Assert.Equal(LayeredColumnSpanKind.IndependentSurface, column.VisibleAt()!.Kind);
+    }
+
+    [Fact]
+    public void ASubtractiveRampCutUsesTheBakedContinuousFloor()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.EmptyInstance() with
+        {
+            RouteSurfaces =
+            [
+                Route(
+                    "route_0001",
+                    RoutePoint(0, 8, 1m, 0.5m),
+                    RoutePoint(64, 8, 3m, 0.5m),
+                    operation: RouteSegmentOperation.Subtractive,
+                    clearance: 1.5m),
+            ],
+        };
+
+        var cuts = RouteSurfaceRaster.Cuts(scene, workspace.Metrics);
+
+        Assert.Equal([0, 1, 2, 3], cuts.Select(static cut => cut.X));
+        Assert.All(cuts, static cut => Assert.Equal(0, cut.Y));
+        Assert.Equal([1.25m, 1.75m, 2.25m, 2.75m],
+            cuts.Select(static cut => cut.BottomMeters));
+        Assert.Equal([2.75m, 3.25m, 3.75m, 4.25m],
+            cuts.Select(static cut => cut.TopMeters));
+    }
+
     private static SceneDocument Hill(
         SceneDocument scene,
         TestWorkspace workspace,
-        decimal elevation) =>
+        decimal elevation,
+        int sizeAuthoringPixels = 32) =>
         ElevationRegionEditing.Place(
             scene,
             workspace.Metrics,
             [
                 ElevationRegionEditing.Point(0, 0),
-                ElevationRegionEditing.Point(32, 0),
-                ElevationRegionEditing.Point(32, 32),
-                ElevationRegionEditing.Point(0, 32),
+                ElevationRegionEditing.Point(sizeAuthoringPixels, 0),
+                ElevationRegionEditing.Point(sizeAuthoringPixels, sizeAuthoringPixels),
+                ElevationRegionEditing.Point(0, sizeAuthoringPixels),
             ],
             elevation);
 
@@ -485,20 +638,29 @@ public sealed class LayeredSceneColumnsTests
         string id,
         RouteSurfacePointDocument first,
         RouteSurfacePointDocument second,
-        string assetKey = "grass") => new()
+        string assetKey = "grass",
+        RouteSegmentOperation operation = RouteSegmentOperation.Additive,
+        decimal? clearance = null) => new()
     {
         RouteSurfaceId = id,
         AssetKey = assetKey,
         Points = [first, second],
         Segments =
         [
-            new RouteSurfaceSegmentDocument
-            {
-                SegmentId = $"{id}.segment_0001",
-                GradePercent = 0,
-                Operation = RouteSegmentOperation.Additive,
-            },
+            Segment(id, 1, operation, clearance),
         ],
+    };
+
+    private static RouteSurfaceSegmentDocument Segment(
+        string routeId,
+        int ordinal,
+        RouteSegmentOperation operation,
+        decimal? clearance = null) => new()
+    {
+        SegmentId = $"{routeId}.segment_{ordinal:0000}",
+        GradePercent = 0,
+        Operation = operation,
+        ClearanceAboveMeters = clearance,
     };
 
     private static RouteSurfacePointDocument RoutePoint(

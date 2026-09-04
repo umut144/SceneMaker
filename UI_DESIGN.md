@@ -458,10 +458,12 @@ sichtbar. Liegt die Ebene in einem ausgeschnittenen River-Korridor, kann darunte
 der River, sein Bett oder ein tieferer Terrain-Span sichtbar werden.
 
 Der Schnitt umfasst Terrain nach Hill-Faltung, River-Schnitte und -Füllungen
-sowie additive Path-Oberflächen. Paths werden dafür aus genau dem Triangle-Bake
-auf das feine Water-Raster abgetastet, das Canvas und Export bereits verwenden;
-ihre Neigung bleibt kontinuierlich und wird nicht zu Terrain-Stufen. Ein Path
-unter einem höheren Terrain-Dach bleibt verborgen, und ein Cut kann eine
+sowie additive und subtraktive Path-Oberflächen. Paths werden dafür aus genau
+dem Triangle-Bake auf das feine Water-Raster abgetastet, das Canvas und Export
+bereits verwenden; ihre Neigung bleibt kontinuierlich und wird nicht zu
+Terrain-Stufen. Ein subtraktives Segment schneidet seinen Korridor bis zur
+authorierten Clearance aus dem Terrain, behält aber den Path als Boden. Ein
+Path unter einem höheren Terrain-Dach bleibt verborgen, und ein Cut kann eine
 niedrigere von mehreren gestapelten Path-Oberflächen freilegen. Placements
 werden in der Schnittansicht vorerst nicht gezeichnet, weil ihre Occlusion noch
 keine gemeinsame Spaltenregel besitzt. Werkzeugvorschauen, Hill-Konturen,
