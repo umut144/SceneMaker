@@ -37,7 +37,7 @@ Canvas und damit gegenüber der linken `ToolBar`.
 
 Die Werkzeugauswahl besteht aus drei unabhängigen Dimensionen:
 
-- `EditorMode` bestimmt den **Bereich**: `Terrain`, `River`, `Hill`,
+- `EditorMode` bestimmt den **Bereich**: `Terrain`, `River`, `Ramp`, `Hill`,
   `Placements` oder `Templates`.
 - `EditorTool` bestimmt das primäre Werkzeug innerhalb dieses Bereichs.
 - Das gewählte Terrain-Asset bestimmt das **Material** und sonst nichts.
@@ -48,7 +48,7 @@ Die Navigation ist zweistufig, wie bei den übrigen Bereichen auch:
 Übersicht:  [ Terrain ] [ Landscape ] [ Placements ] [ Scene Templates ] [ Map ]
                               │
                               ▼
-Kontext:    [ ← ]  Landscape ›  ( River )  ( Hill )
+Kontext:    [ ← ]  Landscape ›  ( River )  ( Ramp )  ( Hill )
 ```
 
 Das Material erscheint dort nicht noch einmal. Ein Bereich, der Zellen malt,
@@ -78,6 +78,7 @@ Surface-Token — aber gefragt wird es jetzt von der Assetleiste:
 | --- | --- | --- |
 | `Terrain` | `Pencil`, `Line`, `Terrain Fill` | `authoring: "cells"`, als Palette |
 | `River` | `Draw River` | `authoring: "curve"`, als `Surface`-Feld |
+| `Ramp` | `Draw Ramp` | alle Terrain-Assets, als `Surface`-Feld |
 | `Hill` | `Draw Hill`, `Select Hill` | — |
 | `Placements` | `Selector`, `Pencil`, `Line` | — |
 | `Templates` | `Selector`, `Anchor Move` | — |
@@ -88,6 +89,13 @@ die Oberfläche eines Hügels ändern will, malt sie im Bereich `Terrain` — do
 etwa Sand über das Grass des Hügelrückens. Jeder Bereich merkt sich sein zuletzt
 gewähltes Asset getrennt, damit man den Pinsel dort wiederfindet, wo man ihn
 abgelegt hat.
+
+`Ramp` ist eine eigenständige Oberfläche über dem Terrain. Deshalb darf sie
+jedes Terrain-Asset präsentieren, auch wenn dessen normale Authoring-Art
+`cells` oder `curve` ist. Ihr offener Bezier-Entwurf speichert Höhe und Breite
+pro Punkt; Punktpositionen rasten horizontal nicht am Terrain-Raster ein. Die
+engine-neutrale Tool-Interaktion ist vorhanden. Die sichtbare
+Godot-Kontextleiste und Canvas-Darstellung folgen in einem eigenen UI-Slice.
 
 Beim Betreten eines Bereichs bleibt das gemerkte Asset, wenn es zum Bereich
 passt; sonst wird das erste passende gewählt. Bietet ein Workspace für einen

@@ -58,15 +58,14 @@ its Assets by, and it makes two mistakes impossible: a river painted cell by
 cell, and a river made of grass.
 
 The editor asks that question of the area rather than of the Asset. Terrain,
-River and Hill are three areas because they author three different things -
-painted cells, an open curve, a closed contour - and each offers the Assets its
-geometry can carry, or none. Terrain offers the cell-authored Assets; River
-offers the curve-authored Assets in its `Surface` field; Hill authors shape
-and height only and so has no material to offer. It used to run the other way, with
-the chosen Asset swapping the tool out from under the author, which meant
-choosing a river silently ended a hill contour being drawn. Now an Asset is
-only the material: changing it keeps the geometry, and only leaving the area
-gives it up - out loud.
+River, Ramp and Hill are separate areas because they author different geometry.
+Terrain offers the cell-authored Assets; River offers the curve-authored Assets
+in its `Surface` field; Ramp may present any Terrain Asset on an independent
+route band; Hill authors shape and height only and so has no material to offer.
+It used to run the other way, with the chosen Asset swapping the tool out from
+under the author, which meant choosing a river silently ended a hill contour
+being drawn. Now an Asset is only the material: changing it keeps the geometry,
+and only leaving the area gives it up - out loud.
 
 Where that material is asked for follows from what the area draws. Painting
 cells means switching Assets constantly, so Terrain carries them as a palette
@@ -138,7 +137,8 @@ quantum, but their horizontal positions do not snap to either raster. Equal
 neighbour positions are valid when their Bezier handles create real arc length,
 which a generated loop may need. Templates refuse routes until composition can
 translate them. Export schema 9 cannot carry them and warns instead of silently
-dropping them; there is no editor tool yet.
+dropping them. Core and Editor now implement `Draw Ramp`, its preview and its
+whole-body eraser; the Godot application does not expose those controls yet.
 
 A flattened loop comes back as a ring whose first point is not repeated at the
 end, with the way home carried in its own `TotalLength` rather than in the last
@@ -306,6 +306,22 @@ may therefore have a surface that is not itself a multiple of the quantum.
 
 Cuts apply to Terrain and never to fills. That one sentence is what will let a
 bridge deck cross the river it spans without the river carving it away.
+
+A ramp is an independently materialized open route rather than a sequence of
+raised Terrain cells. Every authored point carries an absolute surface height
+and a full width; both are interpolated continuously over Bezier arc length.
+The point positions are deliberately free in plan instead of snapping to the
+Terrain grid. `RouteSurfaceEditing` authors and removes the body, while
+`ToolInteraction` owns the unfinished open curve and makes the preview and
+Enter use the same prepared geometry. Ascending and descending routes are the
+same operation with the endpoint heights reversed.
+
+The initial width is 2 m because the first target Actor has a 1 m collision
+radius. That is a convenient authoring default, not a statement that the route
+is traversable: tight inner curves and a future Actor profile still need their
+own clearance test. The editor therefore validates representable geometry and
+the Workspace height quantum only; it does not yet generate a route or reject
+one for grade. Export schema 9 continues to warn and omit route surfaces.
 
 A Prop needs no Terrain under it. Its `elevation_meters` is absolute, like every
 other authored height, so where it stands is already fully said and the ground

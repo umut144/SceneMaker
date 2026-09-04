@@ -99,6 +99,10 @@ public sealed class EditorInteractionStateTests
             ["river"],
             TerrainAreaAssets.Offered(EditorMode.River, workspace.Terrain)
                 .Select(static asset => asset.AssetKey));
+        Assert.Equal(
+            workspace.Terrain.Assets.Select(static asset => asset.AssetKey),
+            TerrainAreaAssets.Offered(EditorMode.Ramp, workspace.Terrain)
+                .Select(static asset => asset.AssetKey));
         Assert.Empty(TerrainAreaAssets.Offered(EditorMode.Props, workspace.Terrain));
     }
 
@@ -180,6 +184,8 @@ public sealed class EditorInteractionStateTests
 
         Assert.NotNull(TerrainAreaAssets.SurfaceFieldFor(
             EditorMode.River, workspace.Terrain, remembered: null));
+        Assert.NotNull(TerrainAreaAssets.SurfaceFieldFor(
+            EditorMode.Ramp, workspace.Terrain, remembered: null));
         Assert.Null(TerrainAreaAssets.SurfaceFieldFor(
             EditorMode.Terrain, workspace.Terrain, remembered: null));
         Assert.Null(TerrainAreaAssets.SurfaceFieldFor(
@@ -249,5 +255,19 @@ public sealed class EditorInteractionStateTests
             TerrainAreaAssets.Choose(EditorMode.River, workspace.Terrain, remembered: null),
             TerrainAreaAssets.SurfaceFieldFor(
                 EditorMode.River, workspace.Terrain, remembered: "grass")?.SelectedAssetKey);
+    }
+
+    [Fact]
+    public void RampMayPresentAnyTerrainAssetAsItsOwnSurface()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var field = Assert.IsType<TerrainSurfaceField>(TerrainAreaAssets.SurfaceFieldFor(
+            EditorMode.Ramp, workspace.Terrain, remembered: "river"));
+
+        Assert.Equal("river", field.SelectedAssetKey);
+        Assert.Contains(field.Options, static asset => asset.Authoring == TerrainAuthoring.Cells);
+        Assert.Contains(field.Options, static asset => asset.Authoring == TerrainAuthoring.Curve);
+        Assert.True(field.Changeable);
     }
 }

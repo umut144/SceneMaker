@@ -88,6 +88,10 @@ public sealed class EditorToolRegistryTests
         Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawRiver));
         Assert.False(EditorToolRegistry.Supports(EditorMode.ElevationRegion, EditorTool.DrawRiver));
 
+        Assert.True(EditorToolRegistry.Supports(EditorMode.Ramp, EditorTool.DrawRamp));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawRamp));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.DrawRamp));
+
         Assert.True(EditorToolRegistry.Supports(EditorMode.ElevationRegion, EditorTool.DrawElevationRegion));
         Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawElevationRegion));
         Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.DrawElevationRegion));
@@ -98,6 +102,7 @@ public sealed class EditorToolRegistryTests
         // The cell tools stay where cells are painted.
         Assert.False(EditorToolRegistry.Supports(EditorMode.ElevationRegion, EditorTool.Pencil));
         Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.Pencil));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Ramp, EditorTool.Pencil));
     }
 
     /// <summary>
@@ -114,6 +119,9 @@ public sealed class EditorToolRegistryTests
         Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.ElevationRegion));
         Assert.Equal(
             TerrainAuthoring.Curve, EditorToolRegistry.TerrainAuthoringFor(EditorMode.River));
+        // A Ramp presents a Terrain Asset but does not author that Asset's
+        // native cells or curves, so it deliberately has no authoring kind.
+        Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.Ramp));
         Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.Props));
         Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.Templates));
     }

@@ -90,7 +90,16 @@ public static class RouteSurfaceGeometry
         RouteSurfaceDocument route)
     {
         ArgumentNullException.ThrowIfNull(route);
-        return Prepare(metrics, route.Points.Select(ToGeometryPoint).ToArray());
+        return Prepare(metrics, route.Points);
+    }
+
+    /// <summary>Prepares document points before their route has been stored.</summary>
+    public static PreparedRouteSurface Prepare(
+        WorkspaceMetrics metrics,
+        IReadOnlyList<RouteSurfacePointDocument> points)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        return Prepare(metrics, points.Select(ToGeometryPoint).ToArray());
     }
 
     public static PreparedRouteSurface Prepare(

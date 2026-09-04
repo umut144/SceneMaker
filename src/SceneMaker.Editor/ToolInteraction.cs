@@ -27,6 +27,8 @@ public sealed class ToolInteraction
     private bool _terrainLineDragging;
     private readonly List<WaterDraftPoint> _riverDraft = [];
     private WaterDraftPoint? _riverPending;
+    private readonly List<RouteDraftPoint> _rampDraft = [];
+    private RouteDraftPoint? _rampPending;
     private readonly List<ElevationRegionDraftPoint> _elevationRegionDraft = [];
     private ElevationRegionDraftPoint? _elevationRegionPending;
     private int? _draggedElevationRegionPointIndex;
@@ -64,6 +66,9 @@ public sealed class ToolInteraction
     /// handle until the button is released.
     /// </summary>
     public WaterDraftPoint? RiverPendingPoint => _riverPending;
+
+    public IReadOnlyList<RouteDraftPoint> RampDraft => _rampDraft;
+    public RouteDraftPoint? RampPendingPoint => _rampPending;
 
     /// <summary>The closed hill contour points placed so far.</summary>
     public IReadOnlyList<ElevationRegionDraftPoint> ElevationRegionDraft => _elevationRegionDraft;
@@ -115,10 +120,11 @@ public sealed class ToolInteraction
     public ToolOutcome SetEraserEnabled(bool enabled)
     {
         string? discarded = null;
-        if (enabled && Mode is EditorMode.River or EditorMode.ElevationRegion)
+        if (enabled && Mode is EditorMode.River or EditorMode.Ramp or EditorMode.ElevationRegion)
         {
             discarded = DiscardedDraftText();
             ClearRiverDraft();
+            ClearRampDraft();
             ClearElevationRegionDraft();
         }
         State.SetEraserEnabled(enabled);
@@ -146,6 +152,13 @@ public sealed class ToolInteraction
             return placed == 0
                 ? null
                 : $"The unfinished river of {placed} point{Plural(placed)} was discarded.";
+        }
+        if (Mode == EditorMode.Ramp && ActiveTool == EditorTool.DrawRamp)
+        {
+            var placed = _rampDraft.Count + (_rampPending is null ? 0 : 1);
+            return placed == 0
+                ? null
+                : $"The unfinished Ramp of {placed} point{Plural(placed)} was discarded.";
         }
         if (Mode == EditorMode.Props && ActiveTool == EditorTool.Line
             && (_propLineStart is not null || _propLineEnd is not null))
@@ -187,6 +200,8 @@ public sealed class ToolInteraction
     {
         EditorMode.River when ActiveTool == EditorTool.DrawRiver =>
             _riverPending is not null || _riverDraft.Count > 0,
+        EditorMode.Ramp when ActiveTool == EditorTool.DrawRamp =>
+            _rampPending is not null || _rampDraft.Count > 0,
         EditorMode.ElevationRegion when ActiveTool == EditorTool.DrawElevationRegion =>
             _elevationRegionPending is not null || _elevationRegionDraft.Count > 0,
         EditorMode.Props when ActiveTool == EditorTool.Line =>
@@ -208,6 +223,7 @@ public sealed class ToolInteraction
         if (!HasUnfinishedDraft) return null;
         if (Mode == EditorMode.ElevationRegion) return CancelElevationRegionPoint();
         if (Mode == EditorMode.River) return CancelRiverPoint();
+        if (Mode == EditorMode.Ramp) return CancelRampPoint();
         return CancelPropLineStep();
     }
 
@@ -272,6 +288,7 @@ public sealed class ToolInteraction
         {
             EditorMode.Terrain => TerrainPressed(context, authoring, cell),
             EditorMode.River => RiverPressed(context, authoring, cell),
+            EditorMode.Ramp => RampPressed(context, authoring),
             EditorMode.ElevationRegion => ElevationRegionPressed(context, authoring, cell),
             EditorMode.Props => PropPressed(context, authoring),
             EditorMode.Templates => TemplatePressed(context, authoring),
@@ -301,6 +318,8 @@ public sealed class ToolInteraction
                 return EraseTerrainRegion(cell, TerrainRegionEraseStroke);
             case EditorMode.River when ActiveTool == EditorTool.DrawRiver && _riverPending is not null:
                 return DragRiverHandle(context, authoring);
+            case EditorMode.Ramp when ActiveTool == EditorTool.DrawRamp && _rampPending is not null:
+                return DragRampHandle(context, authoring);
             case EditorMode.ElevationRegion when ActiveTool == EditorTool.DrawElevationRegion
                                           && _elevationRegionPending is not null:
                 return DragElevationRegionHandle(context, authoring);
@@ -335,6 +354,7 @@ public sealed class ToolInteraction
         }
 
         if (_riverPending is not null) return CommitRiverPoint();
+        if (_rampPending is not null) return CommitRampPoint();
         if (_elevationRegionPending is not null) return CommitElevationRegionPoint(context);
         if (_draggedElevationRegionHandleSide is not null) return FinishElevationRegionHandleMove(context);
         if (_draggedElevationRegionPointIndex is not null) return FinishElevationRegionPointMove(context);
@@ -352,6 +372,8 @@ public sealed class ToolInteraction
         ArgumentNullException.ThrowIfNull(context);
         if (Mode == EditorMode.River && ActiveTool == EditorTool.DrawRiver)
             return key == ToolKey.Enter ? FinishRiver(context) : CancelRiverPoint();
+        if (Mode == EditorMode.Ramp && ActiveTool == EditorTool.DrawRamp)
+            return key == ToolKey.Enter ? FinishRamp(context) : CancelRampPoint();
         if (Mode == EditorMode.ElevationRegion && ActiveTool == EditorTool.DrawElevationRegion)
             return key == ToolKey.Enter ? FinishElevationRegion(context) : CancelElevationRegionPoint();
         if (Mode == EditorMode.ElevationRegion && ActiveTool == EditorTool.SelectElevationRegion)
@@ -433,6 +455,15 @@ public sealed class ToolInteraction
     {
         EditorTool.DrawRiver when EraserEnabled => EraseWaterBody(context, authoring),
         EditorTool.DrawRiver => BeginRiverPoint(context, authoring, cell),
+        _ => ToolOutcome.Idle.Instance,
+    };
+
+    private ToolOutcome RampPressed(
+        ToolContext context,
+        AuthoringPoint authoring) => ActiveTool switch
+    {
+        EditorTool.DrawRamp when EraserEnabled => EraseRamp(context, authoring),
+        EditorTool.DrawRamp => BeginRampPoint(context, authoring),
         _ => ToolOutcome.Idle.Instance,
     };
 
@@ -1171,6 +1202,150 @@ public sealed class ToolInteraction
             : $"River: {_riverDraft.Count} point{Plural(_riverDraft.Count)} left.");
     }
 
+    private ToolOutcome BeginRampPoint(ToolContext context, AuthoringPoint point)
+    {
+        if (context.Scene.SceneKind != SceneKind.Instance)
+            return new ToolOutcome.Message("Ramp: a Scene Template cannot carry Ramps.");
+        if (context.SelectedTerrainAssetKey is null)
+            return new ToolOutcome.Message("Ramp: choose a Surface first.");
+        if (!IsInsideScene(context, point))
+            return new ToolOutcome.Message("Ramp: a point has to sit inside the Scene.");
+
+        _rampPending = new RouteDraftPoint(
+            point.X,
+            point.Y,
+            State.RoutePointMode,
+            context.ElevationMeters,
+            State.RampWidthMeters);
+        var ordinal = _rampDraft.Count + 1;
+        return new ToolOutcome.Message(State.RoutePointMode == RoutePointMode.Linear
+            ? $"Ramp: point {ordinal} at ({point.X}, {point.Y}) · surface {context.ElevationMeters:0.###} m · width {State.RampWidthMeters:0.###} m."
+            : $"Ramp: point {ordinal} at ({point.X}, {point.Y}) · surface {context.ElevationMeters:0.###} m · width {State.RampWidthMeters:0.###} m; drag to pull its handle.");
+    }
+
+    private ToolOutcome DragRampHandle(ToolContext context, AuthoringPoint point)
+    {
+        if (_rampPending is not { } pending) return ToolOutcome.Idle.Instance;
+        if (pending.Mode == RoutePointMode.Linear) return ToolOutcome.Idle.Instance;
+
+        var deltaX = point.X - pending.X;
+        var deltaY = point.Y - pending.Y;
+        var threshold = context.Metrics.AuthoringPixelsPerTerrainCell / 2;
+        var pulled = deltaX * deltaX + deltaY * deltaY >= threshold * threshold;
+        _rampPending = pending with
+        {
+            DraggedHandleOut = pulled
+                ? new AuthoringPixelOffset { X = deltaX, Y = deltaY }
+                : null,
+        };
+        return ToolOutcome.Idle.Instance;
+    }
+
+    private ToolOutcome CommitRampPoint()
+    {
+        if (_rampPending is not { } pending) return ToolOutcome.Idle.Instance;
+        _rampPending = null;
+        if (_rampDraft.Count > 0
+            && _rampDraft[^1].X == pending.X
+            && _rampDraft[^1].Y == pending.Y
+            && pending.DraggedHandleOut is null)
+        {
+            return new ToolOutcome.Message(
+                "Ramp: a repeated point needs a pulled handle to create horizontal run.");
+        }
+        _rampDraft.Add(pending);
+        return new ToolOutcome.Message(_rampDraft.Count < 2
+            ? "Ramp: start placed. Keep placing points; Enter finishes it."
+            : $"Ramp: {_rampDraft.Count} points. Enter finishes it, Escape takes the last one back.");
+    }
+
+    public RouteDraftPreview RampPreview(ToolContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return ToolPreviewBuilder.BuildRouteDraft(
+            context.Metrics,
+            ActiveTool,
+            _rampDraft,
+            _rampPending);
+    }
+
+    private ToolOutcome FinishRamp(ToolContext context)
+    {
+        if (context.SelectedTerrainAssetKey is not { } assetKey)
+            return new ToolOutcome.Message("Ramp: choose a Surface first.");
+        if (_rampPending is { } pending)
+        {
+            _rampPending = null;
+            if (_rampDraft.Count > 0
+                && _rampDraft[^1].X == pending.X
+                && _rampDraft[^1].Y == pending.Y
+                && pending.DraggedHandleOut is null)
+            {
+                return new ToolOutcome.Message(
+                    "Ramp: a repeated point needs a pulled handle to create horizontal run.");
+            }
+            _rampDraft.Add(pending);
+        }
+
+        var preview = RampPreview(context);
+        if (preview.Surface is null)
+            return new ToolOutcome.Message($"Ramp: {preview.Explanation ?? "place at least two points"}.");
+
+        var points = preview.Curve;
+        var placed = _rampDraft.Count;
+        var start = points[0].ElevationMeters;
+        var end = points[^1].ElevationMeters;
+        var assetName = context.TerrainAssets.Resolve(assetKey).Name;
+        _rampDraft.Clear();
+        return new ToolOutcome.Edit(
+            "Ramp",
+            document => RouteSurfaceEditing.Place(
+                document,
+                context.TerrainAssets,
+                context.Metrics,
+                points,
+                assetKey),
+            Describe: (before, after) =>
+            {
+                var added = after.RouteSurfaces.FirstOrDefault(route =>
+                    before.RouteSurfaces.All(previous =>
+                        previous.RouteSurfaceId != route.RouteSurfaceId));
+                var name = added?.RouteSurfaceId ?? "route";
+                return $"Authored {name} from {placed} points · {assetName} · surface {start:0.###} m to {end:0.###} m.";
+            });
+    }
+
+    private ToolOutcome CancelRampPoint()
+    {
+        if (_rampPending is not null)
+        {
+            _rampPending = null;
+            return new ToolOutcome.Message("Ramp: point released.");
+        }
+        if (_rampDraft.Count == 0)
+            return new ToolOutcome.Message("Ramp: nothing to take back.");
+
+        _rampDraft.RemoveAt(_rampDraft.Count - 1);
+        return new ToolOutcome.Message(_rampDraft.Count == 0
+            ? "Ramp: draft cleared."
+            : $"Ramp: {_rampDraft.Count} point{Plural(_rampDraft.Count)} left.");
+    }
+
+    private static ToolOutcome EraseRamp(ToolContext context, AuthoringPoint point)
+    {
+        var route = RouteSurfaceEditing.FindAt(
+            context.Scene,
+            context.Metrics,
+            point.X,
+            point.Y);
+        if (route is null) return new ToolOutcome.Message("Ramp Eraser: no Ramp here.");
+        var routeId = route.RouteSurfaceId;
+        return new ToolOutcome.Edit(
+            "Ramp Eraser",
+            document => RouteSurfaceEditing.Remove(document, routeId),
+            Describe: (_, _) => $"Removed Ramp '{routeId}'.");
+    }
+
     /// <summary>
     /// Erases the whole body under the pointer. Single cells are not erasable
     /// on purpose: they are derived from the curve, so rubbing one out would be
@@ -1386,6 +1561,7 @@ public sealed class ToolInteraction
         ClearElevationRegionPointDrag();
         ClearElevationRegionHandleDrag();
         ClearRiverDraft();
+        ClearRampDraft();
         ClearElevationRegionDraft();
     }
 
@@ -1393,6 +1569,12 @@ public sealed class ToolInteraction
     {
         _riverDraft.Clear();
         _riverPending = null;
+    }
+
+    private void ClearRampDraft()
+    {
+        _rampDraft.Clear();
+        _rampPending = null;
     }
 
     private void ClearElevationRegionDraft()

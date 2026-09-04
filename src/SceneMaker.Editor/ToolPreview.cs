@@ -37,6 +37,20 @@ public sealed record WaterDraftPreview(
 }
 
 /// <summary>
+/// The open Ramp being drawn. A prepared surface is present only when at least
+/// two points form valid route geometry; the same value is used by the canvas
+/// and by Enter.
+/// </summary>
+public sealed record RouteDraftPreview(
+    IReadOnlyList<RouteDraftPoint> Points,
+    IReadOnlyList<RouteSurfacePointDocument> Curve,
+    PreparedRouteSurface? Surface,
+    string? Explanation)
+{
+    public static RouteDraftPreview Empty { get; } = new([], [], null, null);
+}
+
+/// <summary>
 /// What the hill draft on the canvas would do if it were committed now.
 ///
 /// <para><c>Incomplete</c> is not a refusal: the author has simply not placed
@@ -243,6 +257,51 @@ public static class ToolPreviewBuilder
             curve,
             WaterGeometry.Centerline(curve),
             WaterGeometry.Corridor(scene, metrics, curve));
+    }
+
+    public static RouteDraftPreview BuildRouteDraft(
+        WorkspaceMetrics metrics,
+        EditorTool tool,
+        IReadOnlyList<RouteDraftPoint> draft,
+        RouteDraftPoint? pending)
+    {
+        ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentNullException.ThrowIfNull(draft);
+        if (tool != EditorTool.DrawRamp) return RouteDraftPreview.Empty;
+
+        List<RouteDraftPoint> points = [.. draft];
+        if (pending is { } value
+            && (points.Count == 0
+                || points[^1].X != value.X
+                || points[^1].Y != value.Y
+                || value.DraggedHandleOut is not null))
+        {
+            points.Add(value);
+        }
+        if (points.Count == 0) return RouteDraftPreview.Empty;
+
+        var curve = RouteSurfaceEditing.ResolveCurve(points);
+        if (points.Count < 2)
+        {
+            return new RouteDraftPreview(
+                points,
+                curve,
+                null,
+                "a Ramp needs at least two points");
+        }
+
+        try
+        {
+            return new RouteDraftPreview(
+                points,
+                curve,
+                RouteSurfaceGeometry.Prepare(metrics, curve),
+                null);
+        }
+        catch (SceneMakerDocumentException exception)
+        {
+            return new RouteDraftPreview(points, curve, null, exception.Message);
+        }
     }
 
     /// <summary>The points the canvas tool asks for before a contour may close.</summary>
