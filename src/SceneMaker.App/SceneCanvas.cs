@@ -855,8 +855,8 @@ public sealed partial class SceneCanvas : Control
             var color = highlighted
                 ? overlay.Color
                 : new Color(overlay.Color.R, overlay.Color.G, overlay.Color.B, 0.24f);
-            DrawRouteBand(
-                overlay.Surface,
+            DrawBakedRouteBand(
+                overlay.Bake,
                 color,
                 pan,
                 zoom,
@@ -877,7 +877,10 @@ public sealed partial class SceneCanvas : Control
         foreach (var route in document.RouteSurfaces)
         {
             if (!_terrainColors.TryGetValue(route.AssetKey, out var color)) continue;
-            overlays.Add(new RouteOverlay(color, RouteSurfaceGeometry.Prepare(_metrics!, route)));
+            overlays.Add(new RouteOverlay(
+                color,
+                RouteSurfaceGeometry.Prepare(_metrics!, route),
+                RouteSurfaceBake.Build(_metrics!, route)));
         }
         _routeOverlayDocument = document;
         _routeOverlays = overlays;
@@ -937,6 +940,40 @@ public sealed partial class SceneCanvas : Control
                     Screen(endX, endY),
                     (float)segment.EndHalfWidth * zoom,
                     segmentColor);
+        }
+    }
+
+    /// <summary>
+    /// Draws persisted Paths from the same runtime bake that the export ships.
+    /// This is the visible contract: changing tessellation, joins or caps means
+    /// changing one Core bake rather than two implementations.
+    /// </summary>
+    private void DrawBakedRouteBand(
+        BakedRouteSurface bake,
+        Color color,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        (decimal Low, decimal High)? range = null)
+    {
+        var pixelsPerMeter = (float)_metrics!.AuthoringPixelsPerMeter;
+        Vector2 Screen(RouteSurfaceBakeVertex vertex) => pan + new Vector2(
+            (float)vertex.XMeters * pixelsPerMeter * zoom,
+            (sceneHeightAuthoringPixels - (float)vertex.YMeters * pixelsPerMeter) * zoom);
+
+        for (var index = 0; index < bake.TriangleIndices.Count; index += 3)
+        {
+            var first = bake.Vertices[bake.TriangleIndices[index]];
+            var second = bake.Vertices[bake.TriangleIndices[index + 1]];
+            var third = bake.Vertices[bake.TriangleIndices[index + 2]];
+            var triangleColor = range is { } elevationRange
+                ? ElevationColor(
+                    (first.ElevationMeters + second.ElevationMeters + third.ElevationMeters) / 3m,
+                    elevationRange)
+                : color;
+            DrawColoredPolygon(
+                [Screen(first), Screen(second), Screen(third)],
+                triangleColor);
         }
     }
 
@@ -1082,8 +1119,8 @@ public sealed partial class SceneCanvas : Control
             var route = RouteSurfaceEditing.FindAt(
                 document, _metrics!, pointer.X, pointer.Y);
             if (route is null) return;
-            DrawRouteBand(
-                RouteSurfaceGeometry.Prepare(_metrics!, route),
+            DrawBakedRouteBand(
+                RouteSurfaceBake.Build(_metrics!, route),
                 new Color(InvalidPreviewColor.R, InvalidPreviewColor.G, InvalidPreviewColor.B, 0.55f),
                 pan,
                 zoom,
@@ -1602,7 +1639,10 @@ public sealed partial class SceneCanvas : Control
 
     /// <summary>One authored body's cells, in the colour of its Asset.</summary>
     private sealed record WaterOverlay(Color Color, IReadOnlyList<WaterCellSpan> Cells);
-    private sealed record RouteOverlay(Color Color, PreparedRouteSurface Surface);
+    private sealed record RouteOverlay(
+        Color Color,
+        PreparedRouteSurface Surface,
+        BakedRouteSurface Bake);
 
     private static ToolKey? ToolKeyFor(Key keycode) => keycode switch
     {

@@ -148,7 +148,7 @@ cancels and erases those bodies through the existing `ToolInteraction` path.
 Manual UX acceptance of this contour slice was completed before route work
 began.
 
-Scene schema 14 names that neutral source `elevation_regions` and the Core type
+Scene schema 15 names that neutral source `elevation_regions` and the Core type
 `ElevationRegionDocument`; the author-facing area and tools say `Hill`. Existing
 stable IDs deliberately retain their `mountain_` prefix: identity survives a
 terminology correction, and no behavior may infer meaning from an ID prefix.
@@ -167,16 +167,18 @@ quantized starting height and the five fixed per-segment grade presets. It uses
 horizontal Bezier arc length and accumulates before rounding each stored anchor
 to six decimals. Its grade report is descriptive geometry, not an Actor
 capability.
-Authoring schema 13 introduced routes with a Terrain-role material; schema 14
-keeps them unchanged. The author-facing `Draw Path` tool now authors a free
+Authoring schema 13 introduced routes with a Terrain-role material; schema 15
+adds a stable segment ID and exact integer grade to every interval. The
+author-facing `Draw Path` tool now authors a free
 open Bezier curve with an automatic or manual starting height, per-segment
 grade and width per point, previews the continuous band in the Canvas and
 erases the whole route. The Landscape navigation and context controls are
 present, and the height view colours its interpolated surface.
-Export schema 9 still warns and omits routes. Traversal profiles still belong
-in Workspace configuration before a tool or generator can judge whether an
-Actor can use a route. Export support, selection/point reshaping and the
-overlapping-station semantics needed by helixes remain separate later slices.
+Export schema 10 carries both the authored Path and the runtime bake used by
+the Canvas. Traversal profiles still belong to the consuming simulation before
+a tool or generator can judge whether an Actor can use a route.
+Selection/point reshaping and the overlapping-station semantics needed by
+helixes remain separate later slices.
 
 The same analysis should lead to a generated first-person LookDev mode. It is
 DOOM-like in use - enter the authored map, walk it and inspect stairs, tunnels,

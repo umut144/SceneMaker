@@ -13,17 +13,14 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 9;
+    public const int Version = 10;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
-    // The embedded runtime Scene intentionally remains the shape export schema
-    // 8 already promised, and schema 9 does not change it. ElevationRegion contours
-    // are folded into Terrain; authoring schema 13's route surfaces cannot be
-    // represented by this shape yet and therefore produce an explicit warning
-    // instead of disappearing silently. Schema 9 differs from 8 only in what
-    // it guarantees: a Prop footprint no longer has to be covered by Terrain.
-    private const int EmbeddedSceneVersion = 10;
+    // ElevationRegion contours remain folded into Terrain. Embedded scene 11
+    // adds authored route surfaces, while export 10 adds their matching runtime
+    // bake beside the Scene in the same source/derived split as water.
+    private const int EmbeddedSceneVersion = 11;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -71,6 +68,9 @@ public static class SceneExport
             },
             AssetProfiles = ExportProfiles(configuration, propAssets),
             WaterRaster = ExportWaterRaster(scene.Document, configuration.Metrics),
+            RouteSurfaceBakes = scene.Document.RouteSurfaces
+                .Select(route => RouteSurfaceBake.Build(configuration.Metrics, route))
+                .ToList(),
             Scene = ExportScene(scene.Document, configuration.Metrics),
         };
         var directory = Path.Combine(workspace.DirectoryPath, DirectoryName);
@@ -127,11 +127,6 @@ public static class SceneExport
             static cell => new TerrainCellCoordinate(cell.X, cell.Y),
             static cell => cell.ElevationMeters);
         List<string> warnings = [];
-        if (scene.RouteSurfaces.Count > 0)
-        {
-            warnings.Add(
-                $"Scene contains {scene.RouteSurfaces.Count} route surface{(scene.RouteSurfaces.Count == 1 ? string.Empty : "s")}, which export schema {Version} does not carry.");
-        }
         foreach (var body in scene.WaterBodies)
         {
             var cells = WaterGeometry.Corridor(scene, metrics, body);
@@ -224,6 +219,7 @@ public static class SceneExport
         TerrainCells = [.. ElevationRegionGeometry.EffectiveTerrainCells(scene, metrics)],
         Props = scene.Props,
         WaterBodies = scene.WaterBodies,
+        RouteSurfaces = scene.RouteSurfaces,
         TemplateDefinition = scene.TemplateDefinition,
         TemplateAnchors = scene.TemplateAnchors,
         DefaultElevationMeters = scene.DefaultElevationMeters,
@@ -288,6 +284,12 @@ public static class SceneExport
         /// </summary>
         public required List<ExportWaterBodyDocument> WaterRaster { get; init; }
 
+        /// <summary>
+        /// Runtime-ready Path geometry derived by the same code the Canvas
+        /// uses. Empty for a Scene without Paths.
+        /// </summary>
+        public required List<BakedRouteSurface> RouteSurfaceBakes { get; init; }
+
         public required ExportSceneDocument Scene { get; init; }
     }
 
@@ -307,6 +309,7 @@ public static class SceneExport
         public required List<TerrainCellDocument> TerrainCells { get; init; }
         public required List<PropDocument> Props { get; init; }
         public required List<WaterBodyDocument> WaterBodies { get; init; }
+        public required List<RouteSurfaceDocument> RouteSurfaces { get; init; }
         public required TemplateDefinitionDocument? TemplateDefinition { get; init; }
         public required List<TemplateAnchorDocument> TemplateAnchors { get; init; }
         public required decimal DefaultElevationMeters { get; init; }

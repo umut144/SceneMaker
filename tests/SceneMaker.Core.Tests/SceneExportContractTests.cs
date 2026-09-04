@@ -20,10 +20,13 @@ public sealed class SceneExportContractTests
         var root = Export(workspace);
 
         Assert.Equal(
-            ["format", "version", "workspace_key", "grid", "asset_profiles", "water_raster", "scene"],
+            [
+                "format", "version", "workspace_key", "grid", "asset_profiles",
+                "water_raster", "route_surface_bakes", "scene",
+            ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(9, root.GetProperty("version").GetInt32());
+        Assert.Equal(10, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             [
@@ -43,12 +46,12 @@ public sealed class SceneExportContractTests
         Assert.Equal(
             [
                 "schema", "version", "scene_id", "scene_kind", "coordinate_space",
-                "size_cells", "terrain_cells", "props", "water_bodies",
+                "size_cells", "terrain_cells", "props", "water_bodies", "route_surfaces",
                 "template_definition", "template_anchors", "default_elevation_meters",
             ],
             Keys(scene));
         Assert.Equal("srt.scene_maker_scene", scene.GetProperty("schema").GetString());
-        Assert.Equal(10, scene.GetProperty("version").GetInt32());
+        Assert.Equal(11, scene.GetProperty("version").GetInt32());
         Assert.Equal("instance", scene.GetProperty("scene_kind").GetString());
         Assert.Equal(
             "scene_local_bottom_left_y_up",
@@ -148,7 +151,58 @@ public sealed class SceneExportContractTests
         var root = Export(workspace);
 
         Assert.Empty(root.GetProperty("water_raster").EnumerateArray());
+        Assert.Empty(root.GetProperty("route_surface_bakes").EnumerateArray());
         Assert.Empty(root.GetProperty("scene").GetProperty("water_bodies").EnumerateArray());
+        Assert.Empty(root.GetProperty("scene").GetProperty("route_surfaces").EnumerateArray());
+    }
+
+    [Fact]
+    public void PathsShipAuthoredGradesAndTheCanvasRuntimeBake()
+    {
+        using var workspace = TestWorkspace.Create();
+        var root = Export(workspace, WithThreePaths);
+        var routes = root.GetProperty("scene").GetProperty("route_surfaces")
+            .EnumerateArray().ToList();
+        var bakes = root.GetProperty("route_surface_bakes").EnumerateArray().ToList();
+
+        Assert.Equal(3, routes.Count);
+        Assert.Equal([0, 25, 50], routes.Select(route => route
+            .GetProperty("segments")[0].GetProperty("grade_percent").GetInt32()));
+        Assert.Equal(
+            ["route_0001", "route_0002", "route_0003"],
+            bakes.Select(bake => bake.GetProperty("route_surface_id").GetString()));
+        var bake = bakes[1];
+        Assert.Equal(
+            [
+                "route_surface_id", "asset_key", "vertices", "triangle_indices",
+                "boundary_edges", "centerline_samples", "segments",
+            ],
+            Keys(bake));
+        Assert.NotEmpty(bake.GetProperty("vertices").EnumerateArray());
+        Assert.NotEmpty(bake.GetProperty("triangle_indices").EnumerateArray());
+        Assert.NotEmpty(bake.GetProperty("boundary_edges").EnumerateArray());
+        Assert.Equal(
+            ["x_meters", "y_meters", "elevation_meters"],
+            Keys(bake.GetProperty("vertices")[0]));
+        Assert.Equal(
+            ["start_vertex_index", "end_vertex_index"],
+            Keys(bake.GetProperty("boundary_edges")[0]));
+        Assert.Equal(
+            [
+                "x_meters", "y_meters", "elevation_meters", "width_meters",
+                "station_meters", "authored_point_index",
+            ],
+            Keys(bake.GetProperty("centerline_samples")[0]));
+        Assert.Equal(
+            [
+                "segment_id", "grade_percent", "start_point_index", "end_point_index",
+                "start_sample_index", "end_sample_index",
+            ],
+            Keys(bake.GetProperty("segments")[0]));
+        Assert.Contains(
+            bake.GetProperty("centerline_samples").EnumerateArray(),
+            sample => sample.GetProperty("authored_point_index").GetInt32() == 1);
+        Assert.Equal(25, bake.GetProperty("segments")[0].GetProperty("grade_percent").GetInt32());
     }
 
     [Fact]
@@ -201,6 +255,35 @@ public sealed class SceneExportContractTests
                 WaterEditing.Point(160, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
             ],
             "river");
+
+    private static SceneDocument WithThreePaths(SceneDocument scene, TestWorkspace workspace)
+    {
+        foreach (var grade in new[]
+                 {
+                     RouteGradePreset.Level,
+                     RouteGradePreset.UpTwentyFivePercent,
+                     RouteGradePreset.UpFiftyPercent,
+                 })
+        {
+            var y = 32 + scene.RouteSurfaces.Count * 48;
+            var draft = new[]
+            {
+                new GradedRouteDraftPoint(
+                    32, y, RoutePointMode.Linear, 1m, RouteGradePreset.Level),
+                new GradedRouteDraftPoint(
+                    160, y, RoutePointMode.Linear, 1m, grade),
+            };
+            var points = RouteSurfaceEditing.ResolveGradedCurve(workspace.Metrics, 1m, draft);
+            scene = RouteSurfaceEditing.Place(
+                scene,
+                workspace.Terrain,
+                workspace.Metrics,
+                points,
+                [grade],
+                "grass");
+        }
+        return scene;
+    }
 
     /// <summary>Exports a Scene carrying one Terrain cell kind and one Prop.</summary>
     private static string ExportedJson(

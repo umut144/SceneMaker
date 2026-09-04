@@ -14,11 +14,12 @@ public sealed class RouteSurfaceDocumentTests
 
         var restored = DocumentJson.DeserializeScene(DocumentJson.Serialize(scene));
 
-        Assert.Equal(14, restored.Version);
+        Assert.Equal(15, restored.Version);
         var route = Assert.Single(restored.RouteSurfaces);
         Assert.Equal("route_0001", route.RouteSurfaceId);
         Assert.Equal("grass", route.AssetKey);
         Assert.Equal(scene.RouteSurfaces[0].Points, route.Points);
+        Assert.Equal(scene.RouteSurfaces[0].Segments, route.Segments);
         Assert.Equal(1.0625, RouteSurfaceGeometry.Prepare(workspace.Metrics, route).ElevationAt(16));
     }
 
@@ -31,7 +32,7 @@ public sealed class RouteSurfaceDocumentTests
 
         var route = parsed.RootElement.GetProperty("route_surfaces")[0];
         Assert.Equal(
-            ["route_surface_id", "asset_key", "points"],
+            ["route_surface_id", "asset_key", "points", "segments"],
             route.EnumerateObject().Select(static property => property.Name));
         Assert.Equal(
             [
@@ -39,6 +40,11 @@ public sealed class RouteSurfaceDocumentTests
                 "handle_out_authoring_px", "elevation_meters", "width_meters",
             ],
             route.GetProperty("points")[0]
+                .EnumerateObject()
+                .Select(static property => property.Name));
+        Assert.Equal(
+            ["segment_id", "grade_percent"],
+            route.GetProperty("segments")[0]
                 .EnumerateObject()
                 .Select(static property => property.Name));
     }
@@ -56,6 +62,45 @@ public sealed class RouteSurfaceDocumentTests
             DocumentValidation.Validate(scene));
 
         Assert.Contains("canonical ordinal order", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EveryPointPairNeedsOneStableAllowedGradeSegment()
+    {
+        using var workspace = TestWorkspace.Create();
+        var missing = WithRoute(TestScenes.Instance(workspace));
+        missing.RouteSurfaces[0].Segments.Clear();
+        var countError = Assert.Throws<SceneMakerDocumentException>(() =>
+            DocumentValidation.Validate(missing));
+        Assert.Contains("one segment", countError.Message, StringComparison.Ordinal);
+
+        var unsupported = WithRoute(TestScenes.Instance(workspace));
+        unsupported.RouteSurfaces[0].Segments[0] = unsupported.RouteSurfaces[0].Segments[0] with
+        {
+            GradePercent = 49,
+        };
+        var gradeError = Assert.Throws<SceneMakerDocumentException>(() =>
+            DocumentValidation.Validate(unsupported));
+        Assert.Contains("grade_percent 49", gradeError.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SegmentIdsAreUniqueAcrossAllPaths()
+    {
+        using var workspace = TestWorkspace.Create();
+        var first = Route("route_0001");
+        var second = Route("route_0002") with
+        {
+            Segments = [first.Segments[0]],
+        };
+        var scene = TestScenes.Instance(workspace) with
+        {
+            RouteSurfaces = [first, second],
+        };
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            DocumentValidation.Validate(scene));
+        Assert.Contains("duplicated across", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -176,22 +221,27 @@ public sealed class RouteSurfaceDocumentTests
     }
 
     [Fact]
-    public void TemplatesRefuseRoutesUntilCompositionCanTranslateThem()
+    public void TemplatesMayPersistRoutesForAConsumerToAcceptOrReject()
     {
         using var workspace = TestWorkspace.Create();
         var template = WithRoute(TestScenes.Template(workspace, "route_template", 1));
 
-        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
-            DocumentValidation.Validate(template));
-
-        Assert.Contains(
-            "Template cannot own route surfaces",
-            exception.Message,
-            StringComparison.Ordinal);
+        DocumentValidation.Validate(template);
+        Assert.Single(template.RouteSurfaces);
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        var written = SceneExport.Write(
+            session,
+            new LoadedScene(
+                Path.Combine(session.Workspace.TemplatesDirectoryPath, "route_template.scene.json"),
+                template));
+        using var parsed = JsonDocument.Parse(File.ReadAllText(written.Path));
+        Assert.Single(parsed.RootElement.GetProperty("scene")
+            .GetProperty("route_surfaces").EnumerateArray());
+        Assert.Single(parsed.RootElement.GetProperty("route_surface_bakes").EnumerateArray());
     }
 
     [Fact]
-    public void ExportWarnsWhileSchemaNineCannotCarryRoutes()
+    public void ExportTenCarriesAuthoredRoutesAndTheirBakeWithoutAWarning()
     {
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
@@ -201,13 +251,11 @@ public sealed class RouteSurfaceDocumentTests
 
         var result = SceneExport.Write(session, loaded);
 
-        var warning = Assert.Single(result.Warnings);
-        Assert.Contains("1 route surface", warning, StringComparison.Ordinal);
-        Assert.Contains("export schema 9", warning, StringComparison.Ordinal);
+        Assert.Empty(result.Warnings);
         using var parsed = JsonDocument.Parse(File.ReadAllText(result.Path));
-        Assert.False(parsed.RootElement.GetProperty("scene").TryGetProperty(
-            "route_surfaces",
-            out _));
+        Assert.Single(parsed.RootElement.GetProperty("scene")
+            .GetProperty("route_surfaces").EnumerateArray());
+        Assert.Single(parsed.RootElement.GetProperty("route_surface_bakes").EnumerateArray());
     }
 
     private static SceneDocument WithRoute(
@@ -233,6 +281,14 @@ public sealed class RouteSurfaceDocumentTests
         RouteSurfaceId = routeSurfaceId,
         AssetKey = assetKey,
         Points = [.. points ?? [Point(0, 32, 1m), Point(32, 32, 1.125m)]],
+        Segments =
+        [
+            new RouteSurfaceSegmentDocument
+            {
+                SegmentId = $"{routeSurfaceId}.segment_0001",
+                GradePercent = 25,
+            },
+        ],
     };
 
     private static RouteSurfacePointDocument Point(

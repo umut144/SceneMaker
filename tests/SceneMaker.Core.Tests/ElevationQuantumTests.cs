@@ -128,6 +128,14 @@ public sealed class ElevationQuantumTests
             Point(32, startElevation),
             Point(96, endElevation),
         ],
+        Segments =
+        [
+            new RouteSurfaceSegmentDocument
+            {
+                SegmentId = "route_0001.segment_0001",
+                GradePercent = 0,
+            },
+        ],
     };
 
     private static RouteSurfacePointDocument Point(int x, decimal elevation) => new()

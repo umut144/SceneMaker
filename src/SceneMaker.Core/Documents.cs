@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 14;
+    public const int SceneVersion = 15;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -146,6 +146,18 @@ public sealed record RouteSurfacePointDocument
 }
 
 /// <summary>
+/// The authored meaning of one interval between neighbouring Path points.
+/// Its grade is stored rather than recovered from rounded elevations and
+/// flattened arc lengths. The stable ID survives later point editing and lets
+/// runtime data refer to this exact interval.
+/// </summary>
+public sealed record RouteSurfaceSegmentDocument
+{
+    public required string SegmentId { get; init; }
+    public required int GradePercent { get; init; }
+}
+
+/// <summary>
 /// An independently materialized surface along an open route. Unlike a
 /// hill it can cross an unpainted position, so it carries the Terrain Asset
 /// whose surface it presents instead of inheriting material from cells below.
@@ -155,6 +167,7 @@ public sealed record RouteSurfaceDocument
     public required string RouteSurfaceId { get; init; }
     public required string AssetKey { get; init; }
     public required List<RouteSurfacePointDocument> Points { get; init; }
+    public required List<RouteSurfaceSegmentDocument> Segments { get; init; }
 }
 
 /// <summary>

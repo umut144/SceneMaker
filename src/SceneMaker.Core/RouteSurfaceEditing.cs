@@ -56,15 +56,24 @@ public static class RouteSurfaceEditing
         TerrainDisplayCatalog terrainAssets,
         WorkspaceMetrics metrics,
         IReadOnlyList<RouteSurfacePointDocument> points,
+        IReadOnlyList<RouteGradePreset> grades,
         string assetKey)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(points);
+        ArgumentNullException.ThrowIfNull(grades);
         _ = terrainAssets.Resolve(assetKey);
         if (points.Count < 2)
             throw new SceneMakerDocumentException("A Path needs at least two points.");
+        if (grades.Count != points.Count - 1)
+        {
+            throw new SceneMakerDocumentException(
+                "A Path needs exactly one authored grade for every segment.");
+        }
+        if (grades.Any(static grade => !Enum.IsDefined(grade)))
+            throw new SceneMakerDocumentException("A Path contains an unsupported grade.");
         if (points.Any(static point => point.WidthMeters <= 0m))
             throw new SceneMakerDocumentException("A Path needs a positive width at every point.");
         if (!metrics.IsElevationAligned(points[0].ElevationMeters))
@@ -74,11 +83,19 @@ public static class RouteSurfaceEditing
                     $"A Path's starting height must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m."));
         }
 
+        var routeId = NextRouteSurfaceId(scene);
         var route = new RouteSurfaceDocument
         {
-            RouteSurfaceId = NextRouteSurfaceId(scene),
+            RouteSurfaceId = routeId,
             AssetKey = assetKey,
             Points = [.. points],
+            Segments = grades
+                .Select((grade, index) => new RouteSurfaceSegmentDocument
+                {
+                    SegmentId = $"{routeId}.segment_{index + 1:0000}",
+                    GradePercent = GradePercent(grade),
+                })
+                .ToList(),
         };
         _ = RouteSurfaceGeometry.Prepare(metrics, route);
         return scene with
@@ -251,6 +268,20 @@ public static class RouteSurfaceEditing
         RouteGradePreset.UpFiftyPercent => 0.5,
         _ => throw new ArgumentOutOfRangeException(nameof(grade)),
     };
+
+    /// <summary>The exact integer carried across the runtime boundary.</summary>
+    public static int GradePercent(RouteGradePreset grade) => grade switch
+    {
+        RouteGradePreset.DownFiftyPercent => -50,
+        RouteGradePreset.DownTwentyFivePercent => -25,
+        RouteGradePreset.Level => 0,
+        RouteGradePreset.UpTwentyFivePercent => 25,
+        RouteGradePreset.UpFiftyPercent => 50,
+        _ => throw new ArgumentOutOfRangeException(nameof(grade)),
+    };
+
+    public static bool IsSupportedGradePercent(int gradePercent) =>
+        gradePercent is -50 or -25 or 0 or 25 or 50;
 
     /// <summary>
     /// Requires every route to name an enabled Asset whose SceneMaker role is

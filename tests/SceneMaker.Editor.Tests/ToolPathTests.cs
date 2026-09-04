@@ -28,6 +28,9 @@ public sealed class ToolPathTests
         Assert.Equal([32, 32], route.Points.Select(static point => point.PositionAuthoringPx.Y));
         Assert.Equal([1m, 2m], route.Points.Select(static point => point.ElevationMeters));
         Assert.Equal([2m, 3m], route.Points.Select(static point => point.WidthMeters));
+        var segment = Assert.Single(route.Segments);
+        Assert.Equal("route_0001.segment_0001", segment.SegmentId);
+        Assert.Equal(25, segment.GradePercent);
         Assert.Empty(interaction.PathDraft);
         Assert.Null(edit.StrokeKey);
     }
@@ -215,6 +218,10 @@ public sealed class ToolPathTests
             [1m, 1.5m, 1m],
             Assert.Single(edit.Apply(scene).RouteSurfaces).Points
                 .Select(static point => point.ElevationMeters));
+        Assert.Equal(
+            [25, -25],
+            Assert.Single(edit.Apply(scene).RouteSurfaces).Segments
+                .Select(static segment => segment.GradePercent));
     }
 
     [Fact]
@@ -246,6 +253,7 @@ public sealed class ToolPathTests
                 RouteSurfaceEditing.Point(32, 64, RoutePointMode.Linear, 1m, 2m),
                 RouteSurfaceEditing.Point(160, 64, RoutePointMode.Linear, 2m, 2m),
             ],
+            [RouteGradePreset.UpTwentyFivePercent],
             "grass");
         var interaction = Path();
         interaction.SetEraserEnabled(true);

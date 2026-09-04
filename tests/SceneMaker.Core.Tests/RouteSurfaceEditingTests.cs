@@ -14,6 +14,7 @@ public sealed class RouteSurfaceEditingTests
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 32, 1m, 2m), Point(160, 32, 2m, 3m)],
+            [RouteGradePreset.UpTwentyFivePercent],
             "grass");
 
         var route = Assert.Single(scene.RouteSurfaces);
@@ -21,6 +22,9 @@ public sealed class RouteSurfaceEditingTests
         Assert.Equal("grass", route.AssetKey);
         Assert.Equal([1m, 2m], route.Points.Select(static point => point.ElevationMeters));
         Assert.Equal([2m, 3m], route.Points.Select(static point => point.WidthMeters));
+        var segment = Assert.Single(route.Segments);
+        Assert.Equal("route_0001.segment_0001", segment.SegmentId);
+        Assert.Equal(25, segment.GradePercent);
     }
 
     [Fact]
@@ -33,12 +37,14 @@ public sealed class RouteSurfaceEditingTests
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 32, 1m), Point(160, 32, 1m)],
+            [RouteGradePreset.Level],
             "grass");
         scene = RouteSurfaceEditing.Place(
             scene,
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 96, 1m), Point(160, 96, 1m)],
+            [RouteGradePreset.Level],
             "river");
 
         Assert.Equal(["grass", "river"], scene.RouteSurfaces.Select(static route => route.AssetKey));
@@ -68,8 +74,11 @@ public sealed class RouteSurfaceEditingTests
     [InlineData(RouteGradePreset.UpFiftyPercent, 0.5)]
     public void GradePresetsHaveExactlyTheFiveAuthoringRatios(
         RouteGradePreset grade,
-        double expected) =>
+        double expected)
+    {
         Assert.Equal(expected, RouteSurfaceEditing.GradeRatio(grade));
+        Assert.Equal((int)(expected * 100), RouteSurfaceEditing.GradePercent(grade));
+    }
 
     [Fact]
     public void AQuarterGradeRisesOneMeterOverFourMetersOfRun()
@@ -211,12 +220,14 @@ public sealed class RouteSurfaceEditingTests
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 32, 1m), Point(160, 32, 1m)],
+            [RouteGradePreset.Level],
             "grass");
         scene = RouteSurfaceEditing.Place(
             scene,
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 96, 1m), Point(160, 96, 1m)],
+            [RouteGradePreset.Level],
             "grass");
 
         var removed = RouteSurfaceEditing.Remove(scene, "route_0001");
@@ -233,6 +244,7 @@ public sealed class RouteSurfaceEditingTests
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 64, 1m, 2m), Point(160, 64, 2m, 2m)],
+            [RouteGradePreset.UpTwentyFivePercent],
             "grass");
 
         Assert.NotNull(RouteSurfaceEditing.FindAt(scene, workspace.Metrics, 96, 88));
@@ -250,6 +262,7 @@ public sealed class RouteSurfaceEditingTests
                 workspace.Terrain,
                 workspace.Metrics,
                 [Point(32, 32, 1.1m), Point(160, 32, 2m)],
+                [RouteGradePreset.UpTwentyFivePercent],
                 "grass"));
 
         Assert.Contains("0.125 m", exception.Message, StringComparison.Ordinal);
@@ -265,6 +278,7 @@ public sealed class RouteSurfaceEditingTests
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 32, 1m), Point(160, 32, 1.1m)],
+            [RouteGradePreset.Level],
             "grass");
 
         Assert.Equal(1.1m, Assert.Single(scene.RouteSurfaces).Points[1].ElevationMeters);

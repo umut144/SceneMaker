@@ -1325,6 +1325,10 @@ public sealed class ToolInteraction
             return new ToolOutcome.Message($"Path: {preview.Explanation ?? "place at least two points"}.");
 
         var points = preview.Curve;
+        var grades = _pathDraft
+            .Skip(1)
+            .Select(static point => point.GradeFromPrevious)
+            .ToArray();
         var placed = _pathDraft.Count;
         var start = points[0].ElevationMeters;
         var end = points[^1].ElevationMeters;
@@ -1337,6 +1341,7 @@ public sealed class ToolInteraction
                 context.TerrainAssets,
                 context.Metrics,
                 points,
+                grades,
                 assetKey),
             Describe: (before, after) =>
             {

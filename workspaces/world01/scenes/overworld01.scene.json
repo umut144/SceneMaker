@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 14,
+  "version": 15,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60290,7 +60290,281 @@
       ]
     }
   ],
-  "route_surfaces": [],
+  "route_surfaces": [
+    {
+      "route_surface_id": "route_0001",
+      "asset_key": "grass",
+      "points": [
+        {
+          "position_authoring_px": {
+            "x": 1889,
+            "y": 1507
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 1996,
+            "y": 1589
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": -30,
+            "y": -33
+          },
+          "handle_out_authoring_px": {
+            "x": 26,
+            "y": 29
+          },
+          "elevation_meters": 2.054981,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2057,
+            "y": 1689
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": -8,
+            "y": -38
+          },
+          "handle_out_authoring_px": {
+            "x": 9,
+            "y": 41
+          },
+          "elevation_meters": 2.979658,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2044,
+            "y": 1814
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": 10,
+            "y": -41
+          },
+          "handle_out_authoring_px": {
+            "x": -12,
+            "y": 49
+          },
+          "elevation_meters": 3.969755,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 1992,
+            "y": 1956
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": 23,
+            "y": -45
+          },
+          "handle_out_authoring_px": {
+            "x": -16,
+            "y": 31
+          },
+          "elevation_meters": 5.153163,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 1930,
+            "y": 2040
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": 21,
+            "y": -28
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 5.969521,
+          "width_meters": 2.0
+        }
+      ],
+      "segments": [
+        { "segment_id": "route_0001.segment_0001", "grade_percent": 25 },
+        { "segment_id": "route_0001.segment_0002", "grade_percent": 25 },
+        { "segment_id": "route_0001.segment_0003", "grade_percent": 25 },
+        { "segment_id": "route_0001.segment_0004", "grade_percent": 25 },
+        { "segment_id": "route_0001.segment_0005", "grade_percent": 25 }
+      ]
+    },
+    {
+      "route_surface_id": "route_0002",
+      "asset_key": "grass",
+      "points": [
+        {
+          "position_authoring_px": {
+            "x": 1395,
+            "y": 2076
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 26,
+            "y": 25
+          },
+          "elevation_meters": 1.0,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 1472,
+            "y": 2151
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": -19,
+            "y": -30
+          },
+          "handle_out_authoring_px": {
+            "x": 22,
+            "y": 36
+          },
+          "elevation_meters": 2.684641,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 1517,
+            "y": 2269
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": -13,
+            "y": -40
+          },
+          "handle_out_authoring_px": {
+            "x": 12,
+            "y": 36
+          },
+          "elevation_meters": 4.662737,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 1547,
+            "y": 2380
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": -33,
+            "y": -19
+          },
+          "handle_out_authoring_px": {
+            "x": 47,
+            "y": 28
+          },
+          "elevation_meters": 6.516291,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 1710,
+            "y": 2383
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": -52,
+            "y": 14
+          },
+          "handle_out_authoring_px": {
+            "x": 104,
+            "y": -28
+          },
+          "elevation_meters": 9.128516,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2007,
+            "y": 2255
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": -99,
+            "y": 43
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 14.187673,
+          "width_meters": 2.0
+        }
+      ],
+      "segments": [
+        { "segment_id": "route_0002.segment_0001", "grade_percent": 50 },
+        { "segment_id": "route_0002.segment_0002", "grade_percent": 50 },
+        { "segment_id": "route_0002.segment_0003", "grade_percent": 50 },
+        { "segment_id": "route_0002.segment_0004", "grade_percent": 50 },
+        { "segment_id": "route_0002.segment_0005", "grade_percent": 50 }
+      ]
+    },
+    {
+      "route_surface_id": "route_0003",
+      "asset_key": "grass",
+      "points": [
+        {
+          "position_authoring_px": {
+            "x": 2022,
+            "y": 2165
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 95,
+            "y": -15
+          },
+          "elevation_meters": 2.250,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2306,
+            "y": 2120
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": -95,
+            "y": 15
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 0.003570,
+          "width_meters": 2.0
+        }
+      ],
+      "segments": [
+        { "segment_id": "route_0003.segment_0001", "grade_percent": -50 }
+      ]
+    }
+  ],
   "water_bodies": [
     {
       "water_body_id": "river_0001",

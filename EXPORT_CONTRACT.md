@@ -5,22 +5,19 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 9**, embedded **scene 10**. A reader must reject any
+Current schemas: **export 10**, embedded **scene 11**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
 
-Export 9 differs from 8 in what it promises, not in what it contains: the
-guarantee that every Prop footprint is covered by Terrain is withdrawn. The JSON
-is byte-for-byte the same shape, which is exactly why the version had to move —
-a reader that relied on the old promise cannot tell the two apart by looking.
+Export 10 adds authored Paths to the embedded Scene and a matching
+`route_surface_bakes` array beside it. Embedded scene 11 is therefore the first
+runtime Scene shape that carries `route_surfaces`.
 
-The authored Scene currently has its own schema 14. It is deliberately newer
+The authored Scene currently has its own schema 15. It is deliberately newer
 than the embedded Scene: elevation-region contours are editor source, folded
-into the ordinary `terrain_cells` below and omitted from export. Authored route surfaces
-are independent continuous bands that the embedded shape cannot represent yet;
-export schema 9 omits them and reports a warning for every Scene that has any.
-The embedded version therefore stays 10 and the strict runtime shape does not
-change merely because the editor learned new source representations.
+into the ordinary `terrain_cells` below and omitted from export. Authored route
+surfaces remain independent continuous bands and are exported separately from
+that folded Terrain.
 
 ## What is on disk
 
@@ -51,7 +48,7 @@ purpose.
 ```jsonc
 {
   "format": "scene_maker_scene_export",
-  "version": 9,
+  "version": 10,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,        // edge length of one Terrain cell
@@ -88,9 +85,56 @@ purpose.
       ]
     }
   ],
+  "route_surface_bakes": [             // derived from scene.route_surfaces
+    {
+      "route_surface_id": "route_0001",
+      "asset_key": "grass",
+      "vertices": [
+        { "x_meters": 1.0, "y_meters": 2.0, "elevation_meters": 1.0 },
+        { "x_meters": 5.0, "y_meters": 2.0, "elevation_meters": 2.0 },
+        { "x_meters": 5.0, "y_meters": 0.0, "elevation_meters": 2.0 },
+        { "x_meters": 1.0, "y_meters": 0.0, "elevation_meters": 1.0 }
+      ],
+      "triangle_indices": [0, 1, 2, 0, 2, 3],
+      "boundary_edges": [
+        { "start_vertex_index": 0, "end_vertex_index": 1 },
+        { "start_vertex_index": 1, "end_vertex_index": 2 },
+        { "start_vertex_index": 2, "end_vertex_index": 3 },
+        { "start_vertex_index": 3, "end_vertex_index": 0 }
+      ],
+      "centerline_samples": [
+        {
+          "x_meters": 1.0,
+          "y_meters": 1.0,
+          "elevation_meters": 1.0,
+          "width_meters": 2.0,
+          "station_meters": 0.0,
+          "authored_point_index": 0
+        },
+        {
+          "x_meters": 5.0,
+          "y_meters": 1.0,
+          "elevation_meters": 2.0,
+          "width_meters": 2.0,
+          "station_meters": 4.0,
+          "authored_point_index": 1
+        }
+      ],
+      "segments": [
+        {
+          "segment_id": "route_0001.segment_0001",
+          "grade_percent": 25,
+          "start_point_index": 0,
+          "end_point_index": 1,
+          "start_sample_index": 0,
+          "end_sample_index": 1
+        }
+      ]
+    }
+  ],
   "scene": {
     "schema": "srt.scene_maker_scene",
-    "version": 10,
+    "version": 11,
     "scene_id": "overworld01",   // names the map, not the Workspace
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
@@ -122,6 +166,33 @@ purpose.
             "clearance_above_meters": 5.0, // headroom required above it
             "width_meters": 8.0            // full corridor width here
           }
+        ]
+      }
+    ],
+    "route_surfaces": [
+      {
+        "route_surface_id": "route_0001",
+        "asset_key": "grass",
+        "points": [
+          {
+            "position_authoring_px": { "x": 32, "y": 32 },
+            "mode": "linear",
+            "handle_in_authoring_px": { "x": 0, "y": 0 },
+            "handle_out_authoring_px": { "x": 0, "y": 0 },
+            "elevation_meters": 1.0,
+            "width_meters": 2.0
+          },
+          {
+            "position_authoring_px": { "x": 160, "y": 32 },
+            "mode": "linear",
+            "handle_in_authoring_px": { "x": 0, "y": 0 },
+            "handle_out_authoring_px": { "x": 0, "y": 0 },
+            "elevation_meters": 2.0,
+            "width_meters": 2.0
+          }
+        ],
+        "segments": [
+          { "segment_id": "route_0001.segment_0001", "grade_percent": 25 }
         ]
       }
     ],
@@ -309,15 +380,46 @@ A Scene Template carries no water. Composition moves Terrain cells and Props
 and nothing else, so a Template with a river would lose it at every Anchor;
 authoring one is refused instead.
 
-Authoring schema 14 also refuses route surfaces in Templates for the same
-reason. An Instance may persist them as open Bezier centerlines with an
-absolute elevation and width at every point and a Terrain-role `asset_key` for
-the material the band presents. The first elevation is directly authored;
-later absolute anchors may be derived from a selected grade and horizontal
-Bezier arc length. Their positions are bounded by the Scene but are deliberately
-not tied to a horizontal grid. These authoring records are
-not part of export schema 9; exporting such an Instance succeeds with an
-explicit warning rather than losing the omission silently.
+## Paths and route surfaces
+
+A Path is an independent surface and never overwrites or folds into a Terrain
+cell. Terrain and one or more Paths may occupy the same X/Y at different
+heights. Its `asset_key` selects the material/surface it presents; every point
+stores absolute `elevation_meters` and `width_meters`.
+
+`scene.route_surfaces` preserves the authored cubic Bezier chain. Consecutive
+points form segments in deterministic array order. Every matching
+`segments[]` entry stores a stable `segment_id` and the exact authored integer
+`grade_percent`, one of `-50`, `-25`, `0`, `25`, or `50`. A reader must consume
+that integer and must not reconstruct it from rounded point heights and
+floating-point arc lengths. SceneMaker assigns no passability or speed meaning
+to those values.
+
+`route_surface_bakes` is the derived runtime half. It is generated by the same
+Core operation used to draw persisted Paths in the Canvas: the shared Bezier
+flattening, unrounded width interpolation, square outer caps, one quad per
+flattened segment and a 16-sided round join at every interior flattened sample.
+Vertices use scene-local metres and carry absolute elevation. Triangle indices
+are a flat list of triples. `boundary_edges` explicitly lists each primitive's
+edge loop, so a runtime need not infer outline topology from overlapping union
+primitives. Centerline samples include every authored point/grade transition;
+`authored_point_index` is null only for subdivision samples. Their
+`station_meters` is cumulative horizontal arc length.
+
+The authored and baked arrays have identical Path order and identity. Baked
+segment records repeat the stable ID and grade and map each authored point pair
+onto an inclusive centerline-sample range. Export refuses missing or duplicate
+IDs, unsupported grades, non-positive widths, non-finite values, invalid
+indices, and degenerate baked triangles. Output order never comes from a hash
+map.
+
+Authoring schema 15 permits route surfaces in both Instances and Templates so
+the format does not silently lose them. A runtime whose Template composition
+does not yet define Path translation must explicitly reject such a Template;
+world01 does so in its first reader.
+
+Heights stay absolute. Snapping the first point to Terrain is an editor action,
+not a stored dependency, so later Terrain or hill edits never move the Path.
 
 ## Heights
 
@@ -330,7 +432,7 @@ between such values, but those are terraces with vertical edges, not a smooth
 ramp. Their values are authored, not derived, and their step is the Workspace's
 authoring quantum. A consumer's simulation independently decides which
 difference an Actor can traverse. A separately authored, continuously inclined
-route is not part of export schema 9 yet.
+route is the independent continuous surface described above.
 
 It is authored per cell, not per Asset, because one grass Asset covers valley
 floor and hill alike. `default_elevation_meters` on the Scene is the height a
@@ -421,14 +523,22 @@ treat a violation as a corrupt file rather than a case to handle:
 - `water_raster` lists the same bodies as `scene.water_bodies`, in the same
   order, and each body's `cells` are what the corridor rule above produces from
   its curve. A reader may recompute them and must get the same set.
+- `route_surface_bakes` lists exactly the same Paths as
+  `scene.route_surfaces`, in the same order, with matching Path IDs, Asset keys,
+  segment IDs and exact grades. Every Path has at least one segment.
+- Path widths are finite and positive. Every grade is exactly one of
+  `-50`, `-25`, `0`, `25`, or `50`. Every baked value is finite, every index is
+  in range, and no emitted triangle is degenerate at export precision.
 - Nothing is promised about Terrain under a Prop. A Prop carries an absolute
   `elevation_meters` and may stand over a hole, over water, or over nothing at
   all; a footprint with no cells beneath it is authored intent, not a defect.
   Whether an Actor can reach or stand on it is the consumer's question, and the
   export carries the heights it needs to answer it.
 - `terrain_cells` and every body's `cells` are ordered by `y`, then `x`. `props`,
-  `asset_profiles`, `scene.water_bodies` and `water_raster` are ordered by their
-  id, ordinal. This ordering is a checked invariant, not a
+  `asset_profiles`, `scene.water_bodies`, `water_raster`,
+  `scene.route_surfaces` and `route_surface_bakes` are ordered by their id,
+  ordinal. Segment and sample arrays retain their deterministic chain order.
+  This ordering is a checked invariant, not a
   coincidence, so a reader may binary-search it.
 - Editor-only data is absent: authoring colours, PolyTools geometry, and the
   Workspace's own documents are never exported.

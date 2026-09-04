@@ -103,8 +103,6 @@ public static partial class DocumentValidation
                 throw new SceneMakerDocumentException("Scene Template cannot own water bodies.");
             if (document.ElevationRegions.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own elevation regions.");
-            if (document.RouteSurfaces.Count > 0)
-                throw new SceneMakerDocumentException("Scene Template cannot own route surfaces.");
             ValidateGroupNumber("Scene Template", document.TemplateDefinition.GroupNumber);
         }
 
@@ -286,6 +284,7 @@ public static partial class DocumentValidation
             throw new SceneMakerDocumentException("Scene requires route_surfaces.");
 
         string? previousRouteId = null;
+        HashSet<string> segmentIds = new(StringComparer.Ordinal);
         foreach (var route in document.RouteSurfaces)
         {
             ValidateStableId("route_surface_id", route.RouteSurfaceId);
@@ -304,6 +303,34 @@ public static partial class DocumentValidation
             {
                 throw new SceneMakerDocumentException(
                     $"{label} requires at least two curve points.");
+            }
+            if (route.Segments is null || route.Segments.Count != route.Points.Count - 1)
+            {
+                throw new SceneMakerDocumentException(
+                    $"{label} requires exactly one segment for every consecutive point pair.");
+            }
+
+            string? previousSegmentId = null;
+            foreach (var segment in route.Segments)
+            {
+                ValidateStableId("segment_id", segment.SegmentId);
+                if (!segmentIds.Add(segment.SegmentId))
+                {
+                    throw new SceneMakerDocumentException(
+                        $"Segment ID '{segment.SegmentId}' is duplicated across route surfaces.");
+                }
+                if (previousSegmentId is not null
+                    && string.CompareOrdinal(segment.SegmentId, previousSegmentId) <= 0)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} segments must have unique IDs in canonical ordinal order.");
+                }
+                if (!RouteSurfaceEditing.IsSupportedGradePercent(segment.GradePercent))
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} segment '{segment.SegmentId}' has unsupported grade_percent {segment.GradePercent}.");
+                }
+                previousSegmentId = segment.SegmentId;
             }
 
             foreach (var point in route.Points)

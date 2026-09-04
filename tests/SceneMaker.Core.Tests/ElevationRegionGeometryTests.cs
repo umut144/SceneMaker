@@ -596,7 +596,7 @@ public sealed class ElevationRegionGeometryTests
         using var parsed = JsonDocument.Parse(DocumentJson.Serialize(scene));
         var body = parsed.RootElement.GetProperty("elevation_regions")[0];
 
-        Assert.Equal(14, parsed.RootElement.GetProperty("version").GetInt32());
+        Assert.Equal(15, parsed.RootElement.GetProperty("version").GetInt32());
         Assert.False(body.TryGetProperty("asset_key", out _));
         Assert.Equal(10.0m, body.GetProperty("elevation_meters").GetDecimal());
     }
@@ -622,7 +622,7 @@ public sealed class ElevationRegionGeometryTests
         using var parsed = JsonDocument.Parse(json);
         var exportedScene = parsed.RootElement.GetProperty("scene");
 
-        Assert.Equal(10, exportedScene.GetProperty("version").GetInt32());
+        Assert.Equal(11, exportedScene.GetProperty("version").GetInt32());
         Assert.False(exportedScene.TryGetProperty("elevation_regions", out _));
         var cells = exportedScene.GetProperty("terrain_cells").EnumerateArray().ToList();
         Assert.Equal(36, cells.Count);

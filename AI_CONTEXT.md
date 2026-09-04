@@ -128,16 +128,18 @@ quantum: the quantum constrains authored support heights, whereas the surface
 between them is continuously inclined. Grade is only a geometric measurement;
 an Actor profile or generator may compare it with its own limit later.
 
-Authoring schema 13 introduced that source as `route_surfaces`; schema 14 keeps
-it unchanged. A route carries
+Authoring schema 13 introduced that source as `route_surfaces`; schema 15 adds
+a stable segment ID and exact integer `grade_percent` to every interval. A
+route carries
 an Asset whose role is Terrain, regardless of whether that Asset is normally
 authored as cells or as a curve; `authoring` chooses a UI, not eligibility as a
 surface. Its points stay inside the Scene and their heights obey the vertical
 quantum, but their horizontal positions do not snap to either raster. Equal
 neighbour positions are valid when their Bezier handles create real arc length,
-which a generated loop may need. Templates refuse routes until composition can
-translate them. Export schema 9 cannot carry them and warns instead of silently
-dropping them. `Draw Path` is exposed beside River and Hill under Landscape;
+which a generated loop may need. Templates may persist routes, while a runtime
+whose composition cannot translate them must reject them explicitly. Export
+schema 10 carries both authored routes and their runtime bake. `Draw Path` is
+exposed beside River and Hill under Landscape;
 its context bar carries Surface, point mode, width and the shared absolute
 Height. The canvas draws the continuous material-coloured band and its
 centerline, while the height view colours that band from its interpolated
@@ -212,7 +214,7 @@ rule stays at two and `ElevationRegionGeometry.RequireContour` decides whether t
 flattened ring is usable. That the canvas tool asks for three placed points is
 a tool decision about drawing, not a rule about geometry.
 
-Elevation-region contours are editor source and do not enter export schema 9. Export
+Elevation-region contours are editor source and do not enter export schema 10. Export
 folds them into the ordinary Terrain cells promised to the runtime. This also
 keeps hills in the cuttable Terrain solid: a river cut can make a channel
 or tunnel through one, whereas modelling a hill as a fill would incorrectly
@@ -342,7 +344,7 @@ own clearance test. The editor therefore validates representable geometry and
 the Workspace height quantum for the start only. Its five grades are authoring
 choices, not Actor capabilities: SceneMaker derives their geometry but does not
 reject a valid Path because a particular Actor could not climb it. Export
-schema 9 continues to warn and omit route surfaces.
+schema 10 exports route surfaces without assigning traversal policy.
 
 A Prop needs no Terrain under it. Its `elevation_meters` is absolute, like every
 other authored height, so where it stands is already fully said and the ground
