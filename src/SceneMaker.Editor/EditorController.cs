@@ -173,6 +173,7 @@ public sealed class EditorController
                 TerrainEditing.ValidateAssetReferences(openScene, candidate.TerrainAssets);
                 PropEditing.ValidateAssetReferences(openScene, candidate.PropAssets);
                 RouteSurfaceEditing.ValidateAssetReferences(openScene, candidate.TerrainAssets);
+                VoxelDocumentEditing.ValidateAssetReferences(openScene, candidate.Configuration);
             }
             WorkspaceConfigurationStore.Save(candidate.DirectoryPath, candidate.Configuration);
             Session = candidate;
@@ -254,6 +255,7 @@ public sealed class EditorController
             TerrainEditing.ValidateAssetReferences(loaded.Document, session.TerrainAssets);
             PropEditing.ValidateAssetReferences(loaded.Document, session.PropAssets);
             RouteSurfaceEditing.ValidateAssetReferences(loaded.Document, session.TerrainAssets);
+            VoxelDocumentEditing.ValidateAssetReferences(loaded.Document, session.Configuration);
             Open(loaded);
             return EditorReport.Ok($"Loaded Scene '{loaded.Document.SceneId}'.");
         }
@@ -389,6 +391,7 @@ public sealed class EditorController
             TerrainEditing.ValidateAssetReferences(loaded.Document, session.TerrainAssets);
             PropEditing.ValidateAssetReferences(loaded.Document, session.PropAssets);
             RouteSurfaceEditing.ValidateAssetReferences(loaded.Document, session.TerrainAssets);
+            VoxelDocumentEditing.ValidateAssetReferences(loaded.Document, session.Configuration);
             Open(loaded);
             return EditorReport.Ok(
                 $"Restored Workspace '{session.WorkspaceKey}' and Scene '{loaded.Document.SceneId}'.");

@@ -96,5 +96,48 @@ public sealed class VoxelExportTests
         Assert.Contains("\"version\": 1", json, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void WorkspaceBoundaryWritesChosenFormatBesideLegacyExports()
+    {
+        using var workspace = SceneMaker.TestSupport.TestWorkspace.Create();
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        var scene = SceneStore.CreateInstance(session.Workspace, "voxel_map", 8, 8);
+        var grid = Grid().Apply(
+            [new VoxelCoordinate(1, 0, 2)],
+            VoxelEditMode.Additive,
+            "grass");
+        scene = scene with { Document = VoxelDocumentEditing.WithGrid(scene.Document, grid) };
+        SceneStore.Save(session.Workspace, scene);
+
+        var result = VoxelSceneExport.Write(
+            session, scene, VoxelExportFormat.CompressedVoxels);
+
+        Assert.EndsWith("voxel_map.voxels.json", result.Path, StringComparison.Ordinal);
+        Assert.True(File.Exists(result.Path));
+        Assert.Contains(
+            "world_vox_maker.compressed_voxels",
+            File.ReadAllText(result.Path),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LossyHeightfieldWarnsWhenAColumnContainsAGap()
+    {
+        using var workspace = SceneMaker.TestSupport.TestWorkspace.Create();
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        var scene = SceneStore.CreateInstance(session.Workspace, "cave", 8, 8);
+        var grid = Grid().Apply(
+            [new VoxelCoordinate(1, 0, 2), new VoxelCoordinate(1, 2, 2)],
+            VoxelEditMode.Additive,
+            "grass");
+        scene = scene with { Document = VoxelDocumentEditing.WithGrid(scene.Document, grid) };
+
+        var result = VoxelSceneExport.Write(
+            session, scene, VoxelExportFormat.Heightfield);
+
+        Assert.Single(result.Warnings);
+        Assert.Contains("cannot preserve", result.Warnings[0], StringComparison.Ordinal);
+    }
+
     private static VoxelGrid Grid() => VoxelGrid.Empty(8, 8, 1m, 0.2m);
 }

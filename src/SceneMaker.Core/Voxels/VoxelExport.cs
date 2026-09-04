@@ -233,3 +233,66 @@ public static class VoxelExportPipeline
         return index;
     }
 }
+
+/// <summary>Workspace-aware file boundary for voxel export contracts.</summary>
+public static class VoxelSceneExport
+{
+    public static SceneExportResult Write(
+        WorkspaceSession session,
+        LoadedScene scene,
+        VoxelExportFormat format)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(scene);
+        DocumentValidation.ValidateGrid(scene.Document, session.Metrics);
+        VoxelDocumentEditing.ValidateAssetReferences(scene.Document, session.Configuration);
+        var grid = VoxelDocumentEditing.ToGrid(scene.Document, session.Metrics);
+        var directory = Path.Combine(session.DirectoryPath, SceneExport.DirectoryName);
+        var suffix = format switch
+        {
+            VoxelExportFormat.Heightfield => ".heightfield.json",
+            VoxelExportFormat.SurfaceMesh => ".surface_mesh.json",
+            VoxelExportFormat.CompressedVoxels => ".voxels.json",
+            _ => throw new ArgumentOutOfRangeException(nameof(format)),
+        };
+        var path = Path.Combine(directory, scene.Document.SceneId + suffix);
+        VoxelExportPipeline.Write(path, grid, format);
+        var warnings = format == VoxelExportFormat.Heightfield && HasHiddenVolume(grid)
+            ? new[]
+            {
+                $"Scene '{scene.Document.SceneId}' contains caves, overhangs, or stacked gaps that the heightfield export cannot preserve.",
+            }
+            : [];
+        return new SceneExportResult(path, warnings);
+    }
+
+    public static IReadOnlyList<SceneExportResult> WriteWorkspace(
+        WorkspaceSession session,
+        VoxelExportFormat format)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var scenes = SceneStore.EnumeratePaths(session.Workspace)
+            .Select(path => SceneStore.Load(session.Workspace, path))
+            .ToList();
+        var duplicate = scenes
+            .GroupBy(static scene => scene.Document.SceneId, StringComparer.Ordinal)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicate is not null)
+        {
+            throw new SceneMakerDocumentException(
+                $"Scene id '{duplicate.Key}' names {duplicate.Count()} Scenes in this Workspace; ids must be unique before exporting.");
+        }
+        return scenes.Select(scene => Write(session, scene, format)).ToList();
+    }
+
+    private static bool HasHiddenVolume(VoxelGrid grid) =>
+        grid.Cells.Keys
+            .GroupBy(static cell => (cell.X, cell.Z))
+            .Any(group =>
+            {
+                var ordered = group.Select(static cell => cell.Y).Order().ToArray();
+                return ordered[0] != 0
+                    || ordered.Zip(ordered.Skip(1), static (left, right) => right - left)
+                        .Any(static gap => gap > 1);
+            });
+}
