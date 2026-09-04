@@ -392,7 +392,9 @@ Hills, River-Oberflächen, Paths und Placements folgen derselben Skala. Bereichs
 fremde Geometrie behält zusätzlich ihre bisherige Transparenz, weil Helligkeit
 und Werkzeugfokus zwei verschiedene Aussagen sind. Die analytische
 Höhenansicht ersetzt diese Farben weiterhin vollständig durch ihre blaue
-Höhenrampe.
+Höhenrampe. Die Fläche eines Placements folgt der Höhenbeleuchtung, sein Rahmen
+bleibt dagegen in der unveränderten, im Workspace konfigurierten Assetfarbe;
+bei einer Auswahl ersetzt Gelb diese Kennzeichnung.
 
 ### Placements und Untergrund
 

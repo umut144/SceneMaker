@@ -1486,8 +1486,8 @@ public sealed partial class SceneCanvas : Control
                     : LitSurfaceColor(assetColor, prop.ElevationMeters, propSpan);
             var selected = highlighted && prop.InstanceId == _interaction.SelectedPropInstanceId;
             var outline = highlighted
-                ? color
-                : new Color(color.R, color.G, color.B, 0.32f);
+                ? assetColor
+                : new Color(assetColor.R, assetColor.G, assetColor.B, 0.32f);
             DrawRect(
                 rectangle,
                 new Color(color.R, color.G, color.B, highlighted ? 0.38f : 0.10f));
