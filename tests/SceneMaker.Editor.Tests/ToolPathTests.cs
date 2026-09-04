@@ -248,6 +248,33 @@ public sealed class ToolPathTests
     }
 
     [Fact]
+    public void APreselectedOperationReachesTheFirstSegmentAndFreezesOnPress()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var context = Context(workspace, scene, 1m);
+        var interaction = Path();
+        interaction.State.SetPathOperation(RouteSegmentOperation.Subtractive);
+        interaction.State.SetPathClearanceAbove(1.5m);
+
+        var first = Assert.IsType<ToolOutcome.Message>(interaction.PointerPressed(
+            context,
+            Point(32, 32),
+            Cell(1, 1)));
+        Assert.Contains("next segment subtractive", first.Text, StringComparison.Ordinal);
+        interaction.PointerReleased(context);
+        interaction.PointerPressed(context, Point(96, 32), Cell(3, 1));
+        interaction.State.SetPathClearanceAbove(3m);
+        interaction.PointerReleased(context);
+        var edit = Assert.IsType<ToolOutcome.Edit>(
+            interaction.KeyPressed(context, ToolKey.Enter));
+
+        var segment = Assert.Single(Assert.Single(edit.Apply(scene).RouteSurfaces).Segments);
+        Assert.Equal(RouteSegmentOperation.Subtractive, segment.Operation);
+        Assert.Equal(1.5m, segment.ClearanceAboveMeters);
+    }
+
+    [Fact]
     public void EnablingTheEraserDiscardsTheDraftAndSaysSo()
     {
         using var workspace = TestWorkspace.Create();
@@ -276,7 +303,7 @@ public sealed class ToolPathTests
                 RouteSurfaceEditing.Point(32, 64, RoutePointMode.Linear, 1m, 2m),
                 RouteSurfaceEditing.Point(160, 64, RoutePointMode.Linear, 2m, 2m),
             ],
-            [RouteGradePreset.UpTwentyFivePercent],
+            [RouteSegmentAuthoring.Additive(RouteGradePreset.UpTwentyFivePercent)],
             "grass");
         var interaction = Path();
         interaction.SetEraserEnabled(true);

@@ -83,20 +83,6 @@ public static class RouteSurfaceEditing
         TerrainDisplayCatalog terrainAssets,
         WorkspaceMetrics metrics,
         IReadOnlyList<RouteSurfacePointDocument> points,
-        IReadOnlyList<RouteGradePreset> grades,
-        string assetKey) => Place(
-            scene,
-            terrainAssets,
-            metrics,
-            points,
-            grades.Select(RouteSegmentAuthoring.Additive).ToArray(),
-            assetKey);
-
-    public static SceneDocument Place(
-        SceneDocument scene,
-        TerrainDisplayCatalog terrainAssets,
-        WorkspaceMetrics metrics,
-        IReadOnlyList<RouteSurfacePointDocument> points,
         IReadOnlyList<RouteSegmentAuthoring> segments,
         string assetKey)
     {
@@ -337,7 +323,7 @@ public static class RouteSurfaceEditing
             if (segment.ClearanceAboveMeters is not null)
             {
                 throw new SceneMakerDocumentException(
-                    "An additive Path segment must not carry clearance_above_meters.");
+                    "An additive Path segment must leave clearance_above_meters null.");
             }
             return;
         }

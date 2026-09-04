@@ -339,13 +339,15 @@ public static partial class DocumentValidation
                     && segment.ClearanceAboveMeters is not null)
                 {
                     throw new SceneMakerDocumentException(
-                        $"{label} segment '{segment.SegmentId}' is additive and must not carry clearance_above_meters.");
+                        $"{label} segment '{segment.SegmentId}' is additive and must leave "
+                        + "clearance_above_meters null.");
                 }
                 if (segment.Operation == RouteSegmentOperation.Subtractive
                     && segment.ClearanceAboveMeters is not > 0m)
                 {
                     throw new SceneMakerDocumentException(
-                        $"{label} segment '{segment.SegmentId}' is subtractive and needs positive clearance_above_meters.");
+                        $"{label} segment '{segment.SegmentId}' is subtractive and needs "
+                        + "positive clearance_above_meters.");
                 }
                 previousSegmentId = segment.SegmentId;
             }

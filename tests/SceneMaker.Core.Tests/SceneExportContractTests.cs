@@ -166,6 +166,12 @@ public sealed class SceneExportContractTests
         var bakes = root.GetProperty("route_surface_bakes").EnumerateArray().ToList();
 
         Assert.Equal(3, routes.Count);
+        Assert.All(routes, route => Assert.Equal(
+            ["route_surface_id", "asset_key", "points", "segments"],
+            Keys(route)));
+        Assert.All(routes, route => Assert.All(
+            route.GetProperty("segments").EnumerateArray(),
+            segment => Assert.Equal(["segment_id", "grade_percent"], Keys(segment))));
         Assert.Equal([0, 25, 50], routes.Select(route => route
             .GetProperty("segments")[0].GetProperty("grade_percent").GetInt32()));
         Assert.Equal(
@@ -279,7 +285,7 @@ public sealed class SceneExportContractTests
                 workspace.Terrain,
                 workspace.Metrics,
                 points,
-                [grade],
+                [RouteSegmentAuthoring.Additive(grade)],
                 "grass");
         }
         return scene;

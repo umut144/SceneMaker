@@ -108,6 +108,19 @@ public sealed class RouteSurfaceDocumentTests
             DocumentValidation.Validate(subtractiveWithoutClearance));
         Assert.Contains("positive clearance", subtractiveError.Message, StringComparison.Ordinal);
 
+        foreach (var invalid in new[] { 0m, -1m })
+        {
+            var invalidClearance = WithRoute(TestScenes.Instance(workspace));
+            invalidClearance.RouteSurfaces[0].Segments[0] =
+                invalidClearance.RouteSurfaces[0].Segments[0] with
+                {
+                    Operation = RouteSegmentOperation.Subtractive,
+                    ClearanceAboveMeters = invalid,
+                };
+            Assert.Throws<SceneMakerDocumentException>(() =>
+                DocumentValidation.Validate(invalidClearance));
+        }
+
         var subtractive = WithRoute(TestScenes.Instance(workspace));
         subtractive.RouteSurfaces[0].Segments[0] = subtractive.RouteSurfaces[0].Segments[0] with
         {
@@ -118,6 +131,28 @@ public sealed class RouteSurfaceDocumentTests
         var segment = Assert.Single(Assert.Single(restored.RouteSurfaces).Segments);
         Assert.Equal(RouteSegmentOperation.Subtractive, segment.Operation);
         Assert.Equal(1.5m, segment.ClearanceAboveMeters);
+    }
+
+    [Fact]
+    public void JsonRequiresAKnownSegmentOperation()
+    {
+        using var workspace = TestWorkspace.Create();
+        var json = DocumentJson.Serialize(WithRoute(TestScenes.Instance(workspace)));
+        var withoutOperation = json.Replace(
+            "          \"operation\": \"additive\",\n",
+            string.Empty,
+            StringComparison.Ordinal);
+        Assert.NotEqual(json, withoutOperation);
+        Assert.Throws<SceneMakerDocumentException>(() =>
+            DocumentJson.DeserializeScene(withoutOperation));
+
+        var unknownOperation = json.Replace(
+            "\"operation\": \"additive\"",
+            "\"operation\": \"unknown\"",
+            StringComparison.Ordinal);
+        Assert.NotEqual(json, unknownOperation);
+        Assert.Throws<SceneMakerDocumentException>(() =>
+            DocumentJson.DeserializeScene(unknownOperation));
     }
 
     [Fact]

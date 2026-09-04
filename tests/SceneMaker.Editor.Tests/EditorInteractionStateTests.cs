@@ -270,4 +270,15 @@ public sealed class EditorInteractionStateTests
         Assert.Contains(field.Options, static asset => asset.Authoring == TerrainAuthoring.Curve);
         Assert.True(field.Changeable);
     }
+
+    [Fact]
+    public void PathSegmentStateRefusesUnknownOperationsAndNonPositiveClearance()
+    {
+        var state = new EditorInteractionState();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            state.SetPathOperation((RouteSegmentOperation)99));
+        Assert.Throws<ArgumentOutOfRangeException>(() => state.SetPathClearanceAbove(0m));
+        Assert.Throws<ArgumentOutOfRangeException>(() => state.SetPathClearanceAbove(-1m));
+    }
 }

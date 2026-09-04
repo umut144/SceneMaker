@@ -14,7 +14,7 @@ public sealed class RouteSurfaceEditingTests
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 32, 1m, 2m), Point(160, 32, 2m, 3m)],
-            [RouteGradePreset.UpTwentyFivePercent],
+            [RouteSegmentAuthoring.Additive(RouteGradePreset.UpTwentyFivePercent)],
             "grass");
 
         var route = Assert.Single(scene.RouteSurfaces);
@@ -80,14 +80,14 @@ public sealed class RouteSurfaceEditingTests
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 32, 1m), Point(160, 32, 1m)],
-            [RouteGradePreset.Level],
+            [RouteSegmentAuthoring.Additive(RouteGradePreset.Level)],
             "grass");
         scene = RouteSurfaceEditing.Place(
             scene,
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 96, 1m), Point(160, 96, 1m)],
-            [RouteGradePreset.Level],
+            [RouteSegmentAuthoring.Additive(RouteGradePreset.Level)],
             "river");
 
         Assert.Equal(["grass", "river"], scene.RouteSurfaces.Select(static route => route.AssetKey));
@@ -263,14 +263,14 @@ public sealed class RouteSurfaceEditingTests
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 32, 1m), Point(160, 32, 1m)],
-            [RouteGradePreset.Level],
+            [RouteSegmentAuthoring.Additive(RouteGradePreset.Level)],
             "grass");
         scene = RouteSurfaceEditing.Place(
             scene,
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 96, 1m), Point(160, 96, 1m)],
-            [RouteGradePreset.Level],
+            [RouteSegmentAuthoring.Additive(RouteGradePreset.Level)],
             "grass");
 
         var removed = RouteSurfaceEditing.Remove(scene, "route_0001");
@@ -287,7 +287,7 @@ public sealed class RouteSurfaceEditingTests
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 64, 1m, 2m), Point(160, 64, 2m, 2m)],
-            [RouteGradePreset.UpTwentyFivePercent],
+            [RouteSegmentAuthoring.Additive(RouteGradePreset.UpTwentyFivePercent)],
             "grass");
 
         Assert.NotNull(RouteSurfaceEditing.FindAt(scene, workspace.Metrics, 96, 88));
@@ -305,7 +305,7 @@ public sealed class RouteSurfaceEditingTests
                 workspace.Terrain,
                 workspace.Metrics,
                 [Point(32, 32, 1.1m), Point(160, 32, 2m)],
-                [RouteGradePreset.UpTwentyFivePercent],
+                [RouteSegmentAuthoring.Additive(RouteGradePreset.UpTwentyFivePercent)],
                 "grass"));
 
         Assert.Contains("0.125 m", exception.Message, StringComparison.Ordinal);
@@ -321,7 +321,7 @@ public sealed class RouteSurfaceEditingTests
             workspace.Terrain,
             workspace.Metrics,
             [Point(32, 32, 1m), Point(160, 32, 1.1m)],
-            [RouteGradePreset.Level],
+            [RouteSegmentAuthoring.Additive(RouteGradePreset.Level)],
             "grass");
 
         Assert.Equal(1.1m, Assert.Single(scene.RouteSurfaces).Points[1].ElevationMeters);

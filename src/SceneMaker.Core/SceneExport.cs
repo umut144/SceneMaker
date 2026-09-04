@@ -105,6 +105,18 @@ public static class SceneExport
                 $"Scene id '{duplicate.Key}' names {duplicate.Count()} Scenes in this Workspace; ids must be unique before exporting.");
         }
 
+        // A Workspace export is one operation. Refuse every Scene before the
+        // first output is replaced, otherwise one late invalid Scene leaves a
+        // mixture of new and stale files in the exports directory.
+        foreach (var scene in scenes)
+        {
+            Validate(
+                scene.Document,
+                session.Configuration,
+                session.TerrainAssets,
+                session.PropAssets);
+        }
+
         return scenes.Select(scene => Write(session, scene)).ToList();
     }
 
@@ -287,7 +299,8 @@ public static class SceneExport
         if (unsupported is not null)
         {
             throw new SceneMakerDocumentException(
-                $"Path segment '{unsupported.SegmentId}' is subtractive, which export schema {Version} does not support yet.");
+                $"Path segment '{unsupported.SegmentId}' is subtractive, which export "
+                + $"schema {Version} does not support yet.");
         }
     }
 

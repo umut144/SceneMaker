@@ -71,6 +71,37 @@ public sealed class SceneIdentityTests
     }
 
     [Fact]
+    public void WorkspaceExportValidatesEverySceneBeforeReplacingAnyOutput()
+    {
+        using var workspace = TestWorkspace.Create();
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        _ = SceneStore.CreateInstance(session.Workspace, "a", 4, 4);
+        var second = SceneStore.CreateInstance(session.Workspace, "b", 4, 4);
+        var subtractive = RouteSurfaceEditing.Place(
+            second.Document,
+            session.TerrainAssets,
+            session.Configuration.Metrics,
+            [
+                RouteSurfaceEditing.Point(32, 32, RoutePointMode.Linear, 1m),
+                RouteSurfaceEditing.Point(96, 32, RoutePointMode.Linear, 1m),
+            ],
+            [RouteSegmentAuthoring.Subtractive(RouteGradePreset.Level, 1m)],
+            "grass");
+        SceneStore.Save(session.Workspace, second with { Document = subtractive });
+        var exportDirectory = Path.Combine(workspace.RootPath, SceneExport.DirectoryName);
+        Directory.CreateDirectory(exportDirectory);
+        var firstExport = Path.Combine(exportDirectory, "a" + SceneExport.FileSuffix);
+        File.WriteAllText(firstExport, "previous export");
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(
+            () => SceneExport.WriteWorkspace(session));
+
+        Assert.Contains("subtractive", exception.Message, StringComparison.Ordinal);
+        Assert.Equal("previous export", File.ReadAllText(firstExport));
+        Assert.False(File.Exists(Path.Combine(exportDirectory, "b" + SceneExport.FileSuffix)));
+    }
+
+    [Fact]
     public void ASceneIsFoundByItsIdInEitherDirectory()
     {
         using var workspace = TestWorkspace.Create();

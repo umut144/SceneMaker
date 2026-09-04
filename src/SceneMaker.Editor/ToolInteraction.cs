@@ -1257,11 +1257,24 @@ public sealed class ToolInteraction
             ClearanceAboveMetersFromPrevious: clearance);
         var ordinal = _pathDraft.Count + 1;
         var startElevation = _pathStartElevationMeters!.Value;
-        var gradeText = GradeText(grade);
-        var operationText = OperationText(operation, clearance);
+        var firstPoint = _pathDraft.Count == 0;
+        var gradeText = firstPoint
+            ? $"next grade {GradeText(State.PathGrade)}"
+            : $"grade {GradeText(grade)}";
+        var operationText = firstPoint
+            ? $"next segment {OperationText(
+                State.PathOperation,
+                State.PathOperation == RouteSegmentOperation.Subtractive
+                    ? State.PathClearanceAboveMeters
+                    : null)}"
+            : OperationText(operation, clearance);
         return new ToolOutcome.Message(State.RoutePointMode == RoutePointMode.Linear
-            ? $"Path: point {ordinal} at ({point.X}, {point.Y}) · start {startElevation:0.###} m · grade {gradeText} · {operationText} · width {State.PathWidthMeters:0.###} m."
-            : $"Path: point {ordinal} at ({point.X}, {point.Y}) · start {startElevation:0.###} m · grade {gradeText} · {operationText} · width {State.PathWidthMeters:0.###} m; drag to pull its handle.");
+            ? $"Path: point {ordinal} at ({point.X}, {point.Y}) · "
+                + $"start {startElevation:0.###} m · {gradeText} · {operationText} · "
+                + $"width {State.PathWidthMeters:0.###} m."
+            : $"Path: point {ordinal} at ({point.X}, {point.Y}) · "
+                + $"start {startElevation:0.###} m · {gradeText} · {operationText} · "
+                + $"width {State.PathWidthMeters:0.###} m; drag to pull its handle.");
     }
 
     private ToolOutcome DragPathHandle(ToolContext context, AuthoringPoint point)
