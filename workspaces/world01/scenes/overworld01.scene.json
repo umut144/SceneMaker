@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 15,
+  "version": 16,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60399,11 +60399,36 @@
         }
       ],
       "segments": [
-        { "segment_id": "route_0001.segment_0001", "grade_percent": 25 },
-        { "segment_id": "route_0001.segment_0002", "grade_percent": 25 },
-        { "segment_id": "route_0001.segment_0003", "grade_percent": 25 },
-        { "segment_id": "route_0001.segment_0004", "grade_percent": 25 },
-        { "segment_id": "route_0001.segment_0005", "grade_percent": 25 }
+        {
+          "segment_id": "route_0001.segment_0001",
+          "grade_percent": 25,
+          "operation": "additive",
+          "clearance_above_meters": null
+        },
+        {
+          "segment_id": "route_0001.segment_0002",
+          "grade_percent": 25,
+          "operation": "additive",
+          "clearance_above_meters": null
+        },
+        {
+          "segment_id": "route_0001.segment_0003",
+          "grade_percent": 25,
+          "operation": "additive",
+          "clearance_above_meters": null
+        },
+        {
+          "segment_id": "route_0001.segment_0004",
+          "grade_percent": 25,
+          "operation": "additive",
+          "clearance_above_meters": null
+        },
+        {
+          "segment_id": "route_0001.segment_0005",
+          "grade_percent": 25,
+          "operation": "additive",
+          "clearance_above_meters": null
+        }
       ]
     },
     {
@@ -60514,11 +60539,36 @@
         }
       ],
       "segments": [
-        { "segment_id": "route_0002.segment_0001", "grade_percent": 50 },
-        { "segment_id": "route_0002.segment_0002", "grade_percent": 50 },
-        { "segment_id": "route_0002.segment_0003", "grade_percent": 50 },
-        { "segment_id": "route_0002.segment_0004", "grade_percent": 50 },
-        { "segment_id": "route_0002.segment_0005", "grade_percent": 50 }
+        {
+          "segment_id": "route_0002.segment_0001",
+          "grade_percent": 50,
+          "operation": "additive",
+          "clearance_above_meters": null
+        },
+        {
+          "segment_id": "route_0002.segment_0002",
+          "grade_percent": 50,
+          "operation": "additive",
+          "clearance_above_meters": null
+        },
+        {
+          "segment_id": "route_0002.segment_0003",
+          "grade_percent": 50,
+          "operation": "additive",
+          "clearance_above_meters": null
+        },
+        {
+          "segment_id": "route_0002.segment_0004",
+          "grade_percent": 50,
+          "operation": "additive",
+          "clearance_above_meters": null
+        },
+        {
+          "segment_id": "route_0002.segment_0005",
+          "grade_percent": 50,
+          "operation": "additive",
+          "clearance_above_meters": null
+        }
       ]
     },
     {
@@ -60561,7 +60611,12 @@
         }
       ],
       "segments": [
-        { "segment_id": "route_0003.segment_0001", "grade_percent": -50 }
+        {
+          "segment_id": "route_0003.segment_0001",
+          "grade_percent": -50,
+          "operation": "additive",
+          "clearance_above_meters": null
+        }
       ]
     }
   ],

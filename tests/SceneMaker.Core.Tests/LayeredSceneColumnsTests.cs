@@ -496,6 +496,7 @@ public sealed class LayeredSceneColumnsTests
             {
                 SegmentId = $"{id}.segment_0001",
                 GradePercent = 0,
+                Operation = RouteSegmentOperation.Additive,
             },
         ],
     };

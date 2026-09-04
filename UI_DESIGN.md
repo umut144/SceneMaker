@@ -100,6 +100,7 @@ tatsächlichen horizontalen Bezier-Bogenlänge abgeleitet:
 ```text
 Path-Kontext:  Surface [ Grass ▾ ] · Point [ Linear ▾ ] · Width […]
                Grade [ -50% | -25% | 0% | +25% | +50% ]
+               Operation [ Additive | Subtractive ] · Clearance […]
                [✓] Auto start · Start […]
 ```
 
@@ -108,6 +109,11 @@ kann derselbe Path waagerecht laufen, steigen und wieder fallen. Die Steigung
 ist Rise/Run in Metern: `+25%` gewinnt auf 4 m horizontaler Bogenlänge genau
 1 m Höhe. Sie beschreibt Geometrie, keine Zusage über Laufgeschwindigkeit oder
 Begehbarkeit eines bestimmten Actors.
+
+`Operation` gilt wie `Grade` für das Segment zum nächsten Punkt. `Additive`
+materialisiert nur die Path-Oberfläche. `Subtractive` speichert zusätzlich die
+positive `Clearance` über dieser Oberfläche; das Feld ist nur in diesem Zustand
+sichtbar. Bereits gesetzte Segmente ändern sich beim Umschalten nicht.
 
 `Auto start` ist standardmäßig an und kopiert beim ersten Klick die effektive
 Terrainoberkante einschließlich Hills. Danach bleibt die kopierte absolute Zahl

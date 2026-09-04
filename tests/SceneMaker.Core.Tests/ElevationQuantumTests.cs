@@ -134,6 +134,7 @@ public sealed class ElevationQuantumTests
             {
                 SegmentId = "route_0001.segment_0001",
                 GradePercent = 0,
+                Operation = RouteSegmentOperation.Additive,
             },
         ],
     };

@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 15;
+    public const int SceneVersion = 16;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -126,6 +126,16 @@ public enum RoutePointMode
 }
 
 /// <summary>
+/// Whether a Path segment is presented independently above its surroundings or
+/// excavates the Terrain above its own materialized floor.
+/// </summary>
+public enum RouteSegmentOperation
+{
+    Additive,
+    Subtractive,
+}
+
+/// <summary>
 /// One authored support point of a continuously inclined route surface.
 /// Position and handles describe its open Bezier centerline; absolute elevation
 /// and full width interpolate over that centerline's arc length.
@@ -148,13 +158,16 @@ public sealed record RouteSurfacePointDocument
 /// <summary>
 /// The authored meaning of one interval between neighbouring Path points.
 /// Its grade is stored rather than recovered from rounded elevations and
-/// flattened arc lengths. The stable ID survives later point editing and lets
-/// runtime data refer to this exact interval.
+/// flattened arc lengths. A subtractive interval also carries the headroom it
+/// asks to remove above the Path floor. The stable ID survives later point
+/// editing and lets runtime data refer to this exact interval.
 /// </summary>
 public sealed record RouteSurfaceSegmentDocument
 {
     public required string SegmentId { get; init; }
     public required int GradePercent { get; init; }
+    public required RouteSegmentOperation Operation { get; init; }
+    public decimal? ClearanceAboveMeters { get; init; }
 }
 
 /// <summary>

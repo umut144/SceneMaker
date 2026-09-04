@@ -280,6 +280,14 @@ public sealed class EditorInteractionState
     /// <summary>The grade of the segment arriving at the next Path point.</summary>
     public RouteGradePreset PathGrade { get; private set; } = RouteGradePreset.Level;
 
+    /// <summary>The operation of the segment arriving at the next Path point.</summary>
+    public RouteSegmentOperation PathOperation { get; private set; } =
+        RouteSegmentOperation.Additive;
+
+    /// <summary>The Terrain headroom removed by the next subtractive segment.</summary>
+    public decimal PathClearanceAboveMeters { get; private set; } =
+        RouteSurfaceEditing.DefaultClearanceAboveMeters;
+
     /// <summary>
     /// An explicit starting height for the next Path, or null to copy the
     /// effective Terrain height under its first point. This is session state,
@@ -377,6 +385,18 @@ public sealed class EditorInteractionState
     {
         if (!Enum.IsDefined(grade)) throw new ArgumentOutOfRangeException(nameof(grade));
         PathGrade = grade;
+    }
+
+    public void SetPathOperation(RouteSegmentOperation operation)
+    {
+        if (!Enum.IsDefined(operation)) throw new ArgumentOutOfRangeException(nameof(operation));
+        PathOperation = operation;
+    }
+
+    public void SetPathClearanceAbove(decimal clearanceMeters)
+    {
+        if (clearanceMeters <= 0m) throw new ArgumentOutOfRangeException(nameof(clearanceMeters));
+        PathClearanceAboveMeters = clearanceMeters;
     }
 
     public void SetPathStartElevationOverride(decimal? elevationMeters) =>

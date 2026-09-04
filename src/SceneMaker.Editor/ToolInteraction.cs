@@ -1241,18 +1241,27 @@ public sealed class ToolInteraction
         var grade = _pathDraft.Count == 0
             ? RouteGradePreset.Level
             : State.PathGrade;
+        var operation = _pathDraft.Count == 0
+            ? RouteSegmentOperation.Additive
+            : State.PathOperation;
+        decimal? clearance = operation == RouteSegmentOperation.Subtractive
+            ? State.PathClearanceAboveMeters
+            : null;
         _pathPending = new GradedRouteDraftPoint(
             point.X,
             point.Y,
             State.RoutePointMode,
             State.PathWidthMeters,
-            grade);
+            grade,
+            OperationFromPrevious: operation,
+            ClearanceAboveMetersFromPrevious: clearance);
         var ordinal = _pathDraft.Count + 1;
         var startElevation = _pathStartElevationMeters!.Value;
         var gradeText = GradeText(grade);
+        var operationText = OperationText(operation, clearance);
         return new ToolOutcome.Message(State.RoutePointMode == RoutePointMode.Linear
-            ? $"Path: point {ordinal} at ({point.X}, {point.Y}) · start {startElevation:0.###} m · grade {gradeText} · width {State.PathWidthMeters:0.###} m."
-            : $"Path: point {ordinal} at ({point.X}, {point.Y}) · start {startElevation:0.###} m · grade {gradeText} · width {State.PathWidthMeters:0.###} m; drag to pull its handle.");
+            ? $"Path: point {ordinal} at ({point.X}, {point.Y}) · start {startElevation:0.###} m · grade {gradeText} · {operationText} · width {State.PathWidthMeters:0.###} m."
+            : $"Path: point {ordinal} at ({point.X}, {point.Y}) · start {startElevation:0.###} m · grade {gradeText} · {operationText} · width {State.PathWidthMeters:0.###} m; drag to pull its handle.");
     }
 
     private ToolOutcome DragPathHandle(ToolContext context, AuthoringPoint point)
@@ -1325,9 +1334,12 @@ public sealed class ToolInteraction
             return new ToolOutcome.Message($"Path: {preview.Explanation ?? "place at least two points"}.");
 
         var points = preview.Curve;
-        var grades = _pathDraft
+        var segments = _pathDraft
             .Skip(1)
-            .Select(static point => point.GradeFromPrevious)
+            .Select(static point => new RouteSegmentAuthoring(
+                point.GradeFromPrevious,
+                point.OperationFromPrevious,
+                point.ClearanceAboveMetersFromPrevious))
             .ToArray();
         var placed = _pathDraft.Count;
         var start = points[0].ElevationMeters;
@@ -1341,7 +1353,7 @@ public sealed class ToolInteraction
                 context.TerrainAssets,
                 context.Metrics,
                 points,
-                grades,
+                segments,
                 assetKey),
             Describe: (before, after) =>
             {
@@ -1349,7 +1361,12 @@ public sealed class ToolInteraction
                     before.RouteSurfaces.All(previous =>
                         previous.RouteSurfaceId != route.RouteSurfaceId));
                 var name = added?.RouteSurfaceId ?? "route";
-                return $"Authored {name} from {placed} points · {assetName} · surface {start:0.###} m to {end:0.###} m.";
+                var subtractive = added?.Segments.Count(static segment =>
+                    segment.Operation == RouteSegmentOperation.Subtractive) ?? 0;
+                var operationSummary = subtractive == 0
+                    ? "additive"
+                    : $"{subtractive} subtractive segment{Plural(subtractive)}";
+                return $"Authored {name} from {placed} points · {assetName} · {operationSummary} · surface {start:0.###} m to {end:0.###} m.";
             });
     }
 
@@ -1601,6 +1618,16 @@ public sealed class ToolInteraction
         RouteGradePreset.UpTwentyFivePercent => "+25%",
         RouteGradePreset.UpFiftyPercent => "+50%",
         _ => throw new ArgumentOutOfRangeException(nameof(grade)),
+    };
+
+    private static string OperationText(
+        RouteSegmentOperation operation,
+        decimal? clearanceAboveMeters) => operation switch
+    {
+        RouteSegmentOperation.Additive => "additive",
+        RouteSegmentOperation.Subtractive =>
+            $"subtractive · clearance {clearanceAboveMeters:0.###} m",
+        _ => throw new ArgumentOutOfRangeException(nameof(operation)),
     };
 
     private void ResetTransient()

@@ -72,7 +72,7 @@ unrelated reasons.
 
 | Schema | Constant | Current |
 | --- | --- | --- |
-| Scene document | `SceneMakerSchemas.SceneVersion` | 15 |
+| Scene document | `SceneMakerSchemas.SceneVersion` | 16 |
 | Workspace config | `WorkspaceConfigurationStore.Version` | 8 |
 | Scene export | `SceneExport.Version` | 10 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 1 |

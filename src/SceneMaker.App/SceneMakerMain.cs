@@ -61,6 +61,8 @@ public sealed partial class SceneMakerMain : Control
     private const int PathGradeLevel = 3;
     private const int PathGradeUpTwentyFive = 4;
     private const int PathGradeUpFifty = 5;
+    private const int PathOperationAdditive = 1;
+    private const int PathOperationSubtractive = 2;
     private const int SectionCutAtItem = 1;
     private const int SectionCutBetweenItem = 2;
 
@@ -70,6 +72,10 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _pathWidthEdit = new();
     private readonly Label _pathGradeLabel = new();
     private readonly OptionButton _pathGradeEdit = new();
+    private readonly Label _pathOperationLabel = new();
+    private readonly OptionButton _pathOperationEdit = new();
+    private readonly Label _pathClearanceLabel = new();
+    private readonly SpinBox _pathClearanceEdit = new();
     private readonly CheckBox _pathAutoStartToggle = new();
     private readonly Label _pathStartElevationLabel = new();
     private readonly SpinBox _pathStartElevationEdit = new();
@@ -490,6 +496,29 @@ public sealed partial class SceneMakerMain : Control
             "Rise or fall per horizontal metre on the segment arriving at the next point.";
         _pathGradeEdit.ItemSelected += SetPathGrade;
         _contextMenuBar.AddChild(_pathGradeEdit);
+        _pathOperationLabel.Name = "PathOperationLabel";
+        _pathOperationLabel.Text = "Operation";
+        _pathOperationLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_pathOperationLabel);
+        _pathOperationEdit.Name = "PathOperation";
+        _pathOperationEdit.AddItem("Additive", PathOperationAdditive);
+        _pathOperationEdit.AddItem("Subtractive", PathOperationSubtractive);
+        _pathOperationEdit.Selected = _pathOperationEdit.GetItemIndex(PathOperationAdditive);
+        _pathOperationEdit.CustomMinimumSize = new Vector2(130f, 0f);
+        _pathOperationEdit.TooltipText =
+            "Whether the segment arriving at the next point stays above Terrain or excavates it.";
+        _pathOperationEdit.ItemSelected += SetPathOperation;
+        _contextMenuBar.AddChild(_pathOperationEdit);
+        _pathClearanceLabel.Name = "PathClearanceLabel";
+        _pathClearanceLabel.Text = "Clearance";
+        _pathClearanceLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_pathClearanceLabel);
+        _pathClearanceEdit.Name = "PathClearance";
+        ConfigurePathClearanceInput(_pathClearanceEdit);
+        _pathClearanceEdit.TooltipText =
+            "Terrain height removed above the floor of the next subtractive segment.";
+        _pathClearanceEdit.ValueChanged += SetPathClearance;
+        _contextMenuBar.AddChild(_pathClearanceEdit);
         _pathAutoStartToggle.Name = "PathAutoStart";
         _pathAutoStartToggle.Text = "Auto start";
         _pathAutoStartToggle.ButtonPressed = true;
@@ -2024,6 +2053,23 @@ public sealed partial class SceneMakerMain : Control
         input.Value = (double)RouteSurfaceEditing.DefaultWidthMeters;
     }
 
+    private void ConfigurePathClearanceInput(SpinBox input)
+    {
+        var quantum = _controller.Session is { } session
+            ? session.Metrics.ElevationQuantumMeters
+            : 0.125m;
+        input.MinValue = (double)quantum;
+        input.MaxValue = 1024.0;
+        input.Step = ElevationDisplayStep(quantum);
+        input.CustomArrowStep = (double)quantum;
+        input.CustomArrowRound = true;
+        input.AllowGreater = false;
+        input.AllowLesser = false;
+        input.Suffix = " m";
+        input.CustomMinimumSize = new Vector2(110f, 0f);
+        input.Value = (double)RouteSurfaceEditing.DefaultClearanceAboveMeters;
+    }
+
     private void SetCurvePointMode(long item)
     {
         var aligned = _curvePointModeEdit.GetItemId((int)item) == CurvePointModeAligned;
@@ -2098,6 +2144,28 @@ public sealed partial class SceneMakerMain : Control
         };
         _interaction.State.SetPathGrade(grade);
         SetStatus($"Path grade for the next segment set to {PathGradeText(grade)}.");
+    }
+
+    private void SetPathOperation(long item)
+    {
+        var operation = _pathOperationEdit.GetItemId((int)item) switch
+        {
+            PathOperationAdditive => RouteSegmentOperation.Additive,
+            PathOperationSubtractive => RouteSegmentOperation.Subtractive,
+            _ => throw new ArgumentOutOfRangeException(nameof(item)),
+        };
+        _interaction.State.SetPathOperation(operation);
+        UpdateToolContextLabel();
+        SetStatus(operation == RouteSegmentOperation.Additive
+            ? "The next Path segment is additive."
+            : $"The next Path segment is subtractive with {_interaction.State.PathClearanceAboveMeters:0.###} m clearance.");
+    }
+
+    private void SetPathClearance(double value)
+    {
+        var clearance = DecimalOf(value);
+        _interaction.State.SetPathClearanceAbove(clearance);
+        SetStatus($"Path clearance for the next subtractive segment set to {clearance:0.###} m.");
     }
 
     private void SetPathAutoStart(bool enabled)
@@ -2246,6 +2314,16 @@ public sealed partial class SceneMakerMain : Control
         _pathGradeEdit.Visible = pathActive;
         _pathGradeEdit.Selected = _pathGradeEdit.GetItemIndex(
             PathGradeItemId(_interaction.State.PathGrade));
+        _pathOperationLabel.Visible = pathActive;
+        _pathOperationEdit.Visible = pathActive;
+        _pathOperationEdit.Selected = _pathOperationEdit.GetItemIndex(
+            _interaction.State.PathOperation == RouteSegmentOperation.Subtractive
+                ? PathOperationSubtractive
+                : PathOperationAdditive);
+        var subtractivePath = pathActive
+            && _interaction.State.PathOperation == RouteSegmentOperation.Subtractive;
+        _pathClearanceLabel.Visible = subtractivePath;
+        _pathClearanceEdit.Visible = subtractivePath;
         _pathAutoStartToggle.Visible = pathActive;
         _pathStartElevationLabel.Visible = pathActive;
         _pathStartElevationEdit.Visible = pathActive;
@@ -2699,6 +2777,8 @@ public sealed partial class SceneMakerMain : Control
         _interaction.State.SetRiverWidth(DecimalOf(_riverWidthEdit.Value));
         ConfigurePathWidthInput(_pathWidthEdit);
         _interaction.State.SetPathWidth(DecimalOf(_pathWidthEdit.Value));
+        ConfigurePathClearanceInput(_pathClearanceEdit);
+        _interaction.State.SetPathClearanceAbove(DecimalOf(_pathClearanceEdit.Value));
         ConfigureElevationInputs(session.Metrics);
         _pathAutoStartToggle.ButtonPressed = true;
         _interaction.State.SetPathStartElevationOverride(null);
@@ -2770,6 +2850,7 @@ public sealed partial class SceneMakerMain : Control
         _elevationEdit.Editable = editable;
         _waterElevationEdit.Editable = editable;
         _pathStartElevationEdit.Editable = editable && !_pathAutoStartToggle.ButtonPressed;
+        _pathClearanceEdit.Editable = editable;
         _sceneElevationEdit.Editable = editable;
         _sectionElevationEdit.Editable = editable;
         _sectionOffsetEdit.Editable = editable;

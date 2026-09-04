@@ -35,7 +35,28 @@ public readonly record struct GradedRouteDraftPoint(
     RoutePointMode Mode,
     decimal WidthMeters,
     RouteGradePreset GradeFromPrevious,
-    AuthoringPixelOffset? DraggedHandleOut = null);
+    AuthoringPixelOffset? DraggedHandleOut = null,
+    RouteSegmentOperation OperationFromPrevious = RouteSegmentOperation.Additive,
+    decimal? ClearanceAboveMetersFromPrevious = null);
+
+/// <summary>
+/// The authored meaning of one Path segment before its stable document ID is
+/// assigned. Clearance is absent for additive segments and required for
+/// subtractive ones.
+/// </summary>
+public readonly record struct RouteSegmentAuthoring(
+    RouteGradePreset Grade,
+    RouteSegmentOperation Operation,
+    decimal? ClearanceAboveMeters)
+{
+    public static RouteSegmentAuthoring Additive(RouteGradePreset grade) =>
+        new(grade, RouteSegmentOperation.Additive, null);
+
+    public static RouteSegmentAuthoring Subtractive(
+        RouteGradePreset grade,
+        decimal clearanceAboveMeters) =>
+        new(grade, RouteSegmentOperation.Subtractive, clearanceAboveMeters);
+}
 
 /// <summary>
 /// Pure document operations for independently materialized route surfaces.
@@ -51,29 +72,49 @@ public static class RouteSurfaceEditing
     /// </summary>
     public const decimal DefaultWidthMeters = 2.0m;
 
+    /// <summary>
+    /// A neutral initial excavation height. It is authoring convenience only,
+    /// not an Actor-height or traversal guarantee.
+    /// </summary>
+    public const decimal DefaultClearanceAboveMeters = 1.0m;
+
     public static SceneDocument Place(
         SceneDocument scene,
         TerrainDisplayCatalog terrainAssets,
         WorkspaceMetrics metrics,
         IReadOnlyList<RouteSurfacePointDocument> points,
         IReadOnlyList<RouteGradePreset> grades,
+        string assetKey) => Place(
+            scene,
+            terrainAssets,
+            metrics,
+            points,
+            grades.Select(RouteSegmentAuthoring.Additive).ToArray(),
+            assetKey);
+
+    public static SceneDocument Place(
+        SceneDocument scene,
+        TerrainDisplayCatalog terrainAssets,
+        WorkspaceMetrics metrics,
+        IReadOnlyList<RouteSurfacePointDocument> points,
+        IReadOnlyList<RouteSegmentAuthoring> segments,
         string assetKey)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(points);
-        ArgumentNullException.ThrowIfNull(grades);
+        ArgumentNullException.ThrowIfNull(segments);
         _ = terrainAssets.Resolve(assetKey);
         if (points.Count < 2)
             throw new SceneMakerDocumentException("A Path needs at least two points.");
-        if (grades.Count != points.Count - 1)
+        if (segments.Count != points.Count - 1)
         {
             throw new SceneMakerDocumentException(
-                "A Path needs exactly one authored grade for every segment.");
+                "A Path needs exactly one authored segment for every point pair.");
         }
-        if (grades.Any(static grade => !Enum.IsDefined(grade)))
-            throw new SceneMakerDocumentException("A Path contains an unsupported grade.");
+        foreach (var segment in segments)
+            ValidateSegmentAuthoring(segment);
         if (points.Any(static point => point.WidthMeters <= 0m))
             throw new SceneMakerDocumentException("A Path needs a positive width at every point.");
         if (!metrics.IsElevationAligned(points[0].ElevationMeters))
@@ -89,11 +130,13 @@ public static class RouteSurfaceEditing
             RouteSurfaceId = routeId,
             AssetKey = assetKey,
             Points = [.. points],
-            Segments = grades
-                .Select((grade, index) => new RouteSurfaceSegmentDocument
+            Segments = segments
+                .Select((segment, index) => new RouteSurfaceSegmentDocument
                 {
                     SegmentId = $"{routeId}.segment_{index + 1:0000}",
-                    GradePercent = GradePercent(grade),
+                    GradePercent = GradePercent(segment.Grade),
+                    Operation = segment.Operation,
+                    ClearanceAboveMeters = segment.ClearanceAboveMeters,
                 })
                 .ToList(),
         };
@@ -282,6 +325,28 @@ public static class RouteSurfaceEditing
 
     public static bool IsSupportedGradePercent(int gradePercent) =>
         gradePercent is -50 or -25 or 0 or 25 or 50;
+
+    private static void ValidateSegmentAuthoring(RouteSegmentAuthoring segment)
+    {
+        if (!Enum.IsDefined(segment.Grade))
+            throw new SceneMakerDocumentException("A Path contains an unsupported grade.");
+        if (!Enum.IsDefined(segment.Operation))
+            throw new SceneMakerDocumentException("A Path contains an unsupported operation.");
+        if (segment.Operation == RouteSegmentOperation.Additive)
+        {
+            if (segment.ClearanceAboveMeters is not null)
+            {
+                throw new SceneMakerDocumentException(
+                    "An additive Path segment must not carry clearance_above_meters.");
+            }
+            return;
+        }
+        if (segment.ClearanceAboveMeters is not > 0m)
+        {
+            throw new SceneMakerDocumentException(
+                "A subtractive Path segment needs positive clearance_above_meters.");
+        }
+    }
 
     /// <summary>
     /// Requires every route to name an enabled Asset whose SceneMaker role is

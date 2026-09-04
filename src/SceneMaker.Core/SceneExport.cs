@@ -219,7 +219,19 @@ public static class SceneExport
         TerrainCells = [.. ElevationRegionGeometry.EffectiveTerrainCells(scene, metrics)],
         Props = scene.Props,
         WaterBodies = scene.WaterBodies,
-        RouteSurfaces = scene.RouteSurfaces,
+        RouteSurfaces = scene.RouteSurfaces.Select(static route =>
+            new ExportRouteSurfaceDocument
+            {
+                RouteSurfaceId = route.RouteSurfaceId,
+                AssetKey = route.AssetKey,
+                Points = route.Points,
+                Segments = route.Segments.Select(static segment =>
+                    new ExportRouteSurfaceSegmentDocument
+                    {
+                        SegmentId = segment.SegmentId,
+                        GradePercent = segment.GradePercent,
+                    }).ToList(),
+            }).ToList(),
         TemplateDefinition = scene.TemplateDefinition,
         TemplateAnchors = scene.TemplateAnchors,
         DefaultElevationMeters = scene.DefaultElevationMeters,
@@ -268,6 +280,15 @@ public static class SceneExport
         PropEditing.ValidateAssetReferences(scene, propAssets);
         RouteSurfaceEditing.ValidateAssetReferences(scene, terrainAssets);
         WaterEditing.ValidateAssetReferences(scene, terrainAssets);
+        var unsupported = scene.RouteSurfaces
+            .SelectMany(static route => route.Segments)
+            .FirstOrDefault(static segment =>
+                segment.Operation == RouteSegmentOperation.Subtractive);
+        if (unsupported is not null)
+        {
+            throw new SceneMakerDocumentException(
+                $"Path segment '{unsupported.SegmentId}' is subtractive, which export schema {Version} does not support yet.");
+        }
     }
 
     private sealed record ExportDocument
@@ -309,10 +330,28 @@ public static class SceneExport
         public required List<TerrainCellDocument> TerrainCells { get; init; }
         public required List<PropDocument> Props { get; init; }
         public required List<WaterBodyDocument> WaterBodies { get; init; }
-        public required List<RouteSurfaceDocument> RouteSurfaces { get; init; }
+        public required List<ExportRouteSurfaceDocument> RouteSurfaces { get; init; }
         public required TemplateDefinitionDocument? TemplateDefinition { get; init; }
         public required List<TemplateAnchorDocument> TemplateAnchors { get; init; }
         public required decimal DefaultElevationMeters { get; init; }
+    }
+
+    /// <summary>
+    /// The route shape promised by export schema 10. Authoring-only segment
+    /// fields stay out until the runtime contract deliberately advances.
+    /// </summary>
+    private sealed record ExportRouteSurfaceDocument
+    {
+        public required string RouteSurfaceId { get; init; }
+        public required string AssetKey { get; init; }
+        public required List<RouteSurfacePointDocument> Points { get; init; }
+        public required List<ExportRouteSurfaceSegmentDocument> Segments { get; init; }
+    }
+
+    private sealed record ExportRouteSurfaceSegmentDocument
+    {
+        public required string SegmentId { get; init; }
+        public required int GradePercent { get; init; }
     }
 
     private sealed record ExportGridDocument

@@ -257,6 +257,11 @@ the open, become subtractive at a portal, and become additive again at its
 exit. Persist the semantic operation per segment rather than infer it from
 whether Terrain currently happens to overlap the Path.
 
+Scene schema 16 now persists that per-segment operation and clearance, and the
+Draw Path context applies both to the next point pair. Export schema 10 refuses
+subtractive segments rather than discarding their meaning. The actual column
+cut, red authoring wire and advanced export are still the next slice.
+
 Every subtractive segment carries a positive `clearance_above_meters`. At each
 station its floor is the existing interpolated Path elevation and its Terrain
 cut is `[floor, floor + clearance]`. Cuts affect Terrain solids and never water

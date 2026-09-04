@@ -129,8 +129,9 @@ between them is continuously inclined. Grade is only a geometric measurement;
 an Actor profile or generator may compare it with its own limit later.
 
 Authoring schema 13 introduced that source as `route_surfaces`; schema 15 adds
-a stable segment ID and exact integer `grade_percent` to every interval. A
-route carries
+a stable segment ID and exact integer `grade_percent` to every interval, and
+schema 16 adds an explicit additive/subtractive operation plus positive
+clearance for a subtractive interval. A route carries
 an Asset whose role is Terrain, regardless of whether that Asset is normally
 authored as cells or as a curve; `authoring` chooses a UI, not eligibility as a
 surface. Its points stay inside the Scene and their heights obey the vertical
@@ -145,6 +146,11 @@ Height. The canvas draws the continuous material-coloured band and its
 centerline, while the height view colours that band from its interpolated
 surface elevation rather than rasterizing it into steps. The eraser removes
 the whole authored route under the pointer.
+
+Subtractive authoring deliberately leads its runtime contract by one focused
+slice: export schema 10 rejects such a segment instead of silently serializing
+it as an additive Path. Terrain cutting and the matching export version follow
+next.
 
 A flattened loop comes back as a ring whose first point is not repeated at the
 end, with the way home carried in its own `TotalLength` rather than in the last

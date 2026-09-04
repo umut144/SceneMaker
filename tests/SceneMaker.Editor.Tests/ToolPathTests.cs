@@ -225,6 +225,29 @@ public sealed class ToolPathTests
     }
 
     [Fact]
+    public void OperationAndClearanceApplyToTheNextSegmentOnly()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        var interaction = Path();
+
+        Place(interaction, Context(workspace, scene, 1m), 32, 32);
+        interaction.State.SetPathOperation(RouteSegmentOperation.Subtractive);
+        interaction.State.SetPathClearanceAbove(1.5m);
+        Place(interaction, Context(workspace, scene, 1m), 96, 32);
+        interaction.State.SetPathOperation(RouteSegmentOperation.Additive);
+        Place(interaction, Context(workspace, scene, 1m), 160, 32);
+        var edit = Assert.IsType<ToolOutcome.Edit>(
+            interaction.KeyPressed(Context(workspace, scene, 1m), ToolKey.Enter));
+
+        var segments = Assert.Single(edit.Apply(scene).RouteSurfaces).Segments;
+        Assert.Equal(
+            [RouteSegmentOperation.Subtractive, RouteSegmentOperation.Additive],
+            segments.Select(static segment => segment.Operation));
+        Assert.Equal([1.5m, null], segments.Select(static segment => segment.ClearanceAboveMeters));
+    }
+
+    [Fact]
     public void EnablingTheEraserDiscardsTheDraftAndSaysSo()
     {
         using var workspace = TestWorkspace.Create();

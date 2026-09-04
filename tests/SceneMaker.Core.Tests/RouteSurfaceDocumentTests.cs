@@ -14,7 +14,7 @@ public sealed class RouteSurfaceDocumentTests
 
         var restored = DocumentJson.DeserializeScene(DocumentJson.Serialize(scene));
 
-        Assert.Equal(15, restored.Version);
+        Assert.Equal(16, restored.Version);
         var route = Assert.Single(restored.RouteSurfaces);
         Assert.Equal("route_0001", route.RouteSurfaceId);
         Assert.Equal("grass", route.AssetKey);
@@ -43,7 +43,7 @@ public sealed class RouteSurfaceDocumentTests
                 .EnumerateObject()
                 .Select(static property => property.Name));
         Assert.Equal(
-            ["segment_id", "grade_percent"],
+            ["segment_id", "grade_percent", "operation", "clearance_above_meters"],
             route.GetProperty("segments")[0]
                 .EnumerateObject()
                 .Select(static property => property.Name));
@@ -82,6 +82,42 @@ public sealed class RouteSurfaceDocumentTests
         var gradeError = Assert.Throws<SceneMakerDocumentException>(() =>
             DocumentValidation.Validate(unsupported));
         Assert.Contains("grade_percent 49", gradeError.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SegmentOperationAndClearanceAreAClosedAuthoredPair()
+    {
+        using var workspace = TestWorkspace.Create();
+        var additiveWithClearance = WithRoute(TestScenes.Instance(workspace));
+        additiveWithClearance.RouteSurfaces[0].Segments[0] =
+            additiveWithClearance.RouteSurfaces[0].Segments[0] with
+            {
+                ClearanceAboveMeters = 1m,
+            };
+        var additiveError = Assert.Throws<SceneMakerDocumentException>(() =>
+            DocumentValidation.Validate(additiveWithClearance));
+        Assert.Contains("additive", additiveError.Message, StringComparison.Ordinal);
+
+        var subtractiveWithoutClearance = WithRoute(TestScenes.Instance(workspace));
+        subtractiveWithoutClearance.RouteSurfaces[0].Segments[0] =
+            subtractiveWithoutClearance.RouteSurfaces[0].Segments[0] with
+            {
+                Operation = RouteSegmentOperation.Subtractive,
+            };
+        var subtractiveError = Assert.Throws<SceneMakerDocumentException>(() =>
+            DocumentValidation.Validate(subtractiveWithoutClearance));
+        Assert.Contains("positive clearance", subtractiveError.Message, StringComparison.Ordinal);
+
+        var subtractive = WithRoute(TestScenes.Instance(workspace));
+        subtractive.RouteSurfaces[0].Segments[0] = subtractive.RouteSurfaces[0].Segments[0] with
+        {
+            Operation = RouteSegmentOperation.Subtractive,
+            ClearanceAboveMeters = 1.5m,
+        };
+        var restored = DocumentJson.DeserializeScene(DocumentJson.Serialize(subtractive));
+        var segment = Assert.Single(Assert.Single(restored.RouteSurfaces).Segments);
+        Assert.Equal(RouteSegmentOperation.Subtractive, segment.Operation);
+        Assert.Equal(1.5m, segment.ClearanceAboveMeters);
     }
 
     [Fact]
@@ -258,6 +294,27 @@ public sealed class RouteSurfaceDocumentTests
         Assert.Single(parsed.RootElement.GetProperty("route_surface_bakes").EnumerateArray());
     }
 
+    [Fact]
+    public void ExportTenRefusesASubtractiveSegmentInsteadOfSilentlyLosingIt()
+    {
+        using var workspace = TestWorkspace.Create();
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        var document = WithRoute(TestScenes.Instance(workspace));
+        document.RouteSurfaces[0].Segments[0] = document.RouteSurfaces[0].Segments[0] with
+        {
+            Operation = RouteSegmentOperation.Subtractive,
+            ClearanceAboveMeters = 1m,
+        };
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() => SceneExport.Write(
+            session,
+            new LoadedScene(
+                Path.Combine(session.Workspace.ScenesDirectoryPath, "base.scene.json"),
+                document)));
+
+        Assert.Contains("export schema 10", exception.Message, StringComparison.Ordinal);
+    }
+
     private static SceneDocument WithRoute(
         SceneDocument scene,
         string assetKey = "grass",
@@ -287,6 +344,7 @@ public sealed class RouteSurfaceDocumentTests
             {
                 SegmentId = $"{routeSurfaceId}.segment_0001",
                 GradePercent = 25,
+                Operation = RouteSegmentOperation.Additive,
             },
         ],
     };

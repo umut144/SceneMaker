@@ -330,6 +330,23 @@ public static partial class DocumentValidation
                     throw new SceneMakerDocumentException(
                         $"{label} segment '{segment.SegmentId}' has unsupported grade_percent {segment.GradePercent}.");
                 }
+                if (!Enum.IsDefined(segment.Operation))
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} segment '{segment.SegmentId}' has an unsupported operation.");
+                }
+                if (segment.Operation == RouteSegmentOperation.Additive
+                    && segment.ClearanceAboveMeters is not null)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} segment '{segment.SegmentId}' is additive and must not carry clearance_above_meters.");
+                }
+                if (segment.Operation == RouteSegmentOperation.Subtractive
+                    && segment.ClearanceAboveMeters is not > 0m)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} segment '{segment.SegmentId}' is subtractive and needs positive clearance_above_meters.");
+                }
                 previousSegmentId = segment.SegmentId;
             }
 

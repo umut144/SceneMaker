@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 15,
+  "version": 16,
   "scene_id": "test_template",
   "scene_kind": "template",
   "coordinate_space": "scene_local_bottom_left_y_up",

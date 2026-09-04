@@ -25,6 +25,49 @@ public sealed class RouteSurfaceEditingTests
         var segment = Assert.Single(route.Segments);
         Assert.Equal("route_0001.segment_0001", segment.SegmentId);
         Assert.Equal(25, segment.GradePercent);
+        Assert.Equal(RouteSegmentOperation.Additive, segment.Operation);
+        Assert.Null(segment.ClearanceAboveMeters);
+    }
+
+    [Fact]
+    public void PlaceAuthorsSubtractiveMeaningAndClearancePerSegment()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = RouteSurfaceEditing.Place(
+            TestScenes.Instance(workspace),
+            workspace.Terrain,
+            workspace.Metrics,
+            [Point(32, 32, 1m), Point(96, 32, 1m), Point(160, 32, 1m)],
+            [
+                RouteSegmentAuthoring.Subtractive(RouteGradePreset.Level, 1.5m),
+                RouteSegmentAuthoring.Additive(RouteGradePreset.Level),
+            ],
+            "grass");
+
+        var segments = Assert.Single(scene.RouteSurfaces).Segments;
+        Assert.Equal(
+            [RouteSegmentOperation.Subtractive, RouteSegmentOperation.Additive],
+            segments.Select(static segment => segment.Operation));
+        Assert.Equal([1.5m, null], segments.Select(static segment => segment.ClearanceAboveMeters));
+    }
+
+    [Fact]
+    public void PlaceRefusesAnIncompleteSegmentOperation()
+    {
+        using var workspace = TestWorkspace.Create();
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            RouteSurfaceEditing.Place(
+                TestScenes.Instance(workspace),
+                workspace.Terrain,
+                workspace.Metrics,
+                [Point(32, 32, 1m), Point(160, 32, 1m)],
+                [new RouteSegmentAuthoring(
+                    RouteGradePreset.Level,
+                    RouteSegmentOperation.Subtractive,
+                    null)],
+                "grass"));
+
+        Assert.Contains("positive clearance", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
