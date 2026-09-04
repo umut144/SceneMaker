@@ -336,7 +336,8 @@ public sealed partial class SceneCanvas : Control
             SelectedTerrainAssetKey,
             SelectedPropAssetKey,
             TemplateAnchorGroupNumber,
-            ElevationMeters);
+            ElevationMeters,
+            PointerHitRadiusAuthoringPixels: 8.0 / ViewState.Zoom);
     }
 
     private void Publish(ToolOutcome outcome)
@@ -809,6 +810,19 @@ public sealed partial class SceneCanvas : Control
 
         foreach (var outline in outlines)
         {
+            // The selection preview draws this body again, either as stored or
+            // as the live candidate. Leaving the cached contour underneath it
+            // would show two shapes during a drag and make a refused move look
+            // as though both contours were part of the mountain.
+            if (Mode == EditorMode.Mountain
+                && ActiveTool == EditorTool.SelectMountain
+                && string.Equals(
+                    outline.MountainBodyId,
+                    _interaction.SelectedMountainBodyId,
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
             var color = MountainOutlineColors[outline.PaletteIndex];
             if (!highlighted) color = new Color(color.R, color.G, color.B, 0.32f);
             // The ring does not repeat its first point, so the line closes here.
@@ -885,6 +899,11 @@ public sealed partial class SceneCanvas : Control
         float zoom,
         int sceneHeightAuthoringPixels)
     {
+        if (ActiveTool == EditorTool.SelectMountain)
+        {
+            DrawMountainSelectionPreview(pan, zoom, sceneHeightAuthoringPixels);
+            return;
+        }
         if (EraserEnabled)
         {
             DrawMountainEraserPreview(document, pan, zoom);
@@ -949,6 +968,49 @@ public sealed partial class SceneCanvas : Control
             DrawHandle(centre, point.PositionAuthoringPx, point.HandleInAuthoringPx, Screen);
             DrawHandle(centre, point.PositionAuthoringPx, point.HandleOutAuthoringPx, Screen);
             DrawCircle(centre, 4.0f, outlineColor);
+        }
+    }
+
+    /// <summary>
+    /// A selected mountain exposes its authored anchors and handles. While one
+    /// anchor moves, this draws the candidate contour rather than the stored
+    /// one; an invalid candidate turns red and will be refused on release.
+    /// </summary>
+    private void DrawMountainSelectionPreview(
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        if (CurrentContext() is not { } context) return;
+        var preview = _interaction.MountainSelectionPreview(context);
+        if (preview.Body is not { } body) return;
+
+        var color = preview.Kind == MountainDraftKind.Blocked
+            ? InvalidPreviewColor
+            : MountainOutlineColors[MountainPalette.IndexOf(body.MountainBodyId)];
+        Vector2 Screen(double authoringX, double authoringY) => pan + new Vector2(
+            (float)authoringX * zoom,
+            (sceneHeightAuthoringPixels - (float)authoringY) * zoom);
+
+        if (preview.Outline.Count >= 2)
+        {
+            var line = new Vector2[preview.Outline.Count + 1];
+            for (var index = 0; index < preview.Outline.Count; index++)
+                line[index] = Screen(preview.Outline[index].X, preview.Outline[index].Y);
+            line[^1] = line[0];
+            DrawPolyline(line, color, 3.0f);
+        }
+
+        for (var index = 0; index < body.Points.Count; index++)
+        {
+            var point = body.Points[index];
+            var centre = Screen(point.PositionAuthoringPx.X, point.PositionAuthoringPx.Y);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleInAuthoringPx, Screen);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleOutAuthoringPx, Screen);
+            DrawCircle(
+                centre,
+                _interaction.DraggedMountainPointIndex == index ? 6.0f : 4.0f,
+                color);
         }
     }
 

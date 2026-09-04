@@ -29,6 +29,7 @@ public enum EditorTool
     Fill,
     DrawRiver,
     DrawMountain,
+    SelectMountain,
     AnchorPlace,
     AnchorMove,
 }
@@ -58,6 +59,7 @@ public static class EditorToolRegistry
         Define(EditorTool.Fill, "Fill", "fill.svg", EditorMode.Terrain),
         Define(EditorTool.DrawRiver, "Draw River", "river.svg", EditorMode.River),
         Define(EditorTool.DrawMountain, "Draw Mountain", "mountain.svg", EditorMode.Mountain),
+        Define(EditorTool.SelectMountain, "Select Mountain", "select.svg", EditorMode.Mountain),
         Define(EditorTool.AnchorMove, "Move Anchor", "move.svg", EditorMode.Templates),
         Define(EditorTool.AnchorPlace, "Place Anchor", string.Empty,
             false, EditorMode.Templates),

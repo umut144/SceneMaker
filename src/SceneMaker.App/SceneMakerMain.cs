@@ -1891,7 +1891,9 @@ public sealed partial class SceneMakerMain : Control
             && _interaction.ActiveTool == EditorTool.Line;
         var riverActive = _interaction.Mode == EditorMode.River;
         var mountainActive = _interaction.Mode == EditorMode.Mountain;
-        var curveActive = riverActive || mountainActive;
+        var mountainDrawing = mountainActive
+            && _interaction.ActiveTool == EditorTool.DrawMountain;
+        var curveActive = riverActive || mountainDrawing;
         _toolContextSeparator.Visible = propLineActive || curveActive;
         _propLineOffsetLabel.Visible = propLineActive;
         _propLineOffsetEdit.Visible = propLineActive;
@@ -1905,7 +1907,7 @@ public sealed partial class SceneMakerMain : Control
         _surfaceEdit.Visible = surfaceActive;
         // The two tools keep their own point mode; the shared control only
         // shows whichever one the active tool authors with.
-        var aligned = mountainActive
+        var aligned = mountainDrawing
             ? _interaction.State.MountainPointMode == MountainPointMode.Aligned
             : _interaction.State.WaterPointMode == WaterPointMode.Aligned;
         SelectCurvePointModeItem(aligned ? CurvePointModeAligned : CurvePointModeLinear);
@@ -1921,8 +1923,9 @@ public sealed partial class SceneMakerMain : Control
         _waterDerivedSpanLabel.Visible = riverActive;
         // Height authors Terrain and Props. Water carries its own three, so
         // leaving it in reach here would offer a number that changes nothing.
-        _elevationLabel.Visible = !riverActive;
-        _elevationEdit.Visible = !riverActive;
+        var elevationActive = !riverActive && (!mountainActive || mountainDrawing);
+        _elevationLabel.Visible = elevationActive;
+        _elevationEdit.Visible = elevationActive;
     }
 
     /// <summary>

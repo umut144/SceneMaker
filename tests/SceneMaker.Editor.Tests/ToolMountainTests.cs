@@ -393,6 +393,116 @@ public sealed class ToolMountainTests
     }
 
     [Fact]
+    public void SelectMountainPicksTheTopmostBodyByVisibleCell()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Nested(workspace);
+        var interaction = Mountain(EditorTool.SelectMountain);
+
+        var selected = Assert.IsType<ToolOutcome.Message>(interaction.PointerPressed(
+            Context(workspace, scene), Point(80, 80), Cell(2, 2)));
+
+        Assert.Equal("mountain_0002", interaction.SelectedMountainBodyId);
+        Assert.Contains("top 4 m", selected.Text, StringComparison.Ordinal);
+        Assert.Null(interaction.DraggedMountainPointIndex);
+    }
+
+    [Fact]
+    public void DraggingASelectedPointReshapesOneMountainOnTheTerrainGrid()
+    {
+        using var workspace = TestWorkspace.Create();
+        var points = Square(32, 32, 160, 160).ToList();
+        points[1] = MountainEditing.Point(
+            160,
+            32,
+            MountainPointMode.Aligned,
+            new AuthoringPixelOffset { X = -1, Y = 0 },
+            new AuthoringPixelOffset { X = 1, Y = 0 });
+        var scene = MountainEditing.Place(
+            TestScenes.Instance(workspace), workspace.Metrics, points, 4m);
+        var interaction = Mountain(EditorTool.SelectMountain);
+        var context = Context(workspace, scene);
+
+        interaction.PointerPressed(context, Point(161, 33), Cell(5, 1));
+        interaction.PointerDragged(context, Point(181, 47), Cell(5, 1));
+        var preview = interaction.MountainSelectionPreview(context);
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerReleased(context));
+        var reshaped = edit.Apply(scene);
+
+        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Equal(192, preview.Body!.Points[1].PositionAuthoringPx.X);
+        Assert.Equal(32, preview.Body.Points[1].PositionAuthoringPx.Y);
+        var body = Assert.Single(reshaped.MountainBodies);
+        Assert.Equal("mountain_0001", body.MountainBodyId);
+        Assert.Equal(4m, body.ElevationMeters);
+        Assert.Equal(points[1].Mode, body.Points[1].Mode);
+        Assert.Equal(points[1].HandleInAuthoringPx, body.Points[1].HandleInAuthoringPx);
+        Assert.Equal(points[1].HandleOutAuthoringPx, body.Points[1].HandleOutAuthoringPx);
+        Assert.Null(interaction.DraggedMountainPointIndex);
+    }
+
+    [Fact]
+    public void AnInvalidPointMoveTurnsThePreviewBlockedAndIsNotCommitted()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = MountainEditing.Place(
+            TestScenes.Instance(workspace),
+            workspace.Metrics,
+            Square(32, 32, 160, 160),
+            4m);
+        var interaction = Mountain(EditorTool.SelectMountain);
+        var context = Context(workspace, scene);
+
+        interaction.PointerPressed(context, Point(160, 32), Cell(5, 1));
+        interaction.PointerDragged(context, Point(32, 192), Cell(1, 6));
+        var preview = interaction.MountainSelectionPreview(context);
+        var refused = Assert.IsType<ToolOutcome.Message>(interaction.PointerReleased(context));
+
+        Assert.Equal(MountainDraftKind.Blocked, preview.Kind);
+        Assert.Contains("contact with itself", preview.Explanation!, StringComparison.Ordinal);
+        Assert.Contains("Move Mountain Point blocked", refused.Text, StringComparison.Ordinal);
+        Assert.Equal(160, scene.MountainBodies[0].Points[1].PositionAuthoringPx.X);
+        Assert.Equal(
+            MountainDraftKind.Ready,
+            interaction.MountainSelectionPreview(context).Kind);
+    }
+
+    [Fact]
+    public void EmptySpaceClearsMountainSelectionAndEscapeDoesToo()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Nested(workspace);
+        var interaction = Mountain(EditorTool.SelectMountain);
+        var context = Context(workspace, scene);
+
+        interaction.PointerPressed(context, Point(80, 80), Cell(2, 2));
+        interaction.PointerPressed(context, Point(1, 1), Cell(0, 0));
+        Assert.Null(interaction.SelectedMountainBodyId);
+
+        interaction.PointerPressed(context, Point(80, 80), Cell(2, 2));
+        var cleared = Assert.IsType<ToolOutcome.Message>(
+            interaction.KeyPressed(context, ToolKey.Escape));
+        Assert.Equal("Mountain selection cleared.", cleared.Text);
+        Assert.Null(interaction.SelectedMountainBodyId);
+    }
+
+    [Fact]
+    public void RemovingTheSelectedMountainClearsSelection()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Nested(workspace);
+        var interaction = Mountain(EditorTool.SelectMountain);
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(80, 80), Cell(2, 2));
+        var after = MountainEditing.Remove(scene, "mountain_0002");
+
+        interaction.SceneChanged(scene, after);
+
+        Assert.Null(interaction.SelectedMountainBodyId);
+        Assert.Null(interaction.DraggedMountainPointIndex);
+    }
+
+    [Fact]
     public void LeavingTheAreaDiscardsTheDraftAndSaysSo()
     {
         using var workspace = TestWorkspace.Create();
@@ -556,11 +666,11 @@ public sealed class ToolMountainTests
         MountainEditing.Point(left, top),
     ];
 
-    private static ToolInteraction Mountain()
+    private static ToolInteraction Mountain(EditorTool tool = EditorTool.DrawMountain)
     {
         var interaction = new ToolInteraction();
         interaction.SelectMode(EditorMode.Mountain);
-        interaction.SelectTool(EditorTool.DrawMountain);
+        interaction.SelectTool(tool);
         return interaction;
     }
 

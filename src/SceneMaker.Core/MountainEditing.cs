@@ -64,6 +64,70 @@ public static class MountainEditing
     }
 
     /// <summary>
+    /// Replaces one body's contour without changing its identity or top. The
+    /// contour remains authored truth; its cells are derived again wherever
+    /// the Scene is drawn or exported.
+    /// </summary>
+    public static SceneDocument Reshape(
+        SceneDocument scene,
+        string mountainBodyId,
+        IReadOnlyList<MountainCurvePointDocument> points)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentException.ThrowIfNullOrWhiteSpace(mountainBodyId);
+        ArgumentNullException.ThrowIfNull(points);
+        var body = scene.MountainBodies.FirstOrDefault(candidate => string.Equals(
+            candidate.MountainBodyId, mountainBodyId, StringComparison.Ordinal));
+        if (body is null)
+        {
+            throw new SceneMakerDocumentException(
+                $"Mountain body '{mountainBodyId}' does not exist.");
+        }
+
+        var reshaped = body with { Points = [.. points] };
+        _ = MountainGeometry.RequireContour(reshaped);
+        return scene with
+        {
+            MountainBodies = scene.MountainBodies
+                .Select(candidate => string.Equals(
+                    candidate.MountainBodyId, mountainBodyId, StringComparison.Ordinal)
+                        ? reshaped
+                        : candidate)
+                .ToList(),
+        };
+    }
+
+    /// <summary>
+    /// The same reshape the edit commits, answered without throwing so a live
+    /// point drag can show whether releasing it would succeed.
+    /// </summary>
+    public sealed record MountainReshape(
+        SceneDocument? Scene,
+        MountainBodyDocument? Body,
+        string? Reason);
+
+    public static MountainReshape TryReshape(
+        SceneDocument scene,
+        string mountainBodyId,
+        IReadOnlyList<MountainCurvePointDocument> points)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        try
+        {
+            var reshapedScene = Reshape(scene, mountainBodyId, points);
+            return new MountainReshape(
+                reshapedScene,
+                reshapedScene.MountainBodies.Single(body => string.Equals(
+                    body.MountainBodyId, mountainBodyId, StringComparison.Ordinal)),
+                Reason: null);
+        }
+        catch (SceneMakerDocumentException exception)
+        {
+            return new MountainReshape(Scene: null, Body: null, exception.Message);
+        }
+    }
+
+    /// <summary>
     /// The topmost mountain body whose contour covers a Terrain cell.
     ///
     /// <para>The question is asked of the cell, not of the exact position

@@ -91,6 +91,9 @@ public sealed class EditorToolRegistryTests
         Assert.True(EditorToolRegistry.Supports(EditorMode.Mountain, EditorTool.DrawMountain));
         Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawMountain));
         Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.DrawMountain));
+        Assert.True(EditorToolRegistry.Supports(EditorMode.Mountain, EditorTool.SelectMountain));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.SelectMountain));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.SelectMountain));
 
         // The cell tools stay where cells are painted.
         Assert.False(EditorToolRegistry.Supports(EditorMode.Mountain, EditorTool.Pencil));

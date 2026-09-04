@@ -78,7 +78,7 @@ Surface-Token — aber gefragt wird es jetzt von der Assetleiste:
 | --- | --- | --- |
 | `Terrain` | `Pencil`, `Line`, `Terrain Fill` | `authoring: "cells"`, als Palette |
 | `River` | `Draw River` | `authoring: "curve"`, als `Surface`-Feld |
-| `Mountain` | `Draw Mountain` | — |
+| `Mountain` | `Draw Mountain`, `Select Mountain` | — |
 | `Placements` | `Selector`, `Pencil`, `Line` | — |
 | `Templates` | `Selector`, `Anchor Move` | — |
 
@@ -309,6 +309,23 @@ sagen in der Statuszeile, wie viele Punkte dabei verloren gingen. Für Fluss und
 Berg gilt dieselbe Eraser-Regel: kein Entwurf bleibt im Hintergrund erhalten,
 während radiert wird. Das Ausschalten des `Eraser` beginnt keinen neuen Entwurf,
 und ein Assetwechsel verwirft nichts.
+
+### Mountain:Select Mountain
+
+Ein Klick in eine Bergfläche wählt den obersten Bergkörper über der getroffenen
+Terrainzelle. Seine gespeicherten Konturpunkte und Bezier-Handles werden
+sichtbar; ein Klick nahe an einem Punkt hat Vorrang vor der Flächenauswahl und
+zieht genau diesen Punkt. Der Trefferradius bleibt in Bildschirm-Pixeln stabil,
+damit Zoomen die Bedienbarkeit nicht verändert.
+
+Gezogene Punkte rasten auf dem Terrainraster ein. Handles bleiben relative,
+ungesnappte Offsets und wandern mit dem Punkt; ID und absolute Oberkante des
+Bergs ändern sich nicht. Eine gültige Vorschau trägt die stabile Konturfarbe des
+Bergs. Würde die neue Form sich selbst berühren oder sonst die Konturregeln
+brechen, wird sie rot und Loslassen verwirft nur den Zug. Ein gültiges
+Loslassen ist genau ein Undo-Schritt. Escape und ein Klick ins Leere heben die
+Auswahl auf. Die Draw-Felder `Point` und `Height` sind in diesem Werkzeug
+ausgeblendet, weil die erste Scheibe nur vorhandene Punkte verschiebt.
 
 Die Canvasdarstellung verwendet bereits das gefaltete Höhenfeld aus gemalten
 Zellen und Bergkörpern. Dadurch sieht der Autor genau die Terrainzellen, die

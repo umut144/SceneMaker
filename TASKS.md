@@ -168,16 +168,6 @@ It should expose mistakes the top-down view cannot: insufficient headroom,
 unsupported or unreachable surfaces, an unintended tunnel roof, and whether a
 boat or walker can actually pass beneath a bridge.
 
-## 8. The Workspace Asset dialog cannot add or import an Asset
-
-The dialog edits or removes profiles already present in `config.json`, but a
-removed or entirely new Asset must currently be added by editing that file. A
-new Placement additionally needs its PolyTools geometry synchronized before the
-open session can derive its footprint, so simply adding an empty row would make
-the save circular. Add one explicit action that can author the SceneMaker
-profile and, for a Placement, synchronize or select its geometry before the new
-session is adopted. Terrain needs no import and should remain addable on its own.
-
 The editor now says **Placements**, while internal `Prop*` types and the
 persisted `props` array deliberately remain unchanged. Renaming those would be
 a Scene/export migration with no present runtime benefit. Likewise, do not add
@@ -186,6 +176,11 @@ not a second copy of `PropDocument`, and should arrive only when that contract
 has a consumer and tests.
 
 ## Done
+
+- Adding Assets through the application is deliberately not planned. For now,
+  an agent edits and validates the Workspace configuration when a new Asset is
+  needed; a later batch operation may take an explicit list. Placement geometry
+  is synchronized separately through the existing narrow PolyTools boundary.
 
 - SceneMaker owns authoring identity. Workspace config schema 8 added each
   Asset's `display_name` and SceneMaker `role`; both display catalogs derive

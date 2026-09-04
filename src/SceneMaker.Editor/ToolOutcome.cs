@@ -22,7 +22,8 @@ public sealed record ToolContext(
     string? SelectedTerrainAssetKey,
     string? SelectedPropAssetKey,
     int TemplateAnchorGroupNumber,
-    decimal ElevationMeters);
+    decimal ElevationMeters,
+    double PointerHitRadiusAuthoringPixels = 8.0);
 
 /// <summary>
 /// The single answer a tool gives to an input event. Closed hierarchy: an input

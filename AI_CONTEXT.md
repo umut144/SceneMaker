@@ -60,9 +60,9 @@ cell, and a river made of grass.
 The editor asks that question of the area rather than of the Asset. Terrain,
 River and Mountain are three areas because they author three different things -
 painted cells, an open curve, a closed contour - and each offers the Assets its
-geometry can carry, or none. Terrain offers the cell-authored Assets; River is
-made of water and offers nothing to choose; Mountain authors shape and height
-only and so has no material to offer either. It used to run the other way, with
+geometry can carry, or none. Terrain offers the cell-authored Assets; River
+offers the curve-authored Assets in its `Surface` field; Mountain authors shape
+and height only and so has no material to offer. It used to run the other way, with
 the chosen Asset swapping the tool out from under the author, which meant
 choosing a river silently ended a mountain contour being drawn. Now an Asset is
 only the material: changing it keeps the geometry, and only leaving the area
@@ -198,6 +198,14 @@ points snap to the Terrain grid, handles remain unsnapped, Enter closes the
 contour as one undoable body, and Escape or draft undo removes one point. Point
 modes are per next point and the aligned automatic handles are cyclic, so the
 closing Bezier edge has no special endpoint behaviour.
+
+`Select Mountain` edits that authored truth instead of its derived cells. A
+click on a body selects the topmost contour covering the visible Terrain cell;
+an authored point within a screen-sized hit radius takes precedence and begins
+a drag. The point snaps to the Terrain grid while both handle offsets, body ID
+and absolute top remain unchanged. The live contour uses the same reshape check
+as pointer release: a valid candidate keeps the body's palette colour, an
+invalid one turns red and is not committed. The move is one undoable edit.
 
 The draft has three states and they answer one question - what would Enter do.
 Too few points is Incomplete and drawn neutrally, because a contour that is not

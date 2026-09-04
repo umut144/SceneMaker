@@ -53,6 +53,60 @@ public sealed class MountainGeometryTests
     }
 
     [Fact]
+    public void ReshapingChangesOnlyTheRequestedContour()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = MountainEditing.Place(
+            TestScenes.Instance(workspace),
+            workspace.Metrics,
+            Square(32, 32, 160, 160),
+            2m);
+        scene = MountainEditing.Place(
+            scene,
+            workspace.Metrics,
+            Square(64, 64, 128, 128),
+            4m);
+        var firstBefore = scene.MountainBodies[0];
+        var secondBefore = scene.MountainBodies[1];
+        var points = firstBefore.Points.ToList();
+        points[1] = points[1] with
+        {
+            PositionAuthoringPx = new AuthoringPixelPosition { X = 192, Y = 32 },
+        };
+
+        var reshaped = MountainEditing.Reshape(scene, firstBefore.MountainBodyId, points);
+
+        var firstAfter = reshaped.MountainBodies[0];
+        Assert.Equal(firstBefore.MountainBodyId, firstAfter.MountainBodyId);
+        Assert.Equal(firstBefore.ElevationMeters, firstAfter.ElevationMeters);
+        Assert.Equal(192, firstAfter.Points[1].PositionAuthoringPx.X);
+        Assert.Same(secondBefore, reshaped.MountainBodies[1]);
+    }
+
+    [Fact]
+    public void TryReshapeRefusesSelfContactWithoutChangingTheScene()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = MountainEditing.Place(
+            TestScenes.Instance(workspace),
+            workspace.Metrics,
+            Square(32, 32, 160, 160),
+            4m);
+        var points = scene.MountainBodies[0].Points.ToList();
+        points[1] = points[1] with
+        {
+            PositionAuthoringPx = new AuthoringPixelPosition { X = 32, Y = 192 },
+        };
+
+        var result = MountainEditing.TryReshape(scene, "mountain_0001", points);
+
+        Assert.Null(result.Scene);
+        Assert.Null(result.Body);
+        Assert.Contains("contact with itself", result.Reason!, StringComparison.Ordinal);
+        Assert.Equal(160, scene.MountainBodies[0].Points[1].PositionAuthoringPx.X);
+    }
+
+    [Fact]
     public void ASquareMountainRaisesExactlyThePaintedCellsInsideItsContour()
     {
         using var workspace = TestWorkspace.Create();

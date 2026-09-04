@@ -95,6 +95,22 @@ public sealed record MountainEraserPreview(
     public static MountainEraserPreview Empty { get; } = new(null, []);
 }
 
+/// <summary>
+/// The selected mountain and the contour currently proposed while one of its
+/// authored points is dragged. A blocked proposal keeps its outline visible so
+/// the author can see and undo the bad shape; releasing it does not edit the
+/// document.
+/// </summary>
+public sealed record MountainSelectionPreview(
+    MountainBodyDocument? Body,
+    IReadOnlyList<ChainPoint> Outline,
+    MountainDraftKind Kind,
+    string? Explanation)
+{
+    public static MountainSelectionPreview Empty { get; } = new(
+        null, [], MountainDraftKind.Incomplete, null);
+}
+
 public sealed record TerrainPreview(
     IReadOnlyList<TerrainCellCoordinate> Cells,
     bool Erasing)
@@ -355,6 +371,57 @@ public static class ToolPreviewBuilder
         return new MountainEraserPreview(
             body.MountainBodyId,
             MountainGeometry.CellsRaisedBy(scene, metrics, body));
+    }
+
+    /// <summary>
+    /// The selected mountain exactly as stored, or the complete reshape that a
+    /// point drag would commit. Validation is shared with the edit so a normal
+    /// outline is a promise and a red outline is a refusal with the same reason.
+    /// </summary>
+    public static MountainSelectionPreview BuildMountainSelection(
+        SceneDocument scene,
+        EditorTool tool,
+        string? selectedMountainBodyId,
+        int? draggedPointIndex,
+        AuthoringPoint? draggedPointPosition)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        if (tool != EditorTool.SelectMountain || selectedMountainBodyId is null)
+            return MountainSelectionPreview.Empty;
+
+        var stored = scene.MountainBodies.FirstOrDefault(body => string.Equals(
+            body.MountainBodyId, selectedMountainBodyId, StringComparison.Ordinal));
+        if (stored is null) return MountainSelectionPreview.Empty;
+
+        if (draggedPointIndex is not { } pointIndex
+            || draggedPointPosition is not { } position)
+        {
+            return new MountainSelectionPreview(
+                stored,
+                MountainGeometry.Flatten(stored).Points,
+                MountainDraftKind.Ready,
+                Explanation: null);
+        }
+        if (pointIndex < 0 || pointIndex >= stored.Points.Count)
+            return MountainSelectionPreview.Empty;
+
+        var points = stored.Points.ToList();
+        points[pointIndex] = points[pointIndex] with
+        {
+            PositionAuthoringPx = new AuthoringPixelPosition
+            {
+                X = position.X,
+                Y = position.Y,
+            },
+        };
+        var candidate = stored with { Points = points };
+        var outline = MountainGeometry.Flatten(candidate).Points;
+        var reshape = MountainEditing.TryReshape(scene, stored.MountainBodyId, points);
+        return reshape.Body is { } accepted
+            ? new MountainSelectionPreview(
+                accepted, outline, MountainDraftKind.Ready, Explanation: null)
+            : new MountainSelectionPreview(
+                candidate, outline, MountainDraftKind.Blocked, reshape.Reason);
     }
 
     public static int CountOf(IReadOnlyList<PropPreview> previews, PropPreviewKind kind)
