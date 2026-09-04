@@ -202,6 +202,75 @@ Transitions yet: they need their own simulation-owned target/region contract,
 not a second copy of `PropDocument`, and should arrive only when that contract
 has a consumer and tests.
 
+## 8. Horizontal sections and Paths that excavate Terrain
+
+The next Layered-3D authoring slice should make height legible in the ordinary
+Canvas before it adds another analytical view. Asset hue remains the material
+identity, while visible surface elevation changes its brightness. A surface at
+`1 m` is shown at 45% of its Asset colour and higher visible surfaces become
+brighter. The exact lower clamp and the transfer from that fixed anchor to the
+brightest authored elevation remain presentation tuning; changing the
+horizontal section elevation must not renormalize the colours and make the
+whole Canvas jump. The existing height view remains the precise numerical
+inspection tool.
+
+Add a mutually exclusive horizontal **Section** view beside the ordinary and
+height views. It is a top-down clipping plane, not a view of only the material
+that intersects one infinitesimally thin elevation: remove everything above
+the chosen elevation, then look down on the highest remaining surface or cut
+face at each X/Y. A hill ending at `10 m` is therefore cut and coloured at the
+plane when the plane is at `5 m` or `8 m`, appears whole at `10 m`, and remains
+whole above `10 m`. The ordinary view is the same operation with no finite
+upper clip. The Section elevation is transient view state, steps in the open
+Workspace's `elevation_quantum_meters`, displays enough decimal places for
+`0.125 m`, and is never written to a Scene or export.
+
+This view needs one engine-neutral column-resolution rule rather than a second
+Canvas-only interpretation. Begin with painted Terrain folded through
+Elevation Regions and the existing water cuts and fills. For a finite clip,
+the answer at one X/Y is the highest remaining boundary at or below the plane.
+That shared rule is the foundation for later tunnel, bridge and LookDev views;
+the Godot Canvas only projects its answer.
+
+A Path tunnel is not a new body kind. It is a run of **subtractive Path
+segments** inside the same independently materialized Path that already
+supports level, ascending and descending additive segments. The context choice
+applies to the next segment, just like grade, so one Path can be additive in
+the open, become subtractive at a portal, and become additive again at its
+exit. Persist the semantic operation per segment rather than infer it from
+whether Terrain currently happens to overlap the Path.
+
+Every subtractive segment carries a positive `clearance_above_meters`. At each
+station its floor is the existing interpolated Path elevation and its Terrain
+cut is `[floor, floor + clearance]`. Cuts affect Terrain solids and never water
+or another independent fill or surface. The Path remains the materialized
+floor after the cut. A Path keeps exactly one interpolated `width_meters`: for
+an additive segment it is the surface width, and for a subtractive segment it
+is both the surface and excavation width. SceneMaker does not reject a narrow
+corridor for an Actor; a consumer applies collision radius and traversal
+profile. A second excavation width is deferred until a real design needs a
+narrow surface inside a deliberately wider void.
+
+In the ordinary top-down view, a subtractive segment hidden below a Terrain
+roof is an authoring wire rather than a falsely visible material surface: solid
+red corridor edges with a dashed red centreline. The wire is pickable, a
+selected Path is emphasized, and its points and Bezier handles are editing
+detail. In a Section plane passing through the excavated span, the roof has
+been clipped away and the real Path floor becomes visible. Exactly overlapping
+Paths remain ambiguous from above; do not hide that with an arbitrary semantic
+choice.
+
+Implement this as focused slices: elevation lighting; the three-way ordinary,
+height and Section view plus shared column resolution; subtractive segment
+documents and editing; cut bake/export with a corresponding consumer-version
+bump; then wire picking and manual acceptance of an additive-to-tunnel-to-
+additive Path through a hill. Export must never silently omit excavation.
+
+A later, separate profile-section tool may project a marked region onto X-Z or
+Y-Z. Its purpose is to inspect stacked tunnels, floors, ceilings, clearance,
+ramps and water spans that a top-down section cannot disambiguate. It is not
+part of the first horizontal Section slice.
+
 ## Done
 
 - Adding Assets through the application is deliberately not planned. For now,
