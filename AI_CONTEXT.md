@@ -137,8 +137,12 @@ quantum, but their horizontal positions do not snap to either raster. Equal
 neighbour positions are valid when their Bezier handles create real arc length,
 which a generated loop may need. Templates refuse routes until composition can
 translate them. Export schema 9 cannot carry them and warns instead of silently
-dropping them. Core and Editor now implement `Draw Ramp`, its preview and its
-whole-body eraser; the Godot application does not expose those controls yet.
+dropping them. `Draw Ramp` is exposed beside River and Hill under Landscape;
+its context bar carries Surface, point mode, width and the shared absolute
+Height. The canvas draws the continuous material-coloured band and its
+centerline, while the height view colours that band from its interpolated
+surface elevation rather than rasterizing it into steps. The eraser removes
+the whole authored route under the pointer.
 
 A flattened loop comes back as a ring whose first point is not repeated at the
 end, with the way home carried in its own `TotalLength` rather than in the last

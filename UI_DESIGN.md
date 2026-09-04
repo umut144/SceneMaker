@@ -93,9 +93,16 @@ abgelegt hat.
 `Ramp` ist eine eigenständige Oberfläche über dem Terrain. Deshalb darf sie
 jedes Terrain-Asset präsentieren, auch wenn dessen normale Authoring-Art
 `cells` oder `curve` ist. Ihr offener Bezier-Entwurf speichert Höhe und Breite
-pro Punkt; Punktpositionen rasten horizontal nicht am Terrain-Raster ein. Die
-engine-neutrale Tool-Interaktion ist vorhanden. Die sichtbare
-Godot-Kontextleiste und Canvas-Darstellung folgen in einem eigenen UI-Slice.
+pro Punkt; Punktpositionen rasten horizontal nicht am Terrain-Raster ein:
+
+```text
+Ramp-Kontext:  Surface [ Grass ▾ ] · Point [ Linear ▾ ] · Width […] · Height […]
+```
+
+Der Canvas zeichnet das kontinuierliche Band in der Assetfarbe mit sichtbarer
+Mittellinie. In der Height Map wird es entlang der interpolierten Höhe
+eingefärbt, nicht in Zellen oder Terrassen zerlegt. Der Eraser markiert und
+entfernt den ganzen Route-Körper unter dem Zeiger.
 
 Beim Betreten eines Bereichs bleibt das gemerkte Asset, wenn es zum Bereich
 passt; sonst wird das erste passende gewählt. Bietet ein Workspace für einen

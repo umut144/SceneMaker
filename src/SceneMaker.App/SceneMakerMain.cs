@@ -53,6 +53,8 @@ public sealed partial class SceneMakerMain : Control
 
     private readonly Label _riverWidthLabel = new();
     private readonly SpinBox _riverWidthEdit = new();
+    private readonly Label _rampWidthLabel = new();
+    private readonly SpinBox _rampWidthEdit = new();
     private readonly CheckBox _snapWaterToggle = new();
     private readonly Label _waterElevationLabel = new();
     private readonly SpinBox _waterElevationEdit = new();
@@ -90,9 +92,9 @@ public sealed partial class SceneMakerMain : Control
     private readonly Button _landscapeNavigationButton = new();
 
     /// <summary>
-    /// Which Landscape area the group opens on. River and ElevationRegion are two
-    /// areas behind one entry, and coming back should land where the author
-    /// left off rather than always on the first of them.
+    /// Which Landscape area the group opens on. River, Ramp and ElevationRegion
+    /// are three areas behind one entry, and coming back should land where the
+    /// author left off rather than always on the first of them.
     /// </summary>
     private EditorMode _landscapeArea = EditorMode.River;
     private readonly Label _mapDimensionsLabel = new();
@@ -218,7 +220,7 @@ public sealed partial class SceneMakerMain : Control
         AddPerspectiveButton(_overviewNavigationBar, "Terrain", available: true, "Terrain foundation view");
         _landscapeNavigationButton.Text = "Landscape";
         _landscapeNavigationButton.TooltipText =
-            "River and Hill: the shapes a landscape is made of.";
+            "River, Ramp and Hill: the shapes a landscape is made of.";
         _landscapeNavigationButton.CustomMinimumSize = new Vector2(130f, 0f);
         _landscapeNavigationButton.Pressed += SelectLandscapeContext;
         _overviewNavigationBar.AddChild(_landscapeNavigationButton);
@@ -351,15 +353,6 @@ public sealed partial class SceneMakerMain : Control
         _contextMenuBar.AddChild(_toolContextLabel);
         _toolContextSeparator.Name = "ToolContextSeparator";
         _contextMenuBar.AddChild(_toolContextSeparator);
-        _elevationLabel.Name = "ElevationLabel";
-        _elevationLabel.Text = "Height";
-        _elevationLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_elevationLabel);
-        _elevationEdit.Name = "Elevation";
-        ConfigureElevationInput(_elevationEdit);
-        _elevationEdit.TooltipText = "The height the drawing tools author at.";
-        _elevationEdit.ValueChanged += SetAuthoringElevation;
-        _contextMenuBar.AddChild(_elevationEdit);
         _propLineOffsetLabel.Name = "PropLineOffsetLabel";
         _propLineOffsetLabel.Text = "Placement Offset";
         _propLineOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -404,6 +397,25 @@ public sealed partial class SceneMakerMain : Control
         _riverWidthEdit.TooltipText = "The width of the corridor around the river's centerline.";
         _riverWidthEdit.ValueChanged += SetRiverWidth;
         _contextMenuBar.AddChild(_riverWidthEdit);
+        _rampWidthLabel.Name = "RampWidthLabel";
+        _rampWidthLabel.Text = "Width";
+        _rampWidthLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_rampWidthLabel);
+        _rampWidthEdit.Name = "RampWidth";
+        ConfigureRampWidthInput(_rampWidthEdit);
+        _rampWidthEdit.TooltipText =
+            "The full width of the independent route surface at the next point.";
+        _rampWidthEdit.ValueChanged += SetRampWidth;
+        _contextMenuBar.AddChild(_rampWidthEdit);
+        _elevationLabel.Name = "ElevationLabel";
+        _elevationLabel.Text = "Height";
+        _elevationLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_elevationLabel);
+        _elevationEdit.Name = "Elevation";
+        ConfigureElevationInput(_elevationEdit);
+        _elevationEdit.TooltipText = "The height the drawing tools author at.";
+        _elevationEdit.ValueChanged += SetAuthoringElevation;
+        _contextMenuBar.AddChild(_elevationEdit);
         _snapWaterToggle.Name = "SnapWaterToTerrain";
         _snapWaterToggle.Text = "Snap";
         _snapWaterToggle.ButtonPressed = true;
@@ -691,8 +703,8 @@ public sealed partial class SceneMakerMain : Control
             { Options.Count: 1 } =>
                 $"This Workspace offers only one {area} Surface, so there is "
                 + "nothing to choose between.",
-            _ => "This Workspace enables no Terrain Asset authored as a curve, so "
-                + $"{area} has no Surface to offer.",
+            _ => $"This Workspace enables no Terrain Asset that {area} can present, "
+                + "so it has no Surface to offer.",
         };
     }
 
@@ -1227,7 +1239,7 @@ public sealed partial class SceneMakerMain : Control
     }
 
     /// <summary>
-    /// The two Landscape areas, side by side inside the context bar. Landscape
+    /// The Landscape areas, side by side inside the context bar. Landscape
     /// is a way in, not a place to be: opening it lands in one of them, and the
     /// other is one click away.
     /// </summary>
@@ -1235,6 +1247,10 @@ public sealed partial class SceneMakerMain : Control
     {
         _landscapeBar.AddChild(new Label { Text = "Landscape  ›" });
         AddLandscapeAreaButton(EditorMode.River, "River", "Draw and erase rivers.");
+        AddLandscapeAreaButton(
+            EditorMode.Ramp,
+            "Ramp",
+            "Draw and erase inclined route surfaces.");
         AddLandscapeAreaButton(
             EditorMode.ElevationRegion,
             "Hill",
@@ -1265,6 +1281,7 @@ public sealed partial class SceneMakerMain : Control
     {
         "Terrain" => EditorMode.Terrain,
         "River" => EditorMode.River,
+        "Ramp" => EditorMode.Ramp,
         "Hill" => EditorMode.ElevationRegion,
         "Placements" => EditorMode.Props,
         "Scene Templates" => EditorMode.Templates,
@@ -1674,8 +1691,15 @@ public sealed partial class SceneMakerMain : Control
     {
         if (_controller.Session is not { } session) return null;
         var mode = _interaction.Mode;
-        if (EditorToolRegistry.TerrainAuthoringFor(mode) is not { } authoring) return null;
         if (TerrainAreaAssets.Offered(mode, session.TerrainAssets).Count > 0) return null;
+        var field = TerrainAreaAssets.SurfaceFieldFor(
+            mode, session.TerrainAssets, _canvas.SelectedTerrainAssetKey);
+        if (field is not null)
+        {
+            return $"{EditorToolRegistry.ModeDisplayName(mode)} needs a Terrain Asset Surface, "
+                + "and this Workspace enables none. Drawing stays disabled here.";
+        }
+        if (EditorToolRegistry.TerrainAuthoringFor(mode) is not { } authoring) return null;
         var kind = authoring == TerrainAuthoring.Curve ? "curve" : "cells";
         return $"{EditorToolRegistry.ModeDisplayName(mode)} needs a Terrain Asset authored as "
             + $"'{kind}', and this Workspace enables none. Drawing stays disabled here.";
@@ -1811,6 +1835,18 @@ public sealed partial class SceneMakerMain : Control
         input.Value = (double)EditorInteractionState.DefaultRiverWidthMeters;
     }
 
+    private static void ConfigureRampWidthInput(SpinBox input)
+    {
+        input.MinValue = 0.125;
+        input.MaxValue = 1024.0;
+        input.Step = 0.125;
+        input.AllowGreater = false;
+        input.AllowLesser = false;
+        input.Suffix = " m";
+        input.CustomMinimumSize = new Vector2(110f, 0f);
+        input.Value = (double)RouteSurfaceEditing.DefaultWidthMeters;
+    }
+
     private void SetCurvePointMode(long item)
     {
         var aligned = _curvePointModeEdit.GetItemId((int)item) == CurvePointModeAligned;
@@ -1827,6 +1863,16 @@ public sealed partial class SceneMakerMain : Control
             SetStatus(aligned
                 ? "Hill: drag the next point to pull its handle, or click for an automatic one."
                 : "Hill: the next contour point makes straight edges.");
+            return;
+        }
+
+        if (_interaction.ActiveTool == EditorTool.DrawRamp)
+        {
+            _interaction.State.SetRoutePointMode(
+                aligned ? RoutePointMode.Aligned : RoutePointMode.Linear);
+            SetStatus(aligned
+                ? "Ramp: drag the next point to pull its handle, or click for an automatic one."
+                : "Ramp: the next point makes its segments straight.");
             return;
         }
 
@@ -1853,6 +1899,13 @@ public sealed partial class SceneMakerMain : Control
         var width = DecimalOf(value);
         _interaction.State.SetRiverWidth(width);
         SetStatus($"River width set to {width:0.###} m.");
+    }
+
+    private void SetRampWidth(double value)
+    {
+        var width = DecimalOf(value);
+        _interaction.State.SetRampWidth(width);
+        SetStatus($"Ramp width for the next point set to {width:0.###} m.");
     }
 
     private void SetSnapWaterToTerrain(bool enabled)
@@ -1906,6 +1959,7 @@ public sealed partial class SceneMakerMain : Control
         var propLineActive = _interaction.Mode == EditorMode.Props
             && _interaction.ActiveTool == EditorTool.Line;
         var riverActive = _interaction.Mode == EditorMode.River;
+        var rampActive = _interaction.Mode == EditorMode.Ramp;
         var elevationRegionActive = _interaction.Mode == EditorMode.ElevationRegion;
         var elevationRegionDrawing = elevationRegionActive
             && _interaction.ActiveTool == EditorTool.DrawElevationRegion;
@@ -1920,25 +1974,31 @@ public sealed partial class SceneMakerMain : Control
             ? selectedElevationRegion.Points.ElementAtOrDefault(selectedPointIndex)
             : null;
         var elevationRegionPointEditing = selectedElevationRegionPoint is not null;
-        var curveActive = riverActive || elevationRegionDrawing || elevationRegionPointEditing;
+        var curveActive = riverActive || rampActive
+            || elevationRegionDrawing || elevationRegionPointEditing;
         _toolContextSeparator.Visible = propLineActive || curveActive;
         _propLineOffsetLabel.Visible = propLineActive;
         _propLineOffsetEdit.Visible = propLineActive;
         _curvePointModeLabel.Visible = curveActive;
         _curvePointModeEdit.Visible = curveActive;
-        // The material of a curve-authored body is one of its properties, so it
-        // sits here beside its width and its heights rather than in a bar.
-        var surfaceActive =
-            EditorToolRegistry.TerrainAuthoringFor(_interaction.Mode) == TerrainAuthoring.Curve;
+        // The material of a curve body or independent route is one of its
+        // properties, so it sits beside width and heights rather than in a bar.
+        var surfaceActive = _controller.Session is { } session
+            && TerrainAreaAssets.SurfaceFieldFor(
+                _interaction.Mode,
+                session.TerrainAssets,
+                _canvas.SelectedTerrainAssetKey) is not null;
         _surfaceLabel.Visible = surfaceActive;
         _surfaceEdit.Visible = surfaceActive;
-        // The two tools keep their own point mode; the shared control only
-        // shows whichever one the active tool authors with.
+        // River, Ramp and Hill keep their own point modes; the shared control
+        // only shows whichever one the active tool authors with.
         var aligned = elevationRegionPointEditing
             ? selectedElevationRegionPoint!.Mode == ElevationRegionPointMode.Aligned
             : elevationRegionDrawing
                 ? _interaction.State.ElevationRegionPointMode == ElevationRegionPointMode.Aligned
-                : _interaction.State.WaterPointMode == WaterPointMode.Aligned;
+                : rampActive
+                    ? _interaction.State.RoutePointMode == RoutePointMode.Aligned
+                    : _interaction.State.WaterPointMode == WaterPointMode.Aligned;
         SelectCurvePointModeItem(aligned ? CurvePointModeAligned : CurvePointModeLinear);
         _curvePointModeEdit.TooltipText = elevationRegionPointEditing
             ? "Changes the selected authored point. Aligned creates editable cyclic Bezier handles."
@@ -1946,6 +2006,8 @@ public sealed partial class SceneMakerMain : Control
                 + "it decides what the next point does and leaves the placed ones alone.";
         _riverWidthLabel.Visible = riverActive;
         _riverWidthEdit.Visible = riverActive;
+        _rampWidthLabel.Visible = rampActive;
+        _rampWidthEdit.Visible = rampActive;
         _snapWaterToggle.Visible = riverActive;
         _waterElevationLabel.Visible = riverActive;
         _waterElevationEdit.Visible = riverActive;
@@ -1954,7 +2016,7 @@ public sealed partial class SceneMakerMain : Control
         _waterClearanceLabel.Visible = riverActive;
         _waterClearanceEdit.Visible = riverActive;
         _waterDerivedSpanLabel.Visible = riverActive;
-        // Height authors Terrain and Props. Water carries its own three, so
+        // Height authors Terrain, Placements and Ramp points. Water carries its own three, so
         // leaving it in reach here would offer a number that changes nothing.
         var elevationRegionHeightEditing = selectedElevationRegion is not null;
         var elevationActive = !riverActive
@@ -1984,7 +2046,10 @@ public sealed partial class SceneMakerMain : Control
         UpdateToolContextLabel();
         // One path, two ways of saying it: a palette hands the author a brush,
         // a Surface field names what the body being drawn is made of.
-        SetStatus(EditorToolRegistry.TerrainAuthoringFor(mode) == TerrainAuthoring.Curve
+        SetStatus(TerrainAreaAssets.SurfaceFieldFor(
+                mode,
+                _controller.Session.TerrainAssets,
+                assetKey) is not null
             ? $"Selected {EditorToolRegistry.ModeDisplayName(mode)} Surface '{asset.Name}' ({asset.AssetKey})."
             : $"Selected Terrain '{asset.Name}' ({asset.AssetKey}).");
     }
@@ -2300,7 +2365,8 @@ public sealed partial class SceneMakerMain : Control
         // An area whose Asset kind the Workspace does not enable keeps its tools
         // visible and dead rather than hiding them: the area exists, it just has
         // nothing to draw with, and the status line says so.
-        var withoutAsset = EditorToolRegistry.TerrainAuthoringFor(_interaction.Mode) is not null
+        var withoutAsset = (EditorToolRegistry.TerrainAuthoringFor(_interaction.Mode) is not null
+                || _interaction.Mode == EditorMode.Ramp)
             && _canvas.SelectedTerrainAssetKey is null;
         foreach (var (tool, control) in _drawingToolControlsByTool)
         {
@@ -2375,6 +2441,8 @@ public sealed partial class SceneMakerMain : Control
         _canvas.ConfigurePropAssets(session.PropAssets);
         ConfigureRiverWidthInput(_riverWidthEdit);
         _interaction.State.SetRiverWidth(DecimalOf(_riverWidthEdit.Value));
+        ConfigureRampWidthInput(_rampWidthEdit);
+        _interaction.State.SetRampWidth(DecimalOf(_rampWidthEdit.Value));
         ConfigureElevationInputs(session.Metrics);
         UpdateSceneSizeMetrics();
         RebuildAssetBars();

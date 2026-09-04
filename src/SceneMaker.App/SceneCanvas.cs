@@ -101,6 +101,8 @@ public sealed partial class SceneCanvas : Control
     // having to remember to invalidate it.
     private SceneDocument? _waterOverlayDocument;
     private IReadOnlyList<WaterOverlay> _waterOverlays = [];
+    private SceneDocument? _routeOverlayDocument;
+    private IReadOnlyList<RouteOverlay> _routeOverlays = [];
 
     public SceneCanvas()
     {
@@ -267,6 +269,8 @@ public sealed partial class SceneCanvas : Control
         foreach (var asset in catalog.Assets)
             colors.Add(asset.AssetKey, Color.FromHtml(asset.Color));
         _terrainColors = colors;
+        _routeOverlayDocument = null;
+        _routeOverlays = [];
         QueueRedraw();
     }
 
@@ -495,6 +499,13 @@ public sealed partial class SceneCanvas : Control
             zoom,
             elevationRange,
             highlighted: Mode is EditorMode.Terrain or EditorMode.River);
+        DrawRouteSurfaces(
+            document,
+            pan,
+            zoom,
+            heightAuthoringPixels,
+            elevationRange,
+            highlighted: Mode == EditorMode.Ramp);
         DrawElevationRegionOutlines(
             document,
             pan,
@@ -522,6 +533,9 @@ public sealed partial class SceneCanvas : Control
                 break;
             case EditorMode.River:
                 DrawWaterToolPreview(document, pan, zoom, heightAuthoringPixels);
+                break;
+            case EditorMode.Ramp:
+                DrawRampToolPreview(document, pan, zoom, heightAuthoringPixels);
                 break;
             case EditorMode.ElevationRegion:
                 DrawElevationRegionToolPreview(document, pan, zoom, heightAuthoringPixels);
@@ -686,6 +700,9 @@ public sealed partial class SceneCanvas : Control
         decimal? high = null;
         foreach (var elevation in EffectiveTerrain(document).Select(static cell => cell.ElevationMeters)
                      .Concat(document.Props.Select(static prop => prop.ElevationMeters))
+                     .Concat(document.RouteSurfaces.SelectMany(
+                         static route => route.Points.Select(
+                             static point => point.ElevationMeters)))
                      .Concat(WaterOverlays(document).SelectMany(
                          overlay => overlay.Cells.Select(WaterElevation))))
         {
@@ -803,6 +820,128 @@ public sealed partial class SceneCanvas : Control
     }
 
     /// <summary>
+    /// Route surfaces remain continuous bands in plan; drawing them through a
+    /// cell raster here would falsely turn their inclined height profile into
+    /// Terrain steps.
+    /// </summary>
+    private void DrawRouteSurfaces(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        (decimal Low, decimal High)? range,
+        bool highlighted)
+    {
+        foreach (var overlay in RouteOverlays(document))
+        {
+            var color = highlighted
+                ? overlay.Color
+                : new Color(overlay.Color.R, overlay.Color.G, overlay.Color.B, 0.24f);
+            DrawRouteBand(
+                overlay.Surface,
+                color,
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels,
+                range);
+            var outline = highlighted
+                ? SelectionColor
+                : new Color(SelectionColor.R, SelectionColor.G, SelectionColor.B, 0.28f);
+            DrawRouteCenterline(overlay.Surface, outline, pan, zoom, sceneHeightAuthoringPixels);
+        }
+    }
+
+    private IReadOnlyList<RouteOverlay> RouteOverlays(SceneDocument document)
+    {
+        if (ReferenceEquals(_routeOverlayDocument, document)) return _routeOverlays;
+
+        List<RouteOverlay> overlays = new(document.RouteSurfaces.Count);
+        foreach (var route in document.RouteSurfaces)
+        {
+            if (!_terrainColors.TryGetValue(route.AssetKey, out var color)) continue;
+            overlays.Add(new RouteOverlay(color, RouteSurfaceGeometry.Prepare(_metrics!, route)));
+        }
+        _routeOverlayDocument = document;
+        _routeOverlays = overlays;
+        return _routeOverlays;
+    }
+
+    private void DrawRouteBand(
+        PreparedRouteSurface surface,
+        Color color,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        (decimal Low, decimal High)? range = null)
+    {
+        Vector2 Screen(double x, double y) => pan + new Vector2(
+            (float)x * zoom,
+            (sceneHeightAuthoringPixels - (float)y) * zoom);
+
+        foreach (var segment in surface.Corridor.Segments)
+        {
+            var chain = segment.Chain;
+            var length = Math.Sqrt(chain.LengthSquared);
+            if (length <= 0.0) continue;
+            var normalX = -chain.DeltaY / length;
+            var normalY = chain.DeltaX / length;
+            var endX = chain.StartX + chain.DeltaX;
+            var endY = chain.StartY + chain.DeltaY;
+            Vector2[] polygon =
+            [
+                Screen(
+                    chain.StartX + normalX * segment.StartHalfWidth,
+                    chain.StartY + normalY * segment.StartHalfWidth),
+                Screen(
+                    endX + normalX * segment.EndHalfWidth,
+                    endY + normalY * segment.EndHalfWidth),
+                Screen(
+                    endX - normalX * segment.EndHalfWidth,
+                    endY - normalY * segment.EndHalfWidth),
+                Screen(
+                    chain.StartX - normalX * segment.StartHalfWidth,
+                    chain.StartY - normalY * segment.StartHalfWidth),
+            ];
+            var segmentColor = range is { } elevationRange
+                ? ElevationColor(
+                    (decimal)surface.ElevationAt(
+                        segment.Chain.StartStation + (length / 2.0)),
+                    elevationRange)
+                : color;
+            DrawColoredPolygon(polygon, segmentColor);
+            if (!segment.CapsAtStart)
+                DrawCircle(
+                    Screen(chain.StartX, chain.StartY),
+                    (float)segment.StartHalfWidth * zoom,
+                    segmentColor);
+            if (!segment.CapsAtEnd)
+                DrawCircle(
+                    Screen(endX, endY),
+                    (float)segment.EndHalfWidth * zoom,
+                    segmentColor);
+        }
+    }
+
+    private void DrawRouteCenterline(
+        PreparedRouteSurface surface,
+        Color color,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        var points = surface.Centerline.Points;
+        if (points.Count < 2) return;
+        var line = new Vector2[points.Count];
+        for (var index = 0; index < points.Count; index++)
+        {
+            line[index] = pan + new Vector2(
+                (float)points[index].X * zoom,
+                (sceneHeightAuthoringPixels - (float)points[index].Y) * zoom);
+        }
+        DrawPolyline(line, color, 2.0f);
+    }
+
+    /// <summary>
     /// Every authored hill as its own closed contour in its own colour.
     ///
     /// <para>The fill stays what the fold produced - the painted Terrain
@@ -909,6 +1048,64 @@ public sealed partial class SceneCanvas : Control
             // direction, so they are drawn as more than another point.
             var isEnd = index == 0 || index == preview.Curve.Count - 1;
             DrawCircle(centre, isEnd ? 5.0f : 3.5f, WaterCurveColor);
+        }
+    }
+
+    private void DrawRampToolPreview(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        if (EraserEnabled)
+        {
+            if (_interaction.PointerAuthoring is not { } pointer) return;
+            var route = RouteSurfaceEditing.FindAt(
+                document, _metrics!, pointer.X, pointer.Y);
+            if (route is null) return;
+            DrawRouteBand(
+                RouteSurfaceGeometry.Prepare(_metrics!, route),
+                new Color(InvalidPreviewColor.R, InvalidPreviewColor.G, InvalidPreviewColor.B, 0.55f),
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels);
+            return;
+        }
+
+        var preview = _interaction.RampPreview(CurrentContext()!);
+        if (preview.Points.Count == 0) return;
+        var fill = SelectedTerrainAssetKey is { } assetKey
+            && _terrainColors.TryGetValue(assetKey, out var assetColor)
+                ? assetColor
+                : DraftPreviewColor;
+        if (preview.Surface is { } surface)
+        {
+            DrawRouteBand(
+                surface,
+                new Color(fill.R, fill.G, fill.B, 0.55f),
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels);
+            DrawRouteCenterline(
+                surface,
+                ValidPreviewColor,
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels);
+        }
+
+        Vector2 Screen(double x, double y) => pan + new Vector2(
+            (float)x * zoom,
+            (sceneHeightAuthoringPixels - (float)y) * zoom);
+        var ink = preview.Surface is null && preview.Points.Count >= 2
+            ? InvalidPreviewColor
+            : DraftPreviewColor;
+        foreach (var point in preview.Curve)
+        {
+            var centre = Screen(point.PositionAuthoringPx.X, point.PositionAuthoringPx.Y);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleInAuthoringPx, Screen);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleOutAuthoringPx, Screen);
+            DrawCircle(centre, 4.0f, ink);
         }
     }
 
@@ -1385,6 +1582,7 @@ public sealed partial class SceneCanvas : Control
 
     /// <summary>One authored body's cells, in the colour of its Asset.</summary>
     private sealed record WaterOverlay(Color Color, IReadOnlyList<WaterCellSpan> Cells);
+    private sealed record RouteOverlay(Color Color, PreparedRouteSurface Surface);
 
     private static ToolKey? ToolKeyFor(Key keycode) => keycode switch
     {
