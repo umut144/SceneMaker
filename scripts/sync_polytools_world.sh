@@ -51,12 +51,8 @@ if ! jq -e '
   and all(.assets[];
     (.asset_key | type == "string" and length > 0)
     and (.display_name | type == "string" and length > 0)
-    and (.asset_type | type == "string")
+    and (.asset_type | type == "string" and length > 0)
     and (.runtime_package == ("PolyToolsRuntimeExports/" + .asset_key + "/manifest.json"))
-    and (.asset_type == "character" or .asset_type == "props"
-      or .asset_type == "weapons" or .asset_type == "terrain"
-      or .asset_type == "icons"
-      or .asset_type == "symbols")
   )
   and (([.assets[].asset_key] | unique | length) == ([.assets[].asset_key] | length))
 ' "$source_catalog" >/dev/null; then
@@ -107,9 +103,10 @@ staging_dir="$(mktemp -d "$import_parent/.polytools-staging.XXXXXX")"
 backup_dir="$(mktemp -d "$import_parent/.polytools-backup.XXXXXX")"
 published_import=0
 
-while IFS=$'\t' read -r asset_key asset_type runtime_package; do
-  [[ -n "$asset_key" ]] || continue
-  manifest_path="$source_world_dir/$runtime_package"
+validate_manifest() {
+  local asset_key="$1"
+  local asset_type="$2"
+  local manifest_path="$3"
   if [[ ! -f "$manifest_path" ]]; then
     printf 'ERROR: missing PolyTools manifest: %s\n' "$manifest_path" >&2
     exit 1
@@ -167,12 +164,61 @@ while IFS=$'\t' read -r asset_key asset_type runtime_package; do
     printf 'ERROR: invalid PolyTools manifest: %s\n' "$manifest_path" >&2
     exit 1
   fi
+}
+
+contains_required_asset() {
+  local candidate="$1"
+  local existing
+  for existing in "${required_asset_keys[@]}"; do
+    [[ "$existing" != "$candidate" ]] || return 0
+  done
+  return 1
+}
+
+required_asset_keys=()
+while IFS= read -r asset_key; do
+  [[ -z "$asset_key" ]] || required_asset_keys+=("$asset_key")
+done < <(jq -r '.assets[] | select(.role == "placement") | .asset_key' "$config_path")
+
+for ((required_index = 0; required_index < ${#required_asset_keys[@]}; required_index++)); do
+  asset_key="${required_asset_keys[$required_index]}"
+  entry="$(jq -r --arg key "$asset_key" '
+    .assets[] | select(.asset_key == $key)
+    | [.asset_key, .asset_type, .runtime_package] | @tsv
+  ' "$source_catalog")"
+  if [[ -z "$entry" ]]; then
+    printf 'ERROR: PolyTools catalog has no geometry entry for Placement %s.\n' "$asset_key" >&2
+    exit 1
+  fi
+  IFS=$'\t' read -r _ asset_type runtime_package <<<"$entry"
+  manifest_path="$source_world_dir/$runtime_package"
+  validate_manifest "$asset_key" "$asset_type" "$manifest_path"
   destination="$staging_dir/$runtime_package"
   mkdir -p "$(dirname "$destination")"
   cp "$manifest_path" "$destination"
-done < <(jq -r '.assets[] | [.asset_key, .asset_type, .runtime_package] | @tsv' "$source_catalog")
 
-cp "$source_catalog" "$staging_dir/catalog.json"
+  while IFS= read -r source_asset_key; do
+    [[ -z "$source_asset_key" ]] && continue
+    if ! contains_required_asset "$source_asset_key"; then
+      required_asset_keys+=("$source_asset_key")
+    fi
+  done < <(jq -r '
+    .components[]
+    | select(.kind == "asset_reference")
+    | .source_asset_key // empty
+  ' "$manifest_path")
+done
+
+if ((${#required_asset_keys[@]} == 0)); then
+  required_asset_keys_json='[]'
+else
+  required_asset_keys_json="$(
+    printf '%s\n' "${required_asset_keys[@]}" | jq -R . | jq -s .
+  )"
+fi
+jq --argjson required "$required_asset_keys_json" '
+  .assets |= map(select(.asset_key as $key | $required | index($key)))
+' "$source_catalog" >"$staging_dir/catalog.json"
 
 if [[ -e "$destination_dir" ]]; then
   mv "$destination_dir" "$backup_dir/polytools"

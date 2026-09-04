@@ -17,11 +17,11 @@ namespace SceneMaker.TestSupport;
 /// The water grid is half a Terrain cell: 0.5 m, or 16 authoring pixels, the
 /// same proportion world01 authors rivers at.
 ///
-/// Assets: <c>grass</c>, <c>river</c> and <c>sand</c> are PolyTools terrain with
-/// the surfaces <c>land</c>, <c>water</c> and <c>sand</c>; <c>stone</c> and
-/// <c>portal</c> are PolyTools props and therefore carry no surface. Only
-/// <c>river</c> is authored as a curve; the other two are painted as cells. A
-/// second curve Asset, <c>lava</c>, is added only when <see cref="Create"/> is
+/// Assets: SceneMaker authors <c>grass</c>, <c>river</c> and <c>sand</c> as
+/// Terrain with the surfaces <c>land</c>, <c>water</c> and <c>sand</c>;
+/// <c>stone</c> and <c>portal</c> are Placements and consume PolyTools geometry.
+/// Only <c>river</c> is authored as a curve; the other two are painted as cells.
+/// A second curve Asset, <c>lava</c>, is added only when <see cref="Create"/> is
 /// asked for it, so an area that draws curves offers a real choice.
 ///
 /// The Workspace directory is named after its key and carries the empty

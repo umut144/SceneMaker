@@ -10,16 +10,16 @@ kind. A surface is an open lower_snake_case token such as `land` or `water`,
 held per Asset rather than per cell so that one Terrain Asset cannot contradict
 itself. Terrain and curve Assets need no PolyTools package merely to exist.
 
-Today each Workspace also consumes a synchronized copy of the current PolyTools
-Runtime Export below `imports/polytools/`. For SceneMaker Assets whose role is
-`placement`, the matching PolyTools Asset contributes visible bounds and its
-pivot/anchor; SceneMaker derives the footprint from that transformed geometry
-and rounds it outward to whole authoring pixels. The current importer still
-loads and validates Catalog schema 1 and every referenced Runtime Manifest
-schema 16, including hierarchy, Asset References and gameplay Regions, even
-though SceneMaker uses none of those other facts. Narrowing that import is
-tracked work. SceneMaker never discovers packages by scanning directories and
-never reads a sibling PolyTools project at runtime.
+Each configured Placement may consume a synchronized PolyTools geometry copy
+below `imports/polytools/`. The matching root Manifest and the transitive Asset
+References its visible shape needs are the whole import: unrelated packages are
+neither copied nor loaded, and a Workspace with no Placements needs no PolyTools
+import at all. SceneMaker derives the footprint and pivot/anchor from that
+transformed geometry and rounds the bounds outward to whole authoring pixels.
+The catalog's name and `asset_type` are validated only as source structure; they
+never become authoring identity or classification. SceneMaker never discovers
+packages by scanning directories and never reads a sibling PolyTools project at
+runtime.
 
 ## Authoring ownership
 

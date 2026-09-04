@@ -168,28 +168,15 @@ It should expose mistakes the top-down view cannot: insufficient headroom,
 unsupported or unreachable surfaces, an unintended tunnel roof, and whether a
 boat or walker can actually pass beneath a bridge.
 
-## 8. The PolyTools import is still broader than Placement geometry
+## 8. The Workspace Asset dialog cannot add or import an Asset
 
-SceneMaker now owns its closed authoring catalog in `config.json`: enablement,
-display name, role, editor color, surface token and authoring kind. Terrain and
-curve Assets no longer need a PolyTools entry, and a PolyTools `asset_type`
-cannot decide their SceneMaker role. Placements alone join to imported visible
-bounds and a pivot/anchor by stable `asset_key`.
-
-The loader and sync boundary remain broader than that semantic dependency.
-`PolyToolsCatalogImporter` still reads and validates the complete synchronized
-catalog and every referenced Manifest before a Workspace opens, and the sync
-script still copies all packages. A broken, unrelated Terrain or Character
-Manifest can therefore block authors who only need SceneMaker Terrain, River or
-Mountain. Narrow the imported document and synchronization to the geometry
-entries requested by configured Placements, while preserving atomic Workspace
-loading, footprint rounding and anchor behavior pinned by the characterization
-tests.
-
-The Workspace Asset dialog also has no add-new-profile interaction yet. It can
-edit or remove the profiles already in `config.json`, but a removed or entirely
-new Asset must currently be added by editing that file. Add an explicit Asset
-action before treating this dialog as the complete catalog-management UX.
+The dialog edits or removes profiles already present in `config.json`, but a
+removed or entirely new Asset must currently be added by editing that file. A
+new Placement additionally needs its PolyTools geometry synchronized before the
+open session can derive its footprint, so simply adding an empty row would make
+the save circular. Add one explicit action that can author the SceneMaker
+profile and, for a Placement, synchronize or select its geometry before the new
+session is adopted. Terrain needs no import and should remain addable on its own.
 
 The editor now says **Placements**, while internal `Prop*` types and the
 persisted `props` array deliberately remain unchanged. Renaming those would be
@@ -207,6 +194,13 @@ has a consumer and tests.
   footprint and pivot/anchor. The sync no longer rewrites `config.json` from
   PolyTools, so `Water`, `Lava` or another curve surface remains SceneMaker's
   choice rather than an imported package name.
+- PolyTools is a Placement-geometry boundary rather than a second authoring
+  catalog. Workspace loading requests only the configured Placement roots and
+  their transitive Asset References; unrelated Manifests are not opened, and a
+  Workspace without Placements opens without an import. Synchronization copies
+  the same closure and writes a filtered catalog, leaving `config.json`
+  untouched. The geometry result exposes only stable key and bounds — imported
+  display names and `asset_type`s no longer cross into SceneMaker's model.
 
 - A mountain carries no material. `MountainBodyDocument` lost its `asset_key`
   and Scene schema moved 11 to 12; the four authored documents under

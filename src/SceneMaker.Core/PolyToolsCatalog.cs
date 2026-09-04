@@ -3,12 +3,6 @@ using System.Text.Json;
 
 namespace SceneMaker.Core;
 
-public enum PolyToolsAssetType
-{
-    Terrain,
-    Prop,
-}
-
 public sealed record AssetBoundsMeters(
     decimal MinimumX,
     decimal MinimumY,
@@ -17,8 +11,6 @@ public sealed record AssetBoundsMeters(
 
 public sealed record PolyToolsCatalogAsset(
     string AssetKey,
-    PolyToolsAssetType AssetType,
-    string Name,
     AssetBoundsMeters BoundsMeters);
 
 public sealed class PolyToolsCatalog
@@ -36,6 +28,12 @@ public sealed class PolyToolsCatalog
     public string WorldKey { get; }
     public IReadOnlyList<PolyToolsCatalogAsset> Assets => [.. _assets.Values];
 
+    internal static PolyToolsCatalog Empty(string worldKey)
+    {
+        DocumentValidation.ValidateStableId("Workspace key", worldKey);
+        return new PolyToolsCatalog(worldKey, new(StringComparer.Ordinal));
+    }
+
     public PolyToolsCatalogAsset Resolve(string assetKey) =>
         _assets.TryGetValue(assetKey, out var asset)
             ? asset
@@ -51,7 +49,27 @@ public static class PolyToolsCatalogImporter
     public const int CatalogSchemaVersion = 1;
     public const int ManifestSchemaVersion = 16;
 
-    public static PolyToolsCatalog Load(string workspaceDirectory)
+    /// <summary>
+    /// Imports every legacy authoring Asset. Tests for the PolyTools boundary
+    /// use this entry point directly; a Workspace session uses the narrower
+    /// overload below and asks only for configured Placement geometry.
+    /// </summary>
+    public static PolyToolsCatalog Load(string workspaceDirectory) =>
+        Load(workspaceDirectory, requestedAssetKeys: null);
+
+    public static PolyToolsCatalog Load(
+        string workspaceDirectory,
+        IEnumerable<string> requestedAssetKeys)
+    {
+        ArgumentNullException.ThrowIfNull(requestedAssetKeys);
+        return Load(
+            workspaceDirectory,
+            requestedAssetKeys.ToHashSet(StringComparer.Ordinal));
+    }
+
+    private static PolyToolsCatalog Load(
+        string workspaceDirectory,
+        IReadOnlySet<string>? requestedAssetKeys)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
         var importDirectory = Path.Combine(
@@ -78,13 +96,8 @@ public static class PolyToolsCatalogImporter
                 var entryObject = RequireObject(element, "PolyTools catalog asset");
                 var key = RequireString(entryObject, "asset_key", "PolyTools catalog asset");
                 DocumentValidation.ValidateStableId("PolyTools asset_key", key);
-                var displayName = RequireString(entryObject, "display_name", $"PolyTools asset '{key}'");
+                _ = RequireString(entryObject, "display_name", $"PolyTools asset '{key}'");
                 var assetType = RequireString(entryObject, "asset_type", $"PolyTools asset '{key}'");
-                if (assetType is not ("character" or "props" or "weapons" or "terrain" or "icons" or "symbols"))
-                {
-                    throw new SceneMakerDocumentException(
-                        $"PolyTools asset '{key}' has unsupported asset_type '{assetType}'.");
-                }
                 var runtimePackage = RequireString(
                     entryObject, "runtime_package", $"PolyTools asset '{key}'");
                 var expectedPackage = $"PolyToolsRuntimeExports/{key}/manifest.json";
@@ -95,42 +108,44 @@ public static class PolyToolsCatalogImporter
                 }
                 if (!catalogEntries.TryAdd(
                         key,
-                        new CatalogEntry(key, displayName, assetType, runtimePackage)))
+                        new CatalogEntry(key, assetType, runtimePackage)))
                 {
                     throw new SceneMakerDocumentException(
                         $"PolyTools catalog contains duplicate asset_key '{key}'.");
                 }
             }
 
-            Dictionary<string, RuntimeManifest> manifests = new(StringComparer.Ordinal);
-            foreach (var entry in catalogEntries.Values)
+            var roots = requestedAssetKeys is null
+                ? catalogEntries.Values
+                    .Where(static entry => entry.AssetType is "terrain" or "props")
+                    .ToArray()
+                : catalogEntries.Values
+                    .Where(entry => requestedAssetKeys.Contains(entry.AssetKey))
+                    .ToArray();
+            if (requestedAssetKeys is not null && roots.Length != requestedAssetKeys.Count)
             {
-                var manifestPath = Path.Combine(
-                    importDirectory,
-                    entry.RuntimePackage.Replace('/', Path.DirectorySeparatorChar));
-                manifests.Add(entry.AssetKey, LoadManifest(manifestPath, entry));
+                var missing = requestedAssetKeys
+                    .Where(key => !catalogEntries.ContainsKey(key))
+                    .Order(StringComparer.Ordinal)
+                    .First();
+                throw new SceneMakerDocumentException(
+                    $"Placement asset_key '{missing}' has no synchronized PolyTools geometry.");
             }
 
-            SortedDictionary<string, PolyToolsCatalogAsset> assets = new(StringComparer.Ordinal);
-            foreach (var entry in catalogEntries.Values)
-            {
-                var authoringType = entry.AssetType switch
-                {
-                    "terrain" => PolyToolsAssetType.Terrain,
-                    "props" => PolyToolsAssetType.Prop,
-                    _ => (PolyToolsAssetType?)null,
-                };
-                if (authoringType is null) continue;
+            Dictionary<string, RuntimeManifest> manifests = new(StringComparer.Ordinal);
+            foreach (var rootEntry in roots)
+                LoadManifestClosure(importDirectory, rootEntry, catalogEntries, manifests);
 
+            SortedDictionary<string, PolyToolsCatalogAsset> assets = new(StringComparer.Ordinal);
+            foreach (var entry in roots)
+            {
                 var bounds = BoundsForAsset(
                     manifests[entry.AssetKey], manifests, new HashSet<string>(StringComparer.Ordinal));
                 assets.Add(entry.AssetKey, new PolyToolsCatalogAsset(
                     entry.AssetKey,
-                    authoringType.Value,
-                    entry.DisplayName,
                     bounds));
             }
-            if (assets.Count == 0)
+            if (requestedAssetKeys is null && assets.Count == 0)
             {
                 throw new SceneMakerDocumentException(
                     "PolyTools catalog contains no terrain or props available for authoring.");
@@ -146,6 +161,34 @@ public static class PolyToolsCatalogImporter
         {
             throw new SceneMakerDocumentException(
                 $"Could not import synchronized PolyTools catalog: {exception.Message}", exception);
+        }
+    }
+
+    private static void LoadManifestClosure(
+        string importDirectory,
+        CatalogEntry entry,
+        IReadOnlyDictionary<string, CatalogEntry> catalogEntries,
+        IDictionary<string, RuntimeManifest> manifests)
+    {
+        if (manifests.ContainsKey(entry.AssetKey)) return;
+        var manifestPath = Path.Combine(
+            importDirectory,
+            entry.RuntimePackage.Replace('/', Path.DirectorySeparatorChar));
+        var manifest = LoadManifest(manifestPath, entry);
+        manifests.Add(entry.AssetKey, manifest);
+
+        foreach (var sourceAssetKey in manifest.Components.Values
+                     .Select(static component => component.SourceAssetKey)
+                     .Where(static key => key is not null)
+                     .Cast<string>()
+                     .Distinct(StringComparer.Ordinal))
+        {
+            if (!catalogEntries.TryGetValue(sourceAssetKey, out var sourceEntry))
+            {
+                throw new SceneMakerDocumentException(
+                    $"PolyTools Asset Reference targets missing asset '{sourceAssetKey}'.");
+            }
+            LoadManifestClosure(importDirectory, sourceEntry, catalogEntries, manifests);
         }
     }
 
@@ -575,7 +618,6 @@ public static class PolyToolsCatalogImporter
 
     private sealed record CatalogEntry(
         string AssetKey,
-        string DisplayName,
         string AssetType,
         string RuntimePackage);
 

@@ -3,8 +3,9 @@ namespace SceneMaker.Core;
 /// <summary>
 /// One open Workspace with everything derived from it, held as a single value.
 /// A session either exists completely or not at all: there is no state in which
-/// a Workspace is open but its PolyTools catalog, its configuration or its
-/// display catalogs are missing.
+/// a Workspace is open but its configuration or display catalogs are missing.
+/// Placement geometry is a catalog too, but it is legitimately empty when the
+/// Workspace configures no Placements.
 ///
 /// This lives in Core, not in the editor: opening a Workspace is not an editor
 /// concern, and the headless exporter does exactly the same thing.
@@ -26,16 +27,24 @@ public sealed record WorkspaceSession(
 
     /// <summary>
     /// Opens the Workspace in <paramref name="workspaceDirectory"/>. Throws
-    /// <see cref="SceneMakerDocumentException"/> when the Workspace, its
-    /// synchronized PolyTools import or its configuration cannot be read.
+    /// <see cref="SceneMakerDocumentException"/> when the Workspace or its
+    /// configuration cannot be read, or when a configured Placement's
+    /// synchronized PolyTools geometry is unavailable.
     /// </summary>
     public static WorkspaceSession Load(string workspaceDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
         var workspace = WorkspaceStore.Load(workspaceDirectory);
         var configuration = WorkspaceConfigurationStore.Load(workspace.DirectoryPath);
-        var catalog = PolyToolsCatalogImporter.Load(workspaceDirectory);
-        if (!string.Equals(configuration.WorkspaceKey, catalog.WorldKey, StringComparison.Ordinal))
+        var placementKeys = configuration.AssetProfiles
+            .Where(static profile => profile.Role == WorkspaceAssetRole.Placement)
+            .Select(static profile => profile.AssetKey)
+            .ToArray();
+        var catalog = placementKeys.Length == 0
+            ? PolyToolsCatalog.Empty(configuration.WorkspaceKey)
+            : PolyToolsCatalogImporter.Load(workspace.DirectoryPath, placementKeys);
+        if (placementKeys.Length > 0
+            && !string.Equals(configuration.WorkspaceKey, catalog.WorldKey, StringComparison.Ordinal))
         {
             throw new SceneMakerDocumentException(
                 $"Workspace '{configuration.WorkspaceKey}' requires PolyTools world "

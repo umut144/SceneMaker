@@ -14,7 +14,9 @@ Runtime Export and copy it into a Workspace-local import boundary.
 - A Workspace-local `imports/polytools/` boundary may contribute visible bounds
   and pivots/anchors to SceneMaker Assets whose role is `placement`, joined by
   `asset_key`. Its catalog and referenced Manifests are synchronized copies,
-  never live sibling reads. Terrain Assets require no PolyTools package.
+  never live sibling reads. Only configured Placement roots and their
+  transitive geometry references belong there; Terrain Assets require no
+  PolyTools package, and a Workspace without Placements needs no import.
 - Scenes and templates are workspace data. Their documents use `asset_key`s,
   never numeric IDs.
 - No hidden metric defaults, directory-discovered Assets, or game-specific

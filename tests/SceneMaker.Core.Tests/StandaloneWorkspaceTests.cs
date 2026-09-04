@@ -407,6 +407,36 @@ public sealed class StandaloneWorkspaceTests
     }
 
     [Fact]
+    public void NarrowImportIncludesTransitiveGeometryReferencesButOnlyExposesTheRoot()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game07_refs", treeComponents: """
+            {
+              "component_id": "grass_reference",
+              "parent_component_id": null,
+              "kind": "asset_reference",
+              "source_asset_key": "grass",
+              "local_transform": {
+                "position": [2.0, 0.0],
+                "rotation_radians": 0.0,
+                "scale": [1.0, 1.0]
+              },
+              "mesh": null,
+              "contour_stroke_mesh": null
+            }
+        """);
+
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path, ["tree"]);
+        var tree = Assert.Single(catalog.Assets);
+
+        Assert.Equal("tree", tree.AssetKey);
+        Assert.Equal(1.5m, tree.BoundsMeters.MinimumX);
+        Assert.Equal(-0.5m, tree.BoundsMeters.MinimumY);
+        Assert.Equal(2.5m, tree.BoundsMeters.MaximumX);
+        Assert.Equal(0.5m, tree.BoundsMeters.MaximumY);
+    }
+
+    [Fact]
     public void ImportValidatesBothRegionGeometryVariantsWithoutChangingVisibleBounds()
     {
         using var directory = TemporaryDirectory.Create();

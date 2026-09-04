@@ -8,7 +8,10 @@ trap 'rm -rf -- "$test_root"' EXIT
 
 source_world="$test_root/source/world01"
 workspace="$test_root/workspace/world01"
-mkdir -p "$source_world/PolyToolsRuntimeExports/tree" "$workspace/imports"
+mkdir -p \
+  "$source_world/PolyToolsRuntimeExports/tree" \
+  "$source_world/PolyToolsRuntimeExports/leaf" \
+  "$workspace/imports"
 
 cat >"$source_world/catalog.json" <<'JSON'
 {
@@ -21,6 +24,18 @@ cat >"$source_world/catalog.json" <<'JSON'
       "display_name": "Tree",
       "asset_type": "terrain",
       "runtime_package": "PolyToolsRuntimeExports/tree/manifest.json"
+    },
+    {
+      "asset_key": "broken",
+      "display_name": "Broken but unused",
+      "asset_type": "character",
+      "runtime_package": "PolyToolsRuntimeExports/broken/manifest.json"
+    },
+    {
+      "asset_key": "leaf",
+      "display_name": "Referenced leaf",
+      "asset_type": "items",
+      "runtime_package": "PolyToolsRuntimeExports/leaf/manifest.json"
     }
   ]
 }
@@ -46,6 +61,12 @@ cat >"$workspace/config.json" <<'JSON'
       "color": "#123456",
       "surface": "forest",
       "authoring": "cells"
+    },
+    {
+      "asset_key": "tree",
+      "display_name": "Oak",
+      "role": "placement",
+      "color": "#2E7D32"
     }
   ]
 }
@@ -71,6 +92,16 @@ cat >"$manifest" <<'JSON'
         "vertices": [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
         "indices": [0, 1, 2]
       }
+    },
+    {
+      "component_id": "leaf_reference",
+      "kind": "asset_reference",
+      "source_asset_key": "leaf",
+      "local_transform": {
+        "position": [0.0, 0.0],
+        "rotation_radians": 0.0,
+        "scale": [1.0, 1.0]
+      }
     }
   ],
   "regions": [
@@ -94,25 +125,74 @@ cat >"$manifest" <<'JSON'
 }
 JSON
 
+cat >"$source_world/PolyToolsRuntimeExports/leaf/manifest.json" <<'JSON'
+{
+  "schema_version": 16,
+  "asset_key": "leaf",
+  "display_name": "Referenced leaf",
+  "asset_type": "items",
+  "asset_pivot": [0.0, 0.0],
+  "components": [
+    {
+      "component_id": "body",
+      "local_transform": {
+        "position": [0.0, 0.0],
+        "rotation_radians": 0.0,
+        "scale": [1.0, 1.0]
+      },
+      "mesh": {
+        "vertices": [[0.0, 0.0], [0.25, 0.25]],
+        "indices": [0, 1, 1]
+      }
+    }
+  ],
+  "regions": []
+}
+JSON
+
+full_config="$test_root/full-config.json"
+cp "$workspace/config.json" "$full_config"
+jq '.assets |= map(select(.role == "terrain"))' \
+  "$workspace/config.json" >"$test_root/terrain-only-config.json"
+mv "$test_root/terrain-only-config.json" "$workspace/config.json"
+POLYTOOLS_WORLD_DIR="$source_world" \
+SCENEMAKER_WORKSPACE_DIR="$workspace" \
+  "$project_directory/scripts/sync_polytools_world.sh"
+jq -e '.assets == []' "$workspace/imports/polytools/catalog.json" >/dev/null
+test ! -e "$workspace/imports/polytools/PolyToolsRuntimeExports/tree/manifest.json"
+mv "$full_config" "$workspace/config.json"
+
 POLYTOOLS_WORLD_DIR="$source_world" \
 SCENEMAKER_WORKSPACE_DIR="$workspace" \
   "$project_directory/scripts/sync_polytools_world.sh"
 
 imported_manifest="$workspace/imports/polytools/PolyToolsRuntimeExports/tree/manifest.json"
 jq -e '.schema_version == 16 and (.regions | length == 2)' "$imported_manifest" >/dev/null
-jq -e '.assets == [{
-  "asset_key": "bog",
-  "display_name": "Bog",
-  "role": "terrain",
-  "color": "#123456",
-  "surface": "forest",
-  "authoring": "cells"
-}]' "$workspace/config.json" >/dev/null
+jq -e '.assets == [
+  {
+    "asset_key": "bog",
+    "display_name": "Bog",
+    "role": "terrain",
+    "color": "#123456",
+    "surface": "forest",
+    "authoring": "cells"
+  },
+  {
+    "asset_key": "tree",
+    "display_name": "Oak",
+    "role": "placement",
+    "color": "#2E7D32"
+  }
+]' "$workspace/config.json" >/dev/null
+jq -e '[.assets[].asset_key] == ["tree", "leaf"]' \
+  "$workspace/imports/polytools/catalog.json" >/dev/null
+test -f "$workspace/imports/polytools/PolyToolsRuntimeExports/leaf/manifest.json"
+test ! -e "$workspace/imports/polytools/PolyToolsRuntimeExports/broken/manifest.json"
 published_checksum=$(cksum "$imported_manifest")
 
 valid_config="$test_root/valid-config.json"
 cp "$workspace/config.json" "$valid_config"
-jq '.assets[0].role = "placement" | .assets[0] |= del(.surface, .authoring)' \
+jq '.assets[1].asset_key = "missing"' \
   "$workspace/config.json" >"$test_root/missing-geometry.json"
 mv "$test_root/missing-geometry.json" "$workspace/config.json"
 if POLYTOOLS_WORLD_DIR="$source_world" \
