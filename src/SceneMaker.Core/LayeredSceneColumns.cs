@@ -105,6 +105,10 @@ public sealed class LayeredSceneColumns
     private readonly int _sceneHeightAuthoringPixels;
     private readonly IReadOnlyDictionary<TerrainCellCoordinate, TerrainCellDocument> _terrain;
     private readonly IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<WaterLayer>> _water;
+    // Section drawing asks every visible cell again on every redraw. Resolve a
+    // column only once for this immutable prepared Scene instead of allocating
+    // its interval lists per frame.
+    private readonly Dictionary<WaterCellCoordinate, LayeredSceneColumn> _resolved = [];
 
     private LayeredSceneColumns(
         SceneDocument scene,
@@ -191,6 +195,7 @@ public sealed class LayeredSceneColumns
             return Empty();
 
         var coordinate = new WaterCellCoordinate(x, y);
+        if (_resolved.TryGetValue(coordinate, out var resolved)) return resolved;
         _water.TryGetValue(coordinate, out var water);
         water ??= [];
         var terrainCoordinate = new TerrainCellCoordinate(
@@ -198,7 +203,7 @@ public sealed class LayeredSceneColumns
             WorkspaceMetrics.FloorDivide(y, _metrics.WaterCellsPerTerrainCell));
         _terrain.TryGetValue(terrainCoordinate, out var terrain);
 
-        return new LayeredSceneColumn(
+        resolved = new LayeredSceneColumn(
             ResolveTerrain(terrain, water),
             [.. water.Select(static layer => new LayeredColumnSpan(
                     layer.BedMeters,
@@ -206,6 +211,8 @@ public sealed class LayeredSceneColumns
                     layer.AssetKey,
                     LayeredColumnSpanKind.IndependentFill,
                     layer.WaterBodyId))]);
+        _resolved.Add(coordinate, resolved);
+        return resolved;
     }
 
     private static IReadOnlyList<LayeredColumnSpan> ResolveTerrain(

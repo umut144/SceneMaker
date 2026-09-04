@@ -6,6 +6,34 @@ namespace SceneMaker.Editor.Tests;
 public sealed class CanvasViewStateTests
 {
     [Fact]
+    public void PresentationIsAThreeWayTransientChoiceWithASectionElevation()
+    {
+        var view = new CanvasViewState(sectionElevationMeters: 1.125m);
+
+        Assert.Equal(CanvasPresentationMode.Normal, view.PresentationMode);
+        Assert.Equal(1.125m, view.SectionElevationMeters);
+
+        view.SelectPresentation(CanvasPresentationMode.Heightmap);
+        Assert.Equal(CanvasPresentationMode.Heightmap, view.PresentationMode);
+
+        view.SelectPresentation(CanvasPresentationMode.Section);
+        view.SetSectionElevation(8.25m);
+        Assert.Equal(CanvasPresentationMode.Section, view.PresentationMode);
+        Assert.Equal(8.25m, view.SectionElevationMeters);
+    }
+
+    [Fact]
+    public void PresentationRejectsValuesOutsideItsClosedChoice()
+    {
+        var view = new CanvasViewState();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            view.SelectPresentation((CanvasPresentationMode)99));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new CanvasViewState(presentationMode: (CanvasPresentationMode)99));
+    }
+
+    [Fact]
     public void ZoomKeepsTheLogicalPointUnderThePivotInPlace()
     {
         var view = new CanvasViewState(panX: 10.0, panY: 20.0, zoom: 1.0);

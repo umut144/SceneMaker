@@ -342,6 +342,22 @@ to the Workspace water grid because that is the finest authored volumetric
 raster; the authoring-position entry keeps the query engine-neutral for later
 continuous Path cuts.
 
+The Canvas now exposes that answer as a third, transient presentation beside
+the ordinary Asset view and the blue height map. `CanvasViewState` owns the
+mutually exclusive choice and the Section elevation; the App only snaps the
+number to the open Workspace quantum and projects `VisibleAt` at water-raster
+resolution. Moving the plane never changes the complete-document lighting
+range. Prepared columns memoize each resolved cell because a redraw asks the
+same immutable Scene repeatedly.
+
+This first horizontal Section deliberately draws only what the shared column
+model resolves today: painted Terrain after Elevation Regions, plus water cuts
+and fills. Persisted Paths and Props are omitted rather than drawn over roofs
+with invented occlusion. Technical authoring overlays and active previews stay
+visible so choosing the view never disables a tool. Paths join the columns when
+their subtractive operation is introduced; Props wait for an actual layered
+surface rule.
+
 A Path is an independently materialized open route rather than a sequence of
 raised Terrain cells. It can describe a level way, a ramp or a descent. Its
 first point carries a directly authored absolute surface height. Each later

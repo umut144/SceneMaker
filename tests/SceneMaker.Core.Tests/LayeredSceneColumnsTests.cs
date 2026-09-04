@@ -256,6 +256,21 @@ public sealed class LayeredSceneColumnsTests
         Assert.Equal(1m, neighbour.ElevationMeters);
     }
 
+    [Fact]
+    public void APreparedSceneResolvesEachInBoundsColumnOnlyOnce()
+    {
+        using var workspace = TestWorkspace.Create();
+        var columns = LayeredSceneColumns.Prepare(
+            TestScenes.Instance(workspace), workspace.Metrics);
+
+        var first = columns.AtWaterCell(3, 2);
+        var second = columns.AtWaterCell(3, 2);
+        var throughAuthoringPosition = columns.AtAuthoringPosition(56, 40);
+
+        Assert.Same(first, second);
+        Assert.Same(first, throughAuthoringPosition);
+    }
+
     private static SceneDocument Hill(
         SceneDocument scene,
         TestWorkspace workspace,

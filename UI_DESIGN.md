@@ -423,8 +423,10 @@ Die rechte Leiste trennt zwei Sorten Schalter durch einen Separator. Oberhalb
 steht, was die Werkzeuge *anders arbeiten* lässt — derzeit der `Eraser`.
 Unterhalb steht, was die Karte *anders aussehen* lässt.
 
-Dort sitzt die Höhenansicht (`m`). Sie färbt Terrain, Placements und Wasser nach ihrer
-Höhe statt nach ihrem Asset, mit einem einzigen Blauton von dunkel nach hell:
+Dort sitzen drei gegenseitig ausschließende Ansichten. Sind beide Schalter aus,
+zeigt der Canvas die normale Asset-Ansicht. Die Höhenansicht (`m`) färbt Terrain,
+Placements und Wasser nach ihrer Höhe statt nach ihrem Asset, mit einem einzigen
+Blauton von dunkel nach hell:
 tiefer Grund tritt zum Hintergrund zurück, hoher Grund hebt sich ab. Wasser hat
 drei relevante Grenzen; die Auswahl unter dem aktivierten Schalter zeigt
 wahlweise `Surface`, `Bed` oder `Cut top`. Terrain und Placements behalten dabei ihre
@@ -434,8 +436,24 @@ Legende oben rechts auf der Canvas nennt Auswahl und beide Enden — ohne sie
 wären die Farben bedeutungslos. Eine Scene mit nur einer Höhe sagt das statt
 eine Spanne zu zeigen.
 
-Die Höhenansicht ist eine Sicht, kein Modus: Zeichnen, Platzieren, Radieren und
-Auswählen funktionieren unverändert weiter.
+Die Schnittansicht (`S`) entfernt alles strikt oberhalb einer horizontalen Ebene
+und blickt anschließend von oben auf die höchste verbleibende Oberfläche. Ihre
+Höhe steht als `Section` im ContextMenu, folgt dem
+`elevation_quantum_meters` des offenen Workspace und zeigt auch ein Quantum von
+`0.125 m` vollständig an. Eine Ebene innerhalb eines Hills zeigt dessen
+Schnittfläche; am oder über dem höchsten Punkt bleibt seine volle Oberfläche
+sichtbar. Liegt die Ebene in einem ausgeschnittenen River-Korridor, kann darunter
+der River, sein Bett oder ein tieferer Terrain-Span sichtbar werden.
+
+Der erste Schnitt umfasst die volumetrisch aufgelösten Inhalte: Terrain nach
+Hill-Faltung sowie River-Schnitte und -Füllungen. Persistierte Paths und
+Placements werden in der Schnittansicht vorerst nicht gezeichnet, weil ihre
+Occlusion noch nicht Teil derselben Spaltenauswertung ist. Werkzeugvorschauen,
+Hill-Konturen, Raster und Anchors bleiben als technische Authoring-Hilfen
+sichtbar.
+
+Höhen- und Schnittansicht sind Sichten, keine Arbeitsmodi: Zeichnen, Platzieren,
+Radieren und Auswählen funktionieren unverändert weiter.
 
 Die `ToolOptionsBar` ist eine feste, vertikale Optionsleiste rechts neben dem
 Canvas und kein dynamisches `ContextMenu`. Ihre Elemente wechseln nicht

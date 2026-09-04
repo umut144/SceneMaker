@@ -213,8 +213,8 @@ horizontal section elevation must not renormalize the colours and make the
 whole Canvas jump. The existing height view remains the precise numerical
 inspection tool.
 
-Add a mutually exclusive horizontal **Section** view beside the ordinary and
-height views. It is a top-down clipping plane, not a view of only the material
+The mutually exclusive horizontal **Section** view now exists beside the
+ordinary and height views. It is a top-down clipping plane, not a view of only the material
 that intersects one infinitesimally thin elevation: remove everything above
 the chosen elevation, then look down on the highest remaining surface or cut
 face at each X/Y. A hill ending at `10 m` is therefore cut and coloured at the
@@ -223,6 +223,14 @@ whole above `10 m`. The ordinary view is the same operation with no finite
 upper clip. The Section elevation is transient view state, steps in the open
 Workspace's `elevation_quantum_meters`, displays enough decimal places for
 `0.125 m`, and is never written to a Scene or export.
+
+Its first Canvas projection is intentionally limited to the contents already
+resolved by `LayeredSceneColumns`: Terrain after Hill folding and River cuts
+and fills. Persisted Paths and Placements are hidden in Section rather than
+painted over clipped roofs with a false draw-order answer; tool previews and
+technical contours remain usable. Integrating subtractive Paths into these
+columns is the next slice. Placements stay out until they acquire an actual
+layered-surface or occlusion rule.
 
 The engine-neutral column-resolution foundation now exists instead of a second
 Canvas-only interpretation. `LayeredSceneColumns` prepares painted Terrain
@@ -263,9 +271,9 @@ been clipped away and the real Path floor becomes visible. Exactly overlapping
 Paths remain ambiguous from above; do not hide that with an arbitrary semantic
 choice.
 
-Implement the remaining work as focused slices: the three-way ordinary, height
-and Section view backed by the prepared columns; subtractive segment documents
-and editing; cut bake/export with a corresponding consumer-version bump; then
+Implement the remaining work as focused slices: subtractive segment documents
+and editing; integrate their cuts and floors into the shared columns; cut
+bake/export with a corresponding consumer-version bump; then
 wire picking and manual acceptance of an additive-to-tunnel-to-additive Path
 through a hill. Export must never silently omit excavation.
 

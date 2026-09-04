@@ -1,5 +1,13 @@
 namespace SceneMaker.Editor;
 
+/// <summary>How the authored Scene is projected onto the two-dimensional Canvas.</summary>
+public enum CanvasPresentationMode
+{
+    Normal,
+    Heightmap,
+    Section,
+}
+
 public sealed class CanvasViewState
 {
     public const double MinimumZoom = 0.25;
@@ -9,22 +17,42 @@ public sealed class CanvasViewState
     private double _keyboardPanVelocityX;
     private double _keyboardPanVelocityY;
 
-    public CanvasViewState(double panX = 32.0, double panY = 32.0, double zoom = 1.0)
+    public CanvasViewState(
+        double panX = 32.0,
+        double panY = 32.0,
+        double zoom = 1.0,
+        CanvasPresentationMode presentationMode = CanvasPresentationMode.Normal,
+        decimal sectionElevationMeters = 0m)
     {
         if (!double.IsFinite(panX) || !double.IsFinite(panY))
             throw new ArgumentOutOfRangeException(nameof(panX), "Canvas pan must be finite.");
         if (!double.IsFinite(zoom) || zoom < MinimumZoom || zoom > MaximumZoom)
             throw new ArgumentOutOfRangeException(nameof(zoom), "Canvas zoom is outside its view range.");
+        if (!Enum.IsDefined(presentationMode))
+            throw new ArgumentOutOfRangeException(nameof(presentationMode));
         PanX = panX;
         PanY = panY;
         Zoom = zoom;
+        PresentationMode = presentationMode;
+        SectionElevationMeters = sectionElevationMeters;
     }
 
     public double PanX { get; private set; }
     public double PanY { get; private set; }
     public double Zoom { get; private set; }
+    public CanvasPresentationMode PresentationMode { get; private set; }
+    public decimal SectionElevationMeters { get; private set; }
     public double KeyboardPanVelocityX => _keyboardPanVelocityX;
     public double KeyboardPanVelocityY => _keyboardPanVelocityY;
+
+    public void SelectPresentation(CanvasPresentationMode mode)
+    {
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        PresentationMode = mode;
+    }
+
+    public void SetSectionElevation(decimal elevationMeters) =>
+        SectionElevationMeters = elevationMeters;
 
     public void PanBy(double screenDeltaX, double screenDeltaY)
     {

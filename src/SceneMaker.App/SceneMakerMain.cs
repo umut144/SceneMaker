@@ -34,6 +34,8 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _sceneLabel = new();
     private readonly Label _toolContextLabel = new();
     private readonly VSeparator _toolContextSeparator = new();
+    private readonly Label _sectionElevationLabel = new();
+    private readonly SpinBox _sectionElevationEdit = new();
     private readonly Label _propLineOffsetLabel = new();
     private readonly SpinBox _propLineOffsetEdit = new();
     private readonly Label _surfaceLabel = new();
@@ -75,6 +77,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _waterDerivedSpanLabel = new();
     private readonly Button _eraserToggle = new();
     private readonly Button _heatmapToggle = new();
+    private readonly Button _sectionToggle = new();
     private readonly MenuButton _waterHeatmapValueEdit = new();
     private readonly Label _viewLabel = new();
     private readonly Label _statusLabel = new();
@@ -363,6 +366,16 @@ public sealed partial class SceneMakerMain : Control
         _contextMenuBar.AddChild(_toolContextLabel);
         _toolContextSeparator.Name = "ToolContextSeparator";
         _contextMenuBar.AddChild(_toolContextSeparator);
+        _sectionElevationLabel.Name = "SectionElevationLabel";
+        _sectionElevationLabel.Text = "Section";
+        _sectionElevationLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_sectionElevationLabel);
+        _sectionElevationEdit.Name = "SectionElevation";
+        ConfigureElevationInput(_sectionElevationEdit);
+        _sectionElevationEdit.TooltipText =
+            "Remove geometry strictly above this elevation, then look down on what remains.";
+        _sectionElevationEdit.ValueChanged += SetSectionElevation;
+        _contextMenuBar.AddChild(_sectionElevationEdit);
         _propLineOffsetLabel.Name = "PropLineOffsetLabel";
         _propLineOffsetLabel.Text = "Placement Offset";
         _propLineOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -585,6 +598,15 @@ public sealed partial class SceneMakerMain : Control
         _heatmapToggle.CustomMinimumSize = new Vector2(42f, 42f);
         _heatmapToggle.Toggled += SetHeatmapEnabled;
         _toolOptionsBar.AddChild(_heatmapToggle);
+        _sectionToggle.Name = "SectionToggle";
+        _sectionToggle.Text = "S";
+        _sectionToggle.Alignment = HorizontalAlignment.Center;
+        _sectionToggle.ToggleMode = true;
+        _sectionToggle.TooltipText =
+            "Show the highest remaining surface after clipping the Scene at one elevation";
+        _sectionToggle.CustomMinimumSize = new Vector2(42f, 42f);
+        _sectionToggle.Toggled += SetSectionEnabled;
+        _toolOptionsBar.AddChild(_sectionToggle);
         _waterHeatmapValueEdit.Name = "WaterHeatmapValue";
         _waterHeatmapValueEdit.Text = "S";
         _waterHeatmapValueEdit.Alignment = HorizontalAlignment.Center;
@@ -1811,11 +1833,40 @@ public sealed partial class SceneMakerMain : Control
 
     private void SetHeatmapEnabled(bool enabled)
     {
-        _canvas.HeatmapEnabled = enabled;
-        UpdateWaterHeatmapAvailability();
+        if (!enabled && _canvas.PresentationMode != CanvasPresentationMode.Heightmap) return;
+        SelectCanvasPresentation(enabled
+            ? CanvasPresentationMode.Heightmap
+            : CanvasPresentationMode.Normal);
         SetStatus(enabled
             ? "Height view on. Drawing and placing work as usual."
             : "Height view off.");
+    }
+
+    private void SetSectionEnabled(bool enabled)
+    {
+        if (!enabled && _canvas.PresentationMode != CanvasPresentationMode.Section) return;
+        SelectCanvasPresentation(enabled
+            ? CanvasPresentationMode.Section
+            : CanvasPresentationMode.Normal);
+        SetStatus(enabled
+            ? $"Section view at {_canvas.SectionElevationMeters:0.###} m."
+            : "Section view off.");
+    }
+
+    private void SelectCanvasPresentation(CanvasPresentationMode mode)
+    {
+        _canvas.PresentationMode = mode;
+        _heatmapToggle.SetPressedNoSignal(mode == CanvasPresentationMode.Heightmap);
+        _sectionToggle.SetPressedNoSignal(mode == CanvasPresentationMode.Section);
+        UpdateWaterHeatmapAvailability();
+        UpdateToolContextLabel();
+    }
+
+    private void SetSectionElevation(double value)
+    {
+        var elevation = ElevationOf(_sectionElevationEdit, value);
+        _canvas.SectionElevationMeters = elevation;
+        SetStatus($"Section elevation set to {elevation:0.###} m.");
     }
 
     /// <summary>Marks one radio item and clears the rest.</summary>
@@ -1827,7 +1878,8 @@ public sealed partial class SceneMakerMain : Control
     }
 
     private void UpdateWaterHeatmapAvailability() =>
-        _waterHeatmapValueEdit.Disabled = !_canvas.HeatmapEnabled
+        _waterHeatmapValueEdit.Disabled =
+            _canvas.PresentationMode != CanvasPresentationMode.Heightmap
             || _controller.Document?.WaterBodies.Count is not > 0;
 
     private void SetWaterHeatmapValue(long item)
@@ -2063,7 +2115,10 @@ public sealed partial class SceneMakerMain : Control
         var elevationRegionPointEditing = selectedElevationRegionPoint is not null;
         var curveActive = riverActive || pathActive
             || elevationRegionDrawing || elevationRegionPointEditing;
-        _toolContextSeparator.Visible = propLineActive || curveActive;
+        var sectionActive = _canvas.PresentationMode == CanvasPresentationMode.Section;
+        _toolContextSeparator.Visible = propLineActive || curveActive || sectionActive;
+        _sectionElevationLabel.Visible = sectionActive;
+        _sectionElevationEdit.Visible = sectionActive;
         _propLineOffsetLabel.Visible = propLineActive;
         _propLineOffsetEdit.Visible = propLineActive;
         _curvePointModeLabel.Visible = curveActive;
@@ -2567,12 +2622,16 @@ public sealed partial class SceneMakerMain : Control
         ConfigureElevationInput(_waterElevationEdit, metrics);
         ConfigureElevationInput(_pathStartElevationEdit, metrics);
         ConfigureElevationInput(_sceneElevationEdit, metrics);
+        ConfigureElevationInput(_sectionElevationEdit, metrics);
 
         var authoringElevation = ElevationOf(_elevationEdit, _elevationEdit.Value);
         _canvas.ElevationMeters = authoringElevation;
         _interaction.State.SetWaterElevation(
             ElevationOf(_waterElevationEdit, _waterElevationEdit.Value));
         _ = ElevationOf(_sceneElevationEdit, _sceneElevationEdit.Value);
+        _canvas.SectionElevationMeters = ElevationOf(
+            _sectionElevationEdit,
+            _sectionElevationEdit.Value);
     }
 
     private static void ConfigureElevationInput(SpinBox input, WorkspaceMetrics metrics)
@@ -2605,6 +2664,7 @@ public sealed partial class SceneMakerMain : Control
         _waterElevationEdit.Editable = editable;
         _pathStartElevationEdit.Editable = editable && !_pathAutoStartToggle.ButtonPressed;
         _sceneElevationEdit.Editable = editable;
+        _sectionElevationEdit.Editable = editable;
     }
 
     private void RebuildAssetBars()

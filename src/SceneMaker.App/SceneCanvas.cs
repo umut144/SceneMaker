@@ -93,7 +93,6 @@ public sealed partial class SceneCanvas : Control
     private PropDisplayCatalog? _propAssets;
     private ToolInteraction _interaction = new();
     private bool _pointerOverCanvas;
-    private bool _heatmapEnabled;
     private WaterHeatmapValue _waterHeatmapValue;
     // Rasterizing a corridor is cheap but not free, and the authored bodies do
     // not change between frames. The cache is keyed by the document itself, so
@@ -103,6 +102,8 @@ public sealed partial class SceneCanvas : Control
     private IReadOnlyList<WaterOverlay> _waterOverlays = [];
     private SceneDocument? _routeOverlayDocument;
     private IReadOnlyList<RouteOverlay> _routeOverlays = [];
+    private SceneDocument? _layeredColumnsDocument;
+    private LayeredSceneColumns? _layeredColumns;
 
     public SceneCanvas()
     {
@@ -165,17 +166,24 @@ public sealed partial class SceneCanvas : Control
     /// </summary>
     public decimal ElevationMeters { get; set; } = SceneDocument.GroundElevationMeters;
 
-    /// <summary>
-    /// Draws Terrain and Props by their height instead of by their Asset. It is
-    /// a way of looking, not a mode of working: every tool keeps working while
-    /// it is on.
-    /// </summary>
-    public bool HeatmapEnabled
+    /// <summary>The transient projection used to look at the authored Scene.</summary>
+    public CanvasPresentationMode PresentationMode
     {
-        get => _heatmapEnabled;
+        get => ViewState.PresentationMode;
         set
         {
-            _heatmapEnabled = value;
+            ViewState.SelectPresentation(value);
+            QueueRedraw();
+        }
+    }
+
+    /// <summary>The upper clipping plane used by the horizontal Section view.</summary>
+    public decimal SectionElevationMeters
+    {
+        get => ViewState.SectionElevationMeters;
+        set
+        {
+            ViewState.SetSectionElevation(value);
             QueueRedraw();
         }
     }
@@ -278,6 +286,8 @@ public sealed partial class SceneCanvas : Control
     {
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
         _effectiveTerrainDocument = null;
+        _layeredColumnsDocument = null;
+        _layeredColumns = null;
         QueueRedraw();
     }
 
@@ -293,7 +303,9 @@ public sealed partial class SceneCanvas : Control
         _scene = scene;
         _templatePreview = null;
         _templatePreviewMasks = [];
-        ViewState = new CanvasViewState();
+        ViewState = new CanvasViewState(
+            presentationMode: ViewState.PresentationMode,
+            sectionElevationMeters: ViewState.SectionElevationMeters);
         _interaction.ResetForScene();
         QueueRedraw();
         ViewChanged?.Invoke();
@@ -313,6 +325,14 @@ public sealed partial class SceneCanvas : Control
             : ElevationRegionGeometry.EffectiveTerrainCells(document, _metrics);
         _effectiveTerrainDocument = document;
         return _effectiveTerrain;
+    }
+
+    private LayeredSceneColumns LayeredColumns(SceneDocument document)
+    {
+        if (ReferenceEquals(_layeredColumnsDocument, document)) return _layeredColumns!;
+        _layeredColumns = LayeredSceneColumns.Prepare(document, _metrics!);
+        _layeredColumnsDocument = document;
+        return _layeredColumns;
     }
 
     public void ShowTemplatePreview(
@@ -491,25 +511,32 @@ public sealed partial class SceneCanvas : Control
         // the ordinary view is what will let a Section plane move later without
         // making every surviving surface change brightness.
         var elevationRange = ElevationRange(document);
-        DrawTerrain(
-            document,
-            pan,
-            zoom,
-            elevationRange,
-            highlighted: Mode is EditorMode.Terrain or EditorMode.ElevationRegion);
-        DrawWater(
-            document,
-            pan,
-            zoom,
-            elevationRange,
-            highlighted: Mode is EditorMode.Terrain or EditorMode.River);
-        DrawRouteSurfaces(
-            document,
-            pan,
-            zoom,
-            heightAuthoringPixels,
-            elevationRange,
-            highlighted: Mode == EditorMode.Path);
+        if (PresentationMode == CanvasPresentationMode.Section)
+        {
+            DrawSection(document, pan, zoom, elevationRange);
+        }
+        else
+        {
+            DrawTerrain(
+                document,
+                pan,
+                zoom,
+                elevationRange,
+                highlighted: Mode is EditorMode.Terrain or EditorMode.ElevationRegion);
+            DrawWater(
+                document,
+                pan,
+                zoom,
+                elevationRange,
+                highlighted: Mode is EditorMode.Terrain or EditorMode.River);
+            DrawRouteSurfaces(
+                document,
+                pan,
+                zoom,
+                heightAuthoringPixels,
+                elevationRange,
+                highlighted: Mode == EditorMode.Path);
+        }
         DrawElevationRegionOutlines(
             document,
             pan,
@@ -520,13 +547,20 @@ public sealed partial class SceneCanvas : Control
             // says an authored body lies there. The Map overview is structural
             // rather than an area, so it keeps them as well.
             highlighted: Mode is EditorMode.Terrain or EditorMode.ElevationRegion || MapContextActive);
-        DrawProps(
-            document,
-            pan,
-            zoom,
-            heightAuthoringPixels,
-            elevationRange,
-            highlighted: Mode == EditorMode.Props);
+        // Placements and Paths are not column-resolved yet. Hiding their
+        // persisted surfaces in Section is more truthful than painting them
+        // over a clipped roof with invented occlusion. Their active tool
+        // previews remain below, so the view does not disable authoring.
+        if (PresentationMode != CanvasPresentationMode.Section)
+        {
+            DrawProps(
+                document,
+                pan,
+                zoom,
+                heightAuthoringPixels,
+                elevationRange,
+                highlighted: Mode == EditorMode.Props);
+        }
         switch (Mode)
         {
             case EditorMode.Props:
@@ -593,7 +627,8 @@ public sealed partial class SceneCanvas : Control
             highlighted: Mode == EditorMode.Templates);
 
         DrawRect(sceneRect, SceneBorder, filled: false, width: 2.0f);
-        if (_heatmapEnabled && elevationRange is { } range)
+        if (PresentationMode == CanvasPresentationMode.Heightmap
+            && elevationRange is { } range)
             DrawElevationLegend(document, range);
     }
 
@@ -715,13 +750,14 @@ public sealed partial class SceneCanvas : Control
                          static route => route.Points.Select(
                              static point => point.ElevationMeters)))
                      .Concat(WaterOverlays(document).SelectMany(
-                         overlay => overlay.Cells.Select(cell => _heatmapEnabled
+                         overlay => overlay.Cells.Select(cell =>
+                            PresentationMode == CanvasPresentationMode.Heightmap
                              ? WaterElevation(cell)
                              : cell.SurfaceMeters)));
         // An unfinished Path is already geometry the author is judging. Include
         // it in the same scale as the Scene, so Auto start can be verified in
         // the height view before Enter instead of being hidden by Asset colour.
-        if (_heatmapEnabled
+        if (PresentationMode == CanvasPresentationMode.Heightmap
             && Mode == EditorMode.Path
             && !EraserEnabled
             && CurrentContext() is { } context)
@@ -783,6 +819,53 @@ public sealed partial class SceneCanvas : Control
             assetColor.A);
     }
 
+    /// <summary>
+    /// Projects the engine-neutral resolved columns after clipping them at the
+    /// selected elevation. Terrain and water are deliberately drawn together:
+    /// asking the column once is what preserves roofs, voids and fills instead
+    /// of letting Canvas draw order invent a different Layered-3D result.
+    /// </summary>
+    private void DrawSection(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        (decimal Low, decimal High)? range)
+    {
+        var columns = LayeredColumns(document);
+        var cellSize = _metrics!.AuthoringPixelsPerWaterCell * zoom;
+        var width = _metrics.SceneWidthWaterCells(document);
+        var height = _metrics.SceneHeightWaterCells(document);
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var rectangle = new Rect2(
+                    pan + new Vector2(x * cellSize, (height - y - 1) * cellSize),
+                    new Vector2(cellSize, cellSize));
+                if (rectangle.End.X < 0f || rectangle.End.Y < 0f
+                    || rectangle.Position.X > Size.X || rectangle.Position.Y > Size.Y)
+                {
+                    continue;
+                }
+
+                var surface = columns.AtWaterCell(x, y).VisibleAt(SectionElevationMeters);
+                if (surface is null
+                    || !_terrainColors.TryGetValue(surface.AssetKey, out var color))
+                {
+                    continue;
+                }
+                if (range is { } lightingSpan)
+                {
+                    color = LitSurfaceColor(
+                        color,
+                        surface.ElevationMeters,
+                        lightingSpan);
+                }
+                DrawRect(rectangle, color);
+            }
+        }
+    }
+
     private void DrawTerrain(
         SceneDocument document,
         Vector2 pan,
@@ -794,7 +877,8 @@ public sealed partial class SceneCanvas : Control
         foreach (var cell in EffectiveTerrain(document))
         {
             Color color;
-            if (_heatmapEnabled && range is { } heatmapSpan)
+            if (PresentationMode == CanvasPresentationMode.Heightmap
+                && range is { } heatmapSpan)
             {
                 color = ElevationColor(cell.ElevationMeters, heatmapSpan);
             }
@@ -814,7 +898,7 @@ public sealed partial class SceneCanvas : Control
                 continue;
             DrawRect(
                 rectangle,
-                highlighted || _heatmapEnabled
+                highlighted || PresentationMode == CanvasPresentationMode.Heightmap
                     ? color
                     : new Color(color.R, color.G, color.B, 0.24f));
         }
@@ -840,7 +924,8 @@ public sealed partial class SceneCanvas : Control
             foreach (var cell in overlay.Cells)
             {
                 Color color;
-                if (_heatmapEnabled && range is { } heatmapSpan)
+                if (PresentationMode == CanvasPresentationMode.Heightmap
+                    && range is { } heatmapSpan)
                 {
                     color = ElevationColor(WaterElevation(cell), heatmapSpan);
                 }
@@ -970,7 +1055,7 @@ public sealed partial class SceneCanvas : Control
                 segment.Chain.StartStation + (length / 2.0));
             var segmentColor = range is not { } elevationRange
                 ? color
-                : _heatmapEnabled
+                : PresentationMode == CanvasPresentationMode.Heightmap
                     ? ElevationColor(elevation, elevationRange)
                     : LitSurfaceColor(color, elevation, elevationRange);
             DrawColoredPolygon(polygon, segmentColor);
@@ -1014,7 +1099,7 @@ public sealed partial class SceneCanvas : Control
                 (first.ElevationMeters + second.ElevationMeters + third.ElevationMeters) / 3m;
             var triangleColor = range is not { } elevationRange
                 ? color
-                : _heatmapEnabled
+                : PresentationMode == CanvasPresentationMode.Heightmap
                     ? ElevationColor(elevation, elevationRange)
                     : LitSurfaceColor(color, elevation, elevationRange);
             DrawColoredPolygon(
@@ -1481,7 +1566,7 @@ public sealed partial class SceneCanvas : Control
             var assetColor = Color.FromHtml(asset.Color);
             var color = range is not { } propSpan
                 ? assetColor
-                : _heatmapEnabled
+                : PresentationMode == CanvasPresentationMode.Heightmap
                     ? ElevationColor(prop.ElevationMeters, propSpan)
                     : LitSurfaceColor(assetColor, prop.ElevationMeters, propSpan);
             var selected = highlighted && prop.InstanceId == _interaction.SelectedPropInstanceId;
