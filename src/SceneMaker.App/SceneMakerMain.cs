@@ -213,6 +213,7 @@ public sealed partial class SceneMakerMain : Control
         var report = _controller.SaveScene();
         if (!report.Succeeded)
             GD.PushWarning($"Could not save the Scene while closing: {report.Message}");
+        SaveRecentSession();
     }
 
     private void BuildInterface()
@@ -2359,6 +2360,7 @@ public sealed partial class SceneMakerMain : Control
     {
         _autosaveTimer.Stop();
         var report = _controller.SaveScene();
+        if (report.Succeeded) SaveRecentSession();
         Report(report);
         if (report.Succeeded) UpdateDocumentState();
     }
@@ -2381,6 +2383,7 @@ public sealed partial class SceneMakerMain : Control
         _autosaveTimer.Stop();
         var hadChanges = _controller.IsDirty == true;
         var save = _controller.SaveScene();
+        if (save.Succeeded) SaveRecentSession();
         UpdateDocumentState();
         if (!save.Succeeded)
         {
@@ -2686,7 +2689,17 @@ public sealed partial class SceneMakerMain : Control
     private void SaveRecentSession()
     {
         if (_recentSessionPath is null) return;
-        _controller.SaveRecentSession(_recentSessionPath);
+        try
+        {
+            _controller.SaveRecentSession(_recentSessionPath, _canvas.ViewState);
+        }
+        catch (Exception exception)
+            when (exception is SceneMakerDocumentException
+                or IOException
+                or UnauthorizedAccessException)
+        {
+            GD.PushWarning($"Could not save the recent session: {exception.Message}");
+        }
     }
 
     private void RestoreRecentSession()
@@ -2696,7 +2709,7 @@ public sealed partial class SceneMakerMain : Control
         ShowSession();
         ClearTemplatePreview();
         ShowAuthoringElevation();
-        _canvas.ShowScene(_controller.Scene);
+        _canvas.ShowScene(_controller.Scene, _controller.RestoredCanvasView);
         Report(report);
     }
 

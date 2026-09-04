@@ -239,7 +239,9 @@ public sealed class EditorControllerSceneTests
         controller.CreateInstance("base", 6, 6);
         controller.Apply(Paint(workspace, 0, 0));
         controller.SaveScene();
-        controller.SaveRecentSession(recentPath);
+        controller.SaveRecentSession(
+            recentPath,
+            new CanvasViewState(panX: -120.5, panY: 84.25, zoom: 2.5));
 
         var restored = new EditorController();
         var report = restored.RestoreRecentSession(recentPath);
@@ -249,6 +251,9 @@ public sealed class EditorControllerSceneTests
         Assert.Equal("test_world", restored.Session?.WorkspaceKey);
         Assert.Single(restored.Document!.TerrainCells);
         Assert.False(restored.IsDirty);
+        Assert.Equal(-120.5, restored.RestoredCanvasView?.PanX);
+        Assert.Equal(84.25, restored.RestoredCanvasView?.PanY);
+        Assert.Equal(2.5, restored.RestoredCanvasView?.Zoom);
     }
 
     [Fact]
@@ -260,7 +265,7 @@ public sealed class EditorControllerSceneTests
         controller.CreateInstance("base", 6, 6);
         controller.Apply(Paint(workspace, 0, 0));
         controller.SaveScene();
-        controller.SaveRecentSession(recentPath);
+        controller.SaveRecentSession(recentPath, new CanvasViewState());
         // Grass is gone from the Workspace, so the stored Scene names an Asset
         // that is no longer enabled. The Scene has to be closed first, because
         // the controller refuses a profile set that would orphan an open Scene.

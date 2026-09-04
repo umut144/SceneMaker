@@ -53,6 +53,12 @@ public sealed class EditorController
     public SceneDocument? Document => Scene?.Document;
 
     /// <summary>
+    /// The Canvas view loaded with the recent session, ready for the Godot
+    /// interface to adopt after it has rebuilt the Canvas.
+    /// </summary>
+    public CanvasViewState? RestoredCanvasView { get; private set; }
+
+    /// <summary>
     /// The transient Template Preview, or null when there is none. It is not
     /// part of any document and never written; any edit throws it away, because
     /// it was composed from a Scene that no longer exists.
@@ -120,6 +126,7 @@ public sealed class EditorController
         {
             var session = WorkspaceSession.Load(workspaceDirectory);
             Session = session;
+            RestoredCanvasView = null;
             LastWorkspaceDirectory = session.DirectoryPath;
             return EditorReport.Ok(
                 $"Loaded Workspace '{session.WorkspaceKey}'. Load a Scene to start editing.");
@@ -188,6 +195,7 @@ public sealed class EditorController
     public void CloseWorkspace()
     {
         Session = null;
+        RestoredCanvasView = null;
         CloseScene();
     }
 
@@ -355,10 +363,17 @@ public sealed class EditorController
     }
 
     /// <summary>Records the open Workspace and Scene for the next start.</summary>
-    public void SaveRecentSession(string recentSessionPath)
+    public void SaveRecentSession(string recentSessionPath, CanvasViewState canvasView)
     {
+        ArgumentNullException.ThrowIfNull(canvasView);
         if (Session is not { } session) return;
-        RecentSessionStore.Save(recentSessionPath, session.Workspace, Scene);
+        RecentSessionStore.Save(
+            recentSessionPath,
+            session.Workspace,
+            Scene,
+            canvasView.PanX,
+            canvasView.PanY,
+            canvasView.Zoom);
     }
 
     /// <summary>
@@ -373,12 +388,17 @@ public sealed class EditorController
         {
             var recent = RecentSessionStore.Load(recentSessionPath);
             if (recent is null) return EditorReport.Silent;
+            var restoredCanvasView = new CanvasViewState(
+                recent.Camera.PanX,
+                recent.Camera.PanY,
+                recent.Camera.Zoom);
             if (!OpenWorkspaceDirectory(recent.WorkspaceDirectoryPath).Succeeded)
                 throw new SceneMakerDocumentException("The recorded Workspace could not be opened.");
             var session = Session!;
             if (recent.SceneRelativePath is null)
             {
                 CloseScene();
+                RestoredCanvasView = restoredCanvasView;
                 return EditorReport.Ok($"Restored Workspace '{session.WorkspaceKey}'.");
             }
 
@@ -390,10 +410,12 @@ public sealed class EditorController
             PropEditing.ValidateAssetReferences(loaded.Document, session.PropAssets);
             RouteSurfaceEditing.ValidateAssetReferences(loaded.Document, session.TerrainAssets);
             Open(loaded);
+            RestoredCanvasView = restoredCanvasView;
             return EditorReport.Ok(
                 $"Restored Workspace '{session.WorkspaceKey}' and Scene '{loaded.Document.SceneId}'.");
         }
-        catch (Exception exception) when (IsDocumentFailure(exception))
+        catch (Exception exception)
+            when (IsDocumentFailure(exception) || exception is ArgumentOutOfRangeException)
         {
             CloseWorkspace();
             return EditorReport.Failed("No compatible recent session was restored.");

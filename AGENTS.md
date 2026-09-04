@@ -77,7 +77,7 @@ unrelated reasons.
 | Scene export | `SceneExport.Version` | 10 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 1 |
 | PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 16 |
-| Recent session | `RecentSessionStore.Version` | 3 |
+| Recent session | `RecentSessionStore.Version` | 4 |
 
 There is no migration code and none is planned. Every reader rejects a document
 whose version it does not know. Bumping a version therefore means rewriting the

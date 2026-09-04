@@ -9,12 +9,20 @@ public sealed record RecentSessionDocument
     public required int Version { get; init; }
     public required string WorkspaceDirectoryPath { get; init; }
     public required string? SceneRelativePath { get; init; }
+    public required RecentCameraDocument Camera { get; init; }
+}
+
+public sealed record RecentCameraDocument
+{
+    public required double PanX { get; init; }
+    public required double PanY { get; init; }
+    public required double Zoom { get; init; }
 }
 
 public static class RecentSessionStore
 {
     public const string Schema = "scene_maker_recent_session";
-    public const int Version = 3;
+    public const int Version = 4;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -24,7 +32,13 @@ public static class RecentSessionStore
         WriteIndented = true,
     };
 
-    public static void Save(string statePath, LoadedWorkspace workspace, LoadedScene? scene)
+    public static void Save(
+        string statePath,
+        LoadedWorkspace workspace,
+        LoadedScene? scene,
+        double cameraPanX,
+        double cameraPanY,
+        double cameraZoom)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(statePath);
         ArgumentNullException.ThrowIfNull(workspace);
@@ -45,6 +59,12 @@ public static class RecentSessionStore
             Version = Version,
             WorkspaceDirectoryPath = Path.GetFullPath(workspace.DirectoryPath),
             SceneRelativePath = sceneRelativePath,
+            Camera = new RecentCameraDocument
+            {
+                PanX = cameraPanX,
+                PanY = cameraPanY,
+                Zoom = cameraZoom,
+            },
         };
         Validate(document);
         AtomicTextFile.Write(Path.GetFullPath(statePath), JsonSerializer.Serialize(document, JsonOptions) + "\n");
@@ -90,6 +110,15 @@ public static class RecentSessionStore
         {
             throw new SceneMakerDocumentException(
                 $"Recent session Scene must be a Workspace-relative path ending with '{SceneStore.FileSuffix}'.");
+        }
+        if (document.Camera is null
+            || !double.IsFinite(document.Camera.PanX)
+            || !double.IsFinite(document.Camera.PanY)
+            || !double.IsFinite(document.Camera.Zoom)
+            || document.Camera.Zoom <= 0.0)
+        {
+            throw new SceneMakerDocumentException(
+                "Recent session camera requires finite pan coordinates and a positive finite zoom.");
         }
     }
 }

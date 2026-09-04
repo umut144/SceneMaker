@@ -499,6 +499,9 @@ Bearbeitungen wirken zunächst nur im Speicher. Die Szene wird in den Workspace
 geschrieben, sobald 1,5 Sekunden lang nichts mehr bearbeitet wurde, außerdem vor
 jedem Wechsel von Szene oder Workspace, vor Export und Template-Vorschau, beim
 Beenden und auf `Cmd/Strg+S`. Die Dokumentleiste zeigt `unsaved` oder `saved`.
+Beim Speichern und beim Beenden wird außerdem die aktuelle Canvas-Kamera aus
+Position und Zoom in der Recent Session gesichert und beim nächsten Start
+wiederhergestellt.
 
 Jede Bearbeitung landet in einer Historie unveränderlicher Scene-Dokumente:
 

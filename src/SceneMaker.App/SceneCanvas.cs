@@ -298,14 +298,21 @@ public sealed partial class SceneCanvas : Control
         QueueRedraw();
     }
 
-    public void ShowScene(LoadedScene? scene)
+    public void ShowScene(LoadedScene? scene, CanvasViewState? restoredView = null)
     {
         _scene = scene;
         _templatePreview = null;
         _templatePreviewMasks = [];
-        ViewState = new CanvasViewState(
-            presentationMode: ViewState.PresentationMode,
-            sectionElevationMeters: ViewState.SectionElevationMeters);
+        ViewState = restoredView is null
+            ? new CanvasViewState(
+                presentationMode: ViewState.PresentationMode,
+                sectionElevationMeters: ViewState.SectionElevationMeters)
+            : new CanvasViewState(
+                restoredView.PanX,
+                restoredView.PanY,
+                restoredView.Zoom,
+                ViewState.PresentationMode,
+                ViewState.SectionElevationMeters);
         _interaction.ResetForScene();
         QueueRedraw();
         ViewChanged?.Invoke();
