@@ -333,9 +333,14 @@ every fill independently. A column can then answer the top surface in the
 unlimited ordinary view or after a finite horizontal clip: when the plane lies
 inside a span the plane is its section face, and when it lies in a void the
 highest remaining boundary below it is visible. Exact Terrain/fill ties choose
-the fill. The current lookup uses the Workspace water grid because that is the
-finest authored volumetric raster; the public authoring-position entry keeps
-the query engine-neutral for later continuous Path cuts.
+the fill. Spans are closed at both ends, matching the export contract. The clip
+removes only geometry strictly above its plane: exactly at a fill bed the fill
+wins its tie with the floor, and exactly at a cut top the Terrain roof boundary
+remains as a section face. This is also why clipping exactly at a hill top keeps
+the hill visible. The current lookup quantizes an arbitrary authoring position
+to the Workspace water grid because that is the finest authored volumetric
+raster; the authoring-position entry keeps the query engine-neutral for later
+continuous Path cuts.
 
 A Path is an independently materialized open route rather than a sequence of
 raised Terrain cells. It can describe a level way, a ramp or a descent. Its

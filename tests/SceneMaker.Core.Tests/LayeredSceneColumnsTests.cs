@@ -69,8 +69,11 @@ public sealed class LayeredSceneColumnsTests
 
     [Theory]
     [InlineData("1", "1", LayeredColumnSpanKind.TerrainSolid, true)]
+    [InlineData("1.5", "1.5", LayeredColumnSpanKind.IndependentFill, true)]
     [InlineData("1.75", "1.75", LayeredColumnSpanKind.IndependentFill, true)]
+    [InlineData("2", "2", LayeredColumnSpanKind.IndependentFill, false)]
     [InlineData("5", "2", LayeredColumnSpanKind.IndependentFill, false)]
+    [InlineData("7", "7", LayeredColumnSpanKind.TerrainSolid, true)]
     [InlineData("8", "8", LayeredColumnSpanKind.TerrainSolid, true)]
     [InlineData("10", "10", LayeredColumnSpanKind.TerrainSolid, false)]
     [InlineData("12", "10", LayeredColumnSpanKind.TerrainSolid, false)]
@@ -97,7 +100,7 @@ public sealed class LayeredSceneColumnsTests
     }
 
     [Fact]
-    public void WaterWinsTheSharedBedOrSurfaceBoundary()
+    public void AFillWinsAnExactTieWithTheTerrainAtItsBed()
     {
         using var workspace = TestWorkspace.Create();
         var scene = River(
@@ -107,10 +110,29 @@ public sealed class LayeredSceneColumnsTests
         var visible = LayeredSceneColumns
             .Prepare(scene, workspace.Metrics)
             .AtWaterCell(0, 0)
+            .VisibleAt(0.5m);
+
+        Assert.NotNull(visible);
+        Assert.Equal(0.5m, visible.ElevationMeters);
+        Assert.Equal(LayeredColumnSpanKind.IndependentFill, visible.Kind);
+        Assert.Equal("river_0001", visible.SourceId);
+    }
+
+    [Fact]
+    public void EqualFillSurfacesChooseTheOrdinallyFirstSourceId()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = River(
+            TestScenes.EmptyInstance(),
+            WaterBody("river_0002", surface: 2m, depth: 0.5m, clearance: 1m),
+            WaterBody("river_0001", surface: 2m, depth: 1m, clearance: 1m));
+
+        var visible = LayeredSceneColumns
+            .Prepare(scene, workspace.Metrics)
+            .AtWaterCell(0, 0)
             .VisibleAt();
 
         Assert.NotNull(visible);
-        Assert.Equal(LayeredColumnSpanKind.IndependentFill, visible.Kind);
         Assert.Equal("river_0001", visible.SourceId);
     }
 
@@ -155,6 +177,46 @@ public sealed class LayeredSceneColumnsTests
     }
 
     [Fact]
+    public void DisjointCutsLeaveThreeTerrainSolids()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = River(
+            Hill(TestScenes.Instance(workspace), workspace, 10m),
+            WaterBody("river_0001", surface: 1.5m, depth: 0.5m, clearance: 0.5m),
+            WaterBody("river_0002", surface: 5m, depth: 1m, clearance: 1m));
+
+        var solids = LayeredSceneColumns
+            .Prepare(scene, workspace.Metrics)
+            .AtWaterCell(0, 0)
+            .TerrainSolids;
+
+        Assert.Equal(
+            [
+                new LayeredColumnSpan(null, 1m, "grass", LayeredColumnSpanKind.TerrainSolid, null),
+                new LayeredColumnSpan(2m, 4m, "grass", LayeredColumnSpanKind.TerrainSolid, null),
+                new LayeredColumnSpan(6m, 10m, "grass", LayeredColumnSpanKind.TerrainSolid, null),
+            ],
+            solids);
+    }
+
+    [Fact]
+    public void ACompletelyFloatingCutLeavesTerrainWholeAndItsFillVisible()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = River(
+            TestScenes.Instance(workspace),
+            WaterBody("river_0001", surface: 6m, depth: 1m, clearance: 1m));
+
+        var column = LayeredSceneColumns.Prepare(scene, workspace.Metrics).AtWaterCell(0, 0);
+
+        Assert.Equal(
+            [new LayeredColumnSpan(null, 1m, "grass", LayeredColumnSpanKind.TerrainSolid, null)],
+            column.TerrainSolids);
+        Assert.Equal(6m, column.VisibleAt()!.ElevationMeters);
+        Assert.Equal(LayeredColumnSpanKind.IndependentFill, column.VisibleAt()!.Kind);
+    }
+
+    [Fact]
     public void ArbitraryAuthoringPositionsUseTheWaterRasterAndSceneBounds()
     {
         using var workspace = TestWorkspace.Create();
@@ -168,6 +230,30 @@ public sealed class LayeredSceneColumnsTests
         Assert.Empty(columns.AtAuthoringPosition(192, 0).TerrainSolids);
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             columns.AtAuthoringPosition(double.NaN, 0));
+    }
+
+    [Fact]
+    public void WaterCellsMapToTheContainingTerrainCellAwayFromTheOrigin()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TerrainEditing.Paint(
+            TestScenes.Instance(workspace),
+            workspace.Terrain,
+            2,
+            1,
+            "sand",
+            9m);
+        var columns = LayeredSceneColumns.Prepare(scene, workspace.Metrics);
+
+        var mapped = columns.AtWaterCell(5, 3).VisibleAt();
+        var neighbour = columns.AtWaterCell(3, 3).VisibleAt();
+
+        Assert.NotNull(mapped);
+        Assert.Equal("sand", mapped.AssetKey);
+        Assert.Equal(9m, mapped.ElevationMeters);
+        Assert.NotNull(neighbour);
+        Assert.Equal("grass", neighbour.AssetKey);
+        Assert.Equal(1m, neighbour.ElevationMeters);
     }
 
     private static SceneDocument Hill(

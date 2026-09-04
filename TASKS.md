@@ -229,8 +229,11 @@ Canvas-only interpretation. `LayeredSceneColumns` prepares painted Terrain
 folded through Elevation Regions and the existing water cuts and fills. For a
 finite clip, the answer at one X/Y is the highest remaining boundary at or
 below the plane; overlapping cuts are merged independently of body order and
-fills survive them. This shared rule is the foundation for later tunnel,
-bridge and LookDev views; the Godot Canvas must only project its answer.
+fills survive them. Every span is closed: clipping exactly at a fill bed shows
+the fill over the floor, while clipping exactly at a cut top retains the roof
+boundary as a section face, because only geometry strictly above the plane was
+removed. This shared rule is the foundation for later tunnel, bridge and
+LookDev views; the Godot Canvas must only project its answer.
 
 A Path tunnel is not a new body kind. It is a run of **subtractive Path
 segments** inside the same independently materialized Path that already
