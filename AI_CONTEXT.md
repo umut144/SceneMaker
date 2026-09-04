@@ -325,6 +325,18 @@ so moving a clipping plane cannot relight everything left below it.
 Cuts apply to Terrain and never to fills. That one sentence is what will let a
 bridge deck cross the river it spans without the river carving it away.
 
+`LayeredSceneColumns.Prepare` is the engine-neutral implementation of that
+vertical rule for Terrain and authored water. It folds Elevation Regions once,
+rasters every water corridor once, merges overlapping cut intervals without
+depending on body order, subtracts them from the Terrain solid and retains
+every fill independently. A column can then answer the top surface in the
+unlimited ordinary view or after a finite horizontal clip: when the plane lies
+inside a span the plane is its section face, and when it lies in a void the
+highest remaining boundary below it is visible. Exact Terrain/fill ties choose
+the fill. The current lookup uses the Workspace water grid because that is the
+finest authored volumetric raster; the public authoring-position entry keeps
+the query engine-neutral for later continuous Path cuts.
+
 A Path is an independently materialized open route rather than a sequence of
 raised Terrain cells. It can describe a level way, a ramp or a descent. Its
 first point carries a directly authored absolute surface height. Each later

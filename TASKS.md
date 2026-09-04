@@ -224,12 +224,13 @@ upper clip. The Section elevation is transient view state, steps in the open
 Workspace's `elevation_quantum_meters`, displays enough decimal places for
 `0.125 m`, and is never written to a Scene or export.
 
-This view needs one engine-neutral column-resolution rule rather than a second
-Canvas-only interpretation. Begin with painted Terrain folded through
-Elevation Regions and the existing water cuts and fills. For a finite clip,
-the answer at one X/Y is the highest remaining boundary at or below the plane.
-That shared rule is the foundation for later tunnel, bridge and LookDev views;
-the Godot Canvas only projects its answer.
+The engine-neutral column-resolution foundation now exists instead of a second
+Canvas-only interpretation. `LayeredSceneColumns` prepares painted Terrain
+folded through Elevation Regions and the existing water cuts and fills. For a
+finite clip, the answer at one X/Y is the highest remaining boundary at or
+below the plane; overlapping cuts are merged independently of body order and
+fills survive them. This shared rule is the foundation for later tunnel,
+bridge and LookDev views; the Godot Canvas must only project its answer.
 
 A Path tunnel is not a new body kind. It is a run of **subtractive Path
 segments** inside the same independently materialized Path that already
@@ -260,7 +261,7 @@ Paths remain ambiguous from above; do not hide that with an arbitrary semantic
 choice.
 
 Implement the remaining work as focused slices: the three-way ordinary, height
-and Section view plus shared column resolution; subtractive segment documents
+and Section view backed by the prepared columns; subtractive segment documents
 and editing; cut bake/export with a corresponding consumer-version bump; then
 wire picking and manual acceptance of an additive-to-tunnel-to-additive Path
 through a hill. Export must never silently omit excavation.
