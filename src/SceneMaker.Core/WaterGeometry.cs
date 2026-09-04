@@ -21,7 +21,7 @@ public readonly record struct WaterCellSpan(
 /// on it.
 ///
 /// <para>A <see cref="FlattenedChain"/> under a name that says what it is here.
-/// The chain arithmetic is shared - a mountain outline and a route will want
+/// The chain arithmetic is shared - a hill outline and a route will want
 /// the same flattening - but a centerline is a river's word for it, and the
 /// callers that read this were written against that word.</para>
 /// </summary>
@@ -266,7 +266,7 @@ public static class WaterGeometry
     /// <summary>
     /// A river's curve as a plain Bezier chain. The one place a water document
     /// becomes geometry, so that nothing below here has to know what a river
-    /// is - and so that a mountain outline can arrive through its own converter
+    /// is - and so that a hill outline can arrive through its own converter
     /// rather than through this one.
     /// </summary>
     private static BezierChainPoint[] ToChain(IReadOnlyList<WaterCurvePointDocument> points)

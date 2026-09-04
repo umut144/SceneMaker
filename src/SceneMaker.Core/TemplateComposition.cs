@@ -64,7 +64,7 @@ public static class TemplateComposition
             .ToList();
         var selected = Select(baseScene.TemplateAnchors, templates, seed);
 
-        var terrain = MountainGeometry.EffectiveTerrainCells(baseScene, propAssets.Metrics).ToDictionary(
+        var terrain = ElevationRegionGeometry.EffectiveTerrainCells(baseScene, propAssets.Metrics).ToDictionary(
             static cell => new TerrainCellCoordinate(cell.X, cell.Y),
             static cell => cell);
         var props = baseScene.Props.ToList();
@@ -108,7 +108,7 @@ public static class TemplateComposition
             // The preview is already folded. Keeping the source bodies would
             // apply them a second time after Template replacement and make the
             // preview disagree with the replacement policy above.
-            MountainBodies = [],
+            ElevationRegions = [],
             Props = props
                 .OrderBy(static value => value.InstanceId, StringComparer.Ordinal)
                 .ToList(),

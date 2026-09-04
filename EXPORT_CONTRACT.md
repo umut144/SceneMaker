@@ -14,9 +14,9 @@ guarantee that every Prop footprint is covered by Terrain is withdrawn. The JSON
 is byte-for-byte the same shape, which is exactly why the version had to move —
 a reader that relied on the old promise cannot tell the two apart by looking.
 
-The authored Scene currently has its own schema 13. It is deliberately newer
-than the embedded Scene: mountain contours are editor source, folded into the
-ordinary `terrain_cells` below and omitted from export. Authored route surfaces
+The authored Scene currently has its own schema 14. It is deliberately newer
+than the embedded Scene: elevation-region contours are editor source, folded
+into the ordinary `terrain_cells` below and omitted from export. Authored route surfaces
 are independent continuous bands that the embedded shape cannot represent yet;
 export schema 9 omits them and reports a warning for every Scene that has any.
 The embedded version therefore stays 10 and the strict runtime shape does not
@@ -95,7 +95,7 @@ purpose.
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
     "size_cells": { "width": 100, "height": 100 },
-    "terrain_cells": [                 // painted Terrain plus folded mountains
+    "terrain_cells": [                 // painted Terrain plus folded hills
       { "x": 0, "y": 0, "asset_key": "grass", "elevation_meters": 1.0 }
     ],
     "props": [
@@ -245,7 +245,7 @@ at its top, with its floor at `bed_meters`.
 **Cuts apply to Terrain and never to fills.** A bridge deck over a river is a
 fill inside that river's cut, and it has to survive it.
 
-Worked example, a river crossing a mountain that reaches 10 m, with water at
+Worked example, a river crossing a hill that reaches 10 m, with water at
 2.0 m, a channel 0.5 m deep and 5.0 m of headroom:
 
 ```
@@ -253,7 +253,7 @@ bed 1.5, cut [1.5, 7.0], water [1.5, 2.0]
 column: solid (−∞, 1.5]   floor of the tunnel, walking surface at 1.5
         water [1.5, 2.0]  water surface at 2.0
         air   [2.0, 7.0]  the headroom that was asked for
-        solid [7.0, 10.0] the mountain above, walking surface at 10.0
+        solid [7.0, 10.0] the hill above, walking surface at 10.0
 ```
 
 The same three numbers against flat ground at 1 m leave nothing above the cut,
@@ -308,7 +308,7 @@ A Scene Template carries no water. Composition moves Terrain cells and Props
 and nothing else, so a Template with a river would lose it at every Anchor;
 authoring one is refused instead.
 
-Authoring schema 13 also refuses route surfaces in Templates for the same
+Authoring schema 14 also refuses route surfaces in Templates for the same
 reason. An Instance may persist them as open Bezier centerlines with an
 absolute elevation and width at every point and a Terrain-role `asset_key` for
 the material the band presents. Their positions are bounded by the Scene but
@@ -397,10 +397,10 @@ treat a violation as a corrupt file rather than a case to handle:
   Asset has none.
 - Every Terrain cell and every Prop carries `elevation_meters`. There is no
   cell without a height and no Prop without one.
-- Authored mountain contours never appear in this file. They are folded into
+- Authored elevation-region contours never appear in this file. They are folded into
   `scene.terrain_cells` as height alone: a covered cell keeps the `asset_key`
   the author painted, and its `elevation_meters` becomes the highest absolute
-  top over it. A mountain carries no material and creates no cell, so a contour
+  top over it. An elevation region carries no material and creates no cell, so a contour
   over a coordinate with no painted Terrain exports nothing there.
 - A `scene_id` names one Scene in the whole Workspace — never an Instance and a
   Template at once — and it does not change over the life of that Scene. The

@@ -61,20 +61,20 @@ public sealed class EditorInteractionStateTests
     }
 
     /// <summary>
-    /// Mountain is an area that draws and still holds no Asset: the contour
+    /// ElevationRegion is an area that draws and still holds no Asset: the contour
     /// says where and how high, the painted Terrain says what of.
     /// </summary>
     [Fact]
-    public void TheMountainAreaHoldsNoTerrainAsset()
+    public void TheElevationRegionAreaHoldsNoTerrainAsset()
     {
         using var workspace = TestWorkspace.Create();
         var state = new EditorInteractionState();
-        state.SelectMode(EditorMode.Mountain);
+        state.SelectMode(EditorMode.ElevationRegion);
 
         Assert.Null(state.SelectedTerrainAssetKey);
-        Assert.Empty(TerrainAreaAssets.Offered(EditorMode.Mountain, workspace.Terrain));
+        Assert.Empty(TerrainAreaAssets.Offered(EditorMode.ElevationRegion, workspace.Terrain));
         Assert.Null(
-            TerrainAreaAssets.Choose(EditorMode.Mountain, workspace.Terrain, remembered: "grass"));
+            TerrainAreaAssets.Choose(EditorMode.ElevationRegion, workspace.Terrain, remembered: "grass"));
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public sealed class EditorInteractionStateTests
         Assert.All(
             TerrainAreaAssets.Offered(EditorMode.Terrain, workspace.Terrain),
             asset => Assert.Equal(TerrainAuthoring.Cells, asset.Authoring));
-        Assert.Empty(TerrainAreaAssets.Offered(EditorMode.Mountain, workspace.Terrain));
+        Assert.Empty(TerrainAreaAssets.Offered(EditorMode.ElevationRegion, workspace.Terrain));
         Assert.Equal(
             ["river"],
             TerrainAreaAssets.Offered(EditorMode.River, workspace.Terrain)
@@ -183,7 +183,7 @@ public sealed class EditorInteractionStateTests
         Assert.Null(TerrainAreaAssets.SurfaceFieldFor(
             EditorMode.Terrain, workspace.Terrain, remembered: null));
         Assert.Null(TerrainAreaAssets.SurfaceFieldFor(
-            EditorMode.Mountain, workspace.Terrain, remembered: null));
+            EditorMode.ElevationRegion, workspace.Terrain, remembered: null));
         Assert.Null(TerrainAreaAssets.SurfaceFieldFor(
             EditorMode.Props, workspace.Terrain, remembered: null));
         Assert.Null(TerrainAreaAssets.SurfaceFieldFor(

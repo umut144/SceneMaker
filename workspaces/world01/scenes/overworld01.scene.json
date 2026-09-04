@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 13,
+  "version": 14,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60075,9 +60075,9 @@
       "elevation_meters": 1.0
     }
   ],
-  "mountain_bodies": [
+  "elevation_regions": [
     {
-      "mountain_body_id": "mountain_0001",
+      "elevation_region_id": "mountain_0001",
       "elevation_meters": 10.000,
       "points": [
         {

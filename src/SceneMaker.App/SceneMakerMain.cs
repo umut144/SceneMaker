@@ -90,7 +90,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly Button _landscapeNavigationButton = new();
 
     /// <summary>
-    /// Which Landscape area the group opens on. River and Mountain are two
+    /// Which Landscape area the group opens on. River and ElevationRegion are two
     /// areas behind one entry, and coming back should land where the author
     /// left off rather than always on the first of them.
     /// </summary>
@@ -218,7 +218,7 @@ public sealed partial class SceneMakerMain : Control
         AddPerspectiveButton(_overviewNavigationBar, "Terrain", available: true, "Terrain foundation view");
         _landscapeNavigationButton.Text = "Landscape";
         _landscapeNavigationButton.TooltipText =
-            "River and Mountain: the shapes a landscape is made of.";
+            "River and Hill: the shapes a landscape is made of.";
         _landscapeNavigationButton.CustomMinimumSize = new Vector2(130f, 0f);
         _landscapeNavigationButton.Pressed += SelectLandscapeContext;
         _overviewNavigationBar.AddChild(_landscapeNavigationButton);
@@ -409,7 +409,7 @@ public sealed partial class SceneMakerMain : Control
         _snapWaterToggle.ButtonPressed = true;
         _snapWaterToggle.TooltipText =
             "Take the surface height from the Terrain under each placed point. "
-            + "Switch it off to drive a corridor into a mountain, where it must "
+            + "Switch it off to drive a corridor into a hill, where it must "
             + "not follow the ground. What gets stored is the height, not the "
             + "relationship: repainting Terrain later never moves the body.";
         _snapWaterToggle.Toggled += SetSnapWaterToTerrain;
@@ -1235,7 +1235,10 @@ public sealed partial class SceneMakerMain : Control
     {
         _landscapeBar.AddChild(new Label { Text = "Landscape  ›" });
         AddLandscapeAreaButton(EditorMode.River, "River", "Draw and erase rivers.");
-        AddLandscapeAreaButton(EditorMode.Mountain, "Mountain", "Draw and erase mountain bodies.");
+        AddLandscapeAreaButton(
+            EditorMode.ElevationRegion,
+            "Hill",
+            "Draw and reshape raised Terrain regions.");
     }
 
     private void AddLandscapeAreaButton(EditorMode mode, string name, string tooltip)
@@ -1262,7 +1265,7 @@ public sealed partial class SceneMakerMain : Control
     {
         "Terrain" => EditorMode.Terrain,
         "River" => EditorMode.River,
-        "Mountain" => EditorMode.Mountain,
+        "Hill" => EditorMode.ElevationRegion,
         "Placements" => EditorMode.Props,
         "Scene Templates" => EditorMode.Templates,
         _ => throw new ArgumentOutOfRangeException(nameof(perspective)),
@@ -1494,10 +1497,10 @@ public sealed partial class SceneMakerMain : Control
     private void SetAuthoringElevation(double value)
     {
         var elevation = ElevationOf(_elevationEdit, value);
-        if (_interaction.Mode == EditorMode.Mountain
-            && _interaction.ActiveTool == EditorTool.SelectMountain)
+        if (_interaction.Mode == EditorMode.ElevationRegion
+            && _interaction.ActiveTool == EditorTool.SelectElevationRegion)
         {
-            HandleToolOutcome(_canvas.SetSelectedMountainElevation(elevation));
+            HandleToolOutcome(_canvas.SetSelectedElevationRegionElevation(elevation));
             return;
         }
         _canvas.ElevationMeters = elevation;
@@ -1811,19 +1814,19 @@ public sealed partial class SceneMakerMain : Control
     private void SetCurvePointMode(long item)
     {
         var aligned = _curvePointModeEdit.GetItemId((int)item) == CurvePointModeAligned;
-        if (_interaction.ActiveTool == EditorTool.SelectMountain)
+        if (_interaction.ActiveTool == EditorTool.SelectElevationRegion)
         {
-            HandleToolOutcome(_canvas.SetSelectedMountainPointMode(
-                aligned ? MountainPointMode.Aligned : MountainPointMode.Linear));
+            HandleToolOutcome(_canvas.SetSelectedElevationRegionPointMode(
+                aligned ? ElevationRegionPointMode.Aligned : ElevationRegionPointMode.Linear));
             return;
         }
-        if (_interaction.ActiveTool == EditorTool.DrawMountain)
+        if (_interaction.ActiveTool == EditorTool.DrawElevationRegion)
         {
-            _interaction.State.SetMountainPointMode(
-                aligned ? MountainPointMode.Aligned : MountainPointMode.Linear);
+            _interaction.State.SetElevationRegionPointMode(
+                aligned ? ElevationRegionPointMode.Aligned : ElevationRegionPointMode.Linear);
             SetStatus(aligned
-                ? "Mountain: drag the next point to pull its handle, or click for an automatic one."
-                : "Mountain: the next contour point makes straight edges.");
+                ? "Hill: drag the next point to pull its handle, or click for an automatic one."
+                : "Hill: the next contour point makes straight edges.");
             return;
         }
 
@@ -1903,21 +1906,21 @@ public sealed partial class SceneMakerMain : Control
         var propLineActive = _interaction.Mode == EditorMode.Props
             && _interaction.ActiveTool == EditorTool.Line;
         var riverActive = _interaction.Mode == EditorMode.River;
-        var mountainActive = _interaction.Mode == EditorMode.Mountain;
-        var mountainDrawing = mountainActive
-            && _interaction.ActiveTool == EditorTool.DrawMountain;
-        var selectedMountainBody = mountainActive
-            && _interaction.ActiveTool == EditorTool.SelectMountain
-            && _canvas.SelectedMountainBodyId is { } selectedBodyId
-            ? _controller.Document?.MountainBodies
-                .FirstOrDefault(body => body.MountainBodyId == selectedBodyId)
+        var elevationRegionActive = _interaction.Mode == EditorMode.ElevationRegion;
+        var elevationRegionDrawing = elevationRegionActive
+            && _interaction.ActiveTool == EditorTool.DrawElevationRegion;
+        var selectedElevationRegion = elevationRegionActive
+            && _interaction.ActiveTool == EditorTool.SelectElevationRegion
+            && _canvas.SelectedElevationRegionId is { } selectedBodyId
+            ? _controller.Document?.ElevationRegions
+                .FirstOrDefault(body => body.ElevationRegionId == selectedBodyId)
             : null;
-        var selectedMountainPoint = selectedMountainBody is not null
-            && _canvas.SelectedMountainPointIndex is { } selectedPointIndex
-            ? selectedMountainBody.Points.ElementAtOrDefault(selectedPointIndex)
+        var selectedElevationRegionPoint = selectedElevationRegion is not null
+            && _canvas.SelectedElevationRegionPointIndex is { } selectedPointIndex
+            ? selectedElevationRegion.Points.ElementAtOrDefault(selectedPointIndex)
             : null;
-        var mountainPointEditing = selectedMountainPoint is not null;
-        var curveActive = riverActive || mountainDrawing || mountainPointEditing;
+        var elevationRegionPointEditing = selectedElevationRegionPoint is not null;
+        var curveActive = riverActive || elevationRegionDrawing || elevationRegionPointEditing;
         _toolContextSeparator.Visible = propLineActive || curveActive;
         _propLineOffsetLabel.Visible = propLineActive;
         _propLineOffsetEdit.Visible = propLineActive;
@@ -1931,13 +1934,13 @@ public sealed partial class SceneMakerMain : Control
         _surfaceEdit.Visible = surfaceActive;
         // The two tools keep their own point mode; the shared control only
         // shows whichever one the active tool authors with.
-        var aligned = mountainPointEditing
-            ? selectedMountainPoint!.Mode == MountainPointMode.Aligned
-            : mountainDrawing
-                ? _interaction.State.MountainPointMode == MountainPointMode.Aligned
+        var aligned = elevationRegionPointEditing
+            ? selectedElevationRegionPoint!.Mode == ElevationRegionPointMode.Aligned
+            : elevationRegionDrawing
+                ? _interaction.State.ElevationRegionPointMode == ElevationRegionPointMode.Aligned
                 : _interaction.State.WaterPointMode == WaterPointMode.Aligned;
         SelectCurvePointModeItem(aligned ? CurvePointModeAligned : CurvePointModeLinear);
-        _curvePointModeEdit.TooltipText = mountainPointEditing
+        _curvePointModeEdit.TooltipText = elevationRegionPointEditing
             ? "Changes the selected authored point. Aligned creates editable cyclic Bezier handles."
             : "How the next curve point's handles behave. Switchable while drawing; "
                 + "it decides what the next point does and leaves the placed ones alone.";
@@ -1953,16 +1956,16 @@ public sealed partial class SceneMakerMain : Control
         _waterDerivedSpanLabel.Visible = riverActive;
         // Height authors Terrain and Props. Water carries its own three, so
         // leaving it in reach here would offer a number that changes nothing.
-        var mountainHeightEditing = selectedMountainBody is not null;
+        var elevationRegionHeightEditing = selectedElevationRegion is not null;
         var elevationActive = !riverActive
-            && (!mountainActive || mountainDrawing || mountainHeightEditing);
+            && (!elevationRegionActive || elevationRegionDrawing || elevationRegionHeightEditing);
         _elevationLabel.Visible = elevationActive;
         _elevationEdit.Visible = elevationActive;
-        _elevationEdit.SetValueNoSignal((double)(mountainHeightEditing
-            ? selectedMountainBody!.ElevationMeters
+        _elevationEdit.SetValueNoSignal((double)(elevationRegionHeightEditing
+            ? selectedElevationRegion!.ElevationMeters
             : _canvas.ElevationMeters));
-        _elevationEdit.TooltipText = mountainHeightEditing
-            ? "The selected Mountain body's absolute top elevation."
+        _elevationEdit.TooltipText = elevationRegionHeightEditing
+            ? "The selected Hill's absolute top elevation."
             : "The height the drawing tools author at.";
     }
 

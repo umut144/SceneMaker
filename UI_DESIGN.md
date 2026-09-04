@@ -37,7 +37,7 @@ Canvas und damit gegenüber der linken `ToolBar`.
 
 Die Werkzeugauswahl besteht aus drei unabhängigen Dimensionen:
 
-- `EditorMode` bestimmt den **Bereich**: `Terrain`, `River`, `Mountain`,
+- `EditorMode` bestimmt den **Bereich**: `Terrain`, `River`, `Hill`,
   `Placements` oder `Templates`.
 - `EditorTool` bestimmt das primäre Werkzeug innerhalb dieses Bereichs.
 - Das gewählte Terrain-Asset bestimmt das **Material** und sonst nichts.
@@ -48,7 +48,7 @@ Die Navigation ist zweistufig, wie bei den übrigen Bereichen auch:
 Übersicht:  [ Terrain ] [ Landscape ] [ Placements ] [ Scene Templates ] [ Map ]
                               │
                               ▼
-Kontext:    [ ← ]  Landscape ›  ( River )  ( Mountain )
+Kontext:    [ ← ]  Landscape ›  ( River )  ( Hill )
 ```
 
 Das Material erscheint dort nicht noch einmal. Ein Bereich, der Zellen malt,
@@ -78,14 +78,14 @@ Surface-Token — aber gefragt wird es jetzt von der Assetleiste:
 | --- | --- | --- |
 | `Terrain` | `Pencil`, `Line`, `Terrain Fill` | `authoring: "cells"`, als Palette |
 | `River` | `Draw River` | `authoring: "curve"`, als `Surface`-Feld |
-| `Mountain` | `Draw Mountain`, `Select Mountain` | — |
+| `Hill` | `Draw Hill`, `Select Hill` | — |
 | `Placements` | `Selector`, `Pencil`, `Line` | — |
 | `Templates` | `Selector`, `Anchor Move` | — |
 
-`Mountain` bietet keine Assets an, weil ein Bergkörper keines trägt: er
+`Hill` bietet keine Assets an, weil eine Höhenregion keines trägt: sie
 bestimmt Form und Höhe, das Material bleibt Sache des gemalten Terrains. Wer
-die Oberfläche eines Berges ändern will, malt sie im Bereich `Terrain` — dort
-etwa Sand über das Grass des Bergrückens. Jeder Bereich merkt sich sein zuletzt
+die Oberfläche eines Hügels ändern will, malt sie im Bereich `Terrain` — dort
+etwa Sand über das Grass des Hügelrückens. Jeder Bereich merkt sich sein zuletzt
 gewähltes Asset getrennt, damit man den Pinsel dort wiederfindet, wo man ihn
 abgelegt hat.
 
@@ -95,7 +95,7 @@ Bereich gar kein passendes Asset an, bleibt der Bereich erreichbar, sein
 Zeichenwerkzeug ist aber deaktiviert und die Statuszeile sagt, welcher Assettyp
 fehlt. Ein inkompatibles Asset wird nie gewählt, und ein toter aktiver
 Zeichenknopf wird nie angeboten. Das gilt nur für Bereiche, die überhaupt ein
-Material brauchen: `Mountain` bietet keines an und ist deshalb nie aus diesem
+Material brauchen: `Hill` bietet keines an und ist deshalb nie aus diesem
 Grund deaktiviert.
 
 Die angebotenen Namen und Rollen kommen aus SceneMakers Workspace-Konfiguration,
@@ -108,7 +108,7 @@ Ein Assetwechsel **innerhalb** eines Bereichs wechselt nur das Material — ob
 über die Palette oder über das `Surface`-Feld: die Geometrie eines laufenden
 Entwurfs bleibt stehen, und kein Werkzeug wird unter der Hand getauscht. Das
 ersetzt die frühere automatische Werkzeugumschaltung, die einen halb
-gezeichneten Berg verschluckte, sobald man ein Curve-Asset wählte.
+gezeichneten Hügel verschluckte, sobald man ein Curve-Asset wählte.
 
 Die Assetleisten oben zeigen jedes Asset in seiner eigenen Farbe. Die Auswahl
 liegt deshalb auf dem **Hintergrund** — eine gefüllte Fläche in der Assetfarbe
@@ -139,8 +139,8 @@ Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
   Kurvenpunkt auf dem Wasserraster fest, Ziehen zieht sein Handle heraus,
   Loslassen setzt ihn. Enter schließt den Fluss ab, Escape nimmt Punkt für Punkt
   zurück.
-- `Mountain:Draw Mountain` zeichnet eine geschlossene Bezier-Kontur auf dem
-  Terrainraster. Enter schließt und authoriert den ganzen Berg; Escape oder
+- `Hill:Draw Hill` zeichnet eine geschlossene Bezier-Kontur auf dem
+  Terrainraster. Enter schließt und authoriert den ganzen Hügel; Escape oder
   Rückgängig nimmt während des Entwurfs jeweils den letzten Punkt zurück.
 
 Ein aktiver `Eraser` verwendet für Terrain-Highlights die Löschfarbe, damit die
@@ -188,7 +188,7 @@ getrennt betrachtet.
 
 `Point` schaltet
 zwischen `Linear` und `Aligned` um: `Linear` macht die angrenzenden Segmente
-gerade, `Aligned` hält die beiden Handles eines Punktes kollinear. Fluss und Berg
+gerade, `Aligned` hält die beiden Handles eines Punktes kollinear. Fluss und Hügel
 teilen sich dieses eine Bedienelement, aber nicht seinen Wert: jedes Werkzeug
 merkt sich seinen eigenen Punktmodus, und der Dropdown zeigt den des aktiven. Wie beim
 Bezier-Werkzeug von PolyTools ist das Sitzungszustand und gilt für den *nächsten*
@@ -214,7 +214,7 @@ werden zwischen gesetzten Punkten über die Bogenlänge interpoliert.
 standardmäßig an und nimmt die Oberflächenhöhe aus dem Terrain unter dem
 gesetzten Punkt — ein Fluss folgt damit seinem Tal, ohne dass man eine Zahl
 tippt. Für einen Tunnel schaltet man ihn ab, denn dort ist der ganze Sinn, dass
-das Wasser dem Berg gerade *nicht* folgt. Gespeichert wird auch dann nur die
+das Wasser dem Hügel gerade *nicht* folgt. Gespeichert wird auch dann nur die
 Zahl: es gibt keinen Terrain-Bezug im Dokument, ein später umgemaltes Gelände
 verschiebt also keinen Fluss. Liegt unter einem Punkt kein Terrain, erbt er die
 Höhe seines Vorgängers, und die Statuszeile sagt es.
@@ -231,9 +231,9 @@ Kurve abgeleitet sind.
 Ein Scene Template kann kein Wasser tragen; das Werkzeug sagt das beim ersten
 Klick, statt es beim Speichern scheitern zu lassen.
 
-### Mountain:Draw Mountain
+### Hill:Draw Hill
 
-`Draw Mountain` braucht kein Asset und ist deshalb immer verfügbar. Jeder Klick
+`Draw Hill` braucht kein Asset und ist deshalb immer verfügbar. Jeder Klick
 setzt einen Konturpunkt auf das Terrainraster; `Point` schaltet wie beim Fluss
 zwischen geraden Kanten und `Aligned`-Bezierpunkten. Die Kontur ist zyklisch:
 auch der erste und der letzte Punkt sind Nachbarn, und automatische Handles
@@ -245,13 +245,13 @@ Was passiert, wenn ich jetzt Enter drücke?
 - **Unfertig** — cyan, nur Umriss und Punkte, keine Füllung. Es sind noch keine
   drei Punkte gesetzt. Das ist kein Fehler, sondern der normale Zustand einer
   Kontur, die gerade entsteht; die Statuszeile sagt, was noch fehlt.
-- **Bereit** — gelber Umriss und genau die Terrainzellen, die dieser Berg
-  anheben würde, jede in der Farbe des dort gemalten Assets. Der Berg färbt
+- **Bereit** — gelber Umriss und genau die Terrainzellen, die dieser Hügel
+  anheben würde, jede in der Farbe des dort gemalten Assets. Der Hügel färbt
   nichts um: eine Kontur über Sand und Grass zeigt Sand und Grass. Gezeigt wird
   der Unterschied, den Enter macht, nicht die überdeckte Fläche — unbemalte
-  Zellen und Zellen, die ein höherer Berg schon hält, bleiben leer. Gelb ist
+  Zellen und Zellen, die ein höherer Hügel schon hält, bleiben leer. Gelb ist
   eine Zusage: geprüft sind die Höhe auf dem Workspace-Quantum, die Kontur
-  selbst und die Faltung mit den vorhandenen Bergen.
+  selbst und die Faltung mit den vorhandenen Hügeln.
 - **Blockiert** — roter Umriss, keine Füllung. Enter würde scheitern, und der
   Grund steht in der Vorschau und in der Statuszeile. Blockiert ist eine Frage
   der Geometrie und der Höhe: Selbstkontakt, eine Kontur ohne Fläche, eine Höhe
@@ -259,7 +259,7 @@ Was passiert, wenn ich jetzt Enter drücke?
 
 Eine gültige Kontur, die nichts anhebt, ist **nicht** blockiert. Sie bleibt
 bereit, ihre Füllung ist leer, und Vorschau wie Statuszeile sagen es aus:
-`Mountain is valid but currently raises no Terrain cells.` So bleibt die
+`Hill is valid but currently raises no Terrain cells.` So bleibt die
 Reihenfolge „erst Kontur, dann Terrain" möglich, ohne dass eine leere Vorschau
 wie ein kaputtes Werkzeug aussieht.
 
@@ -267,67 +267,69 @@ Vorschau und Enter fragen dieselbe Core-Operation, nicht zwei ähnliche. Eine
 gelbe Kontur kann deshalb nicht abgelehnt und eine rote nicht angenommen werden,
 und beide nennen denselben Grund.
 
-Das `Height`-Feld ist die absolute Oberkante des ganzen Bergkörpers. Ein fertiger
-Berg ist ein Bearbeitungsschritt.
+Das `Height`-Feld ist die absolute Oberkante der ganzen Höhenregion. Ein fertiger
+Hügel ist ein Bearbeitungsschritt.
 
-Mit eingeschaltetem `Eraser` hebt schon das Überfahren den **ganzen** Bergkörper
-hervor, den ein Klick entfernen würde: seine Kontur plus alle Terrainzellen, die
+Mit eingeschaltetem `Eraser` hebt schon das Überfahren die **ganze** Höhenregion
+hervor, die ein Klick entfernen würde: ihre Kontur plus alle Terrainzellen, die
 er gerade anhebt, in der Löschfarbe — nicht nur die Zelle unter dem Zeiger, aber
 auch nicht jede überdeckte Zelle. Gezeigt wird, was tatsächlich absinkt; eine
-Zelle, die ein anderer Berg höher hält oder die niemand gemalt hat, sinkt nicht.
-Deshalb bleibt die Kontur auch dann sichtbar, wenn der Körper nichts anhebt.
+Zelle, die ein anderer Hügel höher hält oder die niemand gemalt hat, sinkt nicht.
+Deshalb bleibt die Kontur auch dann sichtbar, wenn die Region nichts anhebt.
 Getroffen wird über die Terrainzelle unter dem Zeiger, nicht über die
 mathematische Zeigerposition — sonst könnten an einer Randzelle die gefüllte
 Zelle und der getroffene Körper um eine halbe Zelle auseinanderliegen. Liegen
-mehrere Berge übereinander, gewinnt der höchste sichtbare; ein Klick entfernt
-genau diesen einen ganzen Körper.
+mehrere Hügel übereinander, gewinnt der höchste sichtbare; ein Klick entfernt
+genau diese eine ganze Region.
 
-### Fertige Bergkörper auf dem Canvas
+### Fertige Höhenregionen auf dem Canvas
 
-Jeder gespeicherte Bergkörper trägt eine dauerhaft sichtbare geschlossene
+Jede gespeicherte Höhenregion trägt eine dauerhaft sichtbare geschlossene
 Kontur in einer eigenen Farbe. Die Fläche bleibt, was die Faltung ergibt — das
 gemalte Terrain-Asset in seiner eigenen Farbe —, damit das Oberflächenmaterial
-lesbar bleibt; die Kontur sagt, **wo ein Körper aufhört**, und genau das können
-gefaltete Zellen nicht: zwei Berge über demselben gemalten Asset sind ohne sie
+lesbar bleibt; die Kontur sagt, **wo eine Region aufhört**, und genau das können
+gefaltete Zellen nicht: zwei Hügel über demselben gemalten Asset sind ohne sie
 eine einzige Fläche. Die Höhenansicht war bisher der einzige Weg, ihre Grenzen
 zu erraten; sie bleibt eine Höhenanalyse und ist dafür nicht mehr nötig, weshalb
 die Kontur unabhängig davon gezeichnet wird, ob die Ansicht an ist.
 
 Die Farbe stammt aus einer kleinen festen Editorpalette und wird stabil aus der
-`mountain_body_id` abgeleitet: aufeinanderfolgend gezeichnete Berge bekommen
-verschiedene Farben, und derselbe Berg hat nach einem Neustart dieselbe. Sie ist
+`elevation_region_id` abgeleitet: aufeinanderfolgend gezeichnete Hügel bekommen
+verschiedene Farben, und derselbe Hügel hat nach einem Neustart dieselbe. Sie ist
 reine Editorfarbe — sie steht nicht im Dokument, nicht im Export und bedeutet im
-Spiel nichts. In `Terrain` und `Mountain` ist die Kontur voll sichtbar — im Terrain-Bereich
-ist sie das einzige unmittelbare Signal, dass dort ein authorierter Bergkörper
-liegt. Der `Map`-Kontext ist eine strukturelle Übersicht und zeigt sie ebenfalls
-voll. In `River`, `Placements` und `Templates` wird sie wie alles Bereichsfremde
-gedimmt.
+Spiel nichts. Bereits bestehende IDs behalten dabei absichtlich ihr historisches
+Präfix `mountain_`: eine stabile Identität wird wegen einer besseren Bezeichnung
+nicht umgeschrieben. In `Terrain` und `Hill` ist die Kontur voll sichtbar — im
+Terrain-Bereich ist sie das einzige unmittelbare Signal, dass dort eine
+authorierte Höhenregion liegt. Der `Map`-Kontext ist eine strukturelle Übersicht
+und zeigt sie ebenfalls voll. In `River`, `Placements` und `Templates` wird sie
+wie alles Bereichsfremde gedimmt.
 
 Ein begonnener Entwurf verschwindet nie stillschweigend. Ein Bereichswechsel,
 ein Werkzeugwechsel und das Einschalten des `Eraser` verwerfen den Entwurf — und
 sagen in der Statuszeile, wie viele Punkte dabei verloren gingen. Für Fluss und
-Berg gilt dieselbe Eraser-Regel: kein Entwurf bleibt im Hintergrund erhalten,
+Hügel gilt dieselbe Eraser-Regel: kein Entwurf bleibt im Hintergrund erhalten,
 während radiert wird. Das Ausschalten des `Eraser` beginnt keinen neuen Entwurf,
 und ein Assetwechsel verwirft nichts.
 
-### Mountain:Select Mountain
+### Hill:Select Hill
 
-Ein Klick in eine Bergfläche wählt den obersten Bergkörper über der getroffenen
-Terrainzelle. Seine gespeicherten Konturpunkte und Bezier-Handles werden
+Ein Klick in eine Hügelfläche wählt die oberste Höhenregion über der getroffenen
+Terrainzelle. Ihre gespeicherten Konturpunkte und Bezier-Handles werden
 sichtbar; ein Klick nahe an einem Punkt hat Vorrang vor der Flächenauswahl und
 zieht genau diesen Punkt. Der Trefferradius bleibt in Bildschirm-Pixeln stabil,
 damit Zoomen die Bedienbarkeit nicht verändert.
 
 Gezogene Punkte rasten auf dem Terrainraster ein. Handles bleiben relative,
 ungesnappte Offsets und wandern mit dem Punkt; ID und absolute Oberkante des
-Bergs ändern sich nicht. Ist ein Punkt ausgewählt, erscheint das gemeinsame
+Hügels ändern sich nicht. Ist ein Punkt ausgewählt, erscheint das gemeinsame
 `Point`-Feld mit seinem gespeicherten Modus. `Linear` entfernt beide Handles;
 `Aligned` erzeugt zunächst zyklische automatische Handles aus den beiden
 Nachbarn. Danach kann jede Handle-Spitze direkt gezogen werden. Die
 gegenüberliegende Spitze dreht sich auf derselben Tangente mit, behält aber ihre
 eigene Länge.
 
-Eine gültige Vorschau trägt die stabile Konturfarbe des Bergs. Würde ein Punkt-
+Eine gültige Vorschau trägt die stabile Konturfarbe des Hügels. Würde ein Punkt-
 oder Handlezug die Form selbst berühren oder sonst die Konturregeln brechen,
 wird sie rot und die Änderung wird nicht gespeichert. Ein ungültiger
 Moduswechsel wird mit demselben Grund abgelehnt und das Feld auf den
@@ -336,13 +338,13 @@ Undo-Schritt. Escape und ein Klick ins Leere heben die Auswahl auf. `Height`
 zeigt bei einer Körperauswahl dessen absolute Oberkante und ändert sie auf dem
 Höhenquantum des Workspaces; ID und Kontur bleiben dabei unangetastet. Eine
 niedrigere Oberkante darf wirkungslos unter bereits höherem Terrain liegen,
-weil ein Berg niemals nach unten schneidet. Ohne gewählten Körper bleibt
+weil ein Hügel niemals nach unten schneidet. Ohne gewählten Körper bleibt
 `Height` ausgeblendet. Das Feld zeigt so viele Nachkommastellen, wie das Quantum
 tatsächlich braucht — bei `0,125 m` also `0.125`, nicht gerundet `0.1` — und die
 Pfeile gehen weiterhin um genau ein Quantum.
 
 Die Canvasdarstellung verwendet bereits das gefaltete Höhenfeld aus gemalten
-Zellen und Bergkörpern. Dadurch sieht der Autor genau die Terrainzellen, die
+Zellen und Höhenregionn. Dadurch sieht der Autor genau die Terrainzellen, die
 auch der Export erhält.
 
 ### Placements und Untergrund
@@ -352,7 +354,7 @@ steht schon fest, wo es ist; der Boden darunter ist eine eigene Tatsache und
 keine Bedingung. Ein frei stehendes Placement wird deshalb weder markiert noch
 gewarnt noch blockiert: die Vorschau ist normal gültig, das fertige Placement
 wird wie jedes andere gezeichnet, und Radieren von Terrain oder eines
-Bergkörpers unter ihm ändert an ihm nichts. Blockiert wird weiterhin nur, was
+Höhenregions unter ihm ändert an ihm nichts. Blockiert wird weiterhin nur, was
 die Geometrie allein entscheiden kann — ein Footprint außerhalb der Scene und
 ein Footprint, der ein anderes Placement berührt.
 

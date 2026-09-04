@@ -2,32 +2,32 @@ using System.Globalization;
 
 namespace SceneMaker.Core;
 
-/// <summary>One point of a closed mountain contour while it is being drawn.</summary>
-public readonly record struct MountainDraftPoint(
+/// <summary>One point of a closed hill contour while it is being drawn.</summary>
+public readonly record struct ElevationRegionDraftPoint(
     int X,
     int Y,
-    MountainPointMode Mode,
+    ElevationRegionPointMode Mode,
     AuthoringPixelOffset? DraggedHandleOut = null);
 
-/// <summary>Which Bezier handle of a mountain point is being edited.</summary>
-public enum MountainHandleSide
+/// <summary>Which Bezier handle of a hill point is being edited.</summary>
+public enum ElevationRegionHandleSide
 {
     In,
     Out,
 }
 
-/// <summary>Pure edits for closed, level-topped mountain bodies.</summary>
-public static class MountainEditing
+/// <summary>Pure edits for closed, level-topped hill bodies.</summary>
+public static class ElevationRegionEditing
 {
     /// <summary>
     /// Authors one closed contour at one absolute top. No Asset is asked for: a
-    /// mountain raises painted Terrain and the painted cell keeps saying what
+    /// hill raises painted Terrain and the painted cell keeps saying what
     /// the surface is made of.
     /// </summary>
     public static SceneDocument Place(
         SceneDocument scene,
         WorkspaceMetrics metrics,
-        IReadOnlyList<MountainCurvePointDocument> points,
+        IReadOnlyList<ElevationRegionPointDocument> points,
         decimal elevationMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -37,64 +37,64 @@ public static class MountainEditing
         {
             throw new SceneMakerDocumentException(
                 FormattableString.Invariant(
-                    $"Mountain elevation {elevationMeters:0.############################} m must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m."));
+                    $"Elevation region elevation {elevationMeters:0.############################} m must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m."));
         }
 
-        var body = new MountainBodyDocument
+        var body = new ElevationRegionDocument
         {
-            MountainBodyId = NextMountainBodyId(scene),
+            ElevationRegionId = NextElevationRegionId(scene),
             ElevationMeters = elevationMeters,
             Points = [.. points],
         };
-        _ = MountainGeometry.RequireContour(body);
+        _ = ElevationRegionGeometry.RequireContour(body);
         return scene with
         {
-            MountainBodies = scene.MountainBodies
+            ElevationRegions = scene.ElevationRegions
                 .Append(body)
-                .OrderBy(static value => value.MountainBodyId, StringComparer.Ordinal)
+                .OrderBy(static value => value.ElevationRegionId, StringComparer.Ordinal)
                 .ToList(),
         };
     }
 
-    public static SceneDocument Remove(SceneDocument scene, string mountainBodyId)
+    public static SceneDocument Remove(SceneDocument scene, string elevationRegionId)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var remaining = scene.MountainBodies
+        var remaining = scene.ElevationRegions
             .Where(body => !string.Equals(
-                body.MountainBodyId,
-                mountainBodyId,
+                body.ElevationRegionId,
+                elevationRegionId,
                 StringComparison.Ordinal))
             .ToList();
-        return remaining.Count == scene.MountainBodies.Count
+        return remaining.Count == scene.ElevationRegions.Count
             ? scene
-            : scene with { MountainBodies = remaining };
+            : scene with { ElevationRegions = remaining };
     }
 
     /// <summary>
     /// Changes one body's absolute top without changing its identity or shape.
-    /// A lower top is valid even when it raises nothing: mountains never cut
+    /// A lower top is valid even when it raises nothing: hills never cut
     /// painted Terrain down, and a later edit may make the body effective again.
     /// </summary>
     public static SceneDocument SetElevation(
         SceneDocument scene,
         WorkspaceMetrics metrics,
-        string mountainBodyId,
+        string elevationRegionId,
         decimal elevationMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
-        ArgumentException.ThrowIfNullOrWhiteSpace(mountainBodyId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(elevationRegionId);
         if (!metrics.IsElevationAligned(elevationMeters))
         {
             throw new SceneMakerDocumentException(
                 FormattableString.Invariant(
-                    $"Mountain elevation {elevationMeters:0.############################} m must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m."));
+                    $"Elevation region elevation {elevationMeters:0.############################} m must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m."));
         }
 
         var found = false;
-        var bodies = scene.MountainBodies.Select(body =>
+        var bodies = scene.ElevationRegions.Select(body =>
         {
-            if (!string.Equals(body.MountainBodyId, mountainBodyId, StringComparison.Ordinal))
+            if (!string.Equals(body.ElevationRegionId, elevationRegionId, StringComparison.Ordinal))
                 return body;
             found = true;
             return body with { ElevationMeters = elevationMeters };
@@ -102,9 +102,9 @@ public static class MountainEditing
         if (!found)
         {
             throw new SceneMakerDocumentException(
-                $"Mountain body '{mountainBodyId}' does not exist.");
+                $"Elevation region '{elevationRegionId}' does not exist.");
         }
-        return scene with { MountainBodies = bodies };
+        return scene with { ElevationRegions = bodies };
     }
 
     /// <summary>
@@ -114,27 +114,27 @@ public static class MountainEditing
     /// </summary>
     public static SceneDocument Reshape(
         SceneDocument scene,
-        string mountainBodyId,
-        IReadOnlyList<MountainCurvePointDocument> points)
+        string elevationRegionId,
+        IReadOnlyList<ElevationRegionPointDocument> points)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        ArgumentException.ThrowIfNullOrWhiteSpace(mountainBodyId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(elevationRegionId);
         ArgumentNullException.ThrowIfNull(points);
-        var body = scene.MountainBodies.FirstOrDefault(candidate => string.Equals(
-            candidate.MountainBodyId, mountainBodyId, StringComparison.Ordinal));
+        var body = scene.ElevationRegions.FirstOrDefault(candidate => string.Equals(
+            candidate.ElevationRegionId, elevationRegionId, StringComparison.Ordinal));
         if (body is null)
         {
             throw new SceneMakerDocumentException(
-                $"Mountain body '{mountainBodyId}' does not exist.");
+                $"Elevation region '{elevationRegionId}' does not exist.");
         }
 
         var reshaped = body with { Points = [.. points] };
-        _ = MountainGeometry.RequireContour(reshaped);
+        _ = ElevationRegionGeometry.RequireContour(reshaped);
         return scene with
         {
-            MountainBodies = scene.MountainBodies
+            ElevationRegions = scene.ElevationRegions
                 .Select(candidate => string.Equals(
-                    candidate.MountainBodyId, mountainBodyId, StringComparison.Ordinal)
+                    candidate.ElevationRegionId, elevationRegionId, StringComparison.Ordinal)
                         ? reshaped
                         : candidate)
                 .ToList(),
@@ -145,34 +145,34 @@ public static class MountainEditing
     /// The same reshape the edit commits, answered without throwing so a live
     /// point drag can show whether releasing it would succeed.
     /// </summary>
-    public sealed record MountainReshape(
+    public sealed record ElevationRegionReshape(
         SceneDocument? Scene,
-        MountainBodyDocument? Body,
+        ElevationRegionDocument? Body,
         string? Reason);
 
-    public static MountainReshape TryReshape(
+    public static ElevationRegionReshape TryReshape(
         SceneDocument scene,
-        string mountainBodyId,
-        IReadOnlyList<MountainCurvePointDocument> points)
+        string elevationRegionId,
+        IReadOnlyList<ElevationRegionPointDocument> points)
     {
         ArgumentNullException.ThrowIfNull(scene);
         try
         {
-            var reshapedScene = Reshape(scene, mountainBodyId, points);
-            return new MountainReshape(
+            var reshapedScene = Reshape(scene, elevationRegionId, points);
+            return new ElevationRegionReshape(
                 reshapedScene,
-                reshapedScene.MountainBodies.Single(body => string.Equals(
-                    body.MountainBodyId, mountainBodyId, StringComparison.Ordinal)),
+                reshapedScene.ElevationRegions.Single(body => string.Equals(
+                    body.ElevationRegionId, elevationRegionId, StringComparison.Ordinal)),
                 Reason: null);
         }
         catch (SceneMakerDocumentException exception)
         {
-            return new MountainReshape(Scene: null, Body: null, exception.Message);
+            return new ElevationRegionReshape(Scene: null, Body: null, exception.Message);
         }
     }
 
     /// <summary>
-    /// The topmost mountain body whose contour covers a Terrain cell.
+    /// The topmost hill body whose contour covers a Terrain cell.
     ///
     /// <para>The question is asked of the cell, not of the exact position
     /// inside it. Asking the contour whether it contains the pointer would use
@@ -186,64 +186,64 @@ public static class MountainEditing
     /// Coverage is the whole question: a body over ground nobody painted has no
     /// visible surface there and is still picked, because it is still the body
     /// that is there. What it is holding up, if anything, is a second
-    /// question - see <see cref="MountainGeometry.CellsRaisedBy"/>. Equal tops
+    /// question - see <see cref="ElevationRegionGeometry.CellsRaisedBy"/>. Equal tops
     /// are settled by ordinal body ID, so the answer is the same every time
     /// rather than depending on document order.</para>
     /// </summary>
-    public static MountainBodyDocument? FindAtCell(
+    public static ElevationRegionDocument? FindAtCell(
         SceneDocument scene,
         WorkspaceMetrics metrics,
         TerrainCellCoordinate cell)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
-        return scene.MountainBodies
-            .Where(body => MountainGeometry.TerrainCells(scene, metrics, body).Contains(cell))
+        return scene.ElevationRegions
+            .Where(body => ElevationRegionGeometry.TerrainCells(scene, metrics, body).Contains(cell))
             .OrderBy(static body => body.ElevationMeters)
-            .ThenBy(static body => body.MountainBodyId, StringComparer.Ordinal)
+            .ThenBy(static body => body.ElevationRegionId, StringComparer.Ordinal)
             .LastOrDefault();
     }
 
     /// <summary>
-    /// One attempt at authoring a mountain: the Scene it would produce and the
+    /// One attempt at authoring a hill: the Scene it would produce and the
     /// body it would add, or the reason it cannot be done.
     /// </summary>
-    public sealed record MountainPlacement(
+    public sealed record ElevationRegionPlacement(
         SceneDocument? Scene,
-        MountainBodyDocument? Body,
+        ElevationRegionDocument? Body,
         string? Reason);
 
     /// <summary>
-    /// Everything that has to hold for a contour to become a mountain, asked
+    /// Everything that has to hold for a contour to become a hill, asked
     /// once and answered without throwing: the elevation sits on the Workspace
     /// quantum and the ring is a usable contour. That is the whole list - a
-    /// mountain no longer brings a material that could disagree with anything
+    /// hill no longer brings a material that could disagree with anything
     /// already in the Scene, so the fold has nothing left to refuse.
     ///
     /// <para>Both the preview and the key that commits it go through here. Two
     /// separate implementations of "would this work" is how a preview comes to
     /// promise something the commit then refuses.</para>
     /// </summary>
-    public static MountainPlacement TryPlace(
+    public static ElevationRegionPlacement TryPlace(
         SceneDocument scene,
         WorkspaceMetrics metrics,
-        IReadOnlyList<MountainCurvePointDocument> points,
+        IReadOnlyList<ElevationRegionPointDocument> points,
         decimal elevationMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
         try
         {
             var placed = Place(scene, metrics, points, elevationMeters);
-            var authored = placed.MountainBodies.Single(candidate => !scene.MountainBodies.Any(
+            var authored = placed.ElevationRegions.Single(candidate => !scene.ElevationRegions.Any(
                 existing => string.Equals(
-                    existing.MountainBodyId,
-                    candidate.MountainBodyId,
+                    existing.ElevationRegionId,
+                    candidate.ElevationRegionId,
                     StringComparison.Ordinal)));
-            return new MountainPlacement(placed, authored, Reason: null);
+            return new ElevationRegionPlacement(placed, authored, Reason: null);
         }
         catch (SceneMakerDocumentException exception)
         {
-            return new MountainPlacement(Scene: null, Body: null, exception.Message);
+            return new ElevationRegionPlacement(Scene: null, Body: null, exception.Message);
         }
     }
 
@@ -252,15 +252,15 @@ public static class MountainEditing
     /// every aligned point has two neighbours: the last and first points are
     /// neighbours across the closing edge too.
     /// </summary>
-    public static IReadOnlyList<MountainCurvePointDocument> ResolveContour(
-        IReadOnlyList<MountainDraftPoint> draft)
+    public static IReadOnlyList<ElevationRegionPointDocument> ResolveContour(
+        IReadOnlyList<ElevationRegionDraftPoint> draft)
     {
         ArgumentNullException.ThrowIfNull(draft);
-        List<MountainCurvePointDocument> points = new(draft.Count);
+        List<ElevationRegionPointDocument> points = new(draft.Count);
         for (var index = 0; index < draft.Count; index++)
         {
             var current = draft[index];
-            if (current.Mode == MountainPointMode.Linear)
+            if (current.Mode == ElevationRegionPointMode.Linear)
             {
                 points.Add(Point(current.X, current.Y));
                 continue;
@@ -274,26 +274,26 @@ public static class MountainEditing
             points.Add(Point(
                 current.X,
                 current.Y,
-                MountainPointMode.Aligned,
+                ElevationRegionPointMode.Aligned,
                 handleIn: handleIn,
                 handleOut: handleOut));
         }
         return points;
     }
 
-    public static MountainCurvePointDocument Point(
+    public static ElevationRegionPointDocument Point(
         int authoringX,
         int authoringY,
-        MountainPointMode mode = MountainPointMode.Linear,
+        ElevationRegionPointMode mode = ElevationRegionPointMode.Linear,
         AuthoringPixelOffset? handleIn = null,
         AuthoringPixelOffset? handleOut = null) => new()
     {
         PositionAuthoringPx = new AuthoringPixelPosition { X = authoringX, Y = authoringY },
         Mode = mode,
-        HandleInAuthoringPx = mode == MountainPointMode.Linear
+        HandleInAuthoringPx = mode == ElevationRegionPointMode.Linear
             ? AuthoringPixelOffset.Zero
             : handleIn ?? AuthoringPixelOffset.Zero,
-        HandleOutAuthoringPx = mode == MountainPointMode.Linear
+        HandleOutAuthoringPx = mode == ElevationRegionPointMode.Linear
             ? AuthoringPixelOffset.Zero
             : handleOut ?? AuthoringPixelOffset.Zero,
     };
@@ -303,10 +303,10 @@ public static class MountainEditing
     /// and an aligned Bezier point. Turning alignment on supplies useful cyclic
     /// automatic handles; turning it off removes both handles.
     /// </summary>
-    public static IReadOnlyList<MountainCurvePointDocument> WithPointMode(
-        IReadOnlyList<MountainCurvePointDocument> points,
+    public static IReadOnlyList<ElevationRegionPointDocument> WithPointMode(
+        IReadOnlyList<ElevationRegionPointDocument> points,
         int pointIndex,
-        MountainPointMode mode)
+        ElevationRegionPointMode mode)
     {
         ArgumentNullException.ThrowIfNull(points);
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
@@ -315,7 +315,7 @@ public static class MountainEditing
 
         var changed = points.ToList();
         var point = points[pointIndex];
-        if (mode == MountainPointMode.Linear)
+        if (mode == ElevationRegionPointMode.Linear)
         {
             changed[pointIndex] = point with
             {
@@ -344,10 +344,10 @@ public static class MountainEditing
     /// length and turns to remain collinear, which is the persisted meaning of
     /// Aligned: one tangent with independently adjustable lengths.
     /// </summary>
-    public static IReadOnlyList<MountainCurvePointDocument> WithMovedHandle(
-        IReadOnlyList<MountainCurvePointDocument> points,
+    public static IReadOnlyList<ElevationRegionPointDocument> WithMovedHandle(
+        IReadOnlyList<ElevationRegionPointDocument> points,
         int pointIndex,
-        MountainHandleSide side,
+        ElevationRegionHandleSide side,
         AuthoringPixelOffset offset)
     {
         ArgumentNullException.ThrowIfNull(points);
@@ -356,12 +356,12 @@ public static class MountainEditing
         if (pointIndex < 0 || pointIndex >= points.Count)
             throw new ArgumentOutOfRangeException(nameof(pointIndex));
         var point = points[pointIndex];
-        if (point.Mode != MountainPointMode.Aligned)
+        if (point.Mode != ElevationRegionPointMode.Aligned)
             throw new SceneMakerDocumentException(
-                $"Mountain point {pointIndex} is Linear and has no handles to move.");
+                $"Elevation region point {pointIndex} is Linear and has no handles to move.");
 
         var changed = points.ToList();
-        changed[pointIndex] = side == MountainHandleSide.In
+        changed[pointIndex] = side == ElevationRegionHandleSide.In
             ? point with
             {
                 HandleInAuthoringPx = offset,
@@ -377,7 +377,7 @@ public static class MountainEditing
         return changed;
     }
 
-    private static MountainDraftPoint DraftOf(MountainCurvePointDocument point) => new(
+    private static ElevationRegionDraftPoint DraftOf(ElevationRegionPointDocument point) => new(
         point.PositionAuthoringPx.X,
         point.PositionAuthoringPx.Y,
         point.Mode);
@@ -400,8 +400,8 @@ public static class MountainEditing
 
     private static AuthoringPixelOffset Orient(
         AuthoringPixelOffset handleOut,
-        MountainDraftPoint current,
-        MountainDraftPoint previous)
+        ElevationRegionDraftPoint current,
+        ElevationRegionDraftPoint previous)
     {
         var travelX = current.X - previous.X;
         var travelY = current.Y - previous.Y;
@@ -415,9 +415,9 @@ public static class MountainEditing
         (new AuthoringPixelOffset { X = -handleOut.X, Y = -handleOut.Y }, handleOut);
 
     private static (AuthoringPixelOffset In, AuthoringPixelOffset Out) AutomaticHandles(
-        MountainDraftPoint current,
-        MountainDraftPoint previous,
-        MountainDraftPoint next)
+        ElevationRegionDraftPoint current,
+        ElevationRegionDraftPoint previous,
+        ElevationRegionDraftPoint next)
     {
         var tangentX = (double)(next.X - previous.X);
         var tangentY = (double)(next.Y - previous.Y);
@@ -432,10 +432,10 @@ public static class MountainEditing
             Offset(tangentX / tangentLength * outgoing, tangentY / tangentLength * outgoing));
     }
 
-    private static AuthoringPixelOffset Third(MountainDraftPoint from, MountainDraftPoint to) =>
+    private static AuthoringPixelOffset Third(ElevationRegionDraftPoint from, ElevationRegionDraftPoint to) =>
         Offset((to.X - from.X) / 3.0, (to.Y - from.Y) / 3.0);
 
-    private static double Distance(MountainDraftPoint from, MountainDraftPoint to)
+    private static double Distance(ElevationRegionDraftPoint from, ElevationRegionDraftPoint to)
     {
         var deltaX = (double)(to.X - from.X);
         var deltaY = (double)(to.Y - from.Y);
@@ -448,15 +448,15 @@ public static class MountainEditing
         Y = (int)Math.Round(y, MidpointRounding.AwayFromZero),
     };
 
-    private static string NextMountainBodyId(SceneDocument scene)
+    private static string NextElevationRegionId(SceneDocument scene)
     {
         const string prefix = "mountain_";
         HashSet<int> used = [];
-        foreach (var body in scene.MountainBodies)
+        foreach (var body in scene.ElevationRegions)
         {
-            if (!body.MountainBodyId.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            if (!body.ElevationRegionId.StartsWith(prefix, StringComparison.Ordinal)) continue;
             if (int.TryParse(
-                    body.MountainBodyId.AsSpan(prefix.Length),
+                    body.ElevationRegionId.AsSpan(prefix.Length),
                     NumberStyles.None,
                     CultureInfo.InvariantCulture,
                     out var index))
@@ -469,6 +469,6 @@ public static class MountainEditing
         {
             if (used.Add(index)) return $"{prefix}{index:0000}";
         }
-        throw new SceneMakerDocumentException("Scene has exhausted stable mountain body IDs.");
+        throw new SceneMakerDocumentException("Scene has exhausted stable hill body IDs.");
     }
 }

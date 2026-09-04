@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 13;
+    public const int SceneVersion = 14;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -78,22 +78,22 @@ public sealed record AuthoringPixelOffset
     public bool IsZero() => X == 0 && Y == 0;
 }
 
-/// <summary>How one point shapes a closed mountain contour.</summary>
-public enum MountainPointMode
+/// <summary>How one point shapes a closed hill contour.</summary>
+public enum ElevationRegionPointMode
 {
     Linear,
     Aligned,
 }
 
 /// <summary>
-/// One point of a mountain's closed outline. It has its own persisted record:
-/// sharing the water record would make a mountain carry river fields and tie
+/// One point of a hill's closed outline. It has its own persisted record:
+/// sharing the water record would make a hill carry river fields and tie
 /// two unrelated document schemas together.
 /// </summary>
-public sealed record MountainCurvePointDocument
+public sealed record ElevationRegionPointDocument
 {
     public required AuthoringPixelPosition PositionAuthoringPx { get; init; }
-    public required MountainPointMode Mode { get; init; }
+    public required ElevationRegionPointMode Mode { get; init; }
     public required AuthoringPixelOffset HandleInAuthoringPx { get; init; }
     public required AuthoringPixelOffset HandleOutAuthoringPx { get; init; }
 }
@@ -101,21 +101,21 @@ public sealed record MountainCurvePointDocument
 /// <summary>
 /// One level-topped region of raised Terrain. The contour is authored truth and
 /// its covered cells are derived; keeping it lets the outline be edited and a
-/// later route generator follow the actual mountain instead of a baked raster.
+/// later route generator follow the actual hill instead of a baked raster.
 ///
 /// <para>It holds a shape and a height and no material. What the raised surface
 /// is made of is the painted Terrain cell's own Asset, which is why a contour
 /// over unpainted ground raises nothing and why repainting underneath changes
-/// what the mountain shows.</para>
+/// what the hill shows.</para>
 /// </summary>
-public sealed record MountainBodyDocument
+public sealed record ElevationRegionDocument
 {
-    public required string MountainBodyId { get; init; }
+    public required string ElevationRegionId { get; init; }
 
     /// <summary>The absolute top of the solid column inside the contour.</summary>
     public required decimal ElevationMeters { get; init; }
 
-    public required List<MountainCurvePointDocument> Points { get; init; }
+    public required List<ElevationRegionPointDocument> Points { get; init; }
 }
 
 /// <summary>How one point shapes an open route centerline.</summary>
@@ -147,7 +147,7 @@ public sealed record RouteSurfacePointDocument
 
 /// <summary>
 /// An independently materialized surface along an open route. Unlike a
-/// mountain it can cross an unpainted position, so it carries the Terrain Asset
+/// hill it can cross an unpainted position, so it carries the Terrain Asset
 /// whose surface it presents instead of inheriting material from cells below.
 /// </summary>
 public sealed record RouteSurfaceDocument
@@ -189,7 +189,7 @@ public enum WaterPointMode
 /// the curve's shape.</para>
 ///
 /// <para>The three vertical values are what let one model describe an open
-/// river, a cut channel and a tunnel through a mountain without a second rule.
+/// river, a cut channel and a tunnel through a hill without a second rule.
 /// They are absolute heights in metres, never offsets from the Terrain: a
 /// stored offset would make the water move whenever the ground under it was
 /// repainted, and a river's surface does not work that way. The editor can snap
@@ -241,7 +241,7 @@ public sealed record WaterCurvePointDocument
 ///
 /// <para>Its heights are not here but on its points, and they are interpolated
 /// between them: one body describes a river that falls, deepens and ducks under
-/// a mountain along its length.</para>
+/// a hill along its length.</para>
 /// </summary>
 public sealed record WaterBodyDocument
 {
@@ -286,7 +286,7 @@ public sealed record SceneDocument
     /// Closed, editable Terrain regions whose effective cells are derived.
     /// Their absolute tops fold with painted Terrain; they are not voxel data.
     /// </summary>
-    public required List<MountainBodyDocument> MountainBodies { get; init; }
+    public required List<ElevationRegionDocument> ElevationRegions { get; init; }
 
     /// <summary>
     /// Independently materialized, continuously inclined bands. They are
@@ -376,7 +376,7 @@ public sealed record SceneDocument
         SizeCells = new SceneSizeCells { Width = widthCells, Height = heightCells },
         TerrainCells = [],
         Props = [],
-        MountainBodies = [],
+        ElevationRegions = [],
         RouteSurfaces = [],
         WaterBodies = [],
         TemplateDefinition = templateDefinition,

@@ -110,7 +110,7 @@ public sealed class SceneExportContractTests
         Assert.Equal("river", body.GetProperty("water_kind").GetString());
 
         // The heights live on the points, not on the body: one river falls,
-        // deepens and ducks under a mountain along its length.
+        // deepens and ducks under a hill along its length.
         var point = body.GetProperty("points").EnumerateArray().First();
         Assert.Equal(
             [

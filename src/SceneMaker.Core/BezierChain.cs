@@ -12,7 +12,7 @@ public readonly record struct ChainPoint(double X, double Y);
 /// handles that leave it as offsets from it.
 ///
 /// <para>Geometry and nothing else. What a chain means - a river's centerline,
-/// a route, the outline of a mountain - lives in the document record that
+/// a route, the outline of a hill - lives in the document record that
 /// converts into this, and each of those keeps its own fields. Sharing the
 /// document record instead would force every one of them to carry the others'
 /// values, and tie schemas together that have no reason to change at the same

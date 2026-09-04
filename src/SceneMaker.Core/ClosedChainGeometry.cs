@@ -77,7 +77,7 @@ public static class ClosedChainGeometry
     /// scale rather than a promise that holds at any.</para>
     ///
     /// <para>Small on purpose. It is here to make the test decide the same way
-    /// every time, not to express a view about how thin a mountain may be; that
+    /// every time, not to express a view about how thin a hill may be; that
     /// is an authoring-quality question, it belongs with the rule that fills a
     /// contour, and it does not exist yet.</para>
     ///

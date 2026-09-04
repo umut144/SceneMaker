@@ -115,19 +115,19 @@ public sealed class PropEditingTests
     }
 
     [Fact]
-    public void RemovingTheMountainUnderAPropLeavesTheSceneExportable()
+    public void RemovingTheElevationRegionUnderAPropLeavesTheSceneExportable()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             10.0m);
         scene = PropEditing.Place(scene, workspace.Props, 64, 64, "stone", 10.0m);
 
-        scene = MountainEditing.Remove(scene, "mountain_0001");
+        scene = ElevationRegionEditing.Remove(scene, "mountain_0001");
 
-        Assert.Empty(scene.MountainBodies);
+        Assert.Empty(scene.ElevationRegions);
         Assert.Empty(Export(workspace, scene).Warnings);
     }
 
@@ -173,15 +173,15 @@ public sealed class PropEditingTests
     }
 
     /// <summary>A closed square contour, in authoring pixels.</summary>
-    private static IReadOnlyList<MountainCurvePointDocument> Square(
+    private static IReadOnlyList<ElevationRegionPointDocument> Square(
         int left,
         int bottom,
         int right,
         int top) =>
     [
-        MountainEditing.Point(left, bottom),
-        MountainEditing.Point(right, bottom),
-        MountainEditing.Point(right, top),
-        MountainEditing.Point(left, top),
+        ElevationRegionEditing.Point(left, bottom),
+        ElevationRegionEditing.Point(right, bottom),
+        ElevationRegionEditing.Point(right, top),
+        ElevationRegionEditing.Point(left, top),
     ];
 }

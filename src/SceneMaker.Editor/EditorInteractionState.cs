@@ -6,17 +6,17 @@ using SceneMaker.Core;
 namespace SceneMaker.Editor;
 
 /// <summary>
-/// The area of a Scene being authored. Terrain, River and Mountain are three
+/// The area of a Scene being authored. Terrain, River and ElevationRegion are three
 /// areas rather than one, because they author three different things: painted
 /// cells, an open curve, and a closed contour. `Landscape` is not one of them -
-/// it is a caption the navigation draws around River and Mountain, and an area
+/// it is a caption the navigation draws around River and ElevationRegion, and an area
 /// nobody can be in would have to answer what drawing in it means.
 /// </summary>
 public enum EditorMode
 {
     Terrain,
     River,
-    Mountain,
+    ElevationRegion,
     Props,
     Templates,
 }
@@ -28,8 +28,8 @@ public enum EditorTool
     Line,
     Fill,
     DrawRiver,
-    DrawMountain,
-    SelectMountain,
+    DrawElevationRegion,
+    SelectElevationRegion,
     AnchorPlace,
     AnchorMove,
 }
@@ -58,8 +58,8 @@ public static class EditorToolRegistry
             EditorMode.Terrain, EditorMode.Props),
         Define(EditorTool.Fill, "Fill", "fill.svg", EditorMode.Terrain),
         Define(EditorTool.DrawRiver, "Draw River", "river.svg", EditorMode.River),
-        Define(EditorTool.DrawMountain, "Draw Mountain", "mountain.svg", EditorMode.Mountain),
-        Define(EditorTool.SelectMountain, "Select Mountain", "select.svg", EditorMode.Mountain),
+        Define(EditorTool.DrawElevationRegion, "Draw Hill", "mountain.svg", EditorMode.ElevationRegion),
+        Define(EditorTool.SelectElevationRegion, "Select Hill", "select.svg", EditorMode.ElevationRegion),
         Define(EditorTool.AnchorMove, "Move Anchor", "move.svg", EditorMode.Templates),
         Define(EditorTool.AnchorPlace, "Place Anchor", string.Empty,
             false, EditorMode.Templates),
@@ -80,7 +80,7 @@ public static class EditorToolRegistry
     {
         EditorMode.Terrain => EditorTool.Pencil,
         EditorMode.River => EditorTool.DrawRiver,
-        EditorMode.Mountain => EditorTool.DrawMountain,
+        EditorMode.ElevationRegion => EditorTool.DrawElevationRegion,
         EditorMode.Props => EditorTool.Pencil,
         EditorMode.Templates => EditorTool.Selector,
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
@@ -93,14 +93,14 @@ public static class EditorToolRegistry
     /// <para>This is where the tool bar and the Asset bar used to pull in
     /// opposite directions. The Asset used to decide the tool: choosing a river
     /// swapped the Pencil out from under the author, and choosing grass swapped
-    /// it back. Now the area decides the Assets - and Mountain decides that it
+    /// it back. Now the area decides the Assets - and ElevationRegion decides that it
     /// has none, because a contour raises whatever is painted under it.</para>
     /// </summary>
     public static TerrainAuthoring? TerrainAuthoringFor(EditorMode mode) => mode switch
     {
         EditorMode.Terrain => TerrainAuthoring.Cells,
         EditorMode.River => TerrainAuthoring.Curve,
-        // Mountain authors a shape and a height, never a material: the painted
+        // ElevationRegion authors a shape and a height, never a material: the painted
         // Terrain under the contour says what the raised surface is made of, so
         // there is nothing to choose here and no Asset to remember.
         _ => null,
@@ -110,7 +110,7 @@ public static class EditorToolRegistry
     {
         EditorMode.Terrain => "Terrain",
         EditorMode.River => "River",
-        EditorMode.Mountain => "Mountain",
+        EditorMode.ElevationRegion => "Hill",
         // The persisted model and the PolyTools adapter still call these Props,
         // but authors place map content here. Keep that implementation detail
         // out of the tool context while the document contract stays stable.
@@ -236,7 +236,7 @@ public sealed class EditorInteractionState
     /// <summary>
     /// The Terrain Asset the active area is authoring with. Each area keeps its
     /// own, so leaving one and coming back finds the brush where it was left.
-    /// Null for an area that offers no Assets at all, which Mountain now does.
+    /// Null for an area that offers no Assets at all, which ElevationRegion now does.
     /// </summary>
     public string? SelectedTerrainAssetKey =>
         _terrainAssetByMode.TryGetValue(Mode, out var assetKey) ? assetKey : null;
@@ -251,8 +251,8 @@ public sealed class EditorInteractionState
     /// </summary>
     public WaterPointMode WaterPointMode { get; private set; } = WaterPointMode.Linear;
 
-    /// <summary>How the next point of a closed mountain contour behaves.</summary>
-    public MountainPointMode MountainPointMode { get; private set; } = MountainPointMode.Linear;
+    /// <summary>How the next point of a closed hill contour behaves.</summary>
+    public ElevationRegionPointMode ElevationRegionPointMode { get; private set; } = ElevationRegionPointMode.Linear;
 
     /// <summary>
     /// The width the next river point is authored with, in metres. A starting value
@@ -282,7 +282,7 @@ public sealed class EditorInteractionState
     /// Whether a placed point takes the height of the Terrain under it. On by
     /// default, because a river that follows its valley is the ordinary case
     /// and typing its height for every point would be busywork. It is switched
-    /// off to drive a river into a mountain, where the whole point is that the
+    /// off to drive a river into a hill, where the whole point is that the
     /// water does not follow the ground.
     ///
     /// <para>It is a way of filling in a number, not a relationship the document
@@ -323,10 +323,10 @@ public sealed class EditorInteractionState
         WaterPointMode = mode;
     }
 
-    public void SetMountainPointMode(MountainPointMode mode)
+    public void SetElevationRegionPointMode(ElevationRegionPointMode mode)
     {
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
-        MountainPointMode = mode;
+        ElevationRegionPointMode = mode;
     }
 
     public void SetRiverWidth(decimal widthMeters)

@@ -122,7 +122,7 @@ through a Surface/Bed/Cut-top selector, on the same scale as Terrain and Props.
 
 The intended next form of the height view has three independent capabilities:
 
-- an optional author-selected low/high range, so one outlying mountain does not
+- an optional author-selected low/high range, so one outlying hill does not
   compress every useful height into one colour;
 - discrete elevation bands and an arbitrary multi-selection of elevations, so
   chosen floors can be highlighted while the rest of the Scene is muted;
@@ -139,14 +139,19 @@ tool may later distribute a start and end elevation across cells in
 quantum-sized increments; the height view itself should remain inspection
 rather than silently editing the Scene.
 
-The Core persists a level-topped mountain as a closed Bezier contour and an
+The Core persists a level-topped hill as a closed Bezier contour and an
 absolute top elevation, and folds nested bodies into Terrain by that top. A body
 carries no material: painted Terrain decides whether a cell exists and what it
 is made of, the contour decides only how high it reaches. The runtime sees only
-the resulting Terrain cells. `Draw Mountain` now authors, previews, closes,
+the resulting Terrain cells. `Draw Hill` now authors, previews, closes,
 cancels and erases those bodies through the existing `ToolInteraction` path.
 Manual UX acceptance of this contour slice was completed before route work
 began.
+
+Scene schema 14 names that neutral source `elevation_regions` and the Core type
+`ElevationRegionDocument`; the author-facing area and tools say `Hill`. Existing
+stable IDs deliberately retain their `mountain_` prefix: identity survives a
+terminology correction, and no behavior may infer meaning from an ID prefix.
 
 Do not call adjacent flat cell tops a slope without fixing the mesh rule.
 Different cell elevations form terraces and vertical steps. A visually smooth
@@ -158,8 +163,9 @@ The engine-neutral foundation for that separately authored ramp now exists as
 support height at every point. Width and height interpolate over arc length;
 the intermediate height stays continuous rather than being snapped into cell
 steps. Its grade report is descriptive geometry, not an Actor capability.
-Authoring schema 13 persists routes with a Terrain-role material; export schema
-9 warns and omits them, and no editor tool exists yet. Traversal profiles still
+Authoring schema 13 introduced routes with a Terrain-role material; schema 14
+keeps them unchanged. Export schema 9 warns and omits them, and no editor tool
+exists yet. Traversal profiles still
 belong in Workspace configuration before a tool or generator can judge whether
 an Actor can use a route. Export support and the overlapping-station semantics
 needed by helixes remain separate later slices.
@@ -208,7 +214,7 @@ has a consumer and tests.
   untouched. The geometry result exposes only stable key and bounds — imported
   display names and `asset_type`s no longer cross into SceneMaker's model.
 
-- A mountain carries no material. `MountainBodyDocument` lost its `asset_key`
+- A hill carries no material. `ElevationRegionDocument` lost its `asset_key`
   and Scene schema moved 11 to 12; the four authored documents under
   `workspaces/world01` were rewritten by hand, as the no-migration rule
   requires. The fold now raises the top of a painted cell and leaves its Asset

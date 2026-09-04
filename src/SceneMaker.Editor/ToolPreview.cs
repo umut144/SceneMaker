@@ -37,7 +37,7 @@ public sealed record WaterDraftPreview(
 }
 
 /// <summary>
-/// What the mountain draft on the canvas would do if it were committed now.
+/// What the hill draft on the canvas would do if it were committed now.
 ///
 /// <para><c>Incomplete</c> is not a refusal: the author has simply not placed
 /// enough points yet, and the drawing so far is neither promised nor refused.
@@ -45,7 +45,7 @@ public sealed record WaterDraftPreview(
 /// succeeded against this Scene and height. <c>Blocked</c> carries the reason
 /// it would fail.</para>
 /// </summary>
-public enum MountainDraftKind
+public enum ElevationRegionDraftKind
 {
     Incomplete,
     Ready,
@@ -53,7 +53,7 @@ public enum MountainDraftKind
 }
 
 /// <summary>
-/// The closed mountain contour being drawn.
+/// The closed hill contour being drawn.
 ///
 /// <para><see cref="RaisedCells"/> is the difference the commit would make, not
 /// the ground the contour covers: only painted cells whose visible height would
@@ -66,20 +66,20 @@ public enum MountainDraftKind
 /// Blocked - and, on a Ready draft that raises nothing, the note that says so.
 /// </para>
 /// </summary>
-public sealed record MountainDraftPreview(
-    IReadOnlyList<MountainDraftPoint> Points,
-    IReadOnlyList<MountainCurvePointDocument> Curve,
+public sealed record ElevationRegionDraftPreview(
+    IReadOnlyList<ElevationRegionDraftPoint> Points,
+    IReadOnlyList<ElevationRegionPointDocument> Curve,
     IReadOnlyList<ChainPoint> Outline,
     IReadOnlyList<TerrainCellDocument> RaisedCells,
-    MountainDraftKind Kind,
+    ElevationRegionDraftKind Kind,
     string? Explanation)
 {
-    public static MountainDraftPreview Empty { get; } = new(
-        [], [], [], [], MountainDraftKind.Incomplete, ToolPreviewBuilder.IncompleteMountainDraft);
+    public static ElevationRegionDraftPreview Empty { get; } = new(
+        [], [], [], [], ElevationRegionDraftKind.Incomplete, ToolPreviewBuilder.IncompleteElevationRegionDraft);
 }
 
 /// <summary>
-/// The mountain body the eraser would remove, and separately what removing it
+/// The hill body the eraser would remove, and separately what removing it
 /// would change.
 ///
 /// <para>The two are not the same and must not be drawn as if they were: the
@@ -88,27 +88,27 @@ public sealed record MountainDraftPreview(
 /// body is currently holding up. The ID picks the contour out of the outlines
 /// the canvas already has; the cells say what actually drops.</para>
 /// </summary>
-public sealed record MountainEraserPreview(
-    string? MountainBodyId,
+public sealed record ElevationRegionEraserPreview(
+    string? ElevationRegionId,
     IReadOnlyList<TerrainCellDocument> LoweredCells)
 {
-    public static MountainEraserPreview Empty { get; } = new(null, []);
+    public static ElevationRegionEraserPreview Empty { get; } = new(null, []);
 }
 
 /// <summary>
-/// The selected mountain and the contour currently proposed while one of its
+/// The selected hill and the contour currently proposed while one of its
 /// authored points is dragged. A blocked proposal keeps its outline visible so
 /// the author can see and undo the bad shape; releasing it does not edit the
 /// document.
 /// </summary>
-public sealed record MountainSelectionPreview(
-    MountainBodyDocument? Body,
+public sealed record ElevationRegionSelectionPreview(
+    ElevationRegionDocument? Body,
     IReadOnlyList<ChainPoint> Outline,
-    MountainDraftKind Kind,
+    ElevationRegionDraftKind Kind,
     string? Explanation)
 {
-    public static MountainSelectionPreview Empty { get; } = new(
-        null, [], MountainDraftKind.Incomplete, null);
+    public static ElevationRegionSelectionPreview Empty { get; } = new(
+        null, [], ElevationRegionDraftKind.Incomplete, null);
 }
 
 public sealed record TerrainPreview(
@@ -246,7 +246,7 @@ public static class ToolPreviewBuilder
     }
 
     /// <summary>The points the canvas tool asks for before a contour may close.</summary>
-    public const int MinimumMountainDraftPoints = 3;
+    public const int MinimumElevationRegionDraftPoints = 3;
 
     /// <summary>
     /// Why a draft is not ready yet. It is a count the drawing tool asks for
@@ -255,7 +255,7 @@ public static class ToolPreviewBuilder
     /// the canvas cannot offer is a way to author those handles without a third
     /// click to aim them, so the tool asks for three placed points.
     /// </summary>
-    public const string IncompleteMountainDraft = "a contour needs at least three points.";
+    public const string IncompleteElevationRegionDraft = "a contour needs at least three points.";
 
     /// <summary>
     /// Said about a contour that is perfectly authorable and would, right now,
@@ -271,78 +271,78 @@ public static class ToolPreviewBuilder
     public const string RaisesNoTerrain = "currently raises no Terrain cells.";
 
     public const string ValidButRaisesNoTerrain =
-        "Mountain is valid but " + RaisesNoTerrain;
+        "Hill is valid but " + RaisesNoTerrain;
 
     /// <summary>
-    /// What the mountain draft would author, and whether Enter would take it.
+    /// What the hill draft would author, and whether Enter would take it.
     ///
     /// <para>Ready means the whole attempt has already been made against this
     /// Scene and height and succeeded - the height sits on the Workspace
     /// quantum and the ring is a usable contour. Anything the commit would
     /// refuse is Blocked here with the same sentence, because both ask
-    /// <see cref="MountainEditing.TryPlace"/> and neither decides anything of
+    /// <see cref="ElevationRegionEditing.TryPlace"/> and neither decides anything of
     /// its own. A Ready contour that would lift nothing stays Ready and says so:
     /// it is authorable, and refusing it would refuse a body the author means to
     /// paint under later.</para>
     /// </summary>
-    public static MountainDraftPreview BuildMountainDraft(
+    public static ElevationRegionDraftPreview BuildElevationRegionDraft(
         SceneDocument scene,
         WorkspaceMetrics metrics,
         EditorTool tool,
-        IReadOnlyList<MountainDraftPoint> draft,
-        MountainDraftPoint? pending,
+        IReadOnlyList<ElevationRegionDraftPoint> draft,
+        ElevationRegionDraftPoint? pending,
         decimal elevationMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(draft);
-        if (tool != EditorTool.DrawMountain) return MountainDraftPreview.Empty;
+        if (tool != EditorTool.DrawElevationRegion) return ElevationRegionDraftPreview.Empty;
 
-        List<MountainDraftPoint> points = [.. draft];
+        List<ElevationRegionDraftPoint> points = [.. draft];
         if (pending is { } value
             && (points.Count == 0 || points[^1].X != value.X || points[^1].Y != value.Y))
         {
             points.Add(value);
         }
-        if (points.Count == 0) return MountainDraftPreview.Empty;
+        if (points.Count == 0) return ElevationRegionDraftPreview.Empty;
 
-        var curve = MountainEditing.ResolveContour(points);
-        if (points.Count < MinimumMountainDraftPoints)
+        var curve = ElevationRegionEditing.ResolveContour(points);
+        if (points.Count < MinimumElevationRegionDraftPoints)
         {
-            return new MountainDraftPreview(
-                points, curve, [], [], MountainDraftKind.Incomplete, IncompleteMountainDraft);
+            return new ElevationRegionDraftPreview(
+                points, curve, [], [], ElevationRegionDraftKind.Incomplete, IncompleteElevationRegionDraft);
         }
 
         // Drawn from the resolved curve alone, so a contour that crosses itself
         // is still visible while it is being fixed.
-        var outline = MountainGeometry.Flatten(new MountainBodyDocument
+        var outline = ElevationRegionGeometry.Flatten(new ElevationRegionDocument
         {
-            MountainBodyId = "mountain_preview",
+            ElevationRegionId = "mountain_preview",
             ElevationMeters = 0m,
             Points = [.. curve],
         }).Points;
 
-        var placement = MountainEditing.TryPlace(scene, metrics, curve, elevationMeters);
+        var placement = ElevationRegionEditing.TryPlace(scene, metrics, curve, elevationMeters);
         if (placement is not { Body: { } body })
         {
-            return new MountainDraftPreview(
-                points, curve, outline, [], MountainDraftKind.Blocked, placement.Reason);
+            return new ElevationRegionDraftPreview(
+                points, curve, outline, [], ElevationRegionDraftKind.Blocked, placement.Reason);
         }
 
         // Asked of the Scene the body is not in yet, which is what makes this
         // the difference the commit would make rather than the ground it covers.
-        var raised = MountainGeometry.CellsRaisedBy(scene, metrics, body);
-        return new MountainDraftPreview(
+        var raised = ElevationRegionGeometry.CellsRaisedBy(scene, metrics, body);
+        return new ElevationRegionDraftPreview(
             points,
             curve,
             outline,
             raised,
-            MountainDraftKind.Ready,
+            ElevationRegionDraftKind.Ready,
             raised.Count == 0 ? ValidButRaisesNoTerrain : null);
     }
 
     /// <summary>
-    /// The mountain body the eraser would remove where the pointer is, and the
+    /// The hill body the eraser would remove where the pointer is, and the
     /// painted cells that would drop with it - so the author sees the whole
     /// body go before the click rather than the one cell under the cursor.
     ///
@@ -352,7 +352,7 @@ public static class ToolPreviewBuilder
     /// up. A body can therefore be picked and lower nothing, which is why the
     /// canvas draws its outline as well as the cells.</para>
     /// </summary>
-    public static MountainEraserPreview BuildMountainEraser(
+    public static ElevationRegionEraserPreview BuildElevationRegionEraser(
         SceneDocument scene,
         WorkspaceMetrics metrics,
         EditorTool tool,
@@ -361,54 +361,54 @@ public static class ToolPreviewBuilder
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
-        if (tool != EditorTool.DrawMountain || !eraserEnabled) return MountainEraserPreview.Empty;
-        if (pointer is not { } cell) return MountainEraserPreview.Empty;
-        if (MountainEditing.FindAtCell(scene, metrics, cell) is not { } body)
-            return MountainEraserPreview.Empty;
+        if (tool != EditorTool.DrawElevationRegion || !eraserEnabled) return ElevationRegionEraserPreview.Empty;
+        if (pointer is not { } cell) return ElevationRegionEraserPreview.Empty;
+        if (ElevationRegionEditing.FindAtCell(scene, metrics, cell) is not { } body)
+            return ElevationRegionEraserPreview.Empty;
 
         // The body is in the Scene, so this reads the other direction of the
         // same question: what it is holding up, and therefore what drops.
-        return new MountainEraserPreview(
-            body.MountainBodyId,
-            MountainGeometry.CellsRaisedBy(scene, metrics, body));
+        return new ElevationRegionEraserPreview(
+            body.ElevationRegionId,
+            ElevationRegionGeometry.CellsRaisedBy(scene, metrics, body));
     }
 
     /// <summary>
-    /// The selected mountain exactly as stored, or the complete reshape that a
+    /// The selected hill exactly as stored, or the complete reshape that a
     /// point drag would commit. Validation is shared with the edit so a normal
     /// outline is a promise and a red outline is a refusal with the same reason.
     /// </summary>
-    public static MountainSelectionPreview BuildMountainSelection(
+    public static ElevationRegionSelectionPreview BuildElevationRegionSelection(
         SceneDocument scene,
         EditorTool tool,
-        string? selectedMountainBodyId,
-        IReadOnlyList<MountainCurvePointDocument>? candidatePoints)
+        string? selectedElevationRegionId,
+        IReadOnlyList<ElevationRegionPointDocument>? candidatePoints)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        if (tool != EditorTool.SelectMountain || selectedMountainBodyId is null)
-            return MountainSelectionPreview.Empty;
+        if (tool != EditorTool.SelectElevationRegion || selectedElevationRegionId is null)
+            return ElevationRegionSelectionPreview.Empty;
 
-        var stored = scene.MountainBodies.FirstOrDefault(body => string.Equals(
-            body.MountainBodyId, selectedMountainBodyId, StringComparison.Ordinal));
-        if (stored is null) return MountainSelectionPreview.Empty;
+        var stored = scene.ElevationRegions.FirstOrDefault(body => string.Equals(
+            body.ElevationRegionId, selectedElevationRegionId, StringComparison.Ordinal));
+        if (stored is null) return ElevationRegionSelectionPreview.Empty;
 
         if (candidatePoints is null)
         {
-            return new MountainSelectionPreview(
+            return new ElevationRegionSelectionPreview(
                 stored,
-                MountainGeometry.Flatten(stored).Points,
-                MountainDraftKind.Ready,
+                ElevationRegionGeometry.Flatten(stored).Points,
+                ElevationRegionDraftKind.Ready,
                 Explanation: null);
         }
         var points = candidatePoints.ToList();
         var candidate = stored with { Points = points };
-        var outline = MountainGeometry.Flatten(candidate).Points;
-        var reshape = MountainEditing.TryReshape(scene, stored.MountainBodyId, points);
+        var outline = ElevationRegionGeometry.Flatten(candidate).Points;
+        var reshape = ElevationRegionEditing.TryReshape(scene, stored.ElevationRegionId, points);
         return reshape.Body is { } accepted
-            ? new MountainSelectionPreview(
-                accepted, outline, MountainDraftKind.Ready, Explanation: null)
-            : new MountainSelectionPreview(
-                candidate, outline, MountainDraftKind.Blocked, reshape.Reason);
+            ? new ElevationRegionSelectionPreview(
+                accepted, outline, ElevationRegionDraftKind.Ready, Explanation: null)
+            : new ElevationRegionSelectionPreview(
+                candidate, outline, ElevationRegionDraftKind.Blocked, reshape.Reason);
     }
 
     public static int CountOf(IReadOnlyList<PropPreview> previews, PropPreviewKind kind)

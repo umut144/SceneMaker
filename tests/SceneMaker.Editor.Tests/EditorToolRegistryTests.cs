@@ -72,7 +72,7 @@ public sealed class EditorToolRegistryTests
     /// <summary>
     /// Each area owns the tools that draw its own thing. A River is no longer a
     /// tool inside Terrain that a chosen Asset switches to; it is an area, and
-    /// so is Mountain.
+    /// so is ElevationRegion.
     /// </summary>
     [Fact]
     public void EachAreaOwnsTheToolsThatDrawItsOwnThing()
@@ -86,17 +86,17 @@ public sealed class EditorToolRegistryTests
 
         Assert.True(EditorToolRegistry.Supports(EditorMode.River, EditorTool.DrawRiver));
         Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawRiver));
-        Assert.False(EditorToolRegistry.Supports(EditorMode.Mountain, EditorTool.DrawRiver));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.ElevationRegion, EditorTool.DrawRiver));
 
-        Assert.True(EditorToolRegistry.Supports(EditorMode.Mountain, EditorTool.DrawMountain));
-        Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawMountain));
-        Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.DrawMountain));
-        Assert.True(EditorToolRegistry.Supports(EditorMode.Mountain, EditorTool.SelectMountain));
-        Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.SelectMountain));
-        Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.SelectMountain));
+        Assert.True(EditorToolRegistry.Supports(EditorMode.ElevationRegion, EditorTool.DrawElevationRegion));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.DrawElevationRegion));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.DrawElevationRegion));
+        Assert.True(EditorToolRegistry.Supports(EditorMode.ElevationRegion, EditorTool.SelectElevationRegion));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.Terrain, EditorTool.SelectElevationRegion));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.SelectElevationRegion));
 
         // The cell tools stay where cells are painted.
-        Assert.False(EditorToolRegistry.Supports(EditorMode.Mountain, EditorTool.Pencil));
+        Assert.False(EditorToolRegistry.Supports(EditorMode.ElevationRegion, EditorTool.Pencil));
         Assert.False(EditorToolRegistry.Supports(EditorMode.River, EditorTool.Pencil));
     }
 
@@ -109,9 +109,9 @@ public sealed class EditorToolRegistryTests
     {
         Assert.Equal(
             TerrainAuthoring.Cells, EditorToolRegistry.TerrainAuthoringFor(EditorMode.Terrain));
-        // A mountain is a shape and a height. The painted Terrain under the
+        // A hill is a shape and a height. The painted Terrain under the
         // contour is the material, so this area has nothing to offer.
-        Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.Mountain));
+        Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.ElevationRegion));
         Assert.Equal(
             TerrainAuthoring.Curve, EditorToolRegistry.TerrainAuthoringFor(EditorMode.River));
         Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.Props));
@@ -132,16 +132,16 @@ public sealed class EditorToolRegistryTests
 
     /// <summary>
     /// Offering no Asset is not the same as having nothing to draw with. The
-    /// Mountain area authors geometry, so its tool is a real tool - the guard
+    /// ElevationRegion area authors geometry, so its tool is a real tool - the guard
     /// that disables an area without a usable Asset must not catch it.
     /// </summary>
     [Fact]
-    public void MountainOffersNoAssetAndStillHasItsDrawingTool()
+    public void ElevationRegionOffersNoAssetAndStillHasItsDrawingTool()
     {
-        Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.Mountain));
-        Assert.Equal(EditorTool.DrawMountain, EditorToolRegistry.DefaultTool(EditorMode.Mountain));
+        Assert.Null(EditorToolRegistry.TerrainAuthoringFor(EditorMode.ElevationRegion));
+        Assert.Equal(EditorTool.DrawElevationRegion, EditorToolRegistry.DefaultTool(EditorMode.ElevationRegion));
         Assert.Contains(
             EditorToolRegistry.ToolBarDefinitions,
-            static definition => definition.Tool == EditorTool.DrawMountain);
+            static definition => definition.Tool == EditorTool.DrawElevationRegion);
     }
 }

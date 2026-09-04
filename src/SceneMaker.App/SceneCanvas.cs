@@ -28,14 +28,14 @@ public sealed partial class SceneCanvas : Control
     // A draft that is neither promised nor refused yet. Cyan rather than red:
     // too few points is the ordinary state of a contour being drawn.
     private static readonly Color DraftPreviewColor = Color.FromHtml("#8FE3FF");
-    // One colour per authored mountain, so two bodies that meet are still two
+    // One colour per authored hill, so two bodies that meet are still two
     // bodies. Earth, orange, violet and magenta on purpose: they have to read
     // apart from the Assets underneath them - world01's grass is #99E550 and its
     // river #3C7DD9 - and from the four colours that already mean something
     // here: #FFD866 ready and selected, #FF5C5C blocked and erasing, #8FE3FF an
     // unfinished draft and its handles, #FFFFFF a Template preview. One entry
-    // per MountainPalette.Size, indexed by MountainOutline.PaletteIndex.
-    private static readonly Color[] MountainOutlineColors =
+    // per ElevationRegionPalette.Size, indexed by ElevationRegionOutline.PaletteIndex.
+    private static readonly Color[] ElevationRegionOutlineColors =
     [
         Color.FromHtml("#D9801F"),
         Color.FromHtml("#8A5A33"),
@@ -80,13 +80,13 @@ public sealed partial class SceneCanvas : Control
     private WorkspaceMetrics? _metrics;
     private SceneDocument? _templatePreview;
     private IReadOnlyList<TemplateTerrainMask> _templatePreviewMasks = [];
-    // Folding painted cells and mountain contours together is not free, so the
+    // Folding painted cells and hill contours together is not free, so the
     // result is rebuilt only when the document it was derived from changes.
     private SceneDocument? _effectiveTerrainDocument;
     private IReadOnlyList<TerrainCellDocument> _effectiveTerrain = [];
     // Its own cache with its own key: a contour depends on the bodies alone,
     // where the fold above depends on the whole document.
-    private readonly MountainOutlineCache _mountainOutlines = new();
+    private readonly ElevationRegionOutlineCache _elevationRegionOutlines = new();
     private bool _mapContextActive;
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
     private TerrainDisplayCatalog? _terrainAssets;
@@ -139,7 +139,7 @@ public sealed partial class SceneCanvas : Control
 
     /// <summary>
     /// Whether the Map context is open. It is a structural overview rather than
-    /// an authoring area, so mountain bodies stay fully drawn there.
+    /// an authoring area, so hill bodies stay fully drawn there.
     /// </summary>
     public bool MapContextActive
     {
@@ -196,8 +196,8 @@ public sealed partial class SceneCanvas : Control
     /// <summary>The Template Anchor the tools currently have selected, if any.</summary>
     public string? SelectedTemplateAnchorId => _interaction.SelectedTemplateAnchorId;
 
-    public int? SelectedMountainPointIndex => _interaction.SelectedMountainPointIndex;
-    public string? SelectedMountainBodyId => _interaction.SelectedMountainBodyId;
+    public int? SelectedElevationRegionPointIndex => _interaction.SelectedElevationRegionPointIndex;
+    public string? SelectedElevationRegionId => _interaction.SelectedElevationRegionId;
 
     public event Action? ViewChanged;
 
@@ -243,18 +243,18 @@ public sealed partial class SceneCanvas : Control
         return outcome;
     }
 
-    public ToolOutcome SetSelectedMountainPointMode(MountainPointMode mode)
+    public ToolOutcome SetSelectedElevationRegionPointMode(ElevationRegionPointMode mode)
     {
         if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
-        var outcome = _interaction.SetSelectedMountainPointMode(context, mode);
+        var outcome = _interaction.SetSelectedElevationRegionPointMode(context, mode);
         QueueRedraw();
         return outcome;
     }
 
-    public ToolOutcome SetSelectedMountainElevation(decimal elevationMeters)
+    public ToolOutcome SetSelectedElevationRegionElevation(decimal elevationMeters)
     {
         if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
-        var outcome = _interaction.SetSelectedMountainElevation(context, elevationMeters);
+        var outcome = _interaction.SetSelectedElevationRegionElevation(context, elevationMeters);
         QueueRedraw();
         return outcome;
     }
@@ -306,7 +306,7 @@ public sealed partial class SceneCanvas : Control
         if (ReferenceEquals(_effectiveTerrainDocument, document)) return _effectiveTerrain;
         _effectiveTerrain = _metrics is null
             ? document.TerrainCells
-            : MountainGeometry.EffectiveTerrainCells(document, _metrics);
+            : ElevationRegionGeometry.EffectiveTerrainCells(document, _metrics);
         _effectiveTerrainDocument = document;
         return _effectiveTerrain;
     }
@@ -488,23 +488,23 @@ public sealed partial class SceneCanvas : Control
             pan,
             zoom,
             elevationRange,
-            highlighted: Mode is EditorMode.Terrain or EditorMode.Mountain);
+            highlighted: Mode is EditorMode.Terrain or EditorMode.ElevationRegion);
         DrawWater(
             document,
             pan,
             zoom,
             elevationRange,
             highlighted: Mode is EditorMode.Terrain or EditorMode.River);
-        DrawMountainOutlines(
+        DrawElevationRegionOutlines(
             document,
             pan,
             zoom,
             heightAuthoringPixels,
-            // Full where a mountain is authored, and full in Terrain too: with
+            // Full where a hill is authored, and full in Terrain too: with
             // no other mark on the cells, the contour is the only thing that
             // says an authored body lies there. The Map overview is structural
             // rather than an area, so it keeps them as well.
-            highlighted: Mode is EditorMode.Terrain or EditorMode.Mountain || MapContextActive);
+            highlighted: Mode is EditorMode.Terrain or EditorMode.ElevationRegion || MapContextActive);
         DrawProps(
             document,
             pan,
@@ -523,8 +523,8 @@ public sealed partial class SceneCanvas : Control
             case EditorMode.River:
                 DrawWaterToolPreview(document, pan, zoom, heightAuthoringPixels);
                 break;
-            case EditorMode.Mountain:
-                DrawMountainToolPreview(document, pan, zoom, heightAuthoringPixels);
+            case EditorMode.ElevationRegion:
+                DrawElevationRegionToolPreview(document, pan, zoom, heightAuthoringPixels);
                 break;
             default:
                 break;
@@ -803,24 +803,24 @@ public sealed partial class SceneCanvas : Control
     }
 
     /// <summary>
-    /// Every authored mountain as its own closed contour in its own colour.
+    /// Every authored hill as its own closed contour in its own colour.
     ///
     /// <para>The fill stays what the fold produced - the painted Terrain
     /// Asset's colour - so the surface material is still readable; the contour
     /// says where one body ends, which folded cells alone never could. A
-    /// mountain carries no material, so two of them over the same paint are one
+    /// hill carries no material, so two of them over the same paint are one
     /// indistinguishable surface without it, and the height view was the only
     /// way to guess at their edges. It is not an analysis, so it is drawn
     /// whether or not that view is on.</para>
     /// </summary>
-    private void DrawMountainOutlines(
+    private void DrawElevationRegionOutlines(
         SceneDocument document,
         Vector2 pan,
         float zoom,
         int sceneHeightAuthoringPixels,
         bool highlighted)
     {
-        var outlines = _mountainOutlines.For(document);
+        var outlines = _elevationRegionOutlines.For(document);
         if (outlines.Count == 0) return;
 
         Vector2 Screen(double authoringX, double authoringY) => pan + new Vector2(
@@ -832,17 +832,17 @@ public sealed partial class SceneCanvas : Control
             // The selection preview draws this body again, either as stored or
             // as the live candidate. Leaving the cached contour underneath it
             // would show two shapes during a drag and make a refused move look
-            // as though both contours were part of the mountain.
-            if (Mode == EditorMode.Mountain
-                && ActiveTool == EditorTool.SelectMountain
+            // as though both contours were part of the hill.
+            if (Mode == EditorMode.ElevationRegion
+                && ActiveTool == EditorTool.SelectElevationRegion
                 && string.Equals(
-                    outline.MountainBodyId,
-                    _interaction.SelectedMountainBodyId,
+                    outline.ElevationRegionId,
+                    _interaction.SelectedElevationRegionId,
                     StringComparison.Ordinal))
             {
                 continue;
             }
-            var color = MountainOutlineColors[outline.PaletteIndex];
+            var color = ElevationRegionOutlineColors[outline.PaletteIndex];
             if (!highlighted) color = new Color(color.R, color.G, color.B, 0.32f);
             // The ring does not repeat its first point, so the line closes here.
             var line = new Vector2[outline.Points.Count + 1];
@@ -912,29 +912,29 @@ public sealed partial class SceneCanvas : Control
         }
     }
 
-    private void DrawMountainToolPreview(
+    private void DrawElevationRegionToolPreview(
         SceneDocument document,
         Vector2 pan,
         float zoom,
         int sceneHeightAuthoringPixels)
     {
-        if (ActiveTool == EditorTool.SelectMountain)
+        if (ActiveTool == EditorTool.SelectElevationRegion)
         {
-            DrawMountainSelectionPreview(pan, zoom, sceneHeightAuthoringPixels);
+            DrawElevationRegionSelectionPreview(pan, zoom, sceneHeightAuthoringPixels);
             return;
         }
         if (EraserEnabled)
         {
-            DrawMountainEraserPreview(document, pan, zoom);
+            DrawElevationRegionEraserPreview(document, pan, zoom);
             return;
         }
 
-        var preview = ToolPreviewBuilder.BuildMountainDraft(
+        var preview = ToolPreviewBuilder.BuildElevationRegionDraft(
             document,
             _metrics!,
             ActiveTool,
-            _interaction.MountainDraft,
-            _interaction.MountainPendingPoint,
+            _interaction.ElevationRegionDraft,
+            _interaction.ElevationRegionPendingPoint,
             ElevationMeters);
         if (preview.Points.Count == 0) return;
 
@@ -942,14 +942,14 @@ public sealed partial class SceneCanvas : Control
         // would refuse it, and cyan that the author is not finished asking.
         var outlineColor = preview.Kind switch
         {
-            MountainDraftKind.Ready => ValidPreviewColor,
-            MountainDraftKind.Blocked => InvalidPreviewColor,
+            ElevationRegionDraftKind.Ready => ValidPreviewColor,
+            ElevationRegionDraftKind.Blocked => InvalidPreviewColor,
             _ => DraftPreviewColor,
         };
         // Each raised cell in the colour of the Asset it already carries, which
         // the preview hands over with it. A contour across a sand and grass
         // boundary therefore previews as sand and grass, because that is what
-        // the mountain would lift: the height, not the material.
+        // the hill would lift: the height, not the material.
         var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
         foreach (var cell in preview.RaisedCells)
         {
@@ -991,22 +991,22 @@ public sealed partial class SceneCanvas : Control
     }
 
     /// <summary>
-    /// A selected mountain exposes its authored anchors and handles. While one
+    /// A selected hill exposes its authored anchors and handles. While one
     /// anchor moves, this draws the candidate contour rather than the stored
     /// one; an invalid candidate turns red and will be refused on release.
     /// </summary>
-    private void DrawMountainSelectionPreview(
+    private void DrawElevationRegionSelectionPreview(
         Vector2 pan,
         float zoom,
         int sceneHeightAuthoringPixels)
     {
         if (CurrentContext() is not { } context) return;
-        var preview = _interaction.MountainSelectionPreview(context);
+        var preview = _interaction.ElevationRegionSelectionPreview(context);
         if (preview.Body is not { } body) return;
 
-        var color = preview.Kind == MountainDraftKind.Blocked
+        var color = preview.Kind == ElevationRegionDraftKind.Blocked
             ? InvalidPreviewColor
-            : MountainOutlineColors[MountainPalette.IndexOf(body.MountainBodyId)];
+            : ElevationRegionOutlineColors[ElevationRegionPalette.IndexOf(body.ElevationRegionId)];
         Vector2 Screen(double authoringX, double authoringY) => pan + new Vector2(
             (float)authoringX * zoom,
             (sceneHeightAuthoringPixels - (float)authoringY) * zoom);
@@ -1024,25 +1024,25 @@ public sealed partial class SceneCanvas : Control
         {
             var point = body.Points[index];
             var centre = Screen(point.PositionAuthoringPx.X, point.PositionAuthoringPx.Y);
-            DrawMountainSelectionHandle(
-                centre, point, index, MountainHandleSide.In, Screen);
-            DrawMountainSelectionHandle(
-                centre, point, index, MountainHandleSide.Out, Screen);
+            DrawElevationRegionSelectionHandle(
+                centre, point, index, ElevationRegionHandleSide.In, Screen);
+            DrawElevationRegionSelectionHandle(
+                centre, point, index, ElevationRegionHandleSide.Out, Screen);
             DrawCircle(
                 centre,
-                _interaction.SelectedMountainPointIndex == index ? 6.0f : 4.0f,
+                _interaction.SelectedElevationRegionPointIndex == index ? 6.0f : 4.0f,
                 color);
         }
     }
 
-    private void DrawMountainSelectionHandle(
+    private void DrawElevationRegionSelectionHandle(
         Vector2 centre,
-        MountainCurvePointDocument point,
+        ElevationRegionPointDocument point,
         int pointIndex,
-        MountainHandleSide side,
+        ElevationRegionHandleSide side,
         Func<double, double, Vector2> screen)
     {
-        var handle = side == MountainHandleSide.In
+        var handle = side == ElevationRegionHandleSide.In
             ? point.HandleInAuthoringPx
             : point.HandleOutAuthoringPx;
         if (handle.IsZero()) return;
@@ -1050,8 +1050,8 @@ public sealed partial class SceneCanvas : Control
             point.PositionAuthoringPx.X + handle.X,
             point.PositionAuthoringPx.Y + handle.Y);
         DrawLine(centre, tip, WaterHandleColor, 1.5f);
-        var selected = _interaction.SelectedMountainPointIndex == pointIndex;
-        var dragged = selected && _interaction.DraggedMountainHandleSide == side;
+        var selected = _interaction.SelectedElevationRegionPointIndex == pointIndex;
+        var dragged = selected && _interaction.DraggedElevationRegionHandleSide == side;
         DrawCircle(tip, dragged ? 5.0f : selected ? 4.0f : 3.0f, WaterHandleColor);
     }
 
@@ -1060,18 +1060,18 @@ public sealed partial class SceneCanvas : Control
     /// The contour in the erase colour is the body itself, all of it, including
     /// the part standing over unpainted ground; the filled cells are the painted
     /// Terrain whose height this body is holding up, and only those drop.
-    /// Marking one cell under the pointer would say a cell goes, and a mountain
+    /// Marking one cell under the pointer would say a cell goes, and a hill
     /// is erased whole.
     /// </summary>
-    private void DrawMountainEraserPreview(SceneDocument document, Vector2 pan, float zoom)
+    private void DrawElevationRegionEraserPreview(SceneDocument document, Vector2 pan, float zoom)
     {
-        var preview = ToolPreviewBuilder.BuildMountainEraser(
+        var preview = ToolPreviewBuilder.BuildElevationRegionEraser(
             document,
             _metrics!,
             ActiveTool,
             EraserEnabled,
             _interaction.PointerCell);
-        if (preview.MountainBodyId is not { } bodyId) return;
+        if (preview.ElevationRegionId is not { } bodyId) return;
 
         var cellSize = _metrics!.AuthoringPixelsPerTerrainCell * zoom;
         foreach (var cell in preview.LoweredCells)
@@ -1089,9 +1089,9 @@ public sealed partial class SceneCanvas : Control
 
         // The outline the canvas already derived for every body, picked out by
         // ID rather than flattened again.
-        var outline = _mountainOutlines.For(document)
+        var outline = _elevationRegionOutlines.For(document)
             .FirstOrDefault(candidate => string.Equals(
-                candidate.MountainBodyId, bodyId, StringComparison.Ordinal));
+                candidate.ElevationRegionId, bodyId, StringComparison.Ordinal));
         if (outline is null || outline.Points.Count < 2) return;
 
         var sceneHeightAuthoringPixels = _metrics.SceneHeightAuthoringPixels(document);

@@ -100,7 +100,7 @@ public sealed class WorkspaceMetrics
     /// just left of the origin would share an index with the cell just right of
     /// it. Grid arithmetic lives here, next to the rounding rule, so that
     /// nothing that rasterizes has to keep its own copy of it - there were two,
-    /// and a third would have been written the day a mountain needed one.</para>
+    /// and a third would have been written the day a hill needed one.</para>
     /// </summary>
     public static int FloorDivide(int value, int step)
     {

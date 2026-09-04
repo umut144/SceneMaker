@@ -5,21 +5,21 @@ using Xunit;
 namespace SceneMaker.Core.Tests;
 
 /// <summary>
-/// A mountain keeps its closed contour and one absolute top as authoring truth
+/// A hill keeps its closed contour and one absolute top as authoring truth
 /// and raises painted Terrain to it. It carries no material of its own: the
 /// painted cell decides whether there is a column at all and what its surface
 /// is made of. These tests pin that fold.
 /// </summary>
-public sealed class MountainGeometryTests
+public sealed class ElevationRegionGeometryTests
 {
     [Fact]
     public void ClosedAlignedDraftResolvesHandlesAtEveryPointIncludingTheSeam()
     {
-        var points = MountainEditing.ResolveContour(
+        var points = ElevationRegionEditing.ResolveContour(
         [
-            new MountainDraftPoint(0, 0, MountainPointMode.Aligned),
-            new MountainDraftPoint(96, 0, MountainPointMode.Aligned),
-            new MountainDraftPoint(96, 96, MountainPointMode.Aligned),
+            new ElevationRegionDraftPoint(0, 0, ElevationRegionPointMode.Aligned),
+            new ElevationRegionDraftPoint(96, 0, ElevationRegionPointMode.Aligned),
+            new ElevationRegionDraftPoint(96, 96, ElevationRegionPointMode.Aligned),
         ]);
 
         Assert.All(points, point =>
@@ -34,15 +34,15 @@ public sealed class MountainGeometryTests
     {
         var points = Square(32, 32, 160, 160);
 
-        var changed = MountainEditing.WithPointMode(points, 0, MountainPointMode.Aligned);
+        var changed = ElevationRegionEditing.WithPointMode(points, 0, ElevationRegionPointMode.Aligned);
 
-        Assert.Equal(MountainPointMode.Aligned, changed[0].Mode);
+        Assert.Equal(ElevationRegionPointMode.Aligned, changed[0].Mode);
         Assert.False(changed[0].HandleInAuthoringPx.IsZero());
         Assert.False(changed[0].HandleOutAuthoringPx.IsZero());
         Assert.Same(points[1], changed[1]);
 
-        var linear = MountainEditing.WithPointMode(changed, 0, MountainPointMode.Linear);
-        Assert.Equal(MountainPointMode.Linear, linear[0].Mode);
+        var linear = ElevationRegionEditing.WithPointMode(changed, 0, ElevationRegionPointMode.Linear);
+        Assert.Equal(ElevationRegionPointMode.Linear, linear[0].Mode);
         Assert.True(linear[0].HandleInAuthoringPx.IsZero());
         Assert.True(linear[0].HandleOutAuthoringPx.IsZero());
     }
@@ -51,17 +51,17 @@ public sealed class MountainGeometryTests
     public void MovingOneAlignedHandleRotatesTheOtherWithoutChangingItsLength()
     {
         var points = Square(32, 32, 160, 160).ToList();
-        points[1] = MountainEditing.Point(
+        points[1] = ElevationRegionEditing.Point(
             160,
             32,
-            MountainPointMode.Aligned,
+            ElevationRegionPointMode.Aligned,
             new AuthoringPixelOffset { X = -10, Y = 0 },
             new AuthoringPixelOffset { X = 20, Y = 0 });
 
-        var changed = MountainEditing.WithMovedHandle(
+        var changed = ElevationRegionEditing.WithMovedHandle(
             points,
             1,
-            MountainHandleSide.Out,
+            ElevationRegionHandleSide.Out,
             new AuthoringPixelOffset { X = 0, Y = 20 });
 
         Assert.Equal(new AuthoringPixelOffset { X = 0, Y = 20 }, changed[1].HandleOutAuthoringPx);
@@ -70,134 +70,134 @@ public sealed class MountainGeometryTests
     }
 
     [Fact]
-    public void PickingAnOverlapFindsTheHighestMountain()
+    public void PickingAnOverlapFindsTheHighestElevationRegion()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             2m);
-        scene = MountainEditing.Place(scene, workspace.Metrics, Square(64, 64, 128, 128), 4m);
+        scene = ElevationRegionEditing.Place(scene, workspace.Metrics, Square(64, 64, 128, 128), 4m);
 
         Assert.Equal(
             "mountain_0002",
-            MountainEditing.FindAtCell(scene, workspace.Metrics, new TerrainCellCoordinate(3, 3))
-                ?.MountainBodyId);
+            ElevationRegionEditing.FindAtCell(scene, workspace.Metrics, new TerrainCellCoordinate(3, 3))
+                ?.ElevationRegionId);
         Assert.Equal(
             "mountain_0001",
-            MountainEditing.FindAtCell(scene, workspace.Metrics, new TerrainCellCoordinate(1, 1))
-                ?.MountainBodyId);
+            ElevationRegionEditing.FindAtCell(scene, workspace.Metrics, new TerrainCellCoordinate(1, 1))
+                ?.ElevationRegionId);
         Assert.Null(
-            MountainEditing.FindAtCell(scene, workspace.Metrics, new TerrainCellCoordinate(0, 0)));
+            ElevationRegionEditing.FindAtCell(scene, workspace.Metrics, new TerrainCellCoordinate(0, 0)));
     }
 
     [Fact]
     public void ReshapingChangesOnlyTheRequestedContour()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             2m);
-        scene = MountainEditing.Place(
+        scene = ElevationRegionEditing.Place(
             scene,
             workspace.Metrics,
             Square(64, 64, 128, 128),
             4m);
-        var firstBefore = scene.MountainBodies[0];
-        var secondBefore = scene.MountainBodies[1];
+        var firstBefore = scene.ElevationRegions[0];
+        var secondBefore = scene.ElevationRegions[1];
         var points = firstBefore.Points.ToList();
         points[1] = points[1] with
         {
             PositionAuthoringPx = new AuthoringPixelPosition { X = 192, Y = 32 },
         };
 
-        var reshaped = MountainEditing.Reshape(scene, firstBefore.MountainBodyId, points);
+        var reshaped = ElevationRegionEditing.Reshape(scene, firstBefore.ElevationRegionId, points);
 
-        var firstAfter = reshaped.MountainBodies[0];
-        Assert.Equal(firstBefore.MountainBodyId, firstAfter.MountainBodyId);
+        var firstAfter = reshaped.ElevationRegions[0];
+        Assert.Equal(firstBefore.ElevationRegionId, firstAfter.ElevationRegionId);
         Assert.Equal(firstBefore.ElevationMeters, firstAfter.ElevationMeters);
         Assert.Equal(192, firstAfter.Points[1].PositionAuthoringPx.X);
-        Assert.Same(secondBefore, reshaped.MountainBodies[1]);
+        Assert.Same(secondBefore, reshaped.ElevationRegions[1]);
     }
 
     [Fact]
     public void TryReshapeRefusesSelfContactWithoutChangingTheScene()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             4m);
-        var points = scene.MountainBodies[0].Points.ToList();
+        var points = scene.ElevationRegions[0].Points.ToList();
         points[1] = points[1] with
         {
             PositionAuthoringPx = new AuthoringPixelPosition { X = 32, Y = 192 },
         };
 
-        var result = MountainEditing.TryReshape(scene, "mountain_0001", points);
+        var result = ElevationRegionEditing.TryReshape(scene, "mountain_0001", points);
 
         Assert.Null(result.Scene);
         Assert.Null(result.Body);
         Assert.Contains("contact with itself", result.Reason!, StringComparison.Ordinal);
-        Assert.Equal(160, scene.MountainBodies[0].Points[1].PositionAuthoringPx.X);
+        Assert.Equal(160, scene.ElevationRegions[0].Points[1].PositionAuthoringPx.X);
     }
 
     [Fact]
-    public void ChangingAMountainTopPreservesItsIdentityAndContour()
+    public void ChangingAElevationRegionTopPreservesItsIdentityAndContour()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             4m);
-        var before = scene.MountainBodies[0];
+        var before = scene.ElevationRegions[0];
 
-        var changed = MountainEditing.SetElevation(
-            scene, workspace.Metrics, before.MountainBodyId, 6.125m);
+        var changed = ElevationRegionEditing.SetElevation(
+            scene, workspace.Metrics, before.ElevationRegionId, 6.125m);
 
-        var after = Assert.Single(changed.MountainBodies);
-        Assert.Equal(before.MountainBodyId, after.MountainBodyId);
+        var after = Assert.Single(changed.ElevationRegions);
+        Assert.Equal(before.ElevationRegionId, after.ElevationRegionId);
         Assert.Equal(6.125m, after.ElevationMeters);
         Assert.Same(before.Points, after.Points);
         Assert.Equal(
             16,
-            MountainGeometry.EffectiveTerrainCells(changed, workspace.Metrics)
+            ElevationRegionGeometry.EffectiveTerrainCells(changed, workspace.Metrics)
                 .Count(static cell => cell.ElevationMeters == 6.125m));
     }
 
     [Fact]
-    public void ChangingAMountainTopRequiresTheWorkspaceElevationQuantum()
+    public void ChangingAElevationRegionTopRequiresTheWorkspaceElevationQuantum()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             4m);
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
-            MountainEditing.SetElevation(
+            ElevationRegionEditing.SetElevation(
                 scene, workspace.Metrics, "mountain_0001", 6.01m));
 
         Assert.Contains("elevation quantum", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ASquareMountainRaisesExactlyThePaintedCellsInsideItsContour()
+    public void ASquareElevationRegionRaisesExactlyThePaintedCellsInsideItsContour()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             10.0m);
 
-        var terrain = MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
+        var terrain = ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
 
         Assert.Equal(36, terrain.Count);
         Assert.Equal(
@@ -220,9 +220,9 @@ public sealed class MountainGeometryTests
         var scene = TestScenes.Instance(workspace);
         scene = TerrainEditing.Paint(scene, workspace.Terrain, 1, 1, "sand");
         scene = TerrainEditing.Paint(scene, workspace.Terrain, 2, 1, "sand");
-        scene = MountainEditing.Place(scene, workspace.Metrics, Square(32, 32, 160, 160), 10.0m);
+        scene = ElevationRegionEditing.Place(scene, workspace.Metrics, Square(32, 32, 160, 160), 10.0m);
 
-        var terrain = MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
+        var terrain = ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
 
         var raised = terrain.Where(static cell => cell.ElevationMeters == 10.0m).ToList();
         Assert.Equal(16, raised.Count);
@@ -234,7 +234,7 @@ public sealed class MountainGeometryTests
     }
 
     /// <summary>
-    /// A mountain has no material to make ground out of, so it creates no cell
+    /// A hill has no material to make ground out of, so it creates no cell
     /// where nobody painted. The body is still a valid document and starts
     /// working the moment Terrain appears under it - the same rule read from
     /// the other side.
@@ -243,18 +243,18 @@ public sealed class MountainGeometryTests
     public void AContourOverUnpaintedGroundIsValidAndRaisesNothing()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.EmptyInstance(),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             10.0m);
 
         DocumentValidation.ValidateGrid(scene, workspace.Metrics);
-        Assert.Empty(MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics));
+        Assert.Empty(ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics));
 
         var painted = TerrainEditing.Paint(scene, workspace.Terrain, 2, 2, "sand");
         var cell = Assert.Single(
-            MountainGeometry.EffectiveTerrainCells(painted, workspace.Metrics));
+            ElevationRegionGeometry.EffectiveTerrainCells(painted, workspace.Metrics));
         Assert.Equal(10.0m, cell.ElevationMeters);
         Assert.Equal("sand", cell.AssetKey);
     }
@@ -270,30 +270,30 @@ public sealed class MountainGeometryTests
         using var workspace = TestWorkspace.Create();
         var scene = Bodies(Body("mountain_0001", 10.0m,
         [
-            MountainEditing.Point(32, 32),
-            MountainEditing.Point(160, 160),
-            MountainEditing.Point(160, 32),
-            MountainEditing.Point(32, 192),
+            ElevationRegionEditing.Point(32, 32),
+            ElevationRegionEditing.Point(160, 160),
+            ElevationRegionEditing.Point(160, 32),
+            ElevationRegionEditing.Point(32, 192),
         ]));
 
         Assert.Empty(scene.TerrainCells);
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
-            MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics));
+            ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics));
 
         Assert.Contains("contact with itself", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ACurvedMountainFollowsItsBezierRatherThanItsControlPolygon()
+    public void ACurvedElevationRegionFollowsItsBezierRatherThanItsControlPolygon()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Lens(96),
             10.0m);
 
-        var terrain = MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics)
+        var terrain = ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics)
             .Where(static cell => cell.ElevationMeters == 10.0m)
             .ToList();
 
@@ -302,17 +302,17 @@ public sealed class MountainGeometryTests
     }
 
     [Fact]
-    public void ASecondMountainCanSitOnTheFirstAtAnAbsoluteHigherTop()
+    public void ASecondElevationRegionCanSitOnTheFirstAtAnAbsoluteHigherTop()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             10.0m);
-        scene = MountainEditing.Place(scene, workspace.Metrics, Square(64, 64, 128, 128), 15.0m);
+        scene = ElevationRegionEditing.Place(scene, workspace.Metrics, Square(64, 64, 128, 128), 15.0m);
 
-        var terrain = MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
+        var terrain = ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
 
         Assert.Equal(36, terrain.Count);
         Assert.Equal(12, terrain.Count(static cell => cell.ElevationMeters == 10.0m));
@@ -321,16 +321,16 @@ public sealed class MountainGeometryTests
     }
 
     [Fact]
-    public void ALowerMountainNeverCutsDownExistingTerrain()
+    public void ALowerElevationRegionNeverCutsDownExistingTerrain()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             0.5m);
 
-        var terrain = MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
+        var terrain = ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
 
         Assert.Equal(36, terrain.Count);
         Assert.All(terrain, static cell =>
@@ -352,9 +352,9 @@ public sealed class MountainGeometryTests
         using var workspace = TestWorkspace.Create();
         var scene = TerrainEditing.Paint(
             TestScenes.Instance(workspace), workspace.Terrain, 2, 2, "sand");
-        scene = MountainEditing.Place(scene, workspace.Metrics, Square(32, 32, 160, 160), 1.0m);
+        scene = ElevationRegionEditing.Place(scene, workspace.Metrics, Square(32, 32, 160, 160), 1.0m);
 
-        var terrain = MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
+        var terrain = ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
 
         Assert.Equal(scene.TerrainCells, terrain);
         Assert.Equal(1, terrain.Count(static cell => cell.AssetKey == "sand"));
@@ -372,7 +372,7 @@ public sealed class MountainGeometryTests
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace) with
         {
-            MountainBodies =
+            ElevationRegions =
             [
                 Body("mountain_0001", 10.0m, Square(32, 32, 160, 160)),
                 Body("mountain_0002", 10.0m, Square(64, 64, 192, 192)),
@@ -381,7 +381,7 @@ public sealed class MountainGeometryTests
 
         DocumentValidation.ValidateGrid(scene, workspace.Metrics);
 
-        var terrain = MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
+        var terrain = ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
         // Sixteen cells each, nine of them shared.
         Assert.Equal(23, terrain.Count(static cell => cell.ElevationMeters == 10.0m));
         Assert.All(terrain, static cell => Assert.Equal("grass", cell.AssetKey));
@@ -423,14 +423,14 @@ public sealed class MountainGeometryTests
             TestScenes.Instance(workspace), workspace.Terrain, 3, 3, "sand");
         scene = scene with
         {
-            MountainBodies =
+            ElevationRegions =
             [
                 Body("mountain_0001", 15.0m, Square(64, 64, 128, 128)),
                 Body("mountain_0002", 10.0m, Square(32, 32, 160, 160)),
             ],
         };
 
-        var terrain = MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
+        var terrain = ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics);
 
         var covered = terrain.Single(static cell => cell is { X: 3, Y: 3 });
         Assert.Equal(15.0m, covered.ElevationMeters);
@@ -454,17 +454,17 @@ public sealed class MountainGeometryTests
         scene = TerrainEditing.Paint(scene, workspace.Terrain, 2, 2, "grass");
         scene = scene with
         {
-            MountainBodies =
+            ElevationRegions =
             [
                 Body("mountain_0001", 10.0m, Square(32, 32, 160, 160)),
                 Body("mountain_0002", 15.0m, Square(64, 64, 128, 128)),
             ],
         };
 
-        var wide = MountainGeometry.CellsRaisedBy(
-            scene, workspace.Metrics, scene.MountainBodies[0]);
-        var tall = MountainGeometry.CellsRaisedBy(
-            scene, workspace.Metrics, scene.MountainBodies[1]);
+        var wide = ElevationRegionGeometry.CellsRaisedBy(
+            scene, workspace.Metrics, scene.ElevationRegions[0]);
+        var tall = ElevationRegionGeometry.CellsRaisedBy(
+            scene, workspace.Metrics, scene.ElevationRegions[1]);
 
         // (1, 1) is painted and this body's alone; (2, 2) belongs to the higher
         // body; the other fourteen covered coordinates were never painted.
@@ -492,17 +492,17 @@ public sealed class MountainGeometryTests
             TestScenes.EmptyInstance(), workspace.Terrain, 2, 2, "grass");
         scene = scene with
         {
-            MountainBodies =
+            ElevationRegions =
             [
                 Body("mountain_0001", 10.0m, Square(32, 32, 160, 160)),
                 Body("mountain_0002", 10.0m, Square(32, 32, 160, 160)),
             ],
         };
 
-        Assert.Empty(MountainGeometry.CellsRaisedBy(
-            scene, workspace.Metrics, scene.MountainBodies[0]));
-        Assert.Empty(MountainGeometry.CellsRaisedBy(
-            scene, workspace.Metrics, scene.MountainBodies[1]));
+        Assert.Empty(ElevationRegionGeometry.CellsRaisedBy(
+            scene, workspace.Metrics, scene.ElevationRegions[0]));
+        Assert.Empty(ElevationRegionGeometry.CellsRaisedBy(
+            scene, workspace.Metrics, scene.ElevationRegions[1]));
     }
 
     /// <summary>
@@ -516,7 +516,7 @@ public sealed class MountainGeometryTests
         var scene = TestScenes.Instance(workspace);
         var candidate = Body("mountain_0001", 10.0m, Square(32, 32, 160, 160));
 
-        var raised = MountainGeometry.CellsRaisedBy(scene, workspace.Metrics, candidate);
+        var raised = ElevationRegionGeometry.CellsRaisedBy(scene, workspace.Metrics, candidate);
 
         Assert.Equal(16, raised.Count);
         Assert.All(raised, static cell =>
@@ -527,12 +527,12 @@ public sealed class MountainGeometryTests
     }
 
     [Fact]
-    public void MountainElevationUsesTheWorkspaceQuantum()
+    public void ElevationRegionElevationUsesTheWorkspaceQuantum()
     {
         using var workspace = TestWorkspace.Create();
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
-            MountainEditing.Place(
+            ElevationRegionEditing.Place(
                 TestScenes.Instance(workspace),
                 workspace.Metrics,
                 Square(32, 32, 160, 160),
@@ -542,19 +542,19 @@ public sealed class MountainGeometryTests
     }
 
     [Fact]
-    public void ASelfIntersectingMountainIsRefusedBeforeItEntersTheDocument()
+    public void ASelfIntersectingElevationRegionIsRefusedBeforeItEntersTheDocument()
     {
         using var workspace = TestWorkspace.Create();
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
-            MountainEditing.Place(
+            ElevationRegionEditing.Place(
                 TestScenes.Instance(workspace),
                 workspace.Metrics,
                 [
-                    MountainEditing.Point(32, 32),
-                    MountainEditing.Point(160, 160),
-                    MountainEditing.Point(160, 32),
-                    MountainEditing.Point(32, 192),
+                    ElevationRegionEditing.Point(32, 32),
+                    ElevationRegionEditing.Point(160, 160),
+                    ElevationRegionEditing.Point(160, 32),
+                    ElevationRegionEditing.Point(32, 192),
                 ],
                 10.0m));
 
@@ -562,10 +562,10 @@ public sealed class MountainGeometryTests
     }
 
     [Fact]
-    public void MountainSourceSurvivesAnAuthoringRoundTrip()
+    public void ElevationRegionSourceSurvivesAnAuthoringRoundTrip()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
@@ -573,8 +573,8 @@ public sealed class MountainGeometryTests
 
         var restored = DocumentJson.DeserializeScene(DocumentJson.Serialize(scene));
 
-        var body = Assert.Single(restored.MountainBodies);
-        Assert.Equal("mountain_0001", body.MountainBodyId);
+        var body = Assert.Single(restored.ElevationRegions);
+        Assert.Equal("mountain_0001", body.ElevationRegionId);
         Assert.Equal(10.0m, body.ElevationMeters);
         Assert.Equal(4, body.Points.Count);
     }
@@ -584,28 +584,28 @@ public sealed class MountainGeometryTests
     /// there is no material on it to read back.
     /// </summary>
     [Fact]
-    public void AMountainBodyCarriesNoAssetInTheDocument()
+    public void AElevationRegionBodyCarriesNoAssetInTheDocument()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             10.0m);
 
         using var parsed = JsonDocument.Parse(DocumentJson.Serialize(scene));
-        var body = parsed.RootElement.GetProperty("mountain_bodies")[0];
+        var body = parsed.RootElement.GetProperty("elevation_regions")[0];
 
-        Assert.Equal(13, parsed.RootElement.GetProperty("version").GetInt32());
+        Assert.Equal(14, parsed.RootElement.GetProperty("version").GetInt32());
         Assert.False(body.TryGetProperty("asset_key", out _));
         Assert.Equal(10.0m, body.GetProperty("elevation_meters").GetDecimal());
     }
 
     [Fact]
-    public void ExportFoldsMountainsWithoutLeakingTheirAuthoringSource()
+    public void ExportFoldsElevationRegionsWithoutLeakingTheirAuthoringSource()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
@@ -623,7 +623,7 @@ public sealed class MountainGeometryTests
         var exportedScene = parsed.RootElement.GetProperty("scene");
 
         Assert.Equal(10, exportedScene.GetProperty("version").GetInt32());
-        Assert.False(exportedScene.TryGetProperty("mountain_bodies", out _));
+        Assert.False(exportedScene.TryGetProperty("elevation_regions", out _));
         var cells = exportedScene.GetProperty("terrain_cells").EnumerateArray().ToList();
         Assert.Equal(36, cells.Count);
         Assert.Equal(
@@ -633,27 +633,30 @@ public sealed class MountainGeometryTests
     }
 
     [Fact]
-    public void SceneTemplatesRefuseMountainBodiesUntilCompositionCanMoveTheirContours()
+    public void SceneTemplatesRefuseElevationRegionsUntilCompositionCanMoveTheirContours()
     {
         using var workspace = TestWorkspace.Create();
-        var instance = MountainEditing.Place(
+        var instance = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             10.0m);
-        var template = SceneDocument.CreateTemplate("mountain", 6, 6, 1, 0, 0) with
+        var template = SceneDocument.CreateTemplate("hill", 6, 6, 1, 0, 0) with
         {
-            MountainBodies = instance.MountainBodies,
+            ElevationRegions = instance.ElevationRegions,
         };
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             DocumentValidation.Validate(template));
 
-        Assert.Contains("Template cannot own mountain bodies", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "Template cannot own elevation regions",
+            exception.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]
-    public void AMountainAnchorOutsideTheSceneIsRefused()
+    public void AElevationRegionAnchorOutsideTheSceneIsRefused()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Bodies(Body("mountain_0001", 10.0m, Square(32, 32, 224, 160)));
@@ -662,13 +665,13 @@ public sealed class MountainGeometryTests
             DocumentValidation.ValidateGrid(scene, workspace.Metrics));
 
         Assert.Contains(
-            "Mountain body 'mountain_0001' point 1 lies outside Scene bounds",
+            "Elevation region 'mountain_0001' point 1 lies outside Scene bounds",
             exception.Message,
             StringComparison.Ordinal);
     }
 
     [Fact]
-    public void AMountainAnchorBetweenGridLinesIsRefused()
+    public void AElevationRegionAnchorBetweenGridLinesIsRefused()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Bodies(Body("mountain_0001", 10.0m, Square(32, 32, 160, 144)));
@@ -677,7 +680,7 @@ public sealed class MountainGeometryTests
             DocumentValidation.ValidateGrid(scene, workspace.Metrics));
 
         Assert.Contains(
-            "Mountain body 'mountain_0001' point 2 must align to the 32-authoring-pixel grid",
+            "Elevation region 'mountain_0001' point 2 must align to the 32-authoring-pixel grid",
             exception.Message,
             StringComparison.Ordinal);
     }
@@ -693,13 +696,13 @@ public sealed class MountainGeometryTests
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace) with
         {
-            MountainBodies = [Body("mountain_0001", 10.0m, Lens(200))],
+            ElevationRegions = [Body("mountain_0001", 10.0m, Lens(200))],
         };
 
         DocumentValidation.ValidateGrid(scene, workspace.Metrics);
 
         Assert.Contains(
-            MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics),
+            ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics),
             static cell => cell.ElevationMeters == 10.0m);
     }
 
@@ -716,16 +719,16 @@ public sealed class MountainGeometryTests
 
         DocumentValidation.ValidateGrid(scene, workspace.Metrics);
 
-        Assert.Equal(2, Assert.Single(scene.MountainBodies).Points.Count);
+        Assert.Equal(2, Assert.Single(scene.ElevationRegions).Points.Count);
     }
 
     [Fact]
-    public void AGridAlignedMountainStaysValid()
+    public void AGridAlignedElevationRegionStaysValid()
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace) with
         {
-            MountainBodies =
+            ElevationRegions =
             [
                 Body("mountain_0001", 10.0m, Square(0, 0, 192, 192)),
                 Body("mountain_0002", 12.0m, Square(64, 64, 128, 128)),
@@ -734,25 +737,25 @@ public sealed class MountainGeometryTests
 
         DocumentValidation.ValidateGrid(scene, workspace.Metrics);
 
-        Assert.Equal(36, MountainGeometry.EffectiveTerrainCells(scene, workspace.Metrics).Count);
+        Assert.Equal(36, ElevationRegionGeometry.EffectiveTerrainCells(scene, workspace.Metrics).Count);
     }
 
     private static IReadOnlyList<TerrainCellDocument> Fold(
         TestWorkspace workspace,
-        params MountainBodyDocument[] bodies) =>
-        MountainGeometry.EffectiveTerrainCells(
-            TestScenes.Instance(workspace) with { MountainBodies = [.. bodies] },
+        params ElevationRegionDocument[] bodies) =>
+        ElevationRegionGeometry.EffectiveTerrainCells(
+            TestScenes.Instance(workspace) with { ElevationRegions = [.. bodies] },
             workspace.Metrics);
 
-    private static SceneDocument Bodies(params MountainBodyDocument[] bodies) =>
-        TestScenes.EmptyInstance() with { MountainBodies = [.. bodies] };
+    private static SceneDocument Bodies(params ElevationRegionDocument[] bodies) =>
+        TestScenes.EmptyInstance() with { ElevationRegions = [.. bodies] };
 
-    private static MountainBodyDocument Body(
-        string mountainBodyId,
+    private static ElevationRegionDocument Body(
+        string elevationRegionId,
         decimal elevationMeters,
-        IReadOnlyList<MountainCurvePointDocument> points) => new()
+        IReadOnlyList<ElevationRegionPointDocument> points) => new()
     {
-        MountainBodyId = mountainBodyId,
+        ElevationRegionId = elevationRegionId,
         ElevationMeters = elevationMeters,
         Points = [.. points],
     };
@@ -762,31 +765,31 @@ public sealed class MountainGeometryTests
     /// <paramref name="reach"/> is the handle length in authoring pixels; large
     /// values push the curve outside the Scene without moving an anchor.
     /// </summary>
-    private static IReadOnlyList<MountainCurvePointDocument> Lens(int reach) =>
+    private static IReadOnlyList<ElevationRegionPointDocument> Lens(int reach) =>
     [
-        MountainEditing.Point(
+        ElevationRegionEditing.Point(
             32,
             96,
-            MountainPointMode.Aligned,
+            ElevationRegionPointMode.Aligned,
             new AuthoringPixelOffset { X = 0, Y = -reach },
             new AuthoringPixelOffset { X = 0, Y = reach }),
-        MountainEditing.Point(
+        ElevationRegionEditing.Point(
             160,
             96,
-            MountainPointMode.Aligned,
+            ElevationRegionPointMode.Aligned,
             new AuthoringPixelOffset { X = 0, Y = reach },
             new AuthoringPixelOffset { X = 0, Y = -reach }),
     ];
 
-    private static IReadOnlyList<MountainCurvePointDocument> Square(
+    private static IReadOnlyList<ElevationRegionPointDocument> Square(
         int left,
         int bottom,
         int right,
         int top) =>
     [
-        MountainEditing.Point(left, bottom),
-        MountainEditing.Point(right, bottom),
-        MountainEditing.Point(right, top),
-        MountainEditing.Point(left, top),
+        ElevationRegionEditing.Point(left, bottom),
+        ElevationRegionEditing.Point(right, bottom),
+        ElevationRegionEditing.Point(right, top),
+        ElevationRegionEditing.Point(left, top),
     ];
 }

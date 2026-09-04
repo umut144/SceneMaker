@@ -73,7 +73,7 @@ public static partial class DocumentValidation
             previousInstanceId = prop.InstanceId;
         }
 
-        ValidateMountainBodies(document);
+        ValidateElevationRegions(document);
         ValidateRouteSurfaces(document);
         ValidateWaterBodies(document);
 
@@ -101,8 +101,8 @@ public static partial class DocumentValidation
             // author one until composition knows what to do with it.
             if (document.WaterBodies.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own water bodies.");
-            if (document.MountainBodies.Count > 0)
-                throw new SceneMakerDocumentException("Scene Template cannot own mountain bodies.");
+            if (document.ElevationRegions.Count > 0)
+                throw new SceneMakerDocumentException("Scene Template cannot own elevation regions.");
             if (document.RouteSurfaces.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own route surfaces.");
             ValidateGroupNumber("Scene Template", document.TemplateDefinition.GroupNumber);
@@ -153,27 +153,27 @@ public static partial class DocumentValidation
                 prop.ElevationMeters,
                 metrics);
         }
-        foreach (var body in document.MountainBodies)
+        foreach (var body in document.ElevationRegions)
         {
             ValidateElevation(
-                $"Mountain body '{body.MountainBodyId}' elevation_meters",
+                $"Elevation region '{body.ElevationRegionId}' elevation_meters",
                 body.ElevationMeters,
                 metrics);
             for (var index = 0; index < body.Points.Count; index++)
             {
-                // The same two rules `Draw Mountain` authors by, and only for
+                // The same two rules `Draw ElevationRegion` authors by, and only for
                 // the anchor. A handle is a curve control rather than a place:
                 // snapping one would snap the shape of the curve, and the curve
                 // it shapes is allowed to bulge past the edge of the map, where
                 // the raster simply stops.
                 ValidateGridAnchor(
-                    $"Mountain body '{body.MountainBodyId}' point {index}",
+                    $"Elevation region '{body.ElevationRegionId}' point {index}",
                     body.Points[index].PositionAuthoringPx,
                     document.SizeCells,
                     metrics);
             }
         }
-        _ = MountainGeometry.EffectiveTerrainCells(document, metrics);
+        _ = ElevationRegionGeometry.EffectiveTerrainCells(document, metrics);
 
         foreach (var route in document.RouteSurfaces)
         {
@@ -228,24 +228,24 @@ public static partial class DocumentValidation
         }
     }
 
-    private static void ValidateMountainBodies(SceneDocument document)
+    private static void ValidateElevationRegions(SceneDocument document)
     {
-        if (document.MountainBodies is null)
-            throw new SceneMakerDocumentException("Scene requires mountain_bodies.");
+        if (document.ElevationRegions is null)
+            throw new SceneMakerDocumentException("Scene requires elevation_regions.");
 
         string? previousBodyId = null;
-        foreach (var body in document.MountainBodies)
+        foreach (var body in document.ElevationRegions)
         {
-            ValidateStableId("mountain_body_id", body.MountainBodyId);
+            ValidateStableId("elevation_region_id", body.ElevationRegionId);
             if (previousBodyId is not null
-                && string.CompareOrdinal(body.MountainBodyId, previousBodyId) <= 0)
+                && string.CompareOrdinal(body.ElevationRegionId, previousBodyId) <= 0)
             {
                 throw new SceneMakerDocumentException(
-                    "Mountain bodies must have unique IDs in canonical ordinal order.");
+                    "Elevation regions must have unique IDs in canonical ordinal order.");
             }
-            previousBodyId = body.MountainBodyId;
+            previousBodyId = body.ElevationRegionId;
 
-            var label = $"Mountain body '{body.MountainBodyId}'";
+            var label = $"Elevation region '{body.ElevationRegionId}'";
             if (body.Points is null || body.Points.Count < 2)
             {
                 throw new SceneMakerDocumentException(
@@ -259,14 +259,14 @@ public static partial class DocumentValidation
                     throw new SceneMakerDocumentException($"{label} requires both handles on every point.");
                 if (!Enum.IsDefined(point.Mode))
                     throw new SceneMakerDocumentException($"{label} requires a supported point mode.");
-                if (point.Mode == MountainPointMode.Linear
+                if (point.Mode == ElevationRegionPointMode.Linear
                     && !(point.HandleInAuthoringPx.IsZero() && point.HandleOutAuthoringPx.IsZero()))
                 {
                     throw new SceneMakerDocumentException(
                         $"{label} has a linear point carrying handles; a linear point's handles are zero.");
                 }
             }
-            _ = MountainGeometry.RequireContour(body);
+            _ = ElevationRegionGeometry.RequireContour(body);
         }
     }
 

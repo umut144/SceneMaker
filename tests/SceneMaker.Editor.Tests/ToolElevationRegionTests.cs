@@ -6,18 +6,18 @@ using Xunit;
 namespace SceneMaker.Editor.Tests;
 
 /// <summary>
-/// `Draw Mountain` on the canvas. Every anchor here sits on the 32-pixel
+/// `Draw ElevationRegion` on the canvas. Every anchor here sits on the 32-pixel
 /// Terrain grid, because a fixture that builds a Scene the IO boundary would
 /// reject is a trap for the next persistence test rather than a shortcut.
 /// </summary>
-public sealed class ToolMountainTests
+public sealed class ToolElevationRegionTests
 {
     [Fact]
-    public void ThreePointsAndEnterAuthorOneClosedMountain()
+    public void ThreePointsAndEnterAuthorOneClosedElevationRegion()
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene, elevation: 4.0m);
 
         Place(interaction, context, 32, 32);
@@ -26,11 +26,11 @@ public sealed class ToolMountainTests
         var edit = Assert.IsType<ToolOutcome.Edit>(
             interaction.KeyPressed(context, ToolKey.Enter));
 
-        var body = Assert.Single(edit.Apply(scene).MountainBodies);
-        Assert.Equal("mountain_0001", body.MountainBodyId);
+        var body = Assert.Single(edit.Apply(scene).ElevationRegions);
+        Assert.Equal("mountain_0001", body.ElevationRegionId);
         Assert.Equal(4.0m, body.ElevationMeters);
         Assert.Equal(3, body.Points.Count);
-        Assert.Empty(interaction.MountainDraft);
+        Assert.Empty(interaction.ElevationRegionDraft);
         Assert.Null(edit.StrokeKey);
     }
 
@@ -39,15 +39,15 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
-        interaction.State.SetMountainPointMode(MountainPointMode.Aligned);
+        interaction.State.SetElevationRegionPointMode(ElevationRegionPointMode.Aligned);
 
         interaction.PointerPressed(context, Point(20, 20), Cell(0, 0));
         interaction.PointerDragged(context, Point(21, 61), Cell(0, 1));
         interaction.PointerReleased(context);
 
-        var placed = Assert.Single(interaction.MountainDraft);
+        var placed = Assert.Single(interaction.ElevationRegionDraft);
         Assert.Equal(32, placed.X);
         Assert.Equal(32, placed.Y);
         Assert.Equal(new AuthoringPixelOffset { X = -11, Y = 29 }, placed.DraggedHandleOut);
@@ -56,11 +56,11 @@ public sealed class ToolMountainTests
     [Fact]
     public void AlignedClicksResolveCyclicHandlesAcrossTheClosingEdge()
     {
-        var points = MountainEditing.ResolveContour(
+        var points = ElevationRegionEditing.ResolveContour(
         [
-            new MountainDraftPoint(0, 0, MountainPointMode.Aligned),
-            new MountainDraftPoint(96, 0, MountainPointMode.Aligned),
-            new MountainDraftPoint(96, 96, MountainPointMode.Aligned),
+            new ElevationRegionDraftPoint(0, 0, ElevationRegionPointMode.Aligned),
+            new ElevationRegionDraftPoint(96, 0, ElevationRegionPointMode.Aligned),
+            new ElevationRegionDraftPoint(96, 96, ElevationRegionPointMode.Aligned),
         ]);
 
         Assert.False(points[0].HandleInAuthoringPx.IsZero());
@@ -79,15 +79,15 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
 
         Place(interaction, context, 32, 32);
         Place(interaction, context, 160, 32);
-        var preview = interaction.MountainPreview(context);
+        var preview = interaction.ElevationRegionPreview(context);
 
-        Assert.Equal(MountainDraftKind.Incomplete, preview.Kind);
-        Assert.Equal(ToolPreviewBuilder.IncompleteMountainDraft, preview.Explanation);
+        Assert.Equal(ElevationRegionDraftKind.Incomplete, preview.Kind);
+        Assert.Equal(ToolPreviewBuilder.IncompleteElevationRegionDraft, preview.Explanation);
         Assert.Empty(preview.RaisedCells);
         Assert.Empty(preview.Outline);
         Assert.Equal(2, preview.Points.Count);
@@ -98,15 +98,15 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
 
         Place(interaction, context, 32, 32);
         Place(interaction, context, 160, 32);
         Place(interaction, context, 96, 160);
-        var preview = interaction.MountainPreview(context);
+        var preview = interaction.ElevationRegionPreview(context);
 
-        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Equal(ElevationRegionDraftKind.Ready, preview.Kind);
         Assert.Null(preview.Explanation);
         Assert.NotEmpty(preview.RaisedCells);
         Assert.NotEmpty(preview.Outline);
@@ -115,7 +115,7 @@ public sealed class ToolMountainTests
     /// <summary>
     /// The preview shows the difference the commit would make, in the material
     /// that is already there. A contour over sand and grass previews sand and
-    /// grass - the mountain brings no colour of its own.
+    /// grass - the hill brings no colour of its own.
     /// </summary>
     [Fact]
     public void ThePreviewCarriesThePaintedMaterialOfEveryRaisedCell()
@@ -123,16 +123,16 @@ public sealed class ToolMountainTests
         using var workspace = TestWorkspace.Create();
         var scene = TerrainEditing.Paint(
             TestScenes.Instance(workspace), workspace.Terrain, 2, 2, "sand");
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
 
         Place(interaction, context, 32, 32);
         Place(interaction, context, 160, 32);
         Place(interaction, context, 160, 160);
         Place(interaction, context, 32, 160);
-        var preview = interaction.MountainPreview(context);
+        var preview = interaction.ElevationRegionPreview(context);
 
-        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Equal(ElevationRegionDraftKind.Ready, preview.Kind);
         Assert.Equal(16, preview.RaisedCells.Count);
         var sand = Assert.Single(preview.RaisedCells, static cell => cell.AssetKey == "sand");
         Assert.Equal(new TerrainCellCoordinate(2, 2), new TerrainCellCoordinate(sand.X, sand.Y));
@@ -150,16 +150,16 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.EmptyInstance();
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
 
         Place(interaction, context, 32, 32);
         Place(interaction, context, 160, 32);
         interaction.PointerPressed(context, Point(96, 160), Cell(3, 5));
         var closed = Assert.IsType<ToolOutcome.Message>(interaction.PointerReleased(context));
-        var preview = interaction.MountainPreview(context);
+        var preview = interaction.ElevationRegionPreview(context);
 
-        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Equal(ElevationRegionDraftKind.Ready, preview.Kind);
         Assert.Empty(preview.RaisedCells);
         Assert.Equal(ToolPreviewBuilder.ValidButRaisesNoTerrain, preview.Explanation);
         Assert.NotEmpty(preview.Outline);
@@ -176,7 +176,7 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.EmptyInstance();
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
 
         Place(interaction, context, 32, 32);
@@ -186,7 +186,7 @@ public sealed class ToolMountainTests
             interaction.KeyPressed(context, ToolKey.Enter));
         var after = edit.Apply(scene);
 
-        Assert.Single(after.MountainBodies);
+        Assert.Single(after.ElevationRegions);
         Assert.Equal(
             "Authored mountain_0001 from 3 points · top 4 m; "
                 + ToolPreviewBuilder.RaisesNoTerrain,
@@ -198,7 +198,7 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
 
         // Asymmetric on purpose: a symmetric bow tie encloses no net area, and
@@ -210,9 +210,9 @@ public sealed class ToolMountainTests
         Place(interaction, context, 32, 192);
 
         Assert.IsType<ToolOutcome.Message>(interaction.KeyPressed(context, ToolKey.Enter));
-        Assert.Equal(4, interaction.MountainDraft.Count);
-        var preview = interaction.MountainPreview(context);
-        Assert.Equal(MountainDraftKind.Blocked, preview.Kind);
+        Assert.Equal(4, interaction.ElevationRegionDraft.Count);
+        var preview = interaction.ElevationRegionPreview(context);
+        Assert.Equal(ElevationRegionDraftKind.Blocked, preview.Kind);
         Assert.Contains("contact with itself", preview.Explanation!, StringComparison.Ordinal);
         Assert.Empty(preview.RaisedCells);
         Assert.NotEmpty(preview.Outline);
@@ -220,26 +220,26 @@ public sealed class ToolMountainTests
 
     /// <summary>
     /// A body already sitting there at the same height is no longer a reason to
-    /// refuse: the two agree about the only thing a mountain says.
+    /// refuse: the two agree about the only thing a hill says.
     /// </summary>
     [Fact]
     public void AnEqualTopOverAnExistingBodyIsReady()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             4.0m);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
 
         Place(interaction, context, 32, 32);
         Place(interaction, context, 160, 32);
         Place(interaction, context, 96, 160);
-        var preview = interaction.MountainPreview(context);
+        var preview = interaction.ElevationRegionPreview(context);
 
-        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Equal(ElevationRegionDraftKind.Ready, preview.Kind);
         // Ready, and honest about lifting nothing the other body was not
         // already holding at that height.
         Assert.Empty(preview.RaisedCells);
@@ -251,18 +251,18 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
 
         Place(interaction, context, 32, 32);
         Place(interaction, context, 160, 160);
         Place(interaction, context, 160, 32);
         Place(interaction, context, 32, 192);
-        var preview = interaction.MountainPreview(context);
+        var preview = interaction.ElevationRegionPreview(context);
         var message = Assert.IsType<ToolOutcome.Message>(
             interaction.KeyPressed(context, ToolKey.Enter));
 
-        Assert.Equal($"Mountain blocked: {preview.Explanation}", message.Text);
+        Assert.Equal($"Hill blocked: {preview.Explanation}", message.Text);
     }
 
     [Fact]
@@ -270,33 +270,33 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
 
         Place(interaction, context, 32, 32);
         Place(interaction, context, 160, 32);
         Assert.True(interaction.HasUnfinishedDraft);
         Assert.NotNull(interaction.UndoDraftStep());
-        Assert.Single(interaction.MountainDraft);
+        Assert.Single(interaction.ElevationRegionDraft);
         Assert.IsType<ToolOutcome.Message>(interaction.KeyPressed(context, ToolKey.Escape));
-        Assert.Empty(interaction.MountainDraft);
+        Assert.Empty(interaction.ElevationRegionDraft);
         Assert.False(interaction.HasUnfinishedDraft);
     }
 
     [Fact]
-    public void EraserRemovesTheTopmostWholeMountain()
+    public void EraserRemovesTheTopmostWholeElevationRegion()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Nested(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         interaction.SetEraserEnabled(true);
 
         var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerPressed(
             Context(workspace, scene), Point(80, 80), Cell(2, 2)));
         var erased = edit.Apply(scene);
 
-        Assert.Single(erased.MountainBodies);
-        Assert.Equal("mountain_0001", erased.MountainBodies[0].MountainBodyId);
+        Assert.Single(erased.ElevationRegions);
+        Assert.Equal("mountain_0001", erased.ElevationRegions[0].ElevationRegionId);
     }
 
     /// <summary>
@@ -308,21 +308,21 @@ public sealed class ToolMountainTests
     public void TheEraserPicksByCellRatherThanByPointerPosition()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Triangle(32, 32, 128),
             2.0m);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         interaction.SetEraserEnabled(true);
 
         Assert.Contains(
             Cell(2, 3),
-            MountainGeometry.TerrainCells(scene, workspace.Metrics, scene.MountainBodies[0]));
+            ElevationRegionGeometry.TerrainCells(scene, workspace.Metrics, scene.ElevationRegions[0]));
         var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerPressed(
             Context(workspace, scene), Point(74, 120), Cell(2, 3)));
 
-        Assert.Empty(edit.Apply(scene).MountainBodies);
+        Assert.Empty(edit.Apply(scene).ElevationRegions);
     }
 
     [Fact]
@@ -330,21 +330,21 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = Nested(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         interaction.SetEraserEnabled(true);
 
-        var preview = ToolPreviewBuilder.BuildMountainEraser(
+        var preview = ToolPreviewBuilder.BuildElevationRegionEraser(
             scene, workspace.Metrics, interaction.ActiveTool, eraserEnabled: true, Cell(2, 2));
         var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerPressed(
             Context(workspace, scene), Point(80, 80), Cell(2, 2)));
-        var removed = scene.MountainBodies
-            .Select(static body => body.MountainBodyId)
-            .Except(edit.Apply(scene).MountainBodies.Select(static body => body.MountainBodyId));
+        var removed = scene.ElevationRegions
+            .Select(static body => body.ElevationRegionId)
+            .Except(edit.Apply(scene).ElevationRegions.Select(static body => body.ElevationRegionId));
 
-        Assert.Equal("mountain_0002", preview.MountainBodyId);
+        Assert.Equal("mountain_0002", preview.ElevationRegionId);
         Assert.Equal("mountain_0002", Assert.Single(removed));
         Assert.Equal(
-            MountainGeometry.CellsRaisedBy(scene, workspace.Metrics, scene.MountainBodies[^1]),
+            ElevationRegionGeometry.CellsRaisedBy(scene, workspace.Metrics, scene.ElevationRegions[^1]),
             preview.LoweredCells);
         Assert.NotEmpty(preview.LoweredCells);
     }
@@ -362,17 +362,17 @@ public sealed class ToolMountainTests
         using var workspace = TestWorkspace.Create();
         var scene = TerrainEditing.Paint(
             TestScenes.EmptyInstance(), workspace.Terrain, 2, 2, "grass");
-        scene = MountainEditing.Place(
+        scene = ElevationRegionEditing.Place(
             scene, workspace.Metrics, Square(32, 32, 160, 160), 4.0m);
 
-        var preview = ToolPreviewBuilder.BuildMountainEraser(
-            scene, workspace.Metrics, EditorTool.DrawMountain, eraserEnabled: true, Cell(2, 2));
+        var preview = ToolPreviewBuilder.BuildElevationRegionEraser(
+            scene, workspace.Metrics, EditorTool.DrawElevationRegion, eraserEnabled: true, Cell(2, 2));
 
         Assert.Equal(
             16,
-            MountainGeometry.TerrainCells(
-                scene, workspace.Metrics, scene.MountainBodies[0]).Count);
-        Assert.Equal("mountain_0001", preview.MountainBodyId);
+            ElevationRegionGeometry.TerrainCells(
+                scene, workspace.Metrics, scene.ElevationRegions[0]).Count);
+        Assert.Equal("mountain_0001", preview.ElevationRegionId);
         var lowered = Assert.Single(preview.LoweredCells);
         Assert.Equal(
             new TerrainCellCoordinate(2, 2),
@@ -380,83 +380,83 @@ public sealed class ToolMountainTests
     }
 
     [Fact]
-    public void WithoutAMountainUnderThePointerTheEraserPreviewIsEmpty()
+    public void WithoutAElevationRegionUnderThePointerTheEraserPreviewIsEmpty()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Nested(workspace);
 
-        var preview = ToolPreviewBuilder.BuildMountainEraser(
-            scene, workspace.Metrics, EditorTool.DrawMountain, eraserEnabled: true, Cell(0, 0));
+        var preview = ToolPreviewBuilder.BuildElevationRegionEraser(
+            scene, workspace.Metrics, EditorTool.DrawElevationRegion, eraserEnabled: true, Cell(0, 0));
 
-        Assert.Null(preview.MountainBodyId);
+        Assert.Null(preview.ElevationRegionId);
         Assert.Empty(preview.LoweredCells);
     }
 
     [Fact]
-    public void SelectMountainPicksTheTopmostBodyByVisibleCell()
+    public void SelectElevationRegionPicksTheTopmostBodyByVisibleCell()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Nested(workspace);
-        var interaction = Mountain(EditorTool.SelectMountain);
+        var interaction = ElevationRegion(EditorTool.SelectElevationRegion);
 
         var selected = Assert.IsType<ToolOutcome.Message>(interaction.PointerPressed(
             Context(workspace, scene), Point(80, 80), Cell(2, 2)));
 
-        Assert.Equal("mountain_0002", interaction.SelectedMountainBodyId);
+        Assert.Equal("mountain_0002", interaction.SelectedElevationRegionId);
         Assert.Contains("top 4 m", selected.Text, StringComparison.Ordinal);
-        Assert.Null(interaction.DraggedMountainPointIndex);
+        Assert.Null(interaction.DraggedElevationRegionPointIndex);
     }
 
     [Fact]
-    public void DraggingASelectedPointReshapesOneMountainOnTheTerrainGrid()
+    public void DraggingASelectedPointReshapesOneElevationRegionOnTheTerrainGrid()
     {
         using var workspace = TestWorkspace.Create();
         var points = Square(32, 32, 160, 160).ToList();
-        points[1] = MountainEditing.Point(
+        points[1] = ElevationRegionEditing.Point(
             160,
             32,
-            MountainPointMode.Aligned,
+            ElevationRegionPointMode.Aligned,
             new AuthoringPixelOffset { X = -1, Y = 0 },
             new AuthoringPixelOffset { X = 1, Y = 0 });
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace), workspace.Metrics, points, 4m);
-        var interaction = Mountain(EditorTool.SelectMountain);
+        var interaction = ElevationRegion(EditorTool.SelectElevationRegion);
         var context = Context(workspace, scene);
 
         interaction.PointerPressed(context, Point(161, 33), Cell(5, 1));
         interaction.PointerDragged(context, Point(181, 47), Cell(5, 1));
-        var preview = interaction.MountainSelectionPreview(context);
+        var preview = interaction.ElevationRegionSelectionPreview(context);
         var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerReleased(context));
         var reshaped = edit.Apply(scene);
 
-        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Equal(ElevationRegionDraftKind.Ready, preview.Kind);
         Assert.Equal(192, preview.Body!.Points[1].PositionAuthoringPx.X);
         Assert.Equal(32, preview.Body.Points[1].PositionAuthoringPx.Y);
-        var body = Assert.Single(reshaped.MountainBodies);
-        Assert.Equal("mountain_0001", body.MountainBodyId);
+        var body = Assert.Single(reshaped.ElevationRegions);
+        Assert.Equal("mountain_0001", body.ElevationRegionId);
         Assert.Equal(4m, body.ElevationMeters);
         Assert.Equal(points[1].Mode, body.Points[1].Mode);
         Assert.Equal(points[1].HandleInAuthoringPx, body.Points[1].HandleInAuthoringPx);
         Assert.Equal(points[1].HandleOutAuthoringPx, body.Points[1].HandleOutAuthoringPx);
-        Assert.Null(interaction.DraggedMountainPointIndex);
+        Assert.Null(interaction.DraggedElevationRegionPointIndex);
     }
 
     [Fact]
     public void ASelectedAlignedHandleCanBeDraggedWithoutSnapping()
     {
         using var workspace = TestWorkspace.Create();
-        var points = MountainEditing.ResolveContour(
+        var points = ElevationRegionEditing.ResolveContour(
         [
-            new MountainDraftPoint(32, 32, MountainPointMode.Aligned),
-            new MountainDraftPoint(160, 32, MountainPointMode.Aligned),
-            new MountainDraftPoint(160, 160, MountainPointMode.Aligned),
-            new MountainDraftPoint(32, 160, MountainPointMode.Aligned),
+            new ElevationRegionDraftPoint(32, 32, ElevationRegionPointMode.Aligned),
+            new ElevationRegionDraftPoint(160, 32, ElevationRegionPointMode.Aligned),
+            new ElevationRegionDraftPoint(160, 160, ElevationRegionPointMode.Aligned),
+            new ElevationRegionDraftPoint(32, 160, ElevationRegionPointMode.Aligned),
         ]);
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace), workspace.Metrics, points, 4m);
-        var interaction = Mountain(EditorTool.SelectMountain);
+        var interaction = ElevationRegion(EditorTool.SelectElevationRegion);
         var context = Context(workspace, scene);
-        var point = scene.MountainBodies[0].Points[1];
+        var point = scene.ElevationRegions[0].Points[1];
         var anchor = point.PositionAuthoringPx;
         var handle = point.HandleOutAuthoringPx;
 
@@ -466,75 +466,75 @@ public sealed class ToolMountainTests
             context,
             Point(anchor.X + handle.X, anchor.Y + handle.Y),
             Cell((anchor.X + handle.X) / 32, (anchor.Y + handle.Y) / 32));
-        Assert.Equal(MountainHandleSide.Out, interaction.DraggedMountainHandleSide);
+        Assert.Equal(ElevationRegionHandleSide.Out, interaction.DraggedElevationRegionHandleSide);
         interaction.PointerDragged(
             context,
             Point(anchor.X + handle.X / 2, anchor.Y + handle.Y / 2),
             Cell(5, 1));
-        var preview = interaction.MountainSelectionPreview(context);
+        var preview = interaction.ElevationRegionSelectionPreview(context);
         var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerReleased(context));
-        var changed = edit.Apply(scene).MountainBodies[0].Points[1];
+        var changed = edit.Apply(scene).ElevationRegions[0].Points[1];
 
-        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Equal(ElevationRegionDraftKind.Ready, preview.Kind);
         Assert.Equal(handle.X / 2, changed.HandleOutAuthoringPx.X);
         Assert.Equal(handle.Y / 2, changed.HandleOutAuthoringPx.Y);
         Assert.Equal(point.HandleInAuthoringPx, changed.HandleInAuthoringPx);
-        Assert.Equal(MountainPointMode.Aligned, changed.Mode);
+        Assert.Equal(ElevationRegionPointMode.Aligned, changed.Mode);
     }
 
     [Fact]
     public void ThePointFieldChangesTheSelectedStoredPointModeAsOneEdit()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             4m);
-        var interaction = Mountain(EditorTool.SelectMountain);
+        var interaction = ElevationRegion(EditorTool.SelectElevationRegion);
         var context = Context(workspace, scene);
         interaction.PointerPressed(context, Point(32, 32), Cell(1, 1));
         interaction.PointerReleased(context);
 
         var align = Assert.IsType<ToolOutcome.Edit>(
-            interaction.SetSelectedMountainPointMode(context, MountainPointMode.Aligned));
+            interaction.SetSelectedElevationRegionPointMode(context, ElevationRegionPointMode.Aligned));
         var aligned = align.Apply(scene);
         interaction.SceneChanged(scene, aligned);
 
-        Assert.Equal(0, interaction.SelectedMountainPointIndex);
-        Assert.Equal(MountainPointMode.Aligned, aligned.MountainBodies[0].Points[0].Mode);
-        Assert.False(aligned.MountainBodies[0].Points[0].HandleInAuthoringPx.IsZero());
-        Assert.False(aligned.MountainBodies[0].Points[0].HandleOutAuthoringPx.IsZero());
+        Assert.Equal(0, interaction.SelectedElevationRegionPointIndex);
+        Assert.Equal(ElevationRegionPointMode.Aligned, aligned.ElevationRegions[0].Points[0].Mode);
+        Assert.False(aligned.ElevationRegions[0].Points[0].HandleInAuthoringPx.IsZero());
+        Assert.False(aligned.ElevationRegions[0].Points[0].HandleOutAuthoringPx.IsZero());
 
         var makeLinear = Assert.IsType<ToolOutcome.Edit>(
-            interaction.SetSelectedMountainPointMode(
-                Context(workspace, aligned), MountainPointMode.Linear));
-        var linear = makeLinear.Apply(aligned).MountainBodies[0].Points[0];
-        Assert.Equal(MountainPointMode.Linear, linear.Mode);
+            interaction.SetSelectedElevationRegionPointMode(
+                Context(workspace, aligned), ElevationRegionPointMode.Linear));
+        var linear = makeLinear.Apply(aligned).ElevationRegions[0].Points[0];
+        Assert.Equal(ElevationRegionPointMode.Linear, linear.Mode);
         Assert.True(linear.HandleInAuthoringPx.IsZero());
         Assert.True(linear.HandleOutAuthoringPx.IsZero());
     }
 
     [Fact]
-    public void TheHeightFieldChangesTheSelectedMountainWithoutChangingItsShape()
+    public void TheHeightFieldChangesTheSelectedElevationRegionWithoutChangingItsShape()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             4m);
-        var interaction = Mountain(EditorTool.SelectMountain);
+        var interaction = ElevationRegion(EditorTool.SelectElevationRegion);
         var context = Context(workspace, scene);
         interaction.PointerPressed(context, Point(80, 80), Cell(2, 2));
-        var before = scene.MountainBodies[0];
+        var before = scene.ElevationRegions[0];
 
         var edit = Assert.IsType<ToolOutcome.Edit>(
-            interaction.SetSelectedMountainElevation(context, 6.125m));
-        var after = Assert.Single(edit.Apply(scene).MountainBodies);
+            interaction.SetSelectedElevationRegionElevation(context, 6.125m));
+        var after = Assert.Single(edit.Apply(scene).ElevationRegions);
 
-        Assert.Equal("mountain_0001", interaction.SelectedMountainBodyId);
-        Assert.Equal(before.MountainBodyId, after.MountainBodyId);
+        Assert.Equal("mountain_0001", interaction.SelectedElevationRegionId);
+        Assert.Equal(before.ElevationRegionId, after.ElevationRegionId);
         Assert.Equal(6.125m, after.ElevationMeters);
         Assert.Same(before.Points, after.Points);
     }
@@ -543,61 +543,61 @@ public sealed class ToolMountainTests
     public void AnInvalidPointMoveTurnsThePreviewBlockedAndIsNotCommitted()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = MountainEditing.Place(
+        var scene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Square(32, 32, 160, 160),
             4m);
-        var interaction = Mountain(EditorTool.SelectMountain);
+        var interaction = ElevationRegion(EditorTool.SelectElevationRegion);
         var context = Context(workspace, scene);
 
         interaction.PointerPressed(context, Point(160, 32), Cell(5, 1));
         interaction.PointerDragged(context, Point(32, 192), Cell(1, 6));
-        var preview = interaction.MountainSelectionPreview(context);
+        var preview = interaction.ElevationRegionSelectionPreview(context);
         var refused = Assert.IsType<ToolOutcome.Message>(interaction.PointerReleased(context));
 
-        Assert.Equal(MountainDraftKind.Blocked, preview.Kind);
+        Assert.Equal(ElevationRegionDraftKind.Blocked, preview.Kind);
         Assert.Contains("contact with itself", preview.Explanation!, StringComparison.Ordinal);
-        Assert.Contains("Move Mountain Point blocked", refused.Text, StringComparison.Ordinal);
-        Assert.Equal(160, scene.MountainBodies[0].Points[1].PositionAuthoringPx.X);
+        Assert.Contains("Move Hill Point blocked", refused.Text, StringComparison.Ordinal);
+        Assert.Equal(160, scene.ElevationRegions[0].Points[1].PositionAuthoringPx.X);
         Assert.Equal(
-            MountainDraftKind.Ready,
-            interaction.MountainSelectionPreview(context).Kind);
+            ElevationRegionDraftKind.Ready,
+            interaction.ElevationRegionSelectionPreview(context).Kind);
     }
 
     [Fact]
-    public void EmptySpaceClearsMountainSelectionAndEscapeDoesToo()
+    public void EmptySpaceClearsElevationRegionSelectionAndEscapeDoesToo()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Nested(workspace);
-        var interaction = Mountain(EditorTool.SelectMountain);
+        var interaction = ElevationRegion(EditorTool.SelectElevationRegion);
         var context = Context(workspace, scene);
 
         interaction.PointerPressed(context, Point(80, 80), Cell(2, 2));
         interaction.PointerPressed(context, Point(1, 1), Cell(0, 0));
-        Assert.Null(interaction.SelectedMountainBodyId);
+        Assert.Null(interaction.SelectedElevationRegionId);
 
         interaction.PointerPressed(context, Point(80, 80), Cell(2, 2));
         var cleared = Assert.IsType<ToolOutcome.Message>(
             interaction.KeyPressed(context, ToolKey.Escape));
-        Assert.Equal("Mountain selection cleared.", cleared.Text);
-        Assert.Null(interaction.SelectedMountainBodyId);
+        Assert.Equal("Hill selection cleared.", cleared.Text);
+        Assert.Null(interaction.SelectedElevationRegionId);
     }
 
     [Fact]
-    public void RemovingTheSelectedMountainClearsSelection()
+    public void RemovingTheSelectedElevationRegionClearsSelection()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Nested(workspace);
-        var interaction = Mountain(EditorTool.SelectMountain);
+        var interaction = ElevationRegion(EditorTool.SelectElevationRegion);
         var context = Context(workspace, scene);
         interaction.PointerPressed(context, Point(80, 80), Cell(2, 2));
-        var after = MountainEditing.Remove(scene, "mountain_0002");
+        var after = ElevationRegionEditing.Remove(scene, "mountain_0002");
 
         interaction.SceneChanged(scene, after);
 
-        Assert.Null(interaction.SelectedMountainBodyId);
-        Assert.Null(interaction.DraggedMountainPointIndex);
+        Assert.Null(interaction.SelectedElevationRegionId);
+        Assert.Null(interaction.DraggedElevationRegionPointIndex);
     }
 
     [Fact]
@@ -605,7 +605,7 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
         Place(interaction, context, 32, 32);
         Place(interaction, context, 160, 32);
@@ -613,20 +613,20 @@ public sealed class ToolMountainTests
         var outcome = interaction.SelectMode(EditorMode.Terrain);
 
         var message = Assert.IsType<ToolOutcome.Message>(outcome);
-        Assert.Equal("The unfinished mountain contour of 2 points was discarded.", message.Text);
-        Assert.Empty(interaction.MountainDraft);
+        Assert.Equal("The unfinished hill contour of 2 points was discarded.", message.Text);
+        Assert.Empty(interaction.ElevationRegionDraft);
     }
 
     /// <summary>
-    /// Mountain offers no Asset, so `Draw Mountain` may not need one. The whole
+    /// ElevationRegion offers no Asset, so `Draw ElevationRegion` may not need one. The whole
     /// path runs with nothing selected: placing points, the preview, and Enter.
     /// </summary>
     [Fact]
-    public void DrawMountainNeedsNoSelectedAsset()
+    public void DrawElevationRegionNeedsNoSelectedAsset()
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
 
         Assert.Null(context.SelectedTerrainAssetKey);
@@ -634,10 +634,10 @@ public sealed class ToolMountainTests
         Place(interaction, context, 160, 32);
         Place(interaction, context, 96, 160);
 
-        Assert.Equal(MountainDraftKind.Ready, interaction.MountainPreview(context).Kind);
+        Assert.Equal(ElevationRegionDraftKind.Ready, interaction.ElevationRegionPreview(context).Kind);
         var edit = Assert.IsType<ToolOutcome.Edit>(
             interaction.KeyPressed(context, ToolKey.Enter));
-        Assert.Single(edit.Apply(scene).MountainBodies);
+        Assert.Single(edit.Apply(scene).ElevationRegions);
     }
 
     [Fact]
@@ -645,7 +645,7 @@ public sealed class ToolMountainTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
         var context = Context(workspace, scene);
         Place(interaction, context, 32, 32);
 
@@ -653,17 +653,17 @@ public sealed class ToolMountainTests
         var disabled = interaction.SetEraserEnabled(false);
 
         Assert.Equal(
-            "The unfinished mountain contour of 1 point was discarded.",
+            "The unfinished hill contour of 1 point was discarded.",
             Assert.IsType<ToolOutcome.Message>(enabled).Text);
         Assert.IsType<ToolOutcome.Idle>(disabled);
-        Assert.Empty(interaction.MountainDraft);
+        Assert.Empty(interaction.ElevationRegionDraft);
         Assert.False(interaction.HasUnfinishedDraft);
     }
 
     [Fact]
     public void LeavingTheAreaWithoutADraftSaysNothingExtra()
     {
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
 
         Assert.IsType<ToolOutcome.Idle>(interaction.SelectMode(EditorMode.Terrain));
         Assert.IsType<ToolOutcome.Idle>(interaction.SetEraserEnabled(true));
@@ -671,23 +671,23 @@ public sealed class ToolMountainTests
 
     /// <summary>
     /// One control in the context bar, two independent session values. A river
-    /// and a mountain never share a point mode, only the widget that shows one.
+    /// and a hill never share a point mode, only the widget that shows one.
     /// </summary>
     [Fact]
-    public void RiverAndMountainPointModesStayIndependent()
+    public void RiverAndElevationRegionPointModesStayIndependent()
     {
-        var interaction = Mountain();
+        var interaction = ElevationRegion();
 
-        interaction.State.SetMountainPointMode(MountainPointMode.Aligned);
+        interaction.State.SetElevationRegionPointMode(ElevationRegionPointMode.Aligned);
 
-        Assert.Equal(MountainPointMode.Aligned, interaction.State.MountainPointMode);
+        Assert.Equal(ElevationRegionPointMode.Aligned, interaction.State.ElevationRegionPointMode);
         Assert.Equal(WaterPointMode.Linear, interaction.State.WaterPointMode);
 
         interaction.State.SetWaterPointMode(WaterPointMode.Aligned);
-        interaction.State.SetMountainPointMode(MountainPointMode.Linear);
+        interaction.State.SetElevationRegionPointMode(ElevationRegionPointMode.Linear);
 
         Assert.Equal(WaterPointMode.Aligned, interaction.State.WaterPointMode);
-        Assert.Equal(MountainPointMode.Linear, interaction.State.MountainPointMode);
+        Assert.Equal(ElevationRegionPointMode.Linear, interaction.State.ElevationRegionPointMode);
     }
 
     [Fact]
@@ -697,77 +697,77 @@ public sealed class ToolMountainTests
         var scene = TestScenes.Instance(workspace);
         var draft = new[]
         {
-            new MountainDraftPoint(32, 32, MountainPointMode.Linear),
-            new MountainDraftPoint(160, 32, MountainPointMode.Linear),
-            new MountainDraftPoint(96, 160, MountainPointMode.Linear),
+            new ElevationRegionDraftPoint(32, 32, ElevationRegionPointMode.Linear),
+            new ElevationRegionDraftPoint(160, 32, ElevationRegionPointMode.Linear),
+            new ElevationRegionDraftPoint(96, 160, ElevationRegionPointMode.Linear),
         };
-        var preview = ToolPreviewBuilder.BuildMountainDraft(
+        var preview = ToolPreviewBuilder.BuildElevationRegionDraft(
             scene,
             workspace.Metrics,
-            EditorTool.DrawMountain,
+            EditorTool.DrawElevationRegion,
             draft,
             pending: null,
             elevationMeters: 4m);
-        var authored = MountainEditing.Place(
+        var authored = ElevationRegionEditing.Place(
             scene,
             workspace.Metrics,
-            MountainEditing.ResolveContour(draft),
+            ElevationRegionEditing.ResolveContour(draft),
             4m);
 
-        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Equal(ElevationRegionDraftKind.Ready, preview.Kind);
         Assert.Equal(
-            MountainGeometry.CellsRaisedBy(
-                authored, workspace.Metrics, authored.MountainBodies[^1]),
+            ElevationRegionGeometry.CellsRaisedBy(
+                authored, workspace.Metrics, authored.ElevationRegions[^1]),
             preview.RaisedCells);
     }
 
     /// <summary>The fixtures above are Scenes the IO boundary would accept.</summary>
     [Fact]
-    public void TheTestMountainsSitOnTheTerrainGrid()
+    public void TheTestElevationRegionsSitOnTheTerrainGrid()
     {
         using var workspace = TestWorkspace.Create();
 
         DocumentValidation.ValidateGrid(Nested(workspace), workspace.Metrics);
     }
 
-    /// <summary>A small mountain inside a larger, lower one.</summary>
+    /// <summary>A small hill inside a larger, lower one.</summary>
     private static SceneDocument Nested(TestWorkspace workspace)
     {
-        var lower = MountainEditing.Place(
+        var lower = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             Triangle(32, 32, 128),
             2m);
-        return MountainEditing.Place(lower, workspace.Metrics, Triangle(64, 64, 64), 4m);
+        return ElevationRegionEditing.Place(lower, workspace.Metrics, Triangle(64, 64, 64), 4m);
     }
 
     /// <summary>
     /// An isosceles triangle whose three anchors land on the Terrain grid.
     /// <paramref name="size"/> is therefore a multiple of two Terrain cells.
     /// </summary>
-    private static IReadOnlyList<MountainCurvePointDocument> Triangle(int x, int y, int size) =>
+    private static IReadOnlyList<ElevationRegionPointDocument> Triangle(int x, int y, int size) =>
     [
-        MountainEditing.Point(x, y),
-        MountainEditing.Point(x + size, y),
-        MountainEditing.Point(x + (size / 2), y + size),
+        ElevationRegionEditing.Point(x, y),
+        ElevationRegionEditing.Point(x + size, y),
+        ElevationRegionEditing.Point(x + (size / 2), y + size),
     ];
 
-    private static IReadOnlyList<MountainCurvePointDocument> Square(
+    private static IReadOnlyList<ElevationRegionPointDocument> Square(
         int left,
         int bottom,
         int right,
         int top) =>
     [
-        MountainEditing.Point(left, bottom),
-        MountainEditing.Point(right, bottom),
-        MountainEditing.Point(right, top),
-        MountainEditing.Point(left, top),
+        ElevationRegionEditing.Point(left, bottom),
+        ElevationRegionEditing.Point(right, bottom),
+        ElevationRegionEditing.Point(right, top),
+        ElevationRegionEditing.Point(left, top),
     ];
 
-    private static ToolInteraction Mountain(EditorTool tool = EditorTool.DrawMountain)
+    private static ToolInteraction ElevationRegion(EditorTool tool = EditorTool.DrawElevationRegion)
     {
         var interaction = new ToolInteraction();
-        interaction.SelectMode(EditorMode.Mountain);
+        interaction.SelectMode(EditorMode.ElevationRegion);
         interaction.SelectTool(tool);
         return interaction;
     }

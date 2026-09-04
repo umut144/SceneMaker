@@ -280,22 +280,22 @@ public sealed class TemplateCompositionTests
     /// <summary>
     /// The base Scene is folded before the Templates replace anything, and the
     /// bodies do not survive into the composed Scene. A Template therefore
-    /// brings its own heights into a hole a mountain made and is not lifted
+    /// brings its own heights into a hole a hill made and is not lifted
     /// again afterwards - the replacement is the last word on the cells it
     /// covers.
     /// </summary>
     [Fact]
-    public void TemplateCellsAreNotRaisedAgainByTheBaseScenesMountains()
+    public void TemplateCellsAreNotRaisedAgainByTheBaseScenesElevationRegions()
     {
         using var workspace = TestWorkspace.Create();
-        var baseScene = MountainEditing.Place(
+        var baseScene = ElevationRegionEditing.Place(
             TestScenes.Instance(workspace),
             workspace.Metrics,
             [
-                MountainEditing.Point(32, 32),
-                MountainEditing.Point(160, 32),
-                MountainEditing.Point(160, 160),
-                MountainEditing.Point(32, 160),
+                ElevationRegionEditing.Point(32, 32),
+                ElevationRegionEditing.Point(160, 32),
+                ElevationRegionEditing.Point(160, 160),
+                ElevationRegionEditing.Point(32, 160),
             ],
             10.0m);
         baseScene = WithAnchor(baseScene, workspace, 64, 64);
@@ -303,7 +303,7 @@ public sealed class TemplateCompositionTests
 
         var composed = Compose(baseScene, templates, workspace, seed: 3UL).ComposedScene;
 
-        Assert.Empty(composed.MountainBodies);
+        Assert.Empty(composed.ElevationRegions);
         // Inside the mask: the Template's own sand at the Template's own height.
         Assert.All(
             composed.TerrainCells.Where(static cell =>

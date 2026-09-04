@@ -18,7 +18,7 @@ public static class SceneExport
     public const string FileSuffix = ".scene_export.json";
 
     // The embedded runtime Scene intentionally remains the shape export schema
-    // 8 already promised, and schema 9 does not change it. Mountain contours
+    // 8 already promised, and schema 9 does not change it. ElevationRegion contours
     // are folded into Terrain; authoring schema 13's route surfaces cannot be
     // represented by this shape yet and therefore produce an explicit warning
     // instead of disappearing silently. Schema 9 differs from 8 only in what
@@ -119,7 +119,7 @@ public static class SceneExport
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
-        var effectiveTerrain = MountainGeometry.EffectiveTerrainCells(scene, metrics);
+        var effectiveTerrain = ElevationRegionGeometry.EffectiveTerrainCells(scene, metrics);
         var authored = effectiveTerrain
             .Select(static cell => new TerrainCellCoordinate(cell.X, cell.Y))
             .ToHashSet();
@@ -208,7 +208,7 @@ public static class SceneExport
 
     /// <summary>
     /// The runtime Scene is a derived snapshot, not the authoring document.
-    /// Mountain contours are folded into Terrain and deliberately omitted, so
+    /// ElevationRegion contours are folded into Terrain and deliberately omitted, so
     /// adding an editor source does not change the export shape or its reader.
     /// </summary>
     private static ExportSceneDocument ExportScene(
@@ -221,7 +221,7 @@ public static class SceneExport
         SceneKind = scene.SceneKind,
         CoordinateSpace = scene.CoordinateSpace,
         SizeCells = scene.SizeCells,
-        TerrainCells = [.. MountainGeometry.EffectiveTerrainCells(scene, metrics)],
+        TerrainCells = [.. ElevationRegionGeometry.EffectiveTerrainCells(scene, metrics)],
         Props = scene.Props,
         WaterBodies = scene.WaterBodies,
         TemplateDefinition = scene.TemplateDefinition,

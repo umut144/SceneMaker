@@ -1,22 +1,22 @@
 namespace SceneMaker.Core;
 
 /// <summary>
-/// Derives solid Terrain from editable mountain contours. A mountain is not a
+/// Derives solid Terrain from editable hill contours. A hill is not a
 /// separate fill and carries no material of its own: it raises the top of
 /// painted Terrain's solid column, so the existing cut rule can carve a river or
 /// tunnel through it and the Asset underneath keeps saying what the surface is
 /// made of.
 /// </summary>
-public static class MountainGeometry
+public static class ElevationRegionGeometry
 {
-    public static FlattenedClosedChain Flatten(MountainBodyDocument body)
+    public static FlattenedClosedChain Flatten(ElevationRegionDocument body)
     {
         ArgumentNullException.ThrowIfNull(body);
         return BezierChain.FlattenClosed(body.Points.Select(ToChainPoint).ToList());
     }
 
     /// <summary>The checked contour of one body, ready to query or rasterize.</summary>
-    public static FlattenedClosedChain RequireContour(MountainBodyDocument body)
+    public static FlattenedClosedChain RequireContour(ElevationRegionDocument body)
     {
         var ring = Flatten(body);
         if (ClosedChainGeometry.Validate(ring) is not { } defect) return ring;
@@ -24,24 +24,24 @@ public static class MountainGeometry
             ? $" at flattened segments {first} and {second}"
             : string.Empty;
         throw new SceneMakerDocumentException(
-            $"Mountain body '{body.MountainBodyId}' has a contour that is {Describe(defect.Kind)}{location}.");
+            $"Elevation region '{body.ElevationRegionId}' has a contour that is {Describe(defect.Kind)}{location}.");
     }
 
     public static IReadOnlyList<TerrainCellCoordinate> TerrainCells(
         SceneDocument scene,
         WorkspaceMetrics metrics,
-        MountainBodyDocument body) =>
+        ElevationRegionDocument body) =>
         ContourRaster.TerrainCells(scene, metrics, RequireContour(body));
 
     /// <summary>
-    /// Painted Terrain and every mountain folded into one height field.
+    /// Painted Terrain and every hill folded into one height field.
     ///
-    /// <para>A mountain contributes height and nothing else. It raises the top
+    /// <para>A hill contributes height and nothing else. It raises the top
     /// of a painted cell's solid column and leaves its Asset alone, so a contour
     /// drawn around a stretch of sand and grass lifts that pattern unchanged
     /// rather than replacing it with one material. Which is why a contour over a
     /// coordinate nobody painted produces no cell at all: there is no column to
-    /// raise, and a mountain has no material of its own to make one from. The
+    /// raise, and a hill has no material of its own to make one from. The
     /// body stays authored and starts working the moment Terrain is painted
     /// under it.</para>
     ///
@@ -89,7 +89,7 @@ public static class MountainGeometry
     public static IReadOnlyList<TerrainCellDocument> CellsRaisedBy(
         SceneDocument scene,
         WorkspaceMetrics metrics,
-        MountainBodyDocument body)
+        ElevationRegionDocument body)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
@@ -99,7 +99,7 @@ public static class MountainGeometry
         foreach (var cell in scene.TerrainCells)
             painted[new TerrainCellCoordinate(cell.X, cell.Y)] = cell;
 
-        var others = RaisedTops(scene, metrics, exceptBodyId: body.MountainBodyId);
+        var others = RaisedTops(scene, metrics, exceptBodyId: body.ElevationRegionId);
 
         List<TerrainCellDocument> raised = [];
         foreach (var coordinate in TerrainCells(scene, metrics, body))
@@ -115,7 +115,7 @@ public static class MountainGeometry
     }
 
     /// <summary>
-    /// The highest mountain top over each covered coordinate. Walks every body,
+    /// The highest hill top over each covered coordinate. Walks every body,
     /// which is where each contour is flattened and checked.
     /// </summary>
     private static Dictionary<TerrainCellCoordinate, decimal> RaisedTops(
@@ -124,10 +124,10 @@ public static class MountainGeometry
         string? exceptBodyId = null)
     {
         Dictionary<TerrainCellCoordinate, decimal> raised = [];
-        foreach (var body in scene.MountainBodies)
+        foreach (var body in scene.ElevationRegions)
         {
             if (exceptBodyId is not null
-                && string.Equals(body.MountainBodyId, exceptBodyId, StringComparison.Ordinal))
+                && string.Equals(body.ElevationRegionId, exceptBodyId, StringComparison.Ordinal))
             {
                 continue;
             }
@@ -140,7 +140,7 @@ public static class MountainGeometry
         return raised;
     }
 
-    private static BezierChainPoint ToChainPoint(MountainCurvePointDocument point) => new(
+    private static BezierChainPoint ToChainPoint(ElevationRegionPointDocument point) => new(
         point.PositionAuthoringPx.X,
         point.PositionAuthoringPx.Y,
         point.HandleInAuthoringPx.X,

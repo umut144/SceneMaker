@@ -58,13 +58,13 @@ its Assets by, and it makes two mistakes impossible: a river painted cell by
 cell, and a river made of grass.
 
 The editor asks that question of the area rather than of the Asset. Terrain,
-River and Mountain are three areas because they author three different things -
+River and Hill are three areas because they author three different things -
 painted cells, an open curve, a closed contour - and each offers the Assets its
 geometry can carry, or none. Terrain offers the cell-authored Assets; River
-offers the curve-authored Assets in its `Surface` field; Mountain authors shape
+offers the curve-authored Assets in its `Surface` field; Hill authors shape
 and height only and so has no material to offer. It used to run the other way, with
 the chosen Asset swapping the tool out from under the author, which meant
-choosing a river silently ended a mountain contour being drawn. Now an Asset is
+choosing a river silently ended a hill contour being drawn. Now an Asset is
 only the material: changing it keeps the geometry, and only leaving the area
 gives it up - out loud.
 
@@ -104,7 +104,7 @@ arc length, so one river can widen or narrow without being split into bodies.
 
 The curve arithmetic underneath is not water's own. Flattening a cubic Bezier
 chain, measuring arc length along it and projecting a position onto one of its
-segments live in `BezierChain`, which knows nothing about rivers; a mountain
+segments live in `BezierChain`, which knows nothing about rivers; a hill
 outline and a route flatten the same way. `OpenChainCorridor` adds only the
 horizontal band around such an open chain: unrounded width over arc length,
 square caps local to the two outermost segments, bounds and the nearest station
@@ -129,7 +129,8 @@ quantum: the quantum constrains authored support heights, whereas the surface
 between them is continuously inclined. Grade is only a geometric measurement;
 an Actor profile or generator may compare it with its own limit later.
 
-Authoring schema 13 persists that source as `route_surfaces`. A route carries
+Authoring schema 13 introduced that source as `route_surfaces`; schema 14 keeps
+it unchanged. A route carries
 an Asset whose role is Terrain, regardless of whether that Asset is normally
 authored as cells or as a curve; `authoring` chooses a UI, not eligibility as a
 surface. Its points stay inside the Scene and their heights obey the vertical
@@ -162,7 +163,7 @@ decides the same way every time. How thin a contour may usefully be is a
 different question, and it belongs with the rule that fills one.
 
 Filling a contour asks the same question of a cell that a river's corridor
-does: is its centre inside. A mountain's edge and a river's edge therefore
+does: is its centre inside. A hill's edge and a river's edge therefore
 cannot disagree by half a cell where they meet. A centre within the same
 tolerance of the outline counts as inside - the corridor already admits a
 centre lying exactly on its edge, and a contour whose own edges may sit no
@@ -176,53 +177,53 @@ row can meet is an optimisation and only that: a segment on one side of a row
 cannot cross its ray, and one further off than the tolerance cannot be within
 it.
 
-A mountain body keeps that closed contour and one absolute top elevation in the
-Scene document, and nothing else. It carries no material. Painted Terrain
-decides two things a mountain never does: whether there is a cell at a
-coordinate at all, and what its surface is made of. A mountain decides only how
+An elevation region keeps that closed contour and one absolute top elevation
+in the Scene document, and nothing else. It carries no material. Painted
+Terrain decides two things an elevation region never does: whether there is a
+cell at a coordinate at all, and what its surface is made of. A region decides only how
 high that cell's solid column reaches. So a contour drawn around a stretch of
-sand and grass lifts that pattern onto the mountain unchanged, and Terrain
+sand and grass lifts that pattern onto the hill unchanged, and Terrain
 painted afterwards under an existing contour comes up already raised - the same
 one rule read from either side. Where nobody painted, a contour produces no
 cell: there is no column to raise and no material to invent one from. Such a
 body is valid and stays authored; it simply has no effect yet.
 
-Its raster is derived rather than stored. Painted Terrain and every mountain
+Its raster is derived rather than stored. Painted Terrain and every region
 contribution form the same solid column: the highest top wins, so a second
-contour at 15 m inside one at 10 m is a mountain on a mountain without an offset
+contour at 15 m inside one at 10 m is a hill on a hill without an offset
 or parent link. A lower contour never cuts existing Terrain down. Two bodies
 that meet at one height are no conflict - a height is a number and both name the
 same one. Overlap used to be refused when the two bodies named different Assets,
 because geometry supplied no winner for the material; with the material gone
 from the body, so is the question.
 
-A mountain point's anchor is checked at the IO boundary against the two rules
-`Draw Mountain` authors by: it lies inside the Scene and on the Terrain grid.
+A hill point's anchor is checked at the IO boundary against the two rules
+`Draw Hill` authors by: it lies inside the Scene and on the Terrain grid.
 Its handles are not. A handle shapes the curve rather than naming a place, so
 snapping it would snap the shape, and the curve it shapes may bulge past the
 edge of the map - the raster stops at the Scene, the document does not fail.
 How many points a contour needs is not a count either: two anchors whose
 handles bow the closing edges apart already enclose an area, so the document
-rule stays at two and `MountainGeometry.RequireContour` decides whether the
+rule stays at two and `ElevationRegionGeometry.RequireContour` decides whether the
 flattened ring is usable. That the canvas tool asks for three placed points is
 a tool decision about drawing, not a rule about geometry.
 
-Mountain contours are editor source and do not enter export schema 9. Export
+Elevation-region contours are editor source and do not enter export schema 9. Export
 folds them into the ordinary Terrain cells promised to the runtime. This also
-keeps mountains in the cuttable Terrain solid: a river cut can make a channel
-or tunnel through one, whereas modelling a mountain as a fill would incorrectly
-make it immune to cuts. Scene Templates cannot carry mountain bodies until
+keeps hills in the cuttable Terrain solid: a river cut can make a channel
+or tunnel through one, whereas modelling a hill as a fill would incorrectly
+make it immune to cuts. Scene Templates cannot carry elevation regions until
 composition knows how to translate their source contours.
 
-The `Draw Mountain` tool is the authoring entry point for those bodies. It
-needs no Asset and is therefore always available in the Mountain area.
+The `Draw Hill` tool is the authoring entry point for those regions. It
+needs no Asset and is therefore always available in the Hill area.
 It uses the same `ToolInteraction -> ToolOutcome` path as every other tool:
 points snap to the Terrain grid, handles remain unsnapped, Enter closes the
 contour as one undoable body, and Escape or draft undo removes one point. Point
 modes are per next point and the aligned automatic handles are cyclic, so the
 closing Bezier edge has no special endpoint behaviour.
 
-`Select Mountain` edits that authored truth instead of its derived cells. A
+`Select Hill` edits that authored truth instead of its derived cells. A
 click on a body selects the topmost contour covering the visible Terrain cell;
 an authored point within a screen-sized hit radius takes precedence and begins
 a drag. The point snaps to the Terrain grid while both handle offsets, body ID
@@ -239,13 +240,13 @@ The selected body's `Height` field edits its absolute top through the same
 Workspace elevation quantum used while drawing; it leaves ID and contour
 untouched and is one undoable edit. Lowering it below painted Terrain or another
 body is allowed and simply makes it ineffective in those cells, because a
-mountain raises columns and never cuts them down.
+hill raises columns and never cuts them down.
 
 The draft has three states and they answer one question - what would Enter do.
 Too few points is Incomplete and drawn neutrally, because a contour that is not
 finished being asked for is not a contour that was refused. Ready is a promise:
 the whole attempt has already been made against this Scene and height by
-`MountainEditing.TryPlace`, which is the same call the commit makes, so a ready
+`ElevationRegionEditing.TryPlace`, which is the same call the commit makes, so a ready
 contour cannot then be refused and a refused one cannot slip through. Everything
 else is Blocked and carries the reason. Ready is not the same as visible: a
 contour over unpainted ground is a valid body and stays Ready, and says in the
@@ -253,22 +254,22 @@ same breath that it currently raises no Terrain cells. Refusing it would refuse
 a legitimate order of work - contour first, paint second - and staying silent
 would let an author take an empty preview for a broken tool.
 
-A finished body also carries a contour on the canvas, derived from its points
+A finished region also carries a contour on the canvas, derived from its points
 and drawn in a colour taken from a small editor palette by a stable rule over
-its `mountain_body_id`. Both are derived: neither the contour nor the colour is
+its `elevation_region_id`. Both are derived: neither the contour nor the colour is
 in the Scene document or the export, and neither means anything to a consumer.
-It exists because folded cells cannot say where one body ends - two mountains
+It exists because folded cells cannot say where one region ends - two hills
 over the same painted Asset are one surface without it - and the height view
 should stay an analysis rather than the only way to see a boundary.
 
 The eraser asks about the Terrain cell under the pointer rather than the exact
 position in it, because the raster asks about a cell's centre and two different
 sample points would let the body the author sees filled and the body the click
-removes differ by half a cell near an edge. `MountainEditing.FindAtCell` answers
+removes differ by half a cell near an edge. `ElevationRegionEditing.FindAtCell` answers
 once for both the hover highlight and the removal, so what lights up is what
 disappears: the whole topmost body over that cell, never a single derived cell.
 What the highlight fills is the cells that body is actually lifting -
-`MountainGeometry.CellsRaisedBy`, the same definition read backwards - rather
+`ElevationRegionGeometry.CellsRaisedBy`, the same definition read backwards - rather
 than everything its ring covers, because a cell that another body holds higher,
 or that nobody painted, does not drop when this one goes. Its outline is drawn
 too, so the body being erased stays recognisable even where it lifts nothing.

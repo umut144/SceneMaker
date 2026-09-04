@@ -229,7 +229,7 @@ public sealed class ToolRiverTests
         Place(interaction, context, 160, 32);
         var edit = Assert.IsType<ToolOutcome.Edit>(interaction.KeyPressed(context, ToolKey.Enter));
 
-        // Driving a river into a mountain is exactly the case where the water
+        // Driving a river into a hill is exactly the case where the water
         // must not follow the ground.
         Assert.Equal(
             [4.0m, 2.0m],
@@ -385,7 +385,7 @@ public sealed class ToolRiverTests
     }
 
     /// <summary>
-    /// The same rule the mountain contour follows: the eraser ends the curve it
+    /// The same rule the hill contour follows: the eraser ends the curve it
     /// interrupts rather than keeping it alive behind a mode that would give the
     /// next click another meaning.
     /// </summary>

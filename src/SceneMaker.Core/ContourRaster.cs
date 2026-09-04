@@ -5,7 +5,7 @@ namespace SceneMaker.Core;
 ///
 /// <para>One question, asked once: a cell belongs to a contour when its centre
 /// lies inside it. That is the same question <see cref="WaterGeometry.Corridor"/>
-/// asks of a river, which is what keeps a mountain's edge and a river's edge
+/// asks of a river, which is what keeps a hill's edge and a river's edge
 /// from disagreeing by half a cell where they meet.</para>
 ///
 /// <para>A centre within
