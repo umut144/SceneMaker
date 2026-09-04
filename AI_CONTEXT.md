@@ -302,19 +302,28 @@ drawing, but what it writes is the number: no offset is stored, so repainting
 the ground later leaves the river where the author put it.
 
 Directly authored absolute heights sit on the open Workspace's
-`elevation_quantum_meters`: the Scene default, Terrain and Prop elevations, and
-water-point surfaces all share that vertical authoring grid. It does not
-quantize widths or vertical extents such as channel depth and clearance, and it
-does not turn interpolation into steps. A water cell between two valid points
-may therefore have a surface that is not itself a multiple of the quantum.
+`elevation_quantum_meters`: the Scene default, Terrain and Prop elevations,
+water-point surfaces, and a Path's starting height share that vertical
+authoring grid. It does not quantize widths, vertical extents such as channel
+depth and clearance, or later Path anchors derived from grade and horizontal
+arc length. Nor does it turn interpolation into steps. A water cell or derived
+Path point may therefore have a surface that is not itself a multiple of the
+quantum.
 
 Cuts apply to Terrain and never to fills. That one sentence is what will let a
 bridge deck cross the river it spans without the river carving it away.
 
 A Path is an independently materialized open route rather than a sequence of
-raised Terrain cells. It can describe a level way, a ramp or a descent. Every
-authored point carries an absolute surface height
-and a full width; both are interpolated continuously over Bezier arc length.
+raised Terrain cells. It can describe a level way, a ramp or a descent. Its
+first point carries a directly authored absolute surface height. Each later
+draft point chooses the grade of the segment arriving there from exactly
+`-50%`, `-25%`, `0%`, `+25%` or `+50%`; Core derives its absolute height from
+that grade and the segment's horizontal Bezier arc length. The document stores
+those resulting absolute heights, not the grade. Stored derived anchors are
+rounded to six decimal places only after an unrounded running height has been
+accumulated, so adding points cannot accumulate file-precision drift. Every
+point also carries a full width; height and width are interpolated continuously
+over Bezier arc length.
 The point positions are deliberately free in plan instead of snapping to the
 Terrain grid. `RouteSurfaceEditing` authors and removes the body, while
 `ToolInteraction` owns the unfinished open curve and makes the preview and
@@ -325,8 +334,10 @@ The initial width is 2 m because the first target Actor has a 1 m collision
 radius. That is a convenient authoring default, not a statement that the route
 is traversable: tight inner curves and a future Actor profile still need their
 own clearance test. The editor therefore validates representable geometry and
-the Workspace height quantum only; it does not yet generate a route or reject
-one for grade. Export schema 9 continues to warn and omit route surfaces.
+the Workspace height quantum for the start only. Its five grades are authoring
+choices, not Actor capabilities: SceneMaker derives their geometry but does not
+reject a valid Path because a particular Actor could not climb it. Export
+schema 9 continues to warn and omit route surfaces.
 
 A Prop needs no Terrain under it. Its `elevation_meters` is absolute, like every
 other authored height, so where it stands is already fully said and the ground

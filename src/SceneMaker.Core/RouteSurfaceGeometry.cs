@@ -180,6 +180,11 @@ public static class RouteSurfaceGeometry
         }
     }
 
+    /// <summary>The shared flattened centerline for resolved document points.</summary>
+    internal static FlattenedChain Flatten(
+        IReadOnlyList<RouteSurfacePointDocument> points) =>
+        BezierChain.FlattenOpen(points.Select(ToGeometryPoint).Select(static point => point.Plan).ToArray());
+
     private static RouteSurfacePoint ToGeometryPoint(RouteSurfacePointDocument point) => new(
         new BezierChainPoint(
             point.PositionAuthoringPx.X,

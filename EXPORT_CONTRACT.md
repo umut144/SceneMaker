@@ -287,8 +287,9 @@ precision to arrive at the same set.
 That millimetre precision belongs to the derived raster, not to authoring.
 Directly authored absolute heights align to the Workspace's
 `elevation_quantum_meters`, which is not exported; a consumer receives the
-actual heights. Depth, clearance and values interpolated between valid authored
-points need not align to that quantum.
+actual heights. Depth, clearance, values interpolated between valid authored
+points, and later Path anchors derived from grade need not align to that
+quantum. Only a Path's starting height is chosen directly on the quantum.
 
 Heights are absolute. Nothing stores a relationship to the ground, so repainting
 Terrain under a river never moves the water.
@@ -311,8 +312,10 @@ authoring one is refused instead.
 Authoring schema 14 also refuses route surfaces in Templates for the same
 reason. An Instance may persist them as open Bezier centerlines with an
 absolute elevation and width at every point and a Terrain-role `asset_key` for
-the material the band presents. Their positions are bounded by the Scene but
-are deliberately not tied to a horizontal grid. These authoring records are
+the material the band presents. The first elevation is directly authored;
+later absolute anchors may be derived from a selected grade and horizontal
+Bezier arc length. Their positions are bounded by the Scene but are deliberately
+not tied to a horizontal grid. These authoring records are
 not part of export schema 9; exporting such an Instance succeeds with an
 explicit warning rather than losing the omission silently.
 

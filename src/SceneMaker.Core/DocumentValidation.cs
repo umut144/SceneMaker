@@ -179,10 +179,16 @@ public static partial class DocumentValidation
         {
             for (var index = 0; index < route.Points.Count; index++)
             {
-                ValidateElevation(
-                    $"Route surface '{route.RouteSurfaceId}' point {index} elevation_meters",
-                    route.Points[index].ElevationMeters,
-                    metrics);
+                // Only the first height is chosen directly. Later anchors are
+                // derived from grade and Bezier arc length and may therefore
+                // lie between the Workspace's authoring quanta.
+                if (index == 0)
+                {
+                    ValidateElevation(
+                        $"Route surface '{route.RouteSurfaceId}' starting elevation_meters",
+                        route.Points[index].ElevationMeters,
+                        metrics);
+                }
                 // A route is a continuous band and is not rasterized. Its
                 // authoring-pixel anchor must stay inside the Scene but has no
                 // arbitrary Terrain- or water-grid alignment requirement.

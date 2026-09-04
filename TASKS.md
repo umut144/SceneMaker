@@ -162,7 +162,11 @@ The engine-neutral foundation for that separately authored ramp now exists as
 `RouteSurfaceGeometry`: an open Bezier centerline with width and absolute
 support height at every point. Width and height interpolate over arc length;
 the intermediate height stays continuous rather than being snapped into cell
-steps. Its grade report is descriptive geometry, not an Actor capability.
+steps. `RouteSurfaceEditing` can derive those stored absolute anchors from a
+quantized starting height and the five fixed per-segment grade presets. It uses
+horizontal Bezier arc length and accumulates before rounding each stored anchor
+to six decimals. Its grade report is descriptive geometry, not an Actor
+capability.
 Authoring schema 13 introduced routes with a Terrain-role material; schema 14
 keeps them unchanged. The author-facing `Draw Path` tool now authors a free
 open Bezier curve with height and width per point, previews the continuous band

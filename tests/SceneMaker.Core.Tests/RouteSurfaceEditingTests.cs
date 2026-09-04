@@ -60,6 +60,148 @@ public sealed class RouteSurfaceEditingTests
         Assert.False(curve[1].HandleOutAuthoringPx.IsZero());
     }
 
+    [Theory]
+    [InlineData(RouteGradePreset.DownFiftyPercent, -0.5)]
+    [InlineData(RouteGradePreset.DownTwentyFivePercent, -0.25)]
+    [InlineData(RouteGradePreset.Level, 0.0)]
+    [InlineData(RouteGradePreset.UpTwentyFivePercent, 0.25)]
+    [InlineData(RouteGradePreset.UpFiftyPercent, 0.5)]
+    public void GradePresetsHaveExactlyTheFiveAuthoringRatios(
+        RouteGradePreset grade,
+        double expected) =>
+        Assert.Equal(expected, RouteSurfaceEditing.GradeRatio(grade));
+
+    [Fact]
+    public void AQuarterGradeRisesOneMeterOverFourMetersOfRun()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var curve = RouteSurfaceEditing.ResolveGradedCurve(
+            workspace.Metrics,
+            1m,
+            [
+                Draft(32, 32, RouteGradePreset.Level),
+                Draft(160, 32, RouteGradePreset.UpTwentyFivePercent),
+            ]);
+
+        Assert.Equal([1m, 2m], curve.Select(static point => point.ElevationMeters));
+    }
+
+    [Fact]
+    public void EveryNewPointMayChangeDirectionOrContinueLevel()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var curve = RouteSurfaceEditing.ResolveGradedCurve(
+            workspace.Metrics,
+            1m,
+            [
+                Draft(0, 32, RouteGradePreset.Level),
+                Draft(128, 32, RouteGradePreset.UpTwentyFivePercent),
+                Draft(256, 32, RouteGradePreset.Level),
+                Draft(384, 32, RouteGradePreset.DownFiftyPercent),
+            ]);
+
+        Assert.Equal([1m, 2m, 2m, 0m], curve.Select(static point => point.ElevationMeters));
+    }
+
+    [Fact]
+    public void ADescentMayContinueBelowItsStartingHeight()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var curve = RouteSurfaceEditing.ResolveGradedCurve(
+            workspace.Metrics,
+            1m,
+            [
+                Draft(0, 32, RouteGradePreset.Level),
+                Draft(128, 32, RouteGradePreset.DownFiftyPercent),
+            ]);
+
+        Assert.Equal(-1m, curve[1].ElevationMeters);
+    }
+
+    [Fact]
+    public void ACurvedSegmentUsesItsArcLengthRatherThanItsChord()
+    {
+        using var workspace = TestWorkspace.Create();
+        var curve = RouteSurfaceEditing.ResolveGradedCurve(
+            workspace.Metrics,
+            1m,
+            [
+                Draft(
+                    0,
+                    0,
+                    RouteGradePreset.Level,
+                    RoutePointMode.Aligned,
+                    new AuthoringPixelOffset { X = 0, Y = 96 }),
+                Draft(
+                    128,
+                    0,
+                    RouteGradePreset.UpTwentyFivePercent,
+                    RoutePointMode.Aligned,
+                    new AuthoringPixelOffset { X = 0, Y = 96 }),
+            ]);
+
+        Assert.True(curve[1].ElevationMeters > 2m);
+        var geometry = RouteSurfaceGeometry.Prepare(workspace.Metrics, curve);
+        Assert.Equal(
+            geometry.TotalLengthMeters * 0.25,
+            (double)(curve[1].ElevationMeters - curve[0].ElevationMeters),
+            precision: 5);
+    }
+
+    [Fact]
+    public void ReshapedAutomaticHandlesRecomputeEarlierAnchorHeights()
+    {
+        using var workspace = TestWorkspace.Create();
+        var firstTwo = RouteSurfaceEditing.ResolveGradedCurve(
+            workspace.Metrics,
+            1m,
+            [
+                Draft(0, 0, RouteGradePreset.Level, RoutePointMode.Aligned),
+                Draft(128, 0, RouteGradePreset.UpTwentyFivePercent, RoutePointMode.Aligned),
+            ]);
+        var withTurn = RouteSurfaceEditing.ResolveGradedCurve(
+            workspace.Metrics,
+            1m,
+            [
+                Draft(0, 0, RouteGradePreset.Level, RoutePointMode.Aligned),
+                Draft(128, 0, RouteGradePreset.UpTwentyFivePercent, RoutePointMode.Aligned),
+                Draft(128, 128, RouteGradePreset.Level, RoutePointMode.Aligned),
+            ]);
+
+        Assert.Equal(2m, firstTwo[1].ElevationMeters);
+        Assert.True(withTurn[1].ElevationMeters > firstTwo[1].ElevationMeters);
+        Assert.Equal(withTurn[1].ElevationMeters, withTurn[2].ElevationMeters);
+    }
+
+    [Fact]
+    public void LongDraftsNeverAccumulateRoundedAnchorHeights()
+    {
+        using var workspace = TestWorkspace.Create();
+        var draft = Enumerable.Range(0, 101)
+            .Select(index => Draft(
+                index,
+                index,
+                index == 0
+                    ? RouteGradePreset.Level
+                    : RouteGradePreset.UpTwentyFivePercent))
+            .ToArray();
+
+        var curve = RouteSurfaceEditing.ResolveGradedCurve(
+            workspace.Metrics,
+            1m,
+            draft);
+
+        var expected = Math.Round(
+            (decimal)(1.0 + 100.0 * Math.Sqrt(2.0) / 32.0 * 0.25),
+            6,
+            MidpointRounding.AwayFromZero);
+        Assert.Equal(expected, curve[^1].ElevationMeters);
+        Assert.Equal(1.011049m, curve[1].ElevationMeters);
+    }
+
     [Fact]
     public void RemoveDropsExactlyTheNamedRoute()
     {
@@ -98,7 +240,7 @@ public sealed class RouteSurfaceEditingTests
     }
 
     [Fact]
-    public void PlaceRefusesAnOffQuantumHeight()
+    public void PlaceRefusesAnOffQuantumStartingHeight()
     {
         using var workspace = TestWorkspace.Create();
 
@@ -112,6 +254,35 @@ public sealed class RouteSurfaceEditingTests
 
         Assert.Contains("0.125 m", exception.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void PlaceAcceptsDerivedLaterHeightsBetweenTheQuantum()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var scene = RouteSurfaceEditing.Place(
+            TestScenes.Instance(workspace),
+            workspace.Terrain,
+            workspace.Metrics,
+            [Point(32, 32, 1m), Point(160, 32, 1.1m)],
+            "grass");
+
+        Assert.Equal(1.1m, Assert.Single(scene.RouteSurfaces).Points[1].ElevationMeters);
+        DocumentValidation.ValidateGrid(scene, workspace.Metrics);
+    }
+
+    private static GradedRouteDraftPoint Draft(
+        int x,
+        int y,
+        RouteGradePreset grade,
+        RoutePointMode mode = RoutePointMode.Linear,
+        AuthoringPixelOffset? draggedHandleOut = null) => new(
+            x,
+            y,
+            mode,
+            RouteSurfaceEditing.DefaultWidthMeters,
+            grade,
+            draggedHandleOut);
 
     private static RouteSurfacePointDocument Point(
         int x,

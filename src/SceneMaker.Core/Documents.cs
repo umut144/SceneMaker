@@ -132,8 +132,8 @@ public enum RoutePointMode
 ///
 /// <para>The point position is deliberately not tied to either Scene grid. A
 /// route is meshed as a continuous band rather than rasterized into Terrain or
-/// water cells. Its authored elevation still belongs to the Workspace's
-/// vertical quantum.</para>
+/// water cells. The first elevation is directly authored on the Workspace's
+/// vertical quantum; later absolute elevations may be grade-derived.</para>
 /// </summary>
 public sealed record RouteSurfacePointDocument
 {

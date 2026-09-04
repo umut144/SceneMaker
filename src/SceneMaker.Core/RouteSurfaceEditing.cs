@@ -12,6 +12,32 @@ public readonly record struct RouteDraftPoint(
     AuthoringPixelOffset? DraggedHandleOut = null);
 
 /// <summary>
+/// One of the five authoring grades a Path segment may use. The value belongs
+/// to the segment arriving at a draft point; the first point's value is ignored.
+/// </summary>
+public enum RouteGradePreset
+{
+    DownFiftyPercent,
+    DownTwentyFivePercent,
+    Level,
+    UpTwentyFivePercent,
+    UpFiftyPercent,
+}
+
+/// <summary>
+/// One point of a grade-authored Path draft. Only the Path's separate starting
+/// elevation is absolute; every later height is derived from horizontal arc
+/// length and <see cref="GradeFromPrevious"/>.
+/// </summary>
+public readonly record struct GradedRouteDraftPoint(
+    int X,
+    int Y,
+    RoutePointMode Mode,
+    decimal WidthMeters,
+    RouteGradePreset GradeFromPrevious,
+    AuthoringPixelOffset? DraggedHandleOut = null);
+
+/// <summary>
 /// Pure document operations for independently materialized route surfaces.
 /// A route presents its own Terrain Asset and does not alter the Terrain cells
 /// or elevation regions below it.
@@ -41,11 +67,11 @@ public static class RouteSurfaceEditing
             throw new SceneMakerDocumentException("A Path needs at least two points.");
         if (points.Any(static point => point.WidthMeters <= 0m))
             throw new SceneMakerDocumentException("A Path needs a positive width at every point.");
-        if (points.Any(point => !metrics.IsElevationAligned(point.ElevationMeters)))
+        if (!metrics.IsElevationAligned(points[0].ElevationMeters))
         {
             throw new SceneMakerDocumentException(
                 FormattableString.Invariant(
-                    $"Path heights must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m."));
+                    $"A Path's starting height must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m."));
         }
 
         var route = new RouteSurfaceDocument
@@ -161,6 +187,70 @@ public static class RouteSurfaceEditing
         }
         return points;
     }
+
+    /// <summary>
+    /// Resolves a grade-authored draft and derives every absolute point height
+    /// from the starting height and the preceding segment's horizontal Bezier
+    /// arc length. Intermediate results stay unrounded; only stored anchors are
+    /// rounded to six decimal places for deterministic JSON.
+    /// </summary>
+    public static IReadOnlyList<RouteSurfacePointDocument> ResolveGradedCurve(
+        WorkspaceMetrics metrics,
+        decimal startElevationMeters,
+        IReadOnlyList<GradedRouteDraftPoint> draft)
+    {
+        ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentNullException.ThrowIfNull(draft);
+        if (draft.Any(static point => !Enum.IsDefined(point.GradeFromPrevious)))
+            throw new SceneMakerDocumentException("A Path draft contains an unsupported grade.");
+        if (!metrics.IsElevationAligned(startElevationMeters))
+        {
+            throw new SceneMakerDocumentException(
+                FormattableString.Invariant(
+                    $"A Path's starting height must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m."));
+        }
+
+        var resolved = ResolveCurve(draft.Select(point => new RouteDraftPoint(
+            point.X,
+            point.Y,
+            point.Mode,
+            startElevationMeters,
+            point.WidthMeters,
+            point.DraggedHandleOut)).ToArray()).ToArray();
+        if (resolved.Length < 2)
+            return resolved;
+
+        var centerline = RouteSurfaceGeometry.Flatten(resolved);
+        var authoringPixelsPerMeter = (double)metrics.AuthoringPixelsPerMeter;
+        var elevation = (double)startElevationMeters;
+        resolved[0] = resolved[0] with { ElevationMeters = startElevationMeters };
+        for (var index = 1; index < resolved.Length; index++)
+        {
+            var runMeters = (centerline.AnchorStations[index]
+                    - centerline.AnchorStations[index - 1])
+                / authoringPixelsPerMeter;
+            elevation += runMeters * GradeRatio(draft[index].GradeFromPrevious);
+            resolved[index] = resolved[index] with
+            {
+                ElevationMeters = Math.Round(
+                    (decimal)elevation,
+                    6,
+                    MidpointRounding.AwayFromZero),
+            };
+        }
+        return resolved;
+    }
+
+    /// <summary>The signed rise per metre represented by one preset.</summary>
+    public static double GradeRatio(RouteGradePreset grade) => grade switch
+    {
+        RouteGradePreset.DownFiftyPercent => -0.5,
+        RouteGradePreset.DownTwentyFivePercent => -0.25,
+        RouteGradePreset.Level => 0.0,
+        RouteGradePreset.UpTwentyFivePercent => 0.25,
+        RouteGradePreset.UpFiftyPercent => 0.5,
+        _ => throw new ArgumentOutOfRangeException(nameof(grade)),
+    };
 
     /// <summary>
     /// Requires every route to name an enabled Asset whose SceneMaker role is
