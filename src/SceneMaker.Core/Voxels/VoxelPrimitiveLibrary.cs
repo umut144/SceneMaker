@@ -220,12 +220,16 @@ public static class VoxelPrimitiveLibrary
         Func<VoxelPointMeters, bool> contains)
     {
         var voxelSize = grid.VoxelSizeMeters;
-        var minimumX = grid.VoxelIndex(minimum.X);
-        var maximumX = grid.VoxelIndex(maximum.X - decimal.One / 1_000_000m);
+        var minimumX = Math.Max(0, grid.VoxelIndex(minimum.X));
+        var maximumX = Math.Min(
+            grid.WidthVoxels - 1,
+            grid.VoxelIndex(maximum.X - decimal.One / 1_000_000m));
         var minimumY = grid.VoxelIndex(minimum.Y);
         var maximumY = grid.VoxelIndex(maximum.Y - decimal.One / 1_000_000m);
-        var minimumZ = grid.VoxelIndex(minimum.Z);
-        var maximumZ = grid.VoxelIndex(maximum.Z - decimal.One / 1_000_000m);
+        var minimumZ = Math.Max(0, grid.VoxelIndex(minimum.Z));
+        var maximumZ = Math.Min(
+            grid.DepthVoxels - 1,
+            grid.VoxelIndex(maximum.Z - decimal.One / 1_000_000m));
         var cells = new List<VoxelCoordinate>();
         for (var y = minimumY; y <= maximumY; y++)
         {
