@@ -42,7 +42,7 @@ public sealed record WaterDraftPreview(
 /// and by Enter.
 /// </summary>
 public sealed record RouteDraftPreview(
-    IReadOnlyList<RouteDraftPoint> Points,
+    IReadOnlyList<GradedRouteDraftPoint> Points,
     IReadOnlyList<RouteSurfacePointDocument> Curve,
     PreparedRouteSurface? Surface,
     string? Explanation)
@@ -262,14 +262,15 @@ public static class ToolPreviewBuilder
     public static RouteDraftPreview BuildRouteDraft(
         WorkspaceMetrics metrics,
         EditorTool tool,
-        IReadOnlyList<RouteDraftPoint> draft,
-        RouteDraftPoint? pending)
+        decimal? startElevationMeters,
+        IReadOnlyList<GradedRouteDraftPoint> draft,
+        GradedRouteDraftPoint? pending)
     {
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(draft);
         if (tool != EditorTool.DrawPath) return RouteDraftPreview.Empty;
 
-        List<RouteDraftPoint> points = [.. draft];
+        List<GradedRouteDraftPoint> points = [.. draft];
         if (pending is { } value
             && (points.Count == 0
                 || points[^1].X != value.X
@@ -280,18 +281,25 @@ public static class ToolPreviewBuilder
         }
         if (points.Count == 0) return RouteDraftPreview.Empty;
 
-        var curve = RouteSurfaceEditing.ResolveCurve(points);
-        if (points.Count < 2)
+        if (startElevationMeters is not { } start)
         {
             return new RouteDraftPreview(
                 points,
-                curve,
+                [],
                 null,
-                "a Path needs at least two points");
+                "a Path needs a starting elevation");
         }
-
         try
         {
+            var curve = RouteSurfaceEditing.ResolveGradedCurve(metrics, start, points);
+            if (points.Count < 2)
+            {
+                return new RouteDraftPreview(
+                    points,
+                    curve,
+                    null,
+                    "a Path needs at least two points");
+            }
             return new RouteDraftPreview(
                 points,
                 curve,
@@ -300,7 +308,7 @@ public static class ToolPreviewBuilder
         }
         catch (SceneMakerDocumentException exception)
         {
-            return new RouteDraftPreview(points, curve, null, exception.Message);
+            return new RouteDraftPreview(points, [], null, exception.Message);
         }
     }
 

@@ -27,8 +27,9 @@ public sealed class ToolInteraction
     private bool _terrainLineDragging;
     private readonly List<WaterDraftPoint> _riverDraft = [];
     private WaterDraftPoint? _riverPending;
-    private readonly List<RouteDraftPoint> _pathDraft = [];
-    private RouteDraftPoint? _pathPending;
+    private readonly List<GradedRouteDraftPoint> _pathDraft = [];
+    private GradedRouteDraftPoint? _pathPending;
+    private decimal? _pathStartElevationMeters;
     private readonly List<ElevationRegionDraftPoint> _elevationRegionDraft = [];
     private ElevationRegionDraftPoint? _elevationRegionPending;
     private int? _draggedElevationRegionPointIndex;
@@ -67,8 +68,8 @@ public sealed class ToolInteraction
     /// </summary>
     public WaterDraftPoint? RiverPendingPoint => _riverPending;
 
-    public IReadOnlyList<RouteDraftPoint> PathDraft => _pathDraft;
-    public RouteDraftPoint? PathPendingPoint => _pathPending;
+    public IReadOnlyList<GradedRouteDraftPoint> PathDraft => _pathDraft;
+    public GradedRouteDraftPoint? PathPendingPoint => _pathPending;
 
     /// <summary>The closed hill contour points placed so far.</summary>
     public IReadOnlyList<ElevationRegionDraftPoint> ElevationRegionDraft => _elevationRegionDraft;
@@ -288,7 +289,7 @@ public sealed class ToolInteraction
         {
             EditorMode.Terrain => TerrainPressed(context, authoring, cell),
             EditorMode.River => RiverPressed(context, authoring, cell),
-            EditorMode.Path => PathPressed(context, authoring),
+            EditorMode.Path => PathPressed(context, authoring, cell),
             EditorMode.ElevationRegion => ElevationRegionPressed(context, authoring, cell),
             EditorMode.Props => PropPressed(context, authoring),
             EditorMode.Templates => TemplatePressed(context, authoring),
@@ -460,10 +461,11 @@ public sealed class ToolInteraction
 
     private ToolOutcome PathPressed(
         ToolContext context,
-        AuthoringPoint authoring) => ActiveTool switch
+        AuthoringPoint authoring,
+        TerrainCellCoordinate cell) => ActiveTool switch
     {
         EditorTool.DrawPath when EraserEnabled => ErasePath(context, authoring),
-        EditorTool.DrawPath => BeginPathPoint(context, authoring),
+        EditorTool.DrawPath => BeginPathPoint(context, authoring, cell),
         _ => ToolOutcome.Idle.Instance,
     };
 
@@ -1202,7 +1204,10 @@ public sealed class ToolInteraction
             : $"River: {_riverDraft.Count} point{Plural(_riverDraft.Count)} left.");
     }
 
-    private ToolOutcome BeginPathPoint(ToolContext context, AuthoringPoint point)
+    private ToolOutcome BeginPathPoint(
+        ToolContext context,
+        AuthoringPoint point,
+        TerrainCellCoordinate cell)
     {
         if (context.Scene.SceneKind != SceneKind.Instance)
             return new ToolOutcome.Message("Path: a Scene Template cannot carry Paths.");
@@ -1211,16 +1216,43 @@ public sealed class ToolInteraction
         if (!IsInsideScene(context, point))
             return new ToolOutcome.Message("Path: a point has to sit inside the Scene.");
 
-        _pathPending = new RouteDraftPoint(
+        if (_pathDraft.Count == 0 && _pathPending is null)
+        {
+            _pathStartElevationMeters = State.PathStartElevationOverrideMeters
+                ?? ElevationRegionGeometry.EffectiveElevationAt(
+                    context.Scene,
+                    context.Metrics,
+                    cell.X,
+                    cell.Y);
+            if (_pathStartElevationMeters is not { } start)
+            {
+                return new ToolOutcome.Message(
+                    "Path: there is no Terrain here; set a Start elevation first.");
+            }
+            if (!context.Metrics.IsElevationAligned(start))
+            {
+                _pathStartElevationMeters = null;
+                return new ToolOutcome.Message(
+                    FormattableString.Invariant(
+                        $"Path: the Start elevation must align to {context.Metrics.ElevationQuantumMeters:0.############################} m."));
+            }
+        }
+
+        var grade = _pathDraft.Count == 0
+            ? RouteGradePreset.Level
+            : State.PathGrade;
+        _pathPending = new GradedRouteDraftPoint(
             point.X,
             point.Y,
             State.RoutePointMode,
-            context.ElevationMeters,
-            State.PathWidthMeters);
+            State.PathWidthMeters,
+            grade);
         var ordinal = _pathDraft.Count + 1;
+        var startElevation = _pathStartElevationMeters!.Value;
+        var gradeText = GradeText(grade);
         return new ToolOutcome.Message(State.RoutePointMode == RoutePointMode.Linear
-            ? $"Path: point {ordinal} at ({point.X}, {point.Y}) · surface {context.ElevationMeters:0.###} m · width {State.PathWidthMeters:0.###} m."
-            : $"Path: point {ordinal} at ({point.X}, {point.Y}) · surface {context.ElevationMeters:0.###} m · width {State.PathWidthMeters:0.###} m; drag to pull its handle.");
+            ? $"Path: point {ordinal} at ({point.X}, {point.Y}) · start {startElevation:0.###} m · grade {gradeText} · width {State.PathWidthMeters:0.###} m."
+            : $"Path: point {ordinal} at ({point.X}, {point.Y}) · start {startElevation:0.###} m · grade {gradeText} · width {State.PathWidthMeters:0.###} m; drag to pull its handle.");
     }
 
     private ToolOutcome DragPathHandle(ToolContext context, AuthoringPoint point)
@@ -1265,6 +1297,7 @@ public sealed class ToolInteraction
         return ToolPreviewBuilder.BuildRouteDraft(
             context.Metrics,
             ActiveTool,
+            _pathStartElevationMeters,
             _pathDraft,
             _pathPending);
     }
@@ -1296,7 +1329,7 @@ public sealed class ToolInteraction
         var start = points[0].ElevationMeters;
         var end = points[^1].ElevationMeters;
         var assetName = context.TerrainAssets.Resolve(assetKey).Name;
-        _pathDraft.Clear();
+        ClearPathDraft();
         return new ToolOutcome.Edit(
             "Path",
             document => RouteSurfaceEditing.Place(
@@ -1320,12 +1353,14 @@ public sealed class ToolInteraction
         if (_pathPending is not null)
         {
             _pathPending = null;
+            if (_pathDraft.Count == 0) _pathStartElevationMeters = null;
             return new ToolOutcome.Message("Path: point released.");
         }
         if (_pathDraft.Count == 0)
             return new ToolOutcome.Message("Path: nothing to take back.");
 
         _pathDraft.RemoveAt(_pathDraft.Count - 1);
+        if (_pathDraft.Count == 0) _pathStartElevationMeters = null;
         return new ToolOutcome.Message(_pathDraft.Count == 0
             ? "Path: draft cleared."
             : $"Path: {_pathDraft.Count} point{Plural(_pathDraft.Count)} left.");
@@ -1553,6 +1588,16 @@ public sealed class ToolInteraction
 
     private static string Plural(int count) => count == 1 ? string.Empty : "s";
 
+    private static string GradeText(RouteGradePreset grade) => grade switch
+    {
+        RouteGradePreset.DownFiftyPercent => "-50%",
+        RouteGradePreset.DownTwentyFivePercent => "-25%",
+        RouteGradePreset.Level => "0%",
+        RouteGradePreset.UpTwentyFivePercent => "+25%",
+        RouteGradePreset.UpFiftyPercent => "+50%",
+        _ => throw new ArgumentOutOfRangeException(nameof(grade)),
+    };
+
     private void ResetTransient()
     {
         ClearPropLine();
@@ -1575,6 +1620,7 @@ public sealed class ToolInteraction
     {
         _pathDraft.Clear();
         _pathPending = null;
+        _pathStartElevationMeters = null;
     }
 
     private void ClearElevationRegionDraft()

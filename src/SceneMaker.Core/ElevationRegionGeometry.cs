@@ -73,6 +73,21 @@ public static class ElevationRegionGeometry
     }
 
     /// <summary>
+    /// The visible top of painted Terrain at one cell after every hill has
+    /// raised it, or null where no Terrain column exists. This is the surface a
+    /// newly started Path snaps to; the returned number is copied into the Path
+    /// and no live relationship is retained.
+    /// </summary>
+    public static decimal? EffectiveElevationAt(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        int cellX,
+        int cellY) =>
+        EffectiveTerrainCells(scene, metrics)
+            .FirstOrDefault(cell => cell.X == cellX && cell.Y == cellY)
+            ?.ElevationMeters;
+
+    /// <summary>
     /// The painted cells this one body is currently responsible for lifting:
     /// those where its top stands strictly above the painted height and above
     /// every other body over them. Each is returned as the cell would look with

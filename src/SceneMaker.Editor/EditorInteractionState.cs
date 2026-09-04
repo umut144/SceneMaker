@@ -277,6 +277,16 @@ public sealed class EditorInteractionState
     /// <summary>The full width authored onto the next Path point.</summary>
     public decimal PathWidthMeters { get; private set; } = RouteSurfaceEditing.DefaultWidthMeters;
 
+    /// <summary>The grade of the segment arriving at the next Path point.</summary>
+    public RouteGradePreset PathGrade { get; private set; } = RouteGradePreset.Level;
+
+    /// <summary>
+    /// An explicit starting height for the next Path, or null to copy the
+    /// effective Terrain height under its first point. This is session state,
+    /// never a stored relationship between Path and Terrain.
+    /// </summary>
+    public decimal? PathStartElevationOverrideMeters { get; private set; }
+
     public const decimal DefaultRiverWidthMeters = WaterEditing.DefaultWidthMeters;
 
     /// <summary>
@@ -362,6 +372,15 @@ public sealed class EditorInteractionState
         if (widthMeters <= 0m) throw new ArgumentOutOfRangeException(nameof(widthMeters));
         PathWidthMeters = widthMeters;
     }
+
+    public void SetPathGrade(RouteGradePreset grade)
+    {
+        if (!Enum.IsDefined(grade)) throw new ArgumentOutOfRangeException(nameof(grade));
+        PathGrade = grade;
+    }
+
+    public void SetPathStartElevationOverride(decimal? elevationMeters) =>
+        PathStartElevationOverrideMeters = elevationMeters;
 
     public void SetWaterElevation(decimal elevationMeters) =>
         WaterElevationMeters = elevationMeters;

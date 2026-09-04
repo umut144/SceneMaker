@@ -328,7 +328,12 @@ The point positions are deliberately free in plan instead of snapping to the
 Terrain grid. `RouteSurfaceEditing` authors and removes the body, while
 `ToolInteraction` owns the unfinished open curve and makes the preview and
 Enter use the same prepared geometry. Ascending and descending routes are the
-same operation with the endpoint heights reversed.
+same operation with opposite incoming grades. The first click normally copies
+the effective Terrain top under it, after hills have been folded in. That is a
+one-time snap: the Path keeps the number and never follows later Terrain edits.
+Where no Terrain exists, or when the author deliberately wants another level,
+a session-only manual start override supplies it instead. Changing grade or
+width affects the next point; changing the general Height field does not.
 
 The initial width is 2 m because the first target Actor has a 1 m collision
 radius. That is a convenient authoring default, not a statement that the route
