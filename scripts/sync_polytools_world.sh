@@ -63,7 +63,7 @@ fi
 world_key="$(jq -r '.world_key' "$source_catalog")"
 if ! jq -e --arg world "$world_key" '
   .format == "scene_maker_workspace"
-  and .version == 9
+  and .version == 8
   and .workspace_key == $world
   and (.grid.terrain_cell_meters | type == "number" and . > 0)
   and (.grid.authoring_pixels_per_meter | type == "number" and . > 0)
@@ -84,7 +84,7 @@ if ! jq -e --arg world "$world_key" '
     end)
   and (([.assets[].asset_key] | unique | length) == ([.assets[].asset_key] | length))
 ' "$config_path" >/dev/null; then
-  printf 'ERROR: SceneMaker config must be a valid version 9 catalog for PolyTools world %s.\n' "$world_key" >&2
+  printf 'ERROR: SceneMaker config must be a valid version 8 catalog for PolyTools world %s.\n' "$world_key" >&2
   exit 1
 fi
 if ! jq -e --slurpfile catalog "$source_catalog" '

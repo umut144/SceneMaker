@@ -14,8 +14,6 @@ public sealed class WorkspaceMetrics
         GamePixelsPerMeter = grid.GamePixelsPerMeter;
         WaterCellMeters = grid.WaterCellMeters;
         ElevationQuantumMeters = grid.ElevationQuantumMeters;
-        VoxelSizeMeters = grid.VoxelSizeMeters;
-        VoxelSubgridMeters = grid.VoxelSubgridMeters;
         if (ElevationQuantumMeters <= 0m)
             throw new SceneMakerDocumentException(
                 "elevation_quantum_meters must be positive.");
@@ -42,23 +40,6 @@ public sealed class WorkspaceMetrics
                 "terrain_cell_meters ÷ water_cell_meters must be a whole number of water cells per Terrain cell.");
         }
         WaterCellsPerTerrainCell = checked((int)waterCellsPerTerrainCell);
-
-        var subgridSteps = VoxelSizeMeters / VoxelSubgridMeters;
-        if (VoxelSizeMeters <= 0m
-            || VoxelSubgridMeters <= 0m
-            || subgridSteps != decimal.Truncate(subgridSteps))
-        {
-            throw new SceneMakerDocumentException(
-                "voxel_size_meters must contain a positive whole number of voxel_subgrid_meters steps.");
-        }
-        VoxelSubgridStepsPerVoxel = checked((int)subgridSteps);
-        var pixelsPerVoxel = VoxelSizeMeters * AuthoringPixelsPerMeter;
-        if (pixelsPerVoxel != decimal.Truncate(pixelsPerVoxel))
-        {
-            throw new SceneMakerDocumentException(
-                "voxel_size_meters × authoring_pixels_per_meter must be a whole authoring pixel count.");
-        }
-        AuthoringPixelsPerVoxel = checked((int)pixelsPerVoxel);
     }
 
     public decimal TerrainCellMeters { get; }
@@ -66,13 +47,9 @@ public sealed class WorkspaceMetrics
     public decimal GamePixelsPerMeter { get; }
     public decimal WaterCellMeters { get; }
     public decimal ElevationQuantumMeters { get; }
-    public decimal VoxelSizeMeters { get; }
-    public decimal VoxelSubgridMeters { get; }
     public int AuthoringPixelsPerTerrainCell { get; }
     public int AuthoringPixelsPerWaterCell { get; }
     public int WaterCellsPerTerrainCell { get; }
-    public int VoxelSubgridStepsPerVoxel { get; }
-    public int AuthoringPixelsPerVoxel { get; }
     public decimal MetersPerAuthoringPixel => 1m / AuthoringPixelsPerMeter;
 
     /// <summary>Whether an absolute authored height lies on this Workspace's vertical grid.</summary>

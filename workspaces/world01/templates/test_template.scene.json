@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 15,
+  "version": 14,
   "scene_id": "test_template",
   "scene_kind": "template",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -8,7 +8,6 @@
     "width": 10,
     "height": 10
   },
-  "voxel_cells": [],
   "terrain_cells": [
     {
       "x": 0,

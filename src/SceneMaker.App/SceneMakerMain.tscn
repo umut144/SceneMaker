@@ -1,8 +1,8 @@
 [gd_scene format=3 uid="uid://ceetpcehdwcf3"]
 
-[ext_resource type="Script" path="res://src/SceneMaker.App/WorldVoxMakerMain.cs" id="1_main"]
+[ext_resource type="Script" uid="uid://ddncwr5wtbly" path="res://src/SceneMaker.App/SceneMakerMain.cs" id="1_main"]
 
-[node name="WorldVoxMaker" type="Control" unique_id=1513749872]
+[node name="SceneMaker" type="Control" unique_id=1513749872]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

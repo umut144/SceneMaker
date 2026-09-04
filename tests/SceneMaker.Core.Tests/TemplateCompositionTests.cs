@@ -321,41 +321,6 @@ public sealed class TemplateCompositionTests
         Assert.Equal(36, composed.TerrainCells.Count);
     }
 
-    [Fact]
-    public void TemplateReplacesWholeVoxelColumnsAndPreservesVerticalAddresses()
-    {
-        using var workspace = TestWorkspace.Create();
-        var baseScene = WithAnchor(TestScenes.EmptyInstance(), workspace, 64, 64) with
-        {
-            VoxelCells =
-            [
-                new() { X = 0, Y = 0, Z = 0, AssetKey = "grass" },
-                new() { X = 2, Y = 0, Z = 2, AssetKey = "grass" },
-                new() { X = 2, Y = 2, Z = 2, AssetKey = "grass" },
-            ],
-        };
-        var template = SceneDocument.CreateTemplate("tpl_a", 2, 2, 1, 0, 0) with
-        {
-            VoxelCells =
-            [
-                new() { X = 0, Y = -1, Z = 0, AssetKey = "sand" },
-                new() { X = 0, Y = 3, Z = 0, AssetKey = "sand" },
-            ],
-        };
-
-        var composed = Compose(baseScene, [template], workspace, 3UL).ComposedScene;
-
-        Assert.Equal(3, composed.VoxelCells.Count);
-        Assert.Contains(composed.VoxelCells, cell =>
-            cell is { X: 0, Y: 0, Z: 0, AssetKey: "grass" });
-        Assert.Contains(composed.VoxelCells, cell =>
-            cell is { X: 2, Y: -1, Z: 2, AssetKey: "sand" });
-        Assert.Contains(composed.VoxelCells, cell =>
-            cell is { X: 2, Y: 3, Z: 2, AssetKey: "sand" });
-        Assert.DoesNotContain(composed.VoxelCells, cell =>
-            cell is { X: 2, Y: 0, Z: 2 });
-    }
-
     private static TemplateCompositionResult Compose(
         SceneDocument baseScene,
         IEnumerable<SceneDocument> workspaceScenes,

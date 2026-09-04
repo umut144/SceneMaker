@@ -1,7 +1,6 @@
-# WorldVoxMaker guide
+# SceneMaker guide
 
-WorldVoxMaker is the voxel-based successor being built inside the existing
-SceneMaker Godot/C# solution. Its runtime and
+SceneMaker is an independent Godot/C# authoring application. Its runtime and
 Core must not reference MMORPG, Bevy, WorldAssets, PolyDraw, or sibling project
 paths. Developer-time sync adapters may consume a game's current PolyTools
 Runtime Export and copy it into a Workspace-local import boundary.
@@ -73,8 +72,8 @@ unrelated reasons.
 
 | Schema | Constant | Current |
 | --- | --- | --- |
-| Scene document | `SceneMakerSchemas.SceneVersion` | 15 |
-| Workspace config | `WorkspaceConfigurationStore.Version` | 9 |
+| Scene document | `SceneMakerSchemas.SceneVersion` | 14 |
+| Workspace config | `WorkspaceConfigurationStore.Version` | 8 |
 | Scene export | `SceneExport.Version` | 9 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 1 |
 | PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 16 |

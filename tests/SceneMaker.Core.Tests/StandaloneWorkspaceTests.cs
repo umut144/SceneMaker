@@ -223,7 +223,7 @@ public sealed class StandaloneWorkspaceTests
         WritePolyToolsImport(directory.Path, "game03");
         var configuration = WorkspaceConfigurationStore.Create(
             "game03",
-            new WorkspaceGridConfiguration(1m, 10m, 40m, 0.5m, 0.125m, 1m, 0.2m),
+            new WorkspaceGridConfiguration(1m, 10m, 40m, 0.5m, 0.125m),
             [
                 new WorkspaceAssetProfile(
                     "grass", "Grass", WorkspaceAssetRole.Terrain,
@@ -302,14 +302,14 @@ public sealed class StandaloneWorkspaceTests
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             WorkspaceConfigurationStore.Load(directory.Path));
 
-        Assert.Contains("version 9", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("version 8", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void WorkspaceMetricsSnapElevationsSymmetricallyToTheirQuantum()
     {
         var metrics = new WorkspaceMetrics(
-            new WorkspaceGridConfiguration(1m, 32m, 192m, 0.5m, 0.125m, 1m, 0.2m));
+            new WorkspaceGridConfiguration(1m, 32m, 192m, 0.5m, 0.125m));
 
         Assert.True(metrics.IsElevationAligned(1.125m));
         Assert.False(metrics.IsElevationAligned(1.1m));
@@ -630,9 +630,7 @@ public sealed class StandaloneWorkspaceTests
             "authoring_pixels_per_meter": {{authoringPixelsPerMeter.ToString(CultureInfo.InvariantCulture)}},
             "game_pixels_per_meter": {{gamePixelsPerMeter.ToString(CultureInfo.InvariantCulture)}},
             {{quantumProperty}}
-            "water_cell_meters": {{waterCell.ToString(CultureInfo.InvariantCulture)}},
-            "voxel_size_meters": 1.0,
-            "voxel_subgrid_meters": 0.2
+            "water_cell_meters": {{waterCell.ToString(CultureInfo.InvariantCulture)}}
           },
           "assets": [
             {{assets}}
