@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 12;
+    public const int SceneVersion = 13;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -116,6 +116,45 @@ public sealed record MountainBodyDocument
     public required decimal ElevationMeters { get; init; }
 
     public required List<MountainCurvePointDocument> Points { get; init; }
+}
+
+/// <summary>How one point shapes an open route centerline.</summary>
+public enum RoutePointMode
+{
+    Linear,
+    Aligned,
+}
+
+/// <summary>
+/// One authored support point of a continuously inclined route surface.
+/// Position and handles describe its open Bezier centerline; absolute elevation
+/// and full width interpolate over that centerline's arc length.
+///
+/// <para>The point position is deliberately not tied to either Scene grid. A
+/// route is meshed as a continuous band rather than rasterized into Terrain or
+/// water cells. Its authored elevation still belongs to the Workspace's
+/// vertical quantum.</para>
+/// </summary>
+public sealed record RouteSurfacePointDocument
+{
+    public required AuthoringPixelPosition PositionAuthoringPx { get; init; }
+    public required RoutePointMode Mode { get; init; }
+    public required AuthoringPixelOffset HandleInAuthoringPx { get; init; }
+    public required AuthoringPixelOffset HandleOutAuthoringPx { get; init; }
+    public required decimal ElevationMeters { get; init; }
+    public required decimal WidthMeters { get; init; }
+}
+
+/// <summary>
+/// An independently materialized surface along an open route. Unlike a
+/// mountain it can cross an unpainted position, so it carries the Terrain Asset
+/// whose surface it presents instead of inheriting material from cells below.
+/// </summary>
+public sealed record RouteSurfaceDocument
+{
+    public required string RouteSurfaceId { get; init; }
+    public required string AssetKey { get; init; }
+    public required List<RouteSurfacePointDocument> Points { get; init; }
 }
 
 /// <summary>
@@ -250,6 +289,12 @@ public sealed record SceneDocument
     public required List<MountainBodyDocument> MountainBodies { get; init; }
 
     /// <summary>
+    /// Independently materialized, continuously inclined bands. They are
+    /// Layered-3D surfaces and never fold into the Terrain height field.
+    /// </summary>
+    public required List<RouteSurfaceDocument> RouteSurfaces { get; init; }
+
+    /// <summary>
     /// The authored water of this Scene. Its raster is derived at export time,
     /// which is why nothing here counts cells.
     /// </summary>
@@ -332,6 +377,7 @@ public sealed record SceneDocument
         TerrainCells = [],
         Props = [],
         MountainBodies = [],
+        RouteSurfaces = [],
         WaterBodies = [],
         TemplateDefinition = templateDefinition,
         TemplateAnchors = [],

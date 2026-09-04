@@ -127,9 +127,17 @@ reports the signed rise per metre of every authored interval. The intermediate
 height remains a double and is not snapped back to the Workspace elevation
 quantum: the quantum constrains authored support heights, whereas the surface
 between them is continuously inclined. Grade is only a geometric measurement;
-an Actor profile or generator may compare it with its own limit later. This
-foundation is not yet a Scene document, an editor tool or part of export schema
-9, and it deliberately makes no material decision before those consumers exist.
+an Actor profile or generator may compare it with its own limit later.
+
+Authoring schema 13 persists that source as `route_surfaces`. A route carries
+an Asset whose role is Terrain, regardless of whether that Asset is normally
+authored as cells or as a curve; `authoring` chooses a UI, not eligibility as a
+surface. Its points stay inside the Scene and their heights obey the vertical
+quantum, but their horizontal positions do not snap to either raster. Equal
+neighbour positions are valid when their Bezier handles create real arc length,
+which a generated loop may need. Templates refuse routes until composition can
+translate them. Export schema 9 cannot carry them and warns instead of silently
+dropping them; there is no editor tool yet.
 
 A flattened loop comes back as a ring whose first point is not repeated at the
 end, with the way home carried in its own `TotalLength` rather than in the last

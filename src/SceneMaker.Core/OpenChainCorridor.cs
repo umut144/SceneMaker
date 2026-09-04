@@ -142,9 +142,11 @@ public sealed record OpenChainCorridor
     /// The station of the nearest point on the centerline, or null when the
     /// position is not in the corridor at all.
     ///
-    /// <para>Nearest rather than first: on the inside of a bend two stretches
-    /// can both reach a position, and the closer one determines which place on
-    /// the authored profile that position belongs to.</para>
+    /// <para>Nearest rather than first: for a single-valued profile such as a
+    /// river, the closer stretch determines which place on that profile owns
+    /// the position. A self-overlapping route can present several heights at
+    /// the same X/Y; its later spatial consumers must ask for every applicable
+    /// station instead of using this single-answer water query.</para>
     /// </summary>
     public double? NearestStation(
         double x,

@@ -79,11 +79,20 @@ public sealed record PreparedRouteSurface
 /// Builds the derived geometry of a free ramp or another inclined route.
 ///
 /// <para>This layer answers shape, height and grade only. It does not decide
-/// whether an Actor can traverse the result, what material it presents, how it
-/// is persisted, or how a generated helix chooses its points.</para>
+/// whether an Actor can traverse the result, interpret the Asset carried by a
+/// persisted route, or choose the points of a generated helix.</para>
 /// </summary>
 public static class RouteSurfaceGeometry
 {
+    /// <summary>Prepares the derived geometry of a persisted route surface.</summary>
+    public static PreparedRouteSurface Prepare(
+        WorkspaceMetrics metrics,
+        RouteSurfaceDocument route)
+    {
+        ArgumentNullException.ThrowIfNull(route);
+        return Prepare(metrics, route.Points.Select(ToGeometryPoint).ToArray());
+    }
+
     public static PreparedRouteSurface Prepare(
         WorkspaceMetrics metrics,
         IReadOnlyList<RouteSurfacePoint> points)
@@ -140,4 +149,36 @@ public static class RouteSurfaceGeometry
             MaximumAbsoluteRisePerMeter = maximumAbsoluteRisePerMeter,
         };
     }
+
+    /// <summary>
+    /// Whether this authored interval has horizontal arc length. Equal endpoint
+    /// positions may still return true when their handles make a loop; only a
+    /// segment whose flattened geometry really collapses returns false.
+    /// </summary>
+    internal static bool HasPositiveRun(
+        RouteSurfacePointDocument start,
+        RouteSurfacePointDocument end)
+    {
+        try
+        {
+            _ = BezierChain.FlattenOpen(
+                [ToGeometryPoint(start).Plan, ToGeometryPoint(end).Plan]);
+            return true;
+        }
+        catch (SceneMakerDocumentException)
+        {
+            return false;
+        }
+    }
+
+    private static RouteSurfacePoint ToGeometryPoint(RouteSurfacePointDocument point) => new(
+        new BezierChainPoint(
+            point.PositionAuthoringPx.X,
+            point.PositionAuthoringPx.Y,
+            point.HandleInAuthoringPx.X,
+            point.HandleInAuthoringPx.Y,
+            point.HandleOutAuthoringPx.X,
+            point.HandleOutAuthoringPx.Y),
+        point.WidthMeters,
+        point.ElevationMeters);
 }

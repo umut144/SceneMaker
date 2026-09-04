@@ -596,7 +596,7 @@ public sealed class MountainGeometryTests
         using var parsed = JsonDocument.Parse(DocumentJson.Serialize(scene));
         var body = parsed.RootElement.GetProperty("mountain_bodies")[0];
 
-        Assert.Equal(12, parsed.RootElement.GetProperty("version").GetInt32());
+        Assert.Equal(13, parsed.RootElement.GetProperty("version").GetInt32());
         Assert.False(body.TryGetProperty("asset_key", out _));
         Assert.Equal(10.0m, body.GetProperty("elevation_meters").GetDecimal());
     }

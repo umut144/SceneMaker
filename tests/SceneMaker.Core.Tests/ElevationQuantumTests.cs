@@ -38,6 +38,15 @@ public sealed class ElevationQuantumTests
                     widthMeters: 1.0m),
             ],
             "river");
+        scene = scene with
+        {
+            RouteSurfaces =
+            [
+                Route(
+                    1.75m,
+                    1.875m),
+            ],
+        };
 
         DocumentValidation.ValidateGrid(scene, workspace.Metrics);
     }
@@ -47,6 +56,7 @@ public sealed class ElevationQuantumTests
     [InlineData("terrain", "terrain")]
     [InlineData("prop", "placement")]
     [InlineData("water", "water")]
+    [InlineData("route", "route")]
     public void AnOffQuantumAuthoredAbsoluteHeightNamesItsOwner(
         string owner,
         string expectedLabel)
@@ -104,7 +114,29 @@ public sealed class ElevationQuantumTests
                     WaterEditing.Point(160, 96, WaterPointMode.Linear, 1.0m),
                 ],
                 "river"),
+            "route" => scene with { RouteSurfaces = [Route(1.1m, 1.0m)] },
             _ => throw new ArgumentOutOfRangeException(nameof(owner)),
         };
     }
+
+    private static RouteSurfaceDocument Route(decimal startElevation, decimal endElevation) => new()
+    {
+        RouteSurfaceId = "route_0001",
+        AssetKey = "grass",
+        Points =
+        [
+            Point(32, startElevation),
+            Point(96, endElevation),
+        ],
+    };
+
+    private static RouteSurfacePointDocument Point(int x, decimal elevation) => new()
+    {
+        PositionAuthoringPx = new AuthoringPixelPosition { X = x, Y = 64 },
+        Mode = RoutePointMode.Linear,
+        HandleInAuthoringPx = AuthoringPixelOffset.Zero,
+        HandleOutAuthoringPx = AuthoringPixelOffset.Zero,
+        ElevationMeters = elevation,
+        WidthMeters = 1m,
+    };
 }

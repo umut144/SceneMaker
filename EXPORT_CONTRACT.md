@@ -14,11 +14,13 @@ guarantee that every Prop footprint is covered by Terrain is withdrawn. The JSON
 is byte-for-byte the same shape, which is exactly why the version had to move —
 a reader that relied on the old promise cannot tell the two apart by looking.
 
-The authored Scene currently has its own schema 12. It is deliberately newer
+The authored Scene currently has its own schema 13. It is deliberately newer
 than the embedded Scene: mountain contours are editor source, folded into the
-ordinary `terrain_cells` below and omitted from export. The embedded version
-therefore stays 10 and the strict runtime shape does not change merely because
-the editor learned a new source representation.
+ordinary `terrain_cells` below and omitted from export. Authored route surfaces
+are independent continuous bands that the embedded shape cannot represent yet;
+export schema 9 omits them and reports a warning for every Scene that has any.
+The embedded version therefore stays 10 and the strict runtime shape does not
+change merely because the editor learned new source representations.
 
 ## What is on disk
 
@@ -305,6 +307,14 @@ bridge poses further down.
 A Scene Template carries no water. Composition moves Terrain cells and Props
 and nothing else, so a Template with a river would lose it at every Anchor;
 authoring one is refused instead.
+
+Authoring schema 13 also refuses route surfaces in Templates for the same
+reason. An Instance may persist them as open Bezier centerlines with an
+absolute elevation and width at every point and a Terrain-role `asset_key` for
+the material the band presents. Their positions are bounded by the Scene but
+are deliberately not tied to a horizontal grid. These authoring records are
+not part of export schema 9; exporting such an Instance succeeds with an
+explicit warning rather than losing the omission silently.
 
 ## Heights
 

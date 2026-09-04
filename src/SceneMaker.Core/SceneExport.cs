@@ -18,10 +18,11 @@ public static class SceneExport
     public const string FileSuffix = ".scene_export.json";
 
     // The embedded runtime Scene intentionally remains the shape export schema
-    // 8 already promised, and schema 9 does not change it. Authoring schema 11
-    // adds mountain contours, but the runtime receives their folded Terrain
-    // cells rather than editor sources. Schema 9 differs from 8 only in what it
-    // guarantees: a Prop footprint no longer has to be covered by Terrain.
+    // 8 already promised, and schema 9 does not change it. Mountain contours
+    // are folded into Terrain; authoring schema 13's route surfaces cannot be
+    // represented by this shape yet and therefore produce an explicit warning
+    // instead of disappearing silently. Schema 9 differs from 8 only in what
+    // it guarantees: a Prop footprint no longer has to be covered by Terrain.
     private const int EmbeddedSceneVersion = 10;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -126,6 +127,11 @@ public static class SceneExport
             static cell => new TerrainCellCoordinate(cell.X, cell.Y),
             static cell => cell.ElevationMeters);
         List<string> warnings = [];
+        if (scene.RouteSurfaces.Count > 0)
+        {
+            warnings.Add(
+                $"Scene contains {scene.RouteSurfaces.Count} route surface{(scene.RouteSurfaces.Count == 1 ? string.Empty : "s")}, which export schema {Version} does not carry.");
+        }
         foreach (var body in scene.WaterBodies)
         {
             var cells = WaterGeometry.Corridor(scene, metrics, body);
@@ -264,6 +270,7 @@ public static class SceneExport
         DocumentValidation.ValidateGrid(scene, configuration.Metrics);
         TerrainEditing.ValidateAssetReferences(scene, terrainAssets);
         PropEditing.ValidateAssetReferences(scene, propAssets);
+        RouteSurfaceEditing.ValidateAssetReferences(scene, terrainAssets);
         WaterEditing.ValidateAssetReferences(scene, terrainAssets);
     }
 

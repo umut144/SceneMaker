@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 12,
+  "version": 13,
   "scene_id": "test_template02",
   "scene_kind": "template",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -1567,6 +1567,7 @@
     }
   ],
   "mountain_bodies": [],
+  "route_surfaces": [],
   "water_bodies": [],
   "template_definition": {
     "group_number": 1,

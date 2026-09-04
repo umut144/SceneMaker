@@ -74,6 +74,7 @@ public static partial class DocumentValidation
         }
 
         ValidateMountainBodies(document);
+        ValidateRouteSurfaces(document);
         ValidateWaterBodies(document);
 
         if (document.TemplateAnchors is null)
@@ -102,6 +103,8 @@ public static partial class DocumentValidation
                 throw new SceneMakerDocumentException("Scene Template cannot own water bodies.");
             if (document.MountainBodies.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own mountain bodies.");
+            if (document.RouteSurfaces.Count > 0)
+                throw new SceneMakerDocumentException("Scene Template cannot own route surfaces.");
             ValidateGroupNumber("Scene Template", document.TemplateDefinition.GroupNumber);
         }
 
@@ -171,6 +174,25 @@ public static partial class DocumentValidation
             }
         }
         _ = MountainGeometry.EffectiveTerrainCells(document, metrics);
+
+        foreach (var route in document.RouteSurfaces)
+        {
+            for (var index = 0; index < route.Points.Count; index++)
+            {
+                ValidateElevation(
+                    $"Route surface '{route.RouteSurfaceId}' point {index} elevation_meters",
+                    route.Points[index].ElevationMeters,
+                    metrics);
+                // A route is a continuous band and is not rasterized. Its
+                // authoring-pixel anchor must stay inside the Scene but has no
+                // arbitrary Terrain- or water-grid alignment requirement.
+                ValidateAuthoringPosition(
+                    $"Route surface '{route.RouteSurfaceId}' point {index}",
+                    route.Points[index].PositionAuthoringPx,
+                    document.SizeCells,
+                    metrics.AuthoringPixelsPerTerrainCell);
+            }
+        }
 
         if (document.SceneKind == SceneKind.Template)
         {
@@ -245,6 +267,74 @@ public static partial class DocumentValidation
                 }
             }
             _ = MountainGeometry.RequireContour(body);
+        }
+    }
+
+    /// <summary>
+    /// Checks the authored source of continuously inclined routes without
+    /// assigning an Actor capability or a horizontal grid to them.
+    /// </summary>
+    private static void ValidateRouteSurfaces(SceneDocument document)
+    {
+        if (document.RouteSurfaces is null)
+            throw new SceneMakerDocumentException("Scene requires route_surfaces.");
+
+        string? previousRouteId = null;
+        foreach (var route in document.RouteSurfaces)
+        {
+            ValidateStableId("route_surface_id", route.RouteSurfaceId);
+            if (previousRouteId is not null
+                && string.CompareOrdinal(route.RouteSurfaceId, previousRouteId) <= 0)
+            {
+                throw new SceneMakerDocumentException(
+                    "Route surfaces must have unique IDs in canonical ordinal order.");
+            }
+            previousRouteId = route.RouteSurfaceId;
+
+            var label = $"Route surface '{route.RouteSurfaceId}'";
+            if (string.IsNullOrWhiteSpace(route.AssetKey))
+                throw new SceneMakerDocumentException($"{label} requires an asset_key.");
+            if (route.Points is null || route.Points.Count < 2)
+            {
+                throw new SceneMakerDocumentException(
+                    $"{label} requires at least two curve points.");
+            }
+
+            foreach (var point in route.Points)
+            {
+                if (point.PositionAuthoringPx is null)
+                    throw new SceneMakerDocumentException(
+                        $"{label} requires position_authoring_px on every point.");
+                if (point.HandleInAuthoringPx is null || point.HandleOutAuthoringPx is null)
+                    throw new SceneMakerDocumentException(
+                        $"{label} requires both handles on every point.");
+                if (!Enum.IsDefined(point.Mode))
+                    throw new SceneMakerDocumentException(
+                        $"{label} requires a supported point mode.");
+                if (point.WidthMeters <= 0m)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} requires a positive width_meters on every point.");
+                }
+                if (point.Mode == RoutePointMode.Linear
+                    && !(point.HandleInAuthoringPx.IsZero()
+                        && point.HandleOutAuthoringPx.IsZero()))
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} has a linear point carrying handles; a linear point's handles are zero.");
+                }
+            }
+
+            for (var index = 0; index + 1 < route.Points.Count; index++)
+            {
+                if (RouteSurfaceGeometry.HasPositiveRun(
+                        route.Points[index], route.Points[index + 1]))
+                {
+                    continue;
+                }
+                throw new SceneMakerDocumentException(
+                    $"{label} has no horizontal run between points {index} and {index + 1}.");
+            }
         }
     }
 
@@ -377,6 +467,24 @@ public static partial class DocumentValidation
         int terrainStep,
         int snapStep)
     {
+        ValidateAuthoringPosition(label, position, size, terrainStep);
+        if (position!.X % snapStep != 0 || position.Y % snapStep != 0)
+        {
+            throw new SceneMakerDocumentException(
+                $"{label} must align to the {snapStep}-authoring-pixel grid.");
+        }
+    }
+
+    /// <summary>
+    /// A position inside the Scene in authoring pixels, with no statement about
+    /// which horizontal grid - if any - it belongs to.
+    /// </summary>
+    private static void ValidateAuthoringPosition(
+        string label,
+        AuthoringPixelPosition? position,
+        SceneSizeCells size,
+        int terrainStep)
+    {
         if (position is null)
             throw new SceneMakerDocumentException($"{label} requires an authoring-pixel position.");
         var width = checked(size.Width * terrainStep);
@@ -385,11 +493,6 @@ public static partial class DocumentValidation
             || position.Y < 0 || position.Y > height)
         {
             throw new SceneMakerDocumentException($"{label} lies outside Scene bounds.");
-        }
-        if (position.X % snapStep != 0 || position.Y % snapStep != 0)
-        {
-            throw new SceneMakerDocumentException(
-                $"{label} must align to the {snapStep}-authoring-pixel grid.");
         }
     }
 

@@ -145,8 +145,8 @@ carries no material: painted Terrain decides whether a cell exists and what it
 is made of, the contour decides only how high it reaches. The runtime sees only
 the resulting Terrain cells. `Draw Mountain` now authors, previews, closes,
 cancels and erases those bodies through the existing `ToolInteraction` path.
-Manual UX acceptance of this contour slice is required before route or helix
-work starts.
+Manual UX acceptance of this contour slice was completed before route work
+began.
 
 Do not call adjacent flat cell tops a slope without fixing the mesh rule.
 Different cell elevations form terraces and vertical steps. A visually smooth
@@ -157,10 +157,12 @@ The engine-neutral foundation for that separately authored ramp now exists as
 `RouteSurfaceGeometry`: an open Bezier centerline with width and absolute
 support height at every point. Width and height interpolate over arc length;
 the intermediate height stays continuous rather than being snapped into cell
-steps. Its grade report is descriptive geometry, not an Actor capability. It
-is intentionally not persisted, exported or exposed in the editor yet. The
-next authoring slice must decide the route's material ownership and where the
-Actor or simulation grade limit is configured before adding a Scene schema.
+steps. Its grade report is descriptive geometry, not an Actor capability.
+Authoring schema 13 persists routes with a Terrain-role material; export schema
+9 warns and omits them, and no editor tool exists yet. Traversal profiles still
+belong in Workspace configuration before a tool or generator can judge whether
+an Actor can use a route. Export support and the overlapping-station semantics
+needed by helixes remain separate later slices.
 
 The same analysis should lead to a generated first-person LookDev mode. It is
 DOOM-like in use - enter the authored map, walk it and inspect stairs, tunnels,
