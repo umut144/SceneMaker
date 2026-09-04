@@ -363,13 +363,16 @@ whole band without editing a second absolute endpoint. After clipping at the
 upper boundary, a resolved surface below start is omitted. Both controls step
 on the Workspace elevation quantum, but neither enters a document or export.
 
-This first horizontal Section deliberately draws only what the shared column
-model resolves today: painted Terrain after Elevation Regions, plus water cuts
-and fills. Persisted Paths and Props are omitted rather than drawn over roofs
-with invented occlusion. Technical authoring overlays and active previews stay
-visible so choosing the view never disables a tool. Paths join the columns when
-their subtractive operation is introduced; Props wait for an actual layered
-surface rule.
+The horizontal Section draws only what the shared column model resolves:
+painted Terrain after Elevation Regions, water cuts and fills, and additive
+Path surfaces. `RouteSurfaceRaster` samples the existing runtime bake at
+water-cell centres, so Section uses the same triangles, joins, caps and
+continuous elevation that the normal Canvas and export already carry. A Path
+is a zero-thickness independent surface: it wins an exact tie with Terrain,
+remains separate from fills, can be stacked at one X/Y, and stays occluded by a
+higher solid. Props are still omitted rather than drawn over roofs with invented
+occlusion. Technical authoring overlays and active previews stay visible so
+choosing the view never disables a tool.
 
 A Path is an independently materialized open route rather than a sequence of
 raised Terrain cells. It can describe a level way, a ramp or a descent. Its

@@ -451,12 +451,15 @@ Schnittfläche; am oder über dem höchsten Punkt bleibt seine volle Oberfläche
 sichtbar. Liegt die Ebene in einem ausgeschnittenen River-Korridor, kann darunter
 der River, sein Bett oder ein tieferer Terrain-Span sichtbar werden.
 
-Der erste Schnitt umfasst die volumetrisch aufgelösten Inhalte: Terrain nach
-Hill-Faltung sowie River-Schnitte und -Füllungen. Persistierte Paths und
-Placements werden in der Schnittansicht vorerst nicht gezeichnet, weil ihre
-Occlusion noch nicht Teil derselben Spaltenauswertung ist. Werkzeugvorschauen,
-Hill-Konturen, Raster und Anchors bleiben als technische Authoring-Hilfen
-sichtbar.
+Der Schnitt umfasst Terrain nach Hill-Faltung, River-Schnitte und -Füllungen
+sowie additive Path-Oberflächen. Paths werden dafür aus genau dem Triangle-Bake
+auf das feine Water-Raster abgetastet, das Canvas und Export bereits verwenden;
+ihre Neigung bleibt kontinuierlich und wird nicht zu Terrain-Stufen. Ein Path
+unter einem höheren Terrain-Dach bleibt verborgen, und ein Cut kann eine
+niedrigere von mehreren gestapelten Path-Oberflächen freilegen. Placements
+werden in der Schnittansicht vorerst nicht gezeichnet, weil ihre Occlusion noch
+keine gemeinsame Spaltenregel besitzt. Werkzeugvorschauen, Hill-Konturen,
+Raster und Anchors bleiben als technische Authoring-Hilfen sichtbar.
 
 Höhen- und Schnittansicht sind Sichten, keine Arbeitsmodi: Zeichnen, Platzieren,
 Radieren und Auswählen funktionieren unverändert weiter. Das allgemeine

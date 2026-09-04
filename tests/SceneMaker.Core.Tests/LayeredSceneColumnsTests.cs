@@ -19,6 +19,7 @@ public sealed class LayeredSceneColumnsTests
             [new LayeredColumnSpan(null, 1m, "grass", LayeredColumnSpanKind.TerrainSolid, null)],
             column.TerrainSolids);
         Assert.Empty(column.Fills);
+        Assert.Empty(column.Surfaces);
         Assert.Equal(
             new VisibleLayeredSurface(
                 1m, "grass", LayeredColumnSpanKind.TerrainSolid, null, false),
@@ -320,6 +321,124 @@ public sealed class LayeredSceneColumnsTests
         Assert.Same(first, throughAuthoringPosition);
     }
 
+    [Fact]
+    public void AnAdditiveRampUsesTheBakedBandAndContinuousElevation()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace) with
+        {
+            RouteSurfaces =
+            [
+                Route(
+                    "route_0001",
+                    RoutePoint(0, 8, 1m, 0.5m),
+                    RoutePoint(64, 8, 3m, 0.5m)),
+            ],
+        };
+        var columns = LayeredSceneColumns.Prepare(scene, workspace.Metrics);
+
+        var elevations = Enumerable.Range(0, 4)
+            .Select(x => Assert.Single(columns.AtWaterCell(x, 0).Surfaces).TopMeters)
+            .ToArray();
+
+        Assert.Equal([1.25m, 1.75m, 2.25m, 2.75m], elevations);
+        Assert.All(
+            Enumerable.Range(0, 4),
+            x => Assert.Equal(
+                LayeredColumnSpanKind.IndependentSurface,
+                columns.AtWaterCell(x, 0).VisibleAt()!.Kind));
+        Assert.Empty(columns.AtWaterCell(0, 1).Surfaces);
+    }
+
+    [Fact]
+    public void AnAdditivePathIsOccludedByAHillUntilItIsAboveTheTerrain()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Hill(TestScenes.Instance(workspace), workspace, 10m) with
+        {
+            RouteSurfaces =
+            [
+                Route(
+                    "route_0001",
+                    RoutePoint(0, 8, 2m, 0.5m),
+                    RoutePoint(64, 8, 2m, 0.5m)),
+            ],
+        };
+        var columns = LayeredSceneColumns.Prepare(scene, workspace.Metrics);
+
+        var underHill = columns.AtWaterCell(0, 0);
+        Assert.Equal(10m, underHill.VisibleAt()!.ElevationMeters);
+        Assert.Equal(5m, underHill.VisibleAt(5m)!.ElevationMeters);
+        Assert.Equal(2.5m, underHill.VisibleBetween(1.5m, 2.5m)!.ElevationMeters);
+        Assert.Equal(LayeredColumnSpanKind.TerrainSolid, underHill.VisibleAt()!.Kind);
+
+        var beyondHill = columns.AtWaterCell(2, 0).VisibleAt();
+        Assert.NotNull(beyondHill);
+        Assert.Equal(2m, beyondHill.ElevationMeters);
+        Assert.Equal(LayeredColumnSpanKind.IndependentSurface, beyondHill.Kind);
+        Assert.Equal(
+            beyondHill,
+            columns.AtWaterCell(2, 0).VisibleBetween(1.5m, 2.5m));
+        Assert.Null(columns.AtWaterCell(2, 0).VisibleBetween(2.125m, 3.125m));
+    }
+
+    [Fact]
+    public void StackedPathSurfacesRemainSeparateAndClippingCanRevealTheLowerOne()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace) with
+        {
+            RouteSurfaces =
+            [
+                Route(
+                    "route_0001",
+                    RoutePoint(0, 8, 2m, 0.5m),
+                    RoutePoint(32, 8, 2m, 0.5m)),
+                Route(
+                    "route_0002",
+                    RoutePoint(0, 8, 4m, 0.5m),
+                    RoutePoint(32, 8, 4m, 0.5m)),
+            ],
+        };
+        var column = LayeredSceneColumns.Prepare(scene, workspace.Metrics).AtWaterCell(0, 0);
+
+        Assert.Equal(2, column.Surfaces.Count);
+        Assert.Equal(4m, column.VisibleAt()!.ElevationMeters);
+        Assert.Equal(2m, column.VisibleAt(3m)!.ElevationMeters);
+        Assert.Null(column.VisibleBetween(2.5m, 3m));
+    }
+
+    [Fact]
+    public void APathSurfaceWinsATieWithTerrainAndRoutesUseOrdinalIdsToBreakTheirTie()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace) with
+        {
+            RouteSurfaces =
+            [
+                Route(
+                    "route_0002",
+                    RoutePoint(0, 8, 1m, 0.5m),
+                    RoutePoint(32, 8, 1m, 0.5m),
+                    assetKey: "sand"),
+                Route(
+                    "route_0001",
+                    RoutePoint(0, 8, 1m, 0.5m),
+                    RoutePoint(32, 8, 1m, 0.5m)),
+            ],
+        };
+
+        var visible = LayeredSceneColumns
+            .Prepare(scene, workspace.Metrics)
+            .AtWaterCell(0, 0)
+            .VisibleAt();
+
+        Assert.NotNull(visible);
+        Assert.Equal(LayeredColumnSpanKind.IndependentSurface, visible.Kind);
+        Assert.Equal("route_0001", visible.SourceId);
+        Assert.Equal("grass", visible.AssetKey);
+    }
+
     private static SceneDocument Hill(
         SceneDocument scene,
         TestWorkspace workspace,
@@ -361,4 +480,35 @@ public sealed class LayeredSceneColumnsTests
                     32, 16, WaterPointMode.Linear, surface, depth, clearance, 1m),
             ],
         };
+
+    private static RouteSurfaceDocument Route(
+        string id,
+        RouteSurfacePointDocument first,
+        RouteSurfacePointDocument second,
+        string assetKey = "grass") => new()
+    {
+        RouteSurfaceId = id,
+        AssetKey = assetKey,
+        Points = [first, second],
+        Segments =
+        [
+            new RouteSurfaceSegmentDocument
+            {
+                SegmentId = $"{id}.segment_0001",
+                GradePercent = 0,
+            },
+        ],
+    };
+
+    private static RouteSurfacePointDocument RoutePoint(
+        int x,
+        int y,
+        decimal elevation,
+        decimal width) =>
+        RouteSurfaceEditing.Point(
+            x,
+            y,
+            RoutePointMode.Linear,
+            elevation,
+            width);
 }

@@ -5,12 +5,13 @@ public enum LayeredColumnSpanKind
 {
     TerrainSolid,
     IndependentFill,
+    IndependentSurface,
 }
 
 /// <summary>
 /// One closed vertical span at an X/Y position. A null bottom means the solid
-/// continues down without a finite bound; Terrain starts that way, while fills
-/// always have two finite boundaries.
+/// continues down without a finite bound; Terrain starts that way, fills have
+/// two finite boundaries, and a surface has equal bottom and top boundaries.
 /// </summary>
 public sealed record LayeredColumnSpan(
     decimal? BottomMeters,
@@ -29,20 +30,23 @@ public sealed record VisibleLayeredSurface(
 
 /// <summary>
 /// The resolved contents of one vertical Scene column after every Terrain cut
-/// has been applied and every independent fill has been retained.
+/// has been applied and every independent fill and surface has been retained.
 /// </summary>
 public sealed class LayeredSceneColumn
 {
     internal LayeredSceneColumn(
         IReadOnlyList<LayeredColumnSpan> terrainSolids,
-        IReadOnlyList<LayeredColumnSpan> fills)
+        IReadOnlyList<LayeredColumnSpan> fills,
+        IReadOnlyList<LayeredColumnSpan> surfaces)
     {
         TerrainSolids = terrainSolids;
         Fills = fills;
+        Surfaces = surfaces;
     }
 
     public IReadOnlyList<LayeredColumnSpan> TerrainSolids { get; }
     public IReadOnlyList<LayeredColumnSpan> Fills { get; }
+    public IReadOnlyList<LayeredColumnSpan> Surfaces { get; }
 
     /// <summary>
     /// Returns the highest boundary visible from above after removing
@@ -56,8 +60,17 @@ public sealed class LayeredSceneColumn
     /// </summary>
     public VisibleLayeredSurface? VisibleAt(decimal? clipElevationMeters = null)
     {
-        VisibleLayeredSurface? visible = null;
-        foreach (var span in TerrainSolids.Concat(Fills))
+        var visible = HighestIn(TerrainSolids, clipElevationMeters, null);
+        visible = HighestIn(Fills, clipElevationMeters, visible);
+        return HighestIn(Surfaces, clipElevationMeters, visible);
+    }
+
+    private static VisibleLayeredSurface? HighestIn(
+        IReadOnlyList<LayeredColumnSpan> spans,
+        decimal? clipElevationMeters,
+        VisibleLayeredSurface? visible)
+    {
+        foreach (var span in spans)
         {
             if (clipElevationMeters is { } clip
                 && span.BottomMeters is { } bottom
@@ -103,15 +116,24 @@ public sealed class LayeredSceneColumn
         if (current is null || candidate.ElevationMeters > current.ElevationMeters) return true;
         if (candidate.ElevationMeters < current.ElevationMeters) return false;
         if (candidate.Kind != current.Kind)
-            return candidate.Kind == LayeredColumnSpanKind.IndependentFill;
+            return KindPriority(candidate.Kind) > KindPriority(current.Kind);
         return string.CompareOrdinal(candidate.SourceId, current.SourceId) < 0;
     }
+
+    private static int KindPriority(LayeredColumnSpanKind kind) => kind switch
+    {
+        LayeredColumnSpanKind.TerrainSolid => 0,
+        LayeredColumnSpanKind.IndependentFill => 1,
+        LayeredColumnSpanKind.IndependentSurface => 2,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 }
 
 /// <summary>
 /// A prepared, engine-neutral Layered-3D view of one Scene. Terrain is folded
-/// through every Elevation Region once and each water corridor is rasterized
-/// once; repeated column questions then only perform interval subtraction.
+/// through every Elevation Region once, each water corridor is rasterized once,
+/// and additive Paths are sampled from their shared runtime bake; repeated
+/// column questions then only inspect prepared spans.
 /// </summary>
 public sealed class LayeredSceneColumns
 {
@@ -122,6 +144,7 @@ public sealed class LayeredSceneColumns
     private readonly int _sceneHeightAuthoringPixels;
     private readonly IReadOnlyDictionary<TerrainCellCoordinate, TerrainCellDocument> _terrain;
     private readonly IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<WaterLayer>> _water;
+    private readonly IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<RouteLayer>> _routes;
     // Section drawing asks every visible cell again on every redraw. Resolve a
     // column only once for this immutable prepared Scene instead of allocating
     // its interval lists per frame.
@@ -131,7 +154,8 @@ public sealed class LayeredSceneColumns
         SceneDocument scene,
         WorkspaceMetrics metrics,
         IReadOnlyDictionary<TerrainCellCoordinate, TerrainCellDocument> terrain,
-        IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<WaterLayer>> water)
+        IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<WaterLayer>> water,
+        IReadOnlyDictionary<WaterCellCoordinate, IReadOnlyList<RouteLayer>> routes)
     {
         _metrics = metrics;
         _sceneWidthWaterCells = metrics.SceneWidthWaterCells(scene);
@@ -140,6 +164,7 @@ public sealed class LayeredSceneColumns
         _sceneHeightAuthoringPixels = metrics.SceneHeightAuthoringPixels(scene);
         _terrain = terrain;
         _water = water;
+        _routes = routes;
     }
 
     public static LayeredSceneColumns Prepare(SceneDocument scene, WorkspaceMetrics metrics)
@@ -179,7 +204,19 @@ public sealed class LayeredSceneColumns
                 .ThenBy(static layer => layer.SurfaceMeters)
                 .ThenBy(static layer => layer.CutTopMeters)
                 .ThenBy(static layer => layer.WaterBodyId, StringComparer.Ordinal)]);
-        return new LayeredSceneColumns(scene, metrics, terrain, orderedWater);
+        var routes = RouteSurfaceRaster.Cells(scene, metrics)
+            .GroupBy(static cell => new WaterCellCoordinate(cell.X, cell.Y))
+            .ToDictionary(
+                static group => group.Key,
+                static group => (IReadOnlyList<RouteLayer>)[.. group
+                    .Select(static cell => new RouteLayer(
+                        cell.RouteSurfaceId,
+                        cell.AssetKey,
+                        cell.ElevationMeters))
+                    .OrderBy(static layer => layer.ElevationMeters)
+                    .ThenBy(static layer => layer.RouteSurfaceId, StringComparer.Ordinal)
+                    .ThenBy(static layer => layer.AssetKey, StringComparer.Ordinal)]);
+        return new LayeredSceneColumns(scene, metrics, terrain, orderedWater, routes);
     }
 
     /// <summary>
@@ -215,6 +252,8 @@ public sealed class LayeredSceneColumns
         if (_resolved.TryGetValue(coordinate, out var resolved)) return resolved;
         _water.TryGetValue(coordinate, out var water);
         water ??= [];
+        _routes.TryGetValue(coordinate, out var routes);
+        routes ??= [];
         var terrainCoordinate = new TerrainCellCoordinate(
             WorkspaceMetrics.FloorDivide(x, _metrics.WaterCellsPerTerrainCell),
             WorkspaceMetrics.FloorDivide(y, _metrics.WaterCellsPerTerrainCell));
@@ -227,7 +266,13 @@ public sealed class LayeredSceneColumns
                     layer.SurfaceMeters,
                     layer.AssetKey,
                     LayeredColumnSpanKind.IndependentFill,
-                    layer.WaterBodyId))]);
+                    layer.WaterBodyId))],
+            [.. routes.Select(static layer => new LayeredColumnSpan(
+                    layer.ElevationMeters,
+                    layer.ElevationMeters,
+                    layer.AssetKey,
+                    LayeredColumnSpanKind.IndependentSurface,
+                    layer.RouteSurfaceId))]);
         _resolved.Add(coordinate, resolved);
         return resolved;
     }
@@ -296,7 +341,7 @@ public sealed class LayeredSceneColumns
         return merged;
     }
 
-    private static LayeredSceneColumn Empty() => new([], []);
+    private static LayeredSceneColumn Empty() => new([], [], []);
 
     private readonly record struct WaterCellCoordinate(int X, int Y);
     private readonly record struct CutSpan(decimal BottomMeters, decimal TopMeters);
@@ -306,4 +351,8 @@ public sealed class LayeredSceneColumns
         decimal BedMeters,
         decimal SurfaceMeters,
         decimal CutTopMeters);
+    private sealed record RouteLayer(
+        string RouteSurfaceId,
+        string AssetKey,
+        decimal ElevationMeters);
 }

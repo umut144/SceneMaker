@@ -578,10 +578,10 @@ public sealed partial class SceneCanvas : Control
             // says an authored body lies there. The Map overview is structural
             // rather than an area, so it keeps them as well.
             highlighted: Mode is EditorMode.Terrain or EditorMode.ElevationRegion || MapContextActive);
-        // Placements and Paths are not column-resolved yet. Hiding their
-        // persisted surfaces in Section is more truthful than painting them
-        // over a clipped roof with invented occlusion. Their active tool
-        // previews remain below, so the view does not disable authoring.
+        // Placements are not column-resolved yet. Hiding them in Section is
+        // more truthful than painting them over a clipped roof with invented
+        // occlusion. Their active tool preview remains below, so the view does
+        // not disable authoring.
         if (PresentationMode != CanvasPresentationMode.Section)
         {
             DrawProps(
@@ -852,9 +852,10 @@ public sealed partial class SceneCanvas : Control
 
     /// <summary>
     /// Projects the engine-neutral resolved columns after clipping them at the
-    /// selected elevation. Terrain and water are deliberately drawn together:
-    /// asking the column once is what preserves roofs, voids and fills instead
-    /// of letting Canvas draw order invent a different Layered-3D result.
+    /// selected elevation. Terrain, water and Paths are deliberately drawn
+    /// together: asking the column once is what preserves roofs, voids, fills
+    /// and independent surfaces instead of letting Canvas draw order invent a
+    /// different Layered-3D result.
     /// </summary>
     private void DrawSection(
         SceneDocument document,

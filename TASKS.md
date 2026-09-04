@@ -229,13 +229,14 @@ plus a positive `Offset`, not two absolute endpoints, and displays only the
 inclusive band `[Start, Start + Offset]`; moving Start moves the whole band.
 Both values are transient and follow the Workspace elevation quantum.
 
-Its first Canvas projection is intentionally limited to the contents already
-resolved by `LayeredSceneColumns`: Terrain after Hill folding and River cuts
-and fills. Persisted Paths and Placements are hidden in Section rather than
-painted over clipped roofs with a false draw-order answer; tool previews and
-technical contours remain usable. Integrating subtractive Paths into these
-columns is the next slice. Placements stay out until they acquire an actual
-layered-surface or occlusion rule.
+Its Canvas projection is limited to the contents resolved by
+`LayeredSceneColumns`: Terrain after Hill folding, River cuts and fills, and
+additive Path surfaces. `RouteSurfaceRaster` samples the same baked triangles
+used by Canvas and export at water-cell centres, preserving continuous height,
+stacked surfaces and Terrain occlusion. Placements stay hidden rather than
+painted over a clipped roof with a false draw-order answer until they acquire
+an actual layered-surface or occlusion rule. Integrating subtractive Path cuts
+and their retained floors into these columns is the next slice.
 
 The engine-neutral column-resolution foundation now exists instead of a second
 Canvas-only interpretation. `LayeredSceneColumns` prepares painted Terrain
