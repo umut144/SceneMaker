@@ -1425,7 +1425,6 @@ public sealed partial class SceneMakerMain : Control
     /// <summary>What a Terrain Asset presents unless the author says otherwise.</summary>
     private const string DefaultSurface = "land";
 
-    /// <summary>A height in metres, in the tenth-of-a-metre steps ramps use.</summary>
     /// <summary>A vertical extent in metres: a depth below or a height above.</summary>
     private static void ConfigureWaterSpanInput(SpinBox input, double minimum, decimal value)
     {
@@ -1443,7 +1442,9 @@ public sealed partial class SceneMakerMain : Control
     {
         input.MinValue = -1000;
         input.MaxValue = 1000;
-        input.Step = 0.1;
+        input.Step = 0.001;
+        input.CustomArrowStep = 0.1;
+        input.CustomArrowRound = true;
         input.AllowGreater = false;
         input.AllowLesser = false;
         input.Suffix = " m";
@@ -2395,8 +2396,26 @@ public sealed partial class SceneMakerMain : Control
 
     private static void ConfigureElevationInput(SpinBox input, WorkspaceMetrics metrics)
     {
-        input.Step = (double)metrics.ElevationQuantumMeters;
+        // SpinBox derives its visible decimal count from Range.Step by order of
+        // magnitude. A non-decimal quantum such as 0.125 would therefore be
+        // rendered with only one decimal if it were also the Range step. Keep
+        // the display step at the smallest decimal place the quantum uses, and
+        // give the arrows the actual quantum. ElevationOf remains the authority
+        // that snaps typed values to that same quantum.
+        input.Step = ElevationDisplayStep(metrics.ElevationQuantumMeters);
+        input.CustomArrowStep = (double)metrics.ElevationQuantumMeters;
+        input.CustomArrowRound = true;
         input.Editable = true;
+    }
+
+    private static double ElevationDisplayStep(decimal quantumMeters)
+    {
+        var text = quantumMeters.ToString(
+            "0.############################",
+            CultureInfo.InvariantCulture);
+        var decimalPoint = text.IndexOf('.', StringComparison.Ordinal);
+        var decimalPlaces = decimalPoint < 0 ? 0 : text.Length - decimalPoint - 1;
+        return Math.Pow(10.0, -decimalPlaces);
     }
 
     private void SetElevationInputsEditable(bool editable)

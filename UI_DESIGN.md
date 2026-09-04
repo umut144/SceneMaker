@@ -337,7 +337,9 @@ zeigt bei einer Körperauswahl dessen absolute Oberkante und ändert sie auf dem
 Höhenquantum des Workspaces; ID und Kontur bleiben dabei unangetastet. Eine
 niedrigere Oberkante darf wirkungslos unter bereits höherem Terrain liegen,
 weil ein Berg niemals nach unten schneidet. Ohne gewählten Körper bleibt
-`Height` ausgeblendet.
+`Height` ausgeblendet. Das Feld zeigt so viele Nachkommastellen, wie das Quantum
+tatsächlich braucht — bei `0,125 m` also `0.125`, nicht gerundet `0.1` — und die
+Pfeile gehen weiterhin um genau ein Quantum.
 
 Die Canvasdarstellung verwendet bereits das gefaltete Höhenfeld aus gemalten
 Zellen und Bergkörpern. Dadurch sieht der Autor genau die Terrainzellen, die
