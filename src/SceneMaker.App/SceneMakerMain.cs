@@ -50,11 +50,21 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     private const int CurvePointModeLinear = 1;
     private const int CurvePointModeAligned = 2;
+    private const int PathGradeDownFifty = 1;
+    private const int PathGradeDownTwentyFive = 2;
+    private const int PathGradeLevel = 3;
+    private const int PathGradeUpTwentyFive = 4;
+    private const int PathGradeUpFifty = 5;
 
     private readonly Label _riverWidthLabel = new();
     private readonly SpinBox _riverWidthEdit = new();
     private readonly Label _pathWidthLabel = new();
     private readonly SpinBox _pathWidthEdit = new();
+    private readonly Label _pathGradeLabel = new();
+    private readonly OptionButton _pathGradeEdit = new();
+    private readonly CheckBox _pathAutoStartToggle = new();
+    private readonly Label _pathStartElevationLabel = new();
+    private readonly SpinBox _pathStartElevationEdit = new();
     private readonly CheckBox _snapWaterToggle = new();
     private readonly Label _waterElevationLabel = new();
     private readonly SpinBox _waterElevationEdit = new();
@@ -407,6 +417,39 @@ public sealed partial class SceneMakerMain : Control
             "The full width of the independent route surface at the next point.";
         _pathWidthEdit.ValueChanged += SetPathWidth;
         _contextMenuBar.AddChild(_pathWidthEdit);
+        _pathGradeLabel.Name = "PathGradeLabel";
+        _pathGradeLabel.Text = "Grade";
+        _pathGradeLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_pathGradeLabel);
+        _pathGradeEdit.Name = "PathGrade";
+        _pathGradeEdit.AddItem("-50%", PathGradeDownFifty);
+        _pathGradeEdit.AddItem("-25%", PathGradeDownTwentyFive);
+        _pathGradeEdit.AddItem("0%", PathGradeLevel);
+        _pathGradeEdit.AddItem("+25%", PathGradeUpTwentyFive);
+        _pathGradeEdit.AddItem("+50%", PathGradeUpFifty);
+        _pathGradeEdit.Selected = _pathGradeEdit.GetItemIndex(PathGradeLevel);
+        _pathGradeEdit.CustomMinimumSize = new Vector2(100f, 0f);
+        _pathGradeEdit.TooltipText =
+            "Rise or fall per horizontal metre on the segment arriving at the next point.";
+        _pathGradeEdit.ItemSelected += SetPathGrade;
+        _contextMenuBar.AddChild(_pathGradeEdit);
+        _pathAutoStartToggle.Name = "PathAutoStart";
+        _pathAutoStartToggle.Text = "Auto start";
+        _pathAutoStartToggle.ButtonPressed = true;
+        _pathAutoStartToggle.TooltipText =
+            "Copy the effective Terrain height, including Hills, under the first point.";
+        _pathAutoStartToggle.Toggled += SetPathAutoStart;
+        _contextMenuBar.AddChild(_pathAutoStartToggle);
+        _pathStartElevationLabel.Name = "PathStartElevationLabel";
+        _pathStartElevationLabel.Text = "Start";
+        _pathStartElevationLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_pathStartElevationLabel);
+        _pathStartElevationEdit.Name = "PathStartElevation";
+        ConfigureElevationInput(_pathStartElevationEdit);
+        _pathStartElevationEdit.TooltipText =
+            "Manual absolute height of the first point when Auto start is off.";
+        _pathStartElevationEdit.ValueChanged += SetPathStartElevation;
+        _contextMenuBar.AddChild(_pathStartElevationEdit);
         _elevationLabel.Name = "ElevationLabel";
         _elevationLabel.Text = "Height";
         _elevationLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -1908,6 +1951,50 @@ public sealed partial class SceneMakerMain : Control
         SetStatus($"Path width for the next point set to {width:0.###} m.");
     }
 
+    private void SetPathGrade(long item)
+    {
+        var grade = _pathGradeEdit.GetItemId((int)item) switch
+        {
+            PathGradeDownFifty => RouteGradePreset.DownFiftyPercent,
+            PathGradeDownTwentyFive => RouteGradePreset.DownTwentyFivePercent,
+            PathGradeLevel => RouteGradePreset.Level,
+            PathGradeUpTwentyFive => RouteGradePreset.UpTwentyFivePercent,
+            PathGradeUpFifty => RouteGradePreset.UpFiftyPercent,
+            _ => throw new ArgumentOutOfRangeException(nameof(item)),
+        };
+        _interaction.State.SetPathGrade(grade);
+        SetStatus($"Path grade for the next segment set to {PathGradeText(grade)}.");
+    }
+
+    private void SetPathAutoStart(bool enabled)
+    {
+        _pathStartElevationEdit.Editable = !enabled && _controller.Session is not null;
+        _interaction.State.SetPathStartElevationOverride(enabled
+            ? null
+            : ElevationOf(_pathStartElevationEdit, _pathStartElevationEdit.Value));
+        SetStatus(enabled
+            ? "Path start follows the effective Terrain under the first point."
+            : $"Path start fixed at {_interaction.State.PathStartElevationOverrideMeters:0.###} m.");
+    }
+
+    private void SetPathStartElevation(double value)
+    {
+        var elevation = ElevationOf(_pathStartElevationEdit, value);
+        if (!_pathAutoStartToggle.ButtonPressed)
+            _interaction.State.SetPathStartElevationOverride(elevation);
+        SetStatus($"Path start elevation set to {elevation:0.###} m.");
+    }
+
+    private static string PathGradeText(RouteGradePreset grade) => grade switch
+    {
+        RouteGradePreset.DownFiftyPercent => "-50%",
+        RouteGradePreset.DownTwentyFivePercent => "-25%",
+        RouteGradePreset.Level => "0%",
+        RouteGradePreset.UpTwentyFivePercent => "+25%",
+        RouteGradePreset.UpFiftyPercent => "+50%",
+        _ => throw new ArgumentOutOfRangeException(nameof(grade)),
+    };
+
     private void SetSnapWaterToTerrain(bool enabled)
     {
         _interaction.State.SetSnapWaterToTerrain(enabled);
@@ -2008,6 +2095,15 @@ public sealed partial class SceneMakerMain : Control
         _riverWidthEdit.Visible = riverActive;
         _pathWidthLabel.Visible = pathActive;
         _pathWidthEdit.Visible = pathActive;
+        _pathGradeLabel.Visible = pathActive;
+        _pathGradeEdit.Visible = pathActive;
+        _pathGradeEdit.Selected = _pathGradeEdit.GetItemIndex(
+            PathGradeItemId(_interaction.State.PathGrade));
+        _pathAutoStartToggle.Visible = pathActive;
+        _pathStartElevationLabel.Visible = pathActive;
+        _pathStartElevationEdit.Visible = pathActive;
+        _pathStartElevationEdit.Editable = !_pathAutoStartToggle.ButtonPressed
+            && _controller.Session is not null;
         _snapWaterToggle.Visible = riverActive;
         _waterElevationLabel.Visible = riverActive;
         _waterElevationEdit.Visible = riverActive;
@@ -2016,10 +2112,11 @@ public sealed partial class SceneMakerMain : Control
         _waterClearanceLabel.Visible = riverActive;
         _waterClearanceEdit.Visible = riverActive;
         _waterDerivedSpanLabel.Visible = riverActive;
-        // Height authors Terrain, Placements and Path points. Water carries its own three, so
-        // leaving it in reach here would offer a number that changes nothing.
+        // Height authors Terrain, Placements and Hills. River carries its own
+        // profile and Path derives its points from Start plus Grade, so leaving
+        // the general field in either area would offer a number that changes nothing.
         var elevationRegionHeightEditing = selectedElevationRegion is not null;
-        var elevationActive = !riverActive
+        var elevationActive = !riverActive && !pathActive
             && (!elevationRegionActive || elevationRegionDrawing || elevationRegionHeightEditing);
         _elevationLabel.Visible = elevationActive;
         _elevationEdit.Visible = elevationActive;
@@ -2030,6 +2127,16 @@ public sealed partial class SceneMakerMain : Control
             ? "The selected Hill's absolute top elevation."
             : "The height the drawing tools author at.";
     }
+
+    private static int PathGradeItemId(RouteGradePreset grade) => grade switch
+    {
+        RouteGradePreset.DownFiftyPercent => PathGradeDownFifty,
+        RouteGradePreset.DownTwentyFivePercent => PathGradeDownTwentyFive,
+        RouteGradePreset.Level => PathGradeLevel,
+        RouteGradePreset.UpTwentyFivePercent => PathGradeUpTwentyFive,
+        RouteGradePreset.UpFiftyPercent => PathGradeUpFifty,
+        _ => throw new ArgumentOutOfRangeException(nameof(grade)),
+    };
 
     /// <summary>
     /// Choosing an Asset changes the material and nothing else. The area already
@@ -2444,6 +2551,8 @@ public sealed partial class SceneMakerMain : Control
         ConfigurePathWidthInput(_pathWidthEdit);
         _interaction.State.SetPathWidth(DecimalOf(_pathWidthEdit.Value));
         ConfigureElevationInputs(session.Metrics);
+        _pathAutoStartToggle.ButtonPressed = true;
+        _interaction.State.SetPathStartElevationOverride(null);
         UpdateSceneSizeMetrics();
         RebuildAssetBars();
         // The bars only hold buttons now, so the Asset an area shows is chosen
@@ -2456,6 +2565,7 @@ public sealed partial class SceneMakerMain : Control
     {
         ConfigureElevationInput(_elevationEdit, metrics);
         ConfigureElevationInput(_waterElevationEdit, metrics);
+        ConfigureElevationInput(_pathStartElevationEdit, metrics);
         ConfigureElevationInput(_sceneElevationEdit, metrics);
 
         var authoringElevation = ElevationOf(_elevationEdit, _elevationEdit.Value);
@@ -2493,6 +2603,7 @@ public sealed partial class SceneMakerMain : Control
     {
         _elevationEdit.Editable = editable;
         _waterElevationEdit.Editable = editable;
+        _pathStartElevationEdit.Editable = editable && !_pathAutoStartToggle.ButtonPressed;
         _sceneElevationEdit.Editable = editable;
     }
 

@@ -169,9 +169,10 @@ to six decimals. Its grade report is descriptive geometry, not an Actor
 capability.
 Authoring schema 13 introduced routes with a Terrain-role material; schema 14
 keeps them unchanged. The author-facing `Draw Path` tool now authors a free
-open Bezier curve with height and width per point, previews the continuous band
-in the Canvas and erases the whole route. The Landscape navigation and context
-controls are present, and the height view colours its interpolated surface.
+open Bezier curve with an automatic or manual starting height, per-segment
+grade and width per point, previews the continuous band in the Canvas and
+erases the whole route. The Landscape navigation and context controls are
+present, and the height view colours its interpolated surface.
 Export schema 9 still warns and omits routes. Traversal profiles still belong
 in Workspace configuration before a tool or generator can judge whether an
 Actor can use a route. Export support, selection/point reshaping and the

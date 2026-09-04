@@ -92,12 +92,29 @@ abgelegt hat.
 
 `Path` ist eine eigenständige Oberfläche über dem Terrain. Deshalb darf er
 jedes Terrain-Asset präsentieren, auch wenn dessen normale Authoring-Art
-`cells` oder `curve` ist. Sein offener Bezier-Entwurf speichert Höhe und Breite
-pro Punkt; Punktpositionen rasten horizontal nicht am Terrain-Raster ein:
+`cells` oder `curve` ist. Sein offener Bezier-Entwurf speichert absolute Höhe
+und Breite pro Punkt; Punktpositionen rasten horizontal nicht am Terrain-Raster
+ein. Die Höhen nach dem Start werden aus der jeweils gewählten Steigung und der
+tatsächlichen horizontalen Bezier-Bogenlänge abgeleitet:
 
 ```text
-Path-Kontext:  Surface [ Grass ▾ ] · Point [ Linear ▾ ] · Width […] · Height […]
+Path-Kontext:  Surface [ Grass ▾ ] · Point [ Linear ▾ ] · Width […]
+               Grade [ -50% | -25% | 0% | +25% | +50% ]
+               [✓] Auto start · Start […]
 ```
+
+`Grade` gilt für das Segment vom letzten gesetzten Punkt zum nächsten. Dadurch
+kann derselbe Path waagerecht laufen, steigen und wieder fallen. Die Steigung
+ist Rise/Run in Metern: `+25%` gewinnt auf 4 m horizontaler Bogenlänge genau
+1 m Höhe. Sie beschreibt Geometrie, keine Zusage über Laufgeschwindigkeit oder
+Begehbarkeit eines bestimmten Actors.
+
+`Auto start` ist standardmäßig an und kopiert beim ersten Klick die effektive
+Terrainoberkante einschließlich Hills. Danach bleibt die kopierte absolute Zahl
+stehen; spätere Terrainänderungen bewegen den Path nicht. Wo kein Terrain liegt
+oder bewusst auf einer anderen Höhe begonnen werden soll, schaltet man Auto aus
+und gibt `Start` auf dem Workspace-Höhenquantum ein. Nur der Start wird direkt
+quantisiert; die abgeleiteten späteren Punkthöhen dürfen dazwischenliegen.
 
 Der Canvas zeichnet das kontinuierliche Band in der Assetfarbe mit sichtbarer
 Mittellinie. In der Height Map wird es entlang der interpolierten Höhe
@@ -163,7 +180,9 @@ Auswirkung vor dem Ausführen sichtbar ist.
 
 ### Höhe
 
-Das ContextMenu enthält durchgehend `Height` in Metern. Seine Schrittweite ist
+Das allgemeine ContextMenu enthält für Terrain, Placements und Hills `Height`
+in Metern; River besitzt sein eigenes Höhenprofil und Path verwendet `Start`
+plus `Grade`. Die Schrittweite direkt authorierter Höhen ist
 `elevation_quantum_meters` aus dem offenen Workspace; direkt eingegebene Werte
 werden ebenfalls darauf gerundet. Der Wert gilt für Terrain und Placements
 gleichermaßen: gemalte Zellen und gesetzte Placements entstehen auf dieser Höhe.
