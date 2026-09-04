@@ -117,9 +117,11 @@ und gibt `Start` auf dem Workspace-Höhenquantum ein. Nur der Start wird direkt
 quantisiert; die abgeleiteten späteren Punkthöhen dürfen dazwischenliegen.
 
 Der Canvas zeichnet das kontinuierliche Band in der Assetfarbe mit sichtbarer
-Mittellinie. In der Height Map wird es entlang der interpolierten Höhe
-eingefärbt, nicht in Zellen oder Terrassen zerlegt. Der Eraser markiert und
-entfernt den ganzen Route-Körper unter dem Zeiger.
+Mittellinie. In der Height Map werden sowohl der fertige Path als auch sein
+laufender Entwurf entlang der interpolierten Höhe eingefärbt und in dieselbe
+Legende einbezogen, nicht in Zellen oder Terrassen zerlegt. Dadurch ist schon
+vor Enter sichtbar, ob Auto start wirklich die Hill-Oberkante übernommen hat.
+Der Eraser markiert und entfernt den ganzen Route-Körper unter dem Zeiger.
 
 Beim Betreten eines Bereichs bleibt das gemerkte Asset, wenn es zum Bereich
 passt; sonst wird das erste passende gewählt. Bietet ein Workspace für einen

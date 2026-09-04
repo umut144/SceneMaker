@@ -535,7 +535,12 @@ public sealed partial class SceneCanvas : Control
                 DrawWaterToolPreview(document, pan, zoom, heightAuthoringPixels);
                 break;
             case EditorMode.Path:
-                DrawPathToolPreview(document, pan, zoom, heightAuthoringPixels);
+                DrawPathToolPreview(
+                    document,
+                    pan,
+                    zoom,
+                    heightAuthoringPixels,
+                    elevationRange);
                 break;
             case EditorMode.ElevationRegion:
                 DrawElevationRegionToolPreview(document, pan, zoom, heightAuthoringPixels);
@@ -698,13 +703,26 @@ public sealed partial class SceneCanvas : Control
     {
         decimal? low = null;
         decimal? high = null;
-        foreach (var elevation in EffectiveTerrain(document).Select(static cell => cell.ElevationMeters)
+        IEnumerable<decimal> elevations = EffectiveTerrain(document)
+                     .Select(static cell => cell.ElevationMeters)
                      .Concat(document.Props.Select(static prop => prop.ElevationMeters))
                      .Concat(document.RouteSurfaces.SelectMany(
                          static route => route.Points.Select(
                              static point => point.ElevationMeters)))
                      .Concat(WaterOverlays(document).SelectMany(
-                         overlay => overlay.Cells.Select(WaterElevation))))
+                         overlay => overlay.Cells.Select(WaterElevation)));
+        // An unfinished Path is already geometry the author is judging. Include
+        // it in the same scale as the Scene, so Auto start can be verified in
+        // the height view before Enter instead of being hidden by Asset colour.
+        if (Mode == EditorMode.Path
+            && !EraserEnabled
+            && CurrentContext() is { } context)
+        {
+            elevations = elevations.Concat(
+                _interaction.PathPreview(context).Curve.Select(
+                    static point => point.ElevationMeters));
+        }
+        foreach (var elevation in elevations)
         {
             low = low is null || elevation < low ? elevation : low;
             high = high is null || elevation > high ? elevation : high;
@@ -1055,7 +1073,8 @@ public sealed partial class SceneCanvas : Control
         SceneDocument document,
         Vector2 pan,
         float zoom,
-        int sceneHeightAuthoringPixels)
+        int sceneHeightAuthoringPixels,
+        (decimal Low, decimal High)? elevationRange)
     {
         if (EraserEnabled)
         {
@@ -1085,7 +1104,8 @@ public sealed partial class SceneCanvas : Control
                 new Color(fill.R, fill.G, fill.B, 0.55f),
                 pan,
                 zoom,
-                sceneHeightAuthoringPixels);
+                sceneHeightAuthoringPixels,
+                elevationRange);
             DrawRouteCenterline(
                 surface,
                 ValidPreviewColor,
