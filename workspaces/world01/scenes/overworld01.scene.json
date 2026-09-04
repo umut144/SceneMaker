@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 14,
+  "version": 15,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -8,6 +8,7 @@
     "width": 100,
     "height": 100
   },
+  "voxel_cells": [],
   "terrain_cells": [
     {
       "x": 0,

@@ -109,14 +109,16 @@ public sealed class TestWorkspace : IDisposable
             $$"""
             {
               "format": "scene_maker_workspace",
-              "version": 8,
+              "version": 9,
               "workspace_key": "{{worldKey}}",
               "grid": {
                 "terrain_cell_meters": 1.0,
                 "authoring_pixels_per_meter": 32,
                 "game_pixels_per_meter": 192,
                 "water_cell_meters": 0.5,
-                "elevation_quantum_meters": 0.125
+                "elevation_quantum_meters": 0.125,
+                "voxel_size_meters": 1.0,
+                "voxel_subgrid_meters": 0.2
               },
               "assets": [
                 { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" },

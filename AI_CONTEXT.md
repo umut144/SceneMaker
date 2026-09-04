@@ -1,4 +1,29 @@
-# SceneMaker context
+# WorldVoxMaker context
+
+WorldVoxMaker replaces SceneMaker's 2.5D authored heightfield with a sparse,
+volumetric X/Y/Z Voxel Grid. X/Z are the ground plane and Y is elevation, in
+Godot convention. The Workspace explicitly owns `voxel_size_meters` (1 m) and
+`voxel_subgrid_meters` (0.2 m); neither is inferred. `voxel_cells` are canonical
+Scene data ordered by Y, Z, X and carry Workspace `asset_key` materials.
+
+`VoxelTileEditing`, `VoxelHillEditing` and `VoxelPathEditing` all operate on the
+same immutable `VoxelGrid` through additive and subtractive edits. Hill columns
+inherit their existing ground material. VoxelPath is one Bezier-corridor source
+for raised/floating paths, supported ramps and subtractive tunnels. The Editor's
+`VoxelCrossSectionView` follows the metric edit point and exposes the current
+horizontal slice plus the outline of solid volume above it.
+
+Consumer formats are derived, never authored: `VoxelExportPipeline` emits a
+lossy heightfield/material view for 2.5D games, an exposed-face surface mesh, or
+lossless X-run-compressed voxels. Templates translate and replace whole voxel
+columns while retaining their vertical coordinates. The legacy Terrain, Water,
+Route Surface and Elevation Region fields still exist only during the App/UI
+cutover and must not become inputs to new voxel operations.
+
+The solution and namespaces retain their `SceneMaker` names during this
+transition so commits remain buildable; product-facing naming is WorldVoxMaker.
+
+# Legacy SceneMaker context
 
 SceneMaker is a standalone semantic scene authoring tool. A workspace is one
 game and contains its own scene/template data and `config.json`.

@@ -7,6 +7,22 @@ so a later reader can decide rather than rediscover.
 Read `AGENTS.md` first — the rules there are what the fixes below have to stay
 inside.
 
+## 0. WorldVoxMaker App cutover is not complete
+
+Core now owns the sparse Voxel Grid, Tile/Hill/Path operations, primitive
+library, three export projections, schema-15 persistence, Workspace voxel
+metrics and voxel-aware Template composition. Editor owns the pointer-following
+cross-section projection. The Godot App still presents SceneMaker's legacy 2D
+Terrain/River/Ramp/Hill controls and does not yet render or edit `voxel_cells`.
+
+Cost: the new model is testable and serializable but cannot yet be authored
+end-to-end from the running Godot UI. The cutover must replace `SceneCanvas`'s
+2D drawing/input plumbing with a 3D camera, voxel picking/mesh rendering and the
+three voxel tool contexts; then delete the legacy document fields and systems,
+rename the solution/projects, and switch CLI export selection to
+`VoxelExportPipeline`. Do this as an explicit schema cut, not by teaching old
+heightfield tools to mutate voxel data.
+
 ## 1. Instance IDs stop reading in numeric order past 9 999
 
 `src/SceneMaker.Core/PropEditing.cs`, `NextInstanceId`

@@ -15,7 +15,9 @@ public sealed record WorkspaceGridConfiguration(
     decimal AuthoringPixelsPerMeter,
     decimal GamePixelsPerMeter,
     decimal WaterCellMeters,
-    decimal ElevationQuantumMeters);
+    decimal ElevationQuantumMeters,
+    decimal VoxelSizeMeters,
+    decimal VoxelSubgridMeters);
 
 /// <summary>
 /// How a Terrain Asset is authored. This is editor knowledge rather than game
@@ -98,7 +100,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 8;
+    public const int Version = 9;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -152,6 +154,8 @@ public static class WorkspaceConfigurationStore
                 GamePixelsPerMeter = grid.GamePixelsPerMeter,
                 WaterCellMeters = grid.WaterCellMeters,
                 ElevationQuantumMeters = grid.ElevationQuantumMeters,
+                VoxelSizeMeters = grid.VoxelSizeMeters,
+                VoxelSubgridMeters = grid.VoxelSubgridMeters,
             },
             Assets = profiles.Select(profile => new AssetProfileDocument
             {
@@ -182,6 +186,8 @@ public static class WorkspaceConfigurationStore
                 GamePixelsPerMeter = configuration.Grid.GamePixelsPerMeter,
                 WaterCellMeters = configuration.Grid.WaterCellMeters,
                 ElevationQuantumMeters = configuration.Grid.ElevationQuantumMeters,
+                VoxelSizeMeters = configuration.Grid.VoxelSizeMeters,
+                VoxelSubgridMeters = configuration.Grid.VoxelSubgridMeters,
             },
             Assets = configuration.AssetProfiles.Select(profile => new AssetProfileDocument
             {
@@ -214,7 +220,9 @@ public static class WorkspaceConfigurationStore
             "authoring_pixels_per_meter": 32,
             "game_pixels_per_meter": 192,
             "water_cell_meters": 0.5,
-            "elevation_quantum_meters": 0.125
+            "elevation_quantum_meters": 0.125,
+            "voxel_size_meters": 1.0,
+            "voxel_subgrid_meters": 0.2
           },
           "assets": []
         }
@@ -296,17 +304,21 @@ public static class WorkspaceConfigurationStore
         if (document.Grid is null || document.Grid.TerrainCellMeters <= 0m
             || document.Grid.AuthoringPixelsPerMeter <= 0m || document.Grid.GamePixelsPerMeter <= 0m
             || document.Grid.WaterCellMeters <= 0m
-            || document.Grid.ElevationQuantumMeters is not > 0m)
+            || document.Grid.ElevationQuantumMeters is not > 0m
+            || document.Grid.VoxelSizeMeters is not > 0m
+            || document.Grid.VoxelSubgridMeters is not > 0m)
         {
             throw new SceneMakerDocumentException(
-                "Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, game_pixels_per_meter, water_cell_meters, and elevation_quantum_meters.");
+                "Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, game_pixels_per_meter, water_cell_meters, elevation_quantum_meters, voxel_size_meters, and voxel_subgrid_meters.");
         }
         var grid = new WorkspaceGridConfiguration(
             document.Grid.TerrainCellMeters,
             document.Grid.AuthoringPixelsPerMeter,
             document.Grid.GamePixelsPerMeter,
             document.Grid.WaterCellMeters,
-            document.Grid.ElevationQuantumMeters.Value);
+            document.Grid.ElevationQuantumMeters.Value,
+            document.Grid.VoxelSizeMeters.Value,
+            document.Grid.VoxelSubgridMeters.Value);
         _ = new WorkspaceMetrics(grid);
         if (document.Assets is null)
             throw new SceneMakerDocumentException("Workspace config requires an assets array.");
@@ -348,6 +360,8 @@ public static class WorkspaceConfigurationStore
         public required decimal GamePixelsPerMeter { get; init; }
         public required decimal WaterCellMeters { get; init; }
         public decimal? ElevationQuantumMeters { get; init; }
+        public decimal? VoxelSizeMeters { get; init; }
+        public decimal? VoxelSubgridMeters { get; init; }
     }
 
     private sealed record AssetProfileDocument

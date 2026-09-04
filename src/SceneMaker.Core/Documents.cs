@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 14;
+    public const int SceneVersion = 15;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -33,6 +33,18 @@ public sealed record TerrainCellDocument
     /// alike.
     /// </summary>
     public required decimal ElevationMeters { get; init; }
+}
+
+/// <summary>
+/// One persisted WorldVoxMaker cell. X/Z address the map footprint and Y is
+/// vertical elevation; all three count Workspace-configured whole voxels.
+/// </summary>
+public sealed record VoxelCellDocument
+{
+    public required int X { get; init; }
+    public required int Y { get; init; }
+    public required int Z { get; init; }
+    public required string AssetKey { get; init; }
 }
 
 public sealed record AuthoringPixelPosition
@@ -279,6 +291,7 @@ public sealed record SceneDocument
     public required SceneKind SceneKind { get; init; }
     public required string CoordinateSpace { get; init; }
     public required SceneSizeCells SizeCells { get; init; }
+    public required List<VoxelCellDocument> VoxelCells { get; init; }
     public required List<TerrainCellDocument> TerrainCells { get; init; }
     public required List<PropDocument> Props { get; init; }
 
@@ -374,6 +387,7 @@ public sealed record SceneDocument
         SceneKind = sceneKind,
         CoordinateSpace = SceneMakerSchemas.CoordinateSpace,
         SizeCells = new SceneSizeCells { Width = widthCells, Height = heightCells },
+        VoxelCells = [],
         TerrainCells = [],
         Props = [],
         ElevationRegions = [],

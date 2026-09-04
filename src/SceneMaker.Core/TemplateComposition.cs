@@ -68,12 +68,31 @@ public static class TemplateComposition
             static cell => new TerrainCellCoordinate(cell.X, cell.Y),
             static cell => cell);
         var props = baseScene.Props.ToList();
+        var voxels = baseScene.VoxelCells.ToDictionary(
+            static cell => new VoxelCoordinate(cell.X, cell.Y, cell.Z),
+            static cell => cell);
         List<(SelectedTemplate Candidate, HashSet<TerrainCellCoordinate> Mask)> masks = [];
         foreach (var candidate in selected)
         {
             var translation = Translation(candidate.Anchor, candidate.Template, propAssets.Metrics);
             var mask = TranslateTerrainMask(baseScene, candidate.Template, translation);
+            var voxelMask = TranslateVoxelMask(baseScene, candidate.Template, translation);
             masks.Add((candidate, mask));
+
+            foreach (var coordinate in voxels.Keys
+                .Where(coordinate => voxelMask.Contains((coordinate.X, coordinate.Z)))
+                .ToArray())
+            {
+                voxels.Remove(coordinate);
+            }
+            foreach (var cell in candidate.Template.VoxelCells)
+            {
+                var coordinate = new VoxelCoordinate(
+                    checked(cell.X + translation.VoxelX),
+                    cell.Y,
+                    checked(cell.Z + translation.VoxelZ));
+                voxels[coordinate] = cell with { X = coordinate.X, Z = coordinate.Z };
+            }
 
             foreach (var cell in candidate.Template.TerrainCells)
             {
@@ -92,7 +111,14 @@ public static class TemplateComposition
                         prop.PositionAuthoringPx.X,
                         prop.PositionAuthoringPx.Y),
                     mask,
-                    propAssets.Metrics))
+                    propAssets.Metrics)
+                    && !FootprintIntersectsVoxelMask(
+                        PropEditing.BoundsFor(
+                            propAssets.Resolve(prop.AssetKey),
+                            prop.PositionAuthoringPx.X,
+                            prop.PositionAuthoringPx.Y),
+                        voxelMask,
+                        propAssets.Metrics))
                 .ToList();
             props.AddRange(candidate.Template.Props.Select(prop =>
                 TranslateProp(candidate.Anchor, candidate.Template, prop, translation)));
@@ -100,6 +126,12 @@ public static class TemplateComposition
 
         var composed = baseScene with
         {
+            VoxelCells = voxels
+                .OrderBy(static value => value.Key.Y)
+                .ThenBy(static value => value.Key.Z)
+                .ThenBy(static value => value.Key.X)
+                .Select(static value => value.Value)
+                .ToList(),
             TerrainCells = terrain
                 .OrderBy(static value => value.Key.Y)
                 .ThenBy(static value => value.Key.X)
@@ -200,7 +232,19 @@ public static class TemplateComposition
         var authoringX = checked(anchor.PositionAuthoringPx.X - insertion.X);
         var authoringY = checked(anchor.PositionAuthoringPx.Y - insertion.Y);
         var step = metrics.AuthoringPixelsPerTerrainCell;
-        return new TemplateTranslation(authoringX, authoringY, authoringX / step, authoringY / step);
+        var voxelStep = metrics.AuthoringPixelsPerVoxel;
+        if (authoringX % voxelStep != 0 || authoringY % voxelStep != 0)
+        {
+            throw new SceneMakerDocumentException(
+                $"Template '{template.SceneId}' placement must align to the Workspace voxel grid.");
+        }
+        return new TemplateTranslation(
+            authoringX,
+            authoringY,
+            authoringX / step,
+            authoringY / step,
+            authoringX / voxelStep,
+            authoringY / voxelStep);
     }
 
     private static HashSet<TerrainCellCoordinate> TranslateTerrainMask(
@@ -220,6 +264,27 @@ public static class TemplateComposition
                     $"Template '{template.SceneId}' Terrain at ({cell.X}, {cell.Y}) lies outside Scene Instance '{baseScene.SceneId}' after placement.");
             }
             mask.Add(new TerrainCellCoordinate(x, y));
+        }
+        return mask;
+    }
+
+    private static HashSet<(int X, int Z)> TranslateVoxelMask(
+        SceneDocument baseScene,
+        SceneDocument template,
+        TemplateTranslation translation)
+    {
+        HashSet<(int X, int Z)> mask = [];
+        foreach (var cell in template.VoxelCells)
+        {
+            var x = checked(cell.X + translation.VoxelX);
+            var z = checked(cell.Z + translation.VoxelZ);
+            if (x < 0 || x >= baseScene.SizeCells.Width
+                || z < 0 || z >= baseScene.SizeCells.Height)
+            {
+                throw new SceneMakerDocumentException(
+                    $"Template '{template.SceneId}' Voxel at ({cell.X}, {cell.Y}, {cell.Z}) lies outside Scene Instance '{baseScene.SceneId}' after placement.");
+            }
+            mask.Add((x, z));
         }
         return mask;
     }
@@ -252,6 +317,19 @@ public static class TemplateComposition
         WorkspaceMetrics metrics) =>
         TerrainCoverage.IntersectedCells(bounds, metrics).Any(mask.Contains);
 
+    private static bool FootprintIntersectsVoxelMask(
+        PropBoundsAuthoringPixels bounds,
+        IReadOnlySet<(int X, int Z)> mask,
+        WorkspaceMetrics metrics)
+    {
+        var step = metrics.AuthoringPixelsPerVoxel;
+        return mask.Any(cell =>
+            bounds.Right > cell.X * step
+            && bounds.Left < (cell.X + 1) * step
+            && bounds.Top > cell.Z * step
+            && bounds.Bottom < (cell.Z + 1) * step);
+    }
+
     private sealed record SelectedTemplate(
         TemplateAnchorDocument Anchor,
         SceneDocument Template);
@@ -260,7 +338,9 @@ public static class TemplateComposition
         int AuthoringX,
         int AuthoringY,
         int CellX,
-        int CellY);
+        int CellY,
+        int VoxelX,
+        int VoxelZ);
 
     private sealed class DeterministicRandom(ulong state)
     {

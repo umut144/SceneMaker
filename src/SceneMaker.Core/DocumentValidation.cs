@@ -34,6 +34,31 @@ public static partial class DocumentValidation
         if (document.SizeCells.Width <= 0 || document.SizeCells.Height <= 0)
             throw new SceneMakerDocumentException("Scene size_cells must be positive on both axes.");
 
+        if (document.VoxelCells is null)
+            throw new SceneMakerDocumentException("Scene requires voxel_cells.");
+        VoxelCellDocument? previousVoxel = null;
+        foreach (var cell in document.VoxelCells)
+        {
+            if (cell.X < 0 || cell.X >= document.SizeCells.Width
+                || cell.Z < 0 || cell.Z >= document.SizeCells.Height)
+            {
+                throw new SceneMakerDocumentException(
+                    $"Voxel ({cell.X}, {cell.Y}, {cell.Z}) lies outside size_cells.");
+            }
+            if (string.IsNullOrWhiteSpace(cell.AssetKey))
+                throw new SceneMakerDocumentException("Every filled voxel requires an asset_key.");
+            if (previousVoxel is not null
+                && (cell.Y < previousVoxel.Y
+                    || cell.Y == previousVoxel.Y && cell.Z < previousVoxel.Z
+                    || cell.Y == previousVoxel.Y && cell.Z == previousVoxel.Z
+                        && cell.X <= previousVoxel.X))
+            {
+                throw new SceneMakerDocumentException(
+                    "Voxels must be unique and canonically ordered by Y, then Z, then X.");
+            }
+            previousVoxel = cell;
+        }
+
         if (document.TerrainCells is null)
             throw new SceneMakerDocumentException("Scene requires terrain_cells.");
 
