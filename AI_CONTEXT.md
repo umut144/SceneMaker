@@ -120,6 +120,17 @@ first and last point to clamp against, its stations wrap, and it needs an
 orientation before anything can be said about its inside, so it gets its own
 entry point rather than flowing quietly through code that clamps.
 
+`RouteSurfaceGeometry` is the first consumer of that horizontal band besides
+water. A route point combines an open-chain point with a width and an absolute
+support height. Preparing it interpolates both over centerline arc length and
+reports the signed rise per metre of every authored interval. The intermediate
+height remains a double and is not snapped back to the Workspace elevation
+quantum: the quantum constrains authored support heights, whereas the surface
+between them is continuously inclined. Grade is only a geometric measurement;
+an Actor profile or generator may compare it with its own limit later. This
+foundation is not yet a Scene document, an editor tool or part of export schema
+9, and it deliberately makes no material decision before those consumers exist.
+
 A flattened loop comes back as a ring whose first point is not repeated at the
 end, with the way home carried in its own `TotalLength` rather than in the last
 station. Its orientation is derived from the shoelace area and never applied:

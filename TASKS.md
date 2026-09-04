@@ -153,6 +153,15 @@ Different cell elevations form terraces and vertical steps. A visually smooth
 ramp requires an explicit derived meshing rule or a separately authored ramp;
 the `0.125 m` quantum alone does not create inclined geometry.
 
+The engine-neutral foundation for that separately authored ramp now exists as
+`RouteSurfaceGeometry`: an open Bezier centerline with width and absolute
+support height at every point. Width and height interpolate over arc length;
+the intermediate height stays continuous rather than being snapped into cell
+steps. Its grade report is descriptive geometry, not an Actor capability. It
+is intentionally not persisted, exported or exposed in the editor yet. The
+next authoring slice must decide the route's material ownership and where the
+Actor or simulation grade limit is configured before adding a Scene schema.
+
 The same analysis should lead to a generated first-person LookDev mode. It is
 DOOM-like in use - enter the authored map, walk it and inspect stairs, tunnels,
 rivers and bridges - but it must not adopt classic DOOM's single-floor/single-

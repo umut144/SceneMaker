@@ -312,10 +312,12 @@ authoring one is refused instead.
 in the same unit as everything else here. With no water over it that is also its
 walking surface, which is what it always was; under a cut it is not, and the
 section above says how to resolve it. Ground level in `world01` is `1.0`, water
-`0.0`, a bridge deck `1.125`, a hill `2.0`; ramp cells step between them. The
-values are authored, not derived, and their step is the Workspace's authoring
-quantum. A consumer's simulation independently decides which difference an
-Actor can traverse.
+`0.0`, a bridge deck `1.125`, a hill `2.0`. Authored Terrain cells may step
+between such values, but those are terraces with vertical edges, not a smooth
+ramp. Their values are authored, not derived, and their step is the Workspace's
+authoring quantum. A consumer's simulation independently decides which
+difference an Actor can traverse. A separately authored, continuously inclined
+route is not part of export schema 9 yet.
 
 It is authored per cell, not per Asset, because one grass Asset covers valley
 floor and hill alike. `default_elevation_meters` on the Scene is the height a
