@@ -142,6 +142,42 @@ public sealed class VoxelGrid
                 changed);
     }
 
+    /// <summary>
+    /// Adds materialized cells in one immutable edit. This is used by volumes
+    /// such as hills whose columns inherit different ground materials.
+    /// </summary>
+    public VoxelGrid Add(IEnumerable<VoxelCell> cells)
+    {
+        ArgumentNullException.ThrowIfNull(cells);
+        SortedDictionary<VoxelCoordinate, VoxelCell>? changed = null;
+        foreach (var cell in cells
+            .GroupBy(static value => value.Coordinate)
+            .Select(static group => group.Last())
+            .OrderBy(static value => value.Coordinate))
+        {
+            if (string.IsNullOrWhiteSpace(cell.AssetKey))
+                throw new SceneMakerDocumentException("A filled voxel requires an asset_key.");
+            RequireHorizontalBounds(cell.Coordinate);
+            if (_cells.TryGetValue(cell.Coordinate, out var existing)
+                && existing.AssetKey == cell.AssetKey)
+            {
+                continue;
+            }
+
+            changed ??= new SortedDictionary<VoxelCoordinate, VoxelCell>(_cells);
+            changed[cell.Coordinate] = cell;
+        }
+
+        return changed is null
+            ? this
+            : new VoxelGrid(
+                WidthVoxels,
+                DepthVoxels,
+                VoxelSizeMeters,
+                SubgridMeters,
+                changed);
+    }
+
     /// <summary>Snaps an authored metre value to the 0.2 m tool subgrid.</summary>
     public decimal SnapToSubgrid(decimal meters) =>
         Math.Round(meters / SubgridMeters, MidpointRounding.AwayFromZero) * SubgridMeters;
