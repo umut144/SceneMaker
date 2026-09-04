@@ -162,6 +162,41 @@ public sealed class StandaloneWorkspaceTests
         Assert.Equal(0, tree.AnchorYAuthoringPixels);
     }
 
+    /// <summary>
+    /// The future narrow adapter may change where Placement geometry comes
+    /// from, but not what qualifies as geometry: without a visible point there
+    /// is no footprint or anchor for SceneMaker to place.
+    /// </summary>
+    [Fact]
+    public void APlacementWithoutVisibleGeometryIsRejected()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(
+            directory.Path,
+            "geometry01",
+            treeComponents: """
+                {
+                  "component_id": "body",
+                  "parent_component_id": null,
+                  "local_transform": {
+                    "position": [0.0, 0.0],
+                    "rotation_radians": 0.0,
+                    "scale": [1.0, 1.0]
+                  },
+                  "mesh": null,
+                  "contour_stroke_mesh": null
+                }
+            """);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            PolyToolsCatalogImporter.Load(directory.Path));
+
+        Assert.Contains(
+            "PolyTools asset 'tree' has no visible geometry",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void WorkspaceMetricsDriveGridAndSpatialConversions()
     {

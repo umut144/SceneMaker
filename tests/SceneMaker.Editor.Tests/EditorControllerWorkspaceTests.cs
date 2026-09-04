@@ -97,6 +97,33 @@ public sealed class EditorControllerWorkspaceTests
         Assert.Same(opened, controller.Session);
     }
 
+    /// <summary>
+    /// Placement geometry is part of today's all-or-nothing session. The
+    /// catalog boundary may become narrower, but a broken geometry source must
+    /// still fail before the candidate replaces the session the author has.
+    /// </summary>
+    [Fact]
+    public void MissingPlacementGeometryCannotReplaceTheOpenSession()
+    {
+        using var workspace = TestWorkspace.Create();
+        var controller = new EditorController();
+        Assert.True(controller.OpenWorkspaceAt(workspace.RootPath).Succeeded);
+        var opened = controller.Session;
+        File.Delete(Path.Combine(
+            workspace.RootPath,
+            PolyToolsCatalogImporter.ImportDirectoryName,
+            PolyToolsCatalogImporter.PolyToolsDirectoryName,
+            "PolyToolsRuntimeExports",
+            "stone",
+            "manifest.json"));
+
+        var report = controller.OpenWorkspaceAt(workspace.RootPath);
+
+        Assert.False(report.Succeeded);
+        Assert.Same(opened, controller.Session);
+        Assert.Contains("stone", report.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void CreatingAWorkspaceDoesNotOpenItButPointsTheDialogsAtIt()
     {
