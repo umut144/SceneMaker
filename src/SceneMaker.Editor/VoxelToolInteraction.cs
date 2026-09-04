@@ -42,6 +42,22 @@ public sealed class VoxelToolInteraction
     public IReadOnlyList<VoxelPointMeters> HillDraft => _hillDraft;
     public IReadOnlyList<VoxelPathPoint> PathDraft => _pathDraft;
 
+    public decimal NextPathElevation(
+        VoxelToolContext context,
+        VoxelPointMeters metricPoint)
+    {
+        var settings = context.Settings;
+        if (!settings.GradeFollowing || _pathDraft.Count == 0)
+            return Snap(context.Metrics, settings.PathElevationMeters);
+        var snapped = SnapPlan(context.Metrics, metricPoint);
+        var previous = _pathDraft[^1];
+        return Snap(context.Metrics, VoxelPathEditing.ElevationAtGrade(
+            previous.Position,
+            previous.ElevationMeters,
+            new VoxelPlanPointMeters(snapped.X, snapped.Z),
+            settings.PathGrade));
+    }
+
     public void SelectTool(VoxelAuthoringTool tool)
     {
         if (!Enum.IsDefined(tool)) throw new ArgumentOutOfRangeException(nameof(tool));
@@ -124,17 +140,7 @@ public sealed class VoxelToolInteraction
     {
         var snapped = SnapPlan(context.Metrics, point);
         var settings = context.Settings;
-        var elevation = settings.PathElevationMeters;
-        if (settings.GradeFollowing && _pathDraft.Count > 0)
-        {
-            var previous = _pathDraft[^1];
-            elevation = VoxelPathEditing.ElevationAtGrade(
-                previous.Position,
-                previous.ElevationMeters,
-                new VoxelPlanPointMeters(snapped.X, snapped.Z),
-                settings.PathGrade);
-        }
-        elevation = Snap(context.Metrics, elevation);
+        var elevation = NextPathElevation(context, point);
         _pathDraft.Add(new VoxelPathPoint(
             new VoxelPlanPointMeters(snapped.X, snapped.Z),
             VoxelPlanOffsetMeters.Zero,
