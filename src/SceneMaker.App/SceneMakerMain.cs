@@ -36,6 +36,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly VSeparator _toolContextSeparator = new();
     private readonly Label _sectionElevationLabel = new();
     private readonly SpinBox _sectionElevationEdit = new();
+    private readonly Label _waterHeatmapValueLabel = new();
     private readonly Label _propLineOffsetLabel = new();
     private readonly SpinBox _propLineOffsetEdit = new();
     private readonly Label _surfaceLabel = new();
@@ -368,7 +369,7 @@ public sealed partial class SceneMakerMain : Control
         _toolContextSeparator.Name = "ToolContextSeparator";
         _contextMenuBar.AddChild(_toolContextSeparator);
         _sectionElevationLabel.Name = "SectionElevationLabel";
-        _sectionElevationLabel.Text = "Section";
+        _sectionElevationLabel.Text = "Cut at";
         _sectionElevationLabel.VerticalAlignment = VerticalAlignment.Center;
         _contextMenuBar.AddChild(_sectionElevationLabel);
         _sectionElevationEdit.Name = "SectionElevation";
@@ -377,6 +378,24 @@ public sealed partial class SceneMakerMain : Control
             "Remove geometry strictly above this elevation, then look down on what remains.";
         _sectionElevationEdit.ValueChanged += SetSectionElevation;
         _contextMenuBar.AddChild(_sectionElevationEdit);
+        _waterHeatmapValueLabel.Name = "WaterHeatmapValueLabel";
+        _waterHeatmapValueLabel.Text = "Water";
+        _waterHeatmapValueLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_waterHeatmapValueLabel);
+        _waterHeatmapValueEdit.Name = "WaterHeatmapValue";
+        _waterHeatmapValueEdit.Text = "Surface";
+        _waterHeatmapValueEdit.CustomMinimumSize = new Vector2(130f, 0f);
+        _waterHeatmapValueEdit.Disabled = true;
+        var waterHeatmapMenu = _waterHeatmapValueEdit.GetPopup();
+        waterHeatmapMenu.AddRadioCheckItem("Surface", (int)WaterHeatmapValue.Surface);
+        waterHeatmapMenu.AddRadioCheckItem("Bed", (int)WaterHeatmapValue.Bed);
+        waterHeatmapMenu.AddRadioCheckItem("Cut top", (int)WaterHeatmapValue.CutTop);
+        waterHeatmapMenu.IdPressed += SetWaterHeatmapValue;
+        CheckWaterHeatmapItem(WaterHeatmapValue.Surface);
+        _waterHeatmapValueEdit.TooltipText =
+            "Which boundary of every water span the Heatmap shows. Terrain and Placements "
+            + "continue to show their own elevation.";
+        _contextMenuBar.AddChild(_waterHeatmapValueEdit);
         _propLineOffsetLabel.Name = "PropLineOffsetLabel";
         _propLineOffsetLabel.Text = "Placement Offset";
         _propLineOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -608,23 +627,6 @@ public sealed partial class SceneMakerMain : Control
         _sectionToggle.CustomMinimumSize = new Vector2(42f, 42f);
         _sectionToggle.Toggled += SetSectionEnabled;
         _toolOptionsBar.AddChild(_sectionToggle);
-        _waterHeatmapValueEdit.Name = "WaterHeatmapValue";
-        _waterHeatmapValueEdit.Text = "S";
-        _waterHeatmapValueEdit.Alignment = HorizontalAlignment.Center;
-        _waterHeatmapValueEdit.CustomMinimumSize = new Vector2(42f, 42f);
-        _waterHeatmapValueEdit.Disabled = true;
-        var waterHeatmapMenu = _waterHeatmapValueEdit.GetPopup();
-        // Radio items, so the menu shows which boundary is being drawn rather
-        // than leaving the single letter on the button to carry it alone.
-        waterHeatmapMenu.AddRadioCheckItem("Surface", (int)WaterHeatmapValue.Surface);
-        waterHeatmapMenu.AddRadioCheckItem("Bed", (int)WaterHeatmapValue.Bed);
-        waterHeatmapMenu.AddRadioCheckItem("Cut top", (int)WaterHeatmapValue.CutTop);
-        waterHeatmapMenu.IdPressed += SetWaterHeatmapValue;
-        CheckWaterHeatmapItem(WaterHeatmapValue.Surface);
-        _waterHeatmapValueEdit.TooltipText =
-            "Which boundary of every water span the height view shows. Terrain and Placements "
-            + "continue to show their own elevation.";
-        _toolOptionsBar.AddChild(_waterHeatmapValueEdit);
         UpdateToolContextLabel();
 
         var footer = new HBoxContainer { Name = "Footer" };
@@ -1889,17 +1891,17 @@ public sealed partial class SceneMakerMain : Control
         _canvas.WaterHeatmapValue = value;
         _waterHeatmapValueEdit.Text = value switch
         {
-            WaterHeatmapValue.Surface => "S",
-            WaterHeatmapValue.Bed => "B",
-            WaterHeatmapValue.CutTop => "C",
+            WaterHeatmapValue.Surface => "Surface",
+            WaterHeatmapValue.Bed => "Bed",
+            WaterHeatmapValue.CutTop => "Cut top",
             _ => throw new InvalidOperationException("Unknown water heatmap value."),
         };
         CheckWaterHeatmapItem(value);
         SetStatus(value switch
         {
-            WaterHeatmapValue.Surface => "Height view: water cells show their surface.",
-            WaterHeatmapValue.Bed => "Height view: water cells show the river bed.",
-            WaterHeatmapValue.CutTop => "Height view: water cells show the top of the Terrain cut.",
+            WaterHeatmapValue.Surface => "Heatmap: water cells show their surface.",
+            WaterHeatmapValue.Bed => "Heatmap: water cells show the river bed.",
+            WaterHeatmapValue.CutTop => "Heatmap: water cells show the top of the Terrain cut.",
             _ => throw new ArgumentOutOfRangeException(nameof(value)),
         });
     }
@@ -2117,9 +2119,13 @@ public sealed partial class SceneMakerMain : Control
         var curveActive = riverActive || pathActive
             || elevationRegionDrawing || elevationRegionPointEditing;
         var sectionActive = _canvas.PresentationMode == CanvasPresentationMode.Section;
-        _toolContextSeparator.Visible = propLineActive || curveActive || sectionActive;
+        var heatmapActive = _canvas.PresentationMode == CanvasPresentationMode.Heightmap;
+        _toolContextSeparator.Visible =
+            propLineActive || curveActive || sectionActive || heatmapActive;
         _sectionElevationLabel.Visible = sectionActive;
         _sectionElevationEdit.Visible = sectionActive;
+        _waterHeatmapValueLabel.Visible = heatmapActive;
+        _waterHeatmapValueEdit.Visible = heatmapActive;
         _propLineOffsetLabel.Visible = propLineActive;
         _propLineOffsetEdit.Visible = propLineActive;
         _curvePointModeLabel.Visible = curveActive;
@@ -2172,7 +2178,7 @@ public sealed partial class SceneMakerMain : Control
         // profile and Path derives its points from Start plus Grade, so leaving
         // the general field in either area would offer a number that changes nothing.
         var elevationRegionHeightEditing = selectedElevationRegion is not null;
-        var elevationActive = !riverActive && !pathActive
+        var elevationActive = !sectionActive && !riverActive && !pathActive
             && (!elevationRegionActive || elevationRegionDrawing || elevationRegionHeightEditing);
         _elevationLabel.Visible = elevationActive;
         _elevationEdit.Visible = elevationActive;

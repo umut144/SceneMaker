@@ -428,8 +428,8 @@ zeigt der Canvas die normale Asset-Ansicht. Die Höhenansicht (`m`) färbt Terra
 Placements und Wasser nach ihrer Höhe statt nach ihrem Asset, mit einem einzigen
 Blauton von dunkel nach hell:
 tiefer Grund tritt zum Hintergrund zurück, hoher Grund hebt sich ab. Wasser hat
-drei relevante Grenzen; die Auswahl unter dem aktivierten Schalter zeigt
-wahlweise `Surface`, `Bed` oder `Cut top`. Terrain und Placements behalten dabei ihre
+drei relevante Grenzen; die Heatmap zeigt dafür im ContextMenu das Feld `Water`
+mit `Surface`, `Bed` oder `Cut top`. Terrain und Placements behalten dabei ihre
 eigene Elevation, sodass alles auf derselben Skala vergleichbar bleibt. Die
 Skala spannt sich über die tatsächlich vorkommenden Höhen der Scene, und eine
 Legende oben rechts auf der Canvas nennt Auswahl und beide Enden — ohne sie
@@ -438,7 +438,7 @@ eine Spanne zu zeigen.
 
 Die Schnittansicht (`S`) entfernt alles strikt oberhalb einer horizontalen Ebene
 und blickt anschließend von oben auf die höchste verbleibende Oberfläche. Ihre
-Höhe steht als `Section` im ContextMenu, folgt dem
+Höhe steht als `Cut at` im ContextMenu, folgt dem
 `elevation_quantum_meters` des offenen Workspace und zeigt auch ein Quantum von
 `0.125 m` vollständig an. Eine Ebene innerhalb eines Hills zeigt dessen
 Schnittfläche; am oder über dem höchsten Punkt bleibt seine volle Oberfläche
@@ -453,7 +453,10 @@ Hill-Konturen, Raster und Anchors bleiben als technische Authoring-Hilfen
 sichtbar.
 
 Höhen- und Schnittansicht sind Sichten, keine Arbeitsmodi: Zeichnen, Platzieren,
-Radieren und Auswählen funktionieren unverändert weiter.
+Radieren und Auswählen funktionieren unverändert weiter. Das allgemeine
+Authoring-Feld `Height` ist während der Schnittansicht ausgeblendet, damit es
+nicht mit der rein visuellen Schnitthöhe `Cut at` verwechselt wird; sein
+gespeicherter Session-Wert bleibt dabei unverändert.
 
 Die `ToolOptionsBar` ist eine feste, vertikale Optionsleiste rechts neben dem
 Canvas und kein dynamisches `ContextMenu`. Ihre Elemente wechseln nicht

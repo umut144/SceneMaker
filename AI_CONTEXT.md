@@ -350,6 +350,12 @@ resolution. Moving the plane never changes the complete-document lighting
 range. Prepared columns memoize each resolved cell because a redraw asks the
 same immutable Scene repeatedly.
 
+The interface labels that transient elevation `Cut at`, not `Height`: `Height`
+remains the authoring elevation and is hidden while the Section view is active.
+The height map's water-boundary selector is contextual too; `Surface`, `Bed`
+and `Cut top` appear in the ContextMenu only while the height map is active,
+not as a third permanent control in the right-hand ToolOptionsBar.
+
 This first horizontal Section deliberately draws only what the shared column
 model resolves today: painted Terrain after Elevation Regions, plus water cuts
 and fills. Persisted Paths and Props are omitted rather than drawn over roofs
