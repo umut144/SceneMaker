@@ -212,6 +212,11 @@ the same reshape check as pointer release: a valid candidate keeps the body's
 palette colour, an invalid one turns red and is not committed. A mode change is
 checked before its edit is offered and is likewise refused with its reason.
 Point moves, handle moves and mode changes are each one undoable edit.
+The selected body's `Height` field edits its absolute top through the same
+Workspace elevation quantum used while drawing; it leaves ID and contour
+untouched and is one undoable edit. Lowering it below painted Terrain or another
+body is allowed and simply makes it ineffective in those cells, because a
+mountain raises columns and never cuts them down.
 
 The draft has three states and they answer one question - what would Enter do.
 Too few points is Incomplete and drawn neutrally, because a contour that is not

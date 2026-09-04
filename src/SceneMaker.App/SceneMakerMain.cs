@@ -1493,6 +1493,12 @@ public sealed partial class SceneMakerMain : Control
     private void SetAuthoringElevation(double value)
     {
         var elevation = ElevationOf(_elevationEdit, value);
+        if (_interaction.Mode == EditorMode.Mountain
+            && _interaction.ActiveTool == EditorTool.SelectMountain)
+        {
+            HandleToolOutcome(_canvas.SetSelectedMountainElevation(elevation));
+            return;
+        }
         _canvas.ElevationMeters = elevation;
         SetStatus($"Drawing at {elevation:0.###} m.");
     }
@@ -1899,13 +1905,15 @@ public sealed partial class SceneMakerMain : Control
         var mountainActive = _interaction.Mode == EditorMode.Mountain;
         var mountainDrawing = mountainActive
             && _interaction.ActiveTool == EditorTool.DrawMountain;
-        var selectedMountainPoint = mountainActive
+        var selectedMountainBody = mountainActive
             && _interaction.ActiveTool == EditorTool.SelectMountain
             && _canvas.SelectedMountainBodyId is { } selectedBodyId
-            && _canvas.SelectedMountainPointIndex is { } selectedPointIndex
             ? _controller.Document?.MountainBodies
                 .FirstOrDefault(body => body.MountainBodyId == selectedBodyId)
-                ?.Points.ElementAtOrDefault(selectedPointIndex)
+            : null;
+        var selectedMountainPoint = selectedMountainBody is not null
+            && _canvas.SelectedMountainPointIndex is { } selectedPointIndex
+            ? selectedMountainBody.Points.ElementAtOrDefault(selectedPointIndex)
             : null;
         var mountainPointEditing = selectedMountainPoint is not null;
         var curveActive = riverActive || mountainDrawing || mountainPointEditing;
@@ -1944,9 +1952,17 @@ public sealed partial class SceneMakerMain : Control
         _waterDerivedSpanLabel.Visible = riverActive;
         // Height authors Terrain and Props. Water carries its own three, so
         // leaving it in reach here would offer a number that changes nothing.
-        var elevationActive = !riverActive && (!mountainActive || mountainDrawing);
+        var mountainHeightEditing = selectedMountainBody is not null;
+        var elevationActive = !riverActive
+            && (!mountainActive || mountainDrawing || mountainHeightEditing);
         _elevationLabel.Visible = elevationActive;
         _elevationEdit.Visible = elevationActive;
+        _elevationEdit.SetValueNoSignal((double)(mountainHeightEditing
+            ? selectedMountainBody!.ElevationMeters
+            : _canvas.ElevationMeters));
+        _elevationEdit.TooltipText = mountainHeightEditing
+            ? "The selected Mountain body's absolute top elevation."
+            : "The height the drawing tools author at.";
     }
 
     /// <summary>

@@ -516,6 +516,30 @@ public sealed class ToolMountainTests
     }
 
     [Fact]
+    public void TheHeightFieldChangesTheSelectedMountainWithoutChangingItsShape()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = MountainEditing.Place(
+            TestScenes.Instance(workspace),
+            workspace.Metrics,
+            Square(32, 32, 160, 160),
+            4m);
+        var interaction = Mountain(EditorTool.SelectMountain);
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(80, 80), Cell(2, 2));
+        var before = scene.MountainBodies[0];
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(
+            interaction.SetSelectedMountainElevation(context, 6.125m));
+        var after = Assert.Single(edit.Apply(scene).MountainBodies);
+
+        Assert.Equal("mountain_0001", interaction.SelectedMountainBodyId);
+        Assert.Equal(before.MountainBodyId, after.MountainBodyId);
+        Assert.Equal(6.125m, after.ElevationMeters);
+        Assert.Same(before.Points, after.Points);
+    }
+
+    [Fact]
     public void AnInvalidPointMoveTurnsThePreviewBlockedAndIsNotCommitted()
     {
         using var workspace = TestWorkspace.Create();

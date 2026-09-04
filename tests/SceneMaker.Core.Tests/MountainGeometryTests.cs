@@ -147,6 +147,47 @@ public sealed class MountainGeometryTests
     }
 
     [Fact]
+    public void ChangingAMountainTopPreservesItsIdentityAndContour()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = MountainEditing.Place(
+            TestScenes.Instance(workspace),
+            workspace.Metrics,
+            Square(32, 32, 160, 160),
+            4m);
+        var before = scene.MountainBodies[0];
+
+        var changed = MountainEditing.SetElevation(
+            scene, workspace.Metrics, before.MountainBodyId, 6.125m);
+
+        var after = Assert.Single(changed.MountainBodies);
+        Assert.Equal(before.MountainBodyId, after.MountainBodyId);
+        Assert.Equal(6.125m, after.ElevationMeters);
+        Assert.Same(before.Points, after.Points);
+        Assert.Equal(
+            16,
+            MountainGeometry.EffectiveTerrainCells(changed, workspace.Metrics)
+                .Count(static cell => cell.ElevationMeters == 6.125m));
+    }
+
+    [Fact]
+    public void ChangingAMountainTopRequiresTheWorkspaceElevationQuantum()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = MountainEditing.Place(
+            TestScenes.Instance(workspace),
+            workspace.Metrics,
+            Square(32, 32, 160, 160),
+            4m);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            MountainEditing.SetElevation(
+                scene, workspace.Metrics, "mountain_0001", 6.01m));
+
+        Assert.Contains("elevation quantum", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ASquareMountainRaisesExactlyThePaintedCellsInsideItsContour()
     {
         using var workspace = TestWorkspace.Create();

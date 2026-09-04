@@ -333,8 +333,11 @@ wird sie rot und die Änderung wird nicht gespeichert. Ein ungültiger
 Moduswechsel wird mit demselben Grund abgelehnt und das Feld auf den
 gespeicherten Modus zurückgesetzt. Jede gültige Änderung ist genau ein
 Undo-Schritt. Escape und ein Klick ins Leere heben die Auswahl auf. `Height`
-bleibt in diesem Werkzeug ausgeblendet: diese Scheibe bearbeitet die Form,
-nicht die absolute Oberkante des Körpers.
+zeigt bei einer Körperauswahl dessen absolute Oberkante und ändert sie auf dem
+Höhenquantum des Workspaces; ID und Kontur bleiben dabei unangetastet. Eine
+niedrigere Oberkante darf wirkungslos unter bereits höherem Terrain liegen,
+weil ein Berg niemals nach unten schneidet. Ohne gewählten Körper bleibt
+`Height` ausgeblendet.
 
 Die Canvasdarstellung verwendet bereits das gefaltete Höhenfeld aus gemalten
 Zellen und Bergkörpern. Dadurch sieht der Autor genau die Terrainzellen, die

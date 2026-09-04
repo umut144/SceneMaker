@@ -703,6 +703,41 @@ public sealed class ToolInteraction
                 $"Changed point {pointIndex + 1} of '{bodyId}' to {mode}.");
     }
 
+    /// <summary>Changes the selected body's absolute top as one document edit.</summary>
+    public ToolOutcome SetSelectedMountainElevation(
+        ToolContext context,
+        decimal elevationMeters)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (Mode != EditorMode.Mountain || ActiveTool != EditorTool.SelectMountain
+            || SelectedMountainBodyId is not { } bodyId)
+        {
+            return new ToolOutcome.Message("Select a Mountain before changing its height.");
+        }
+
+        var body = context.Scene.MountainBodies.FirstOrDefault(candidate => string.Equals(
+            candidate.MountainBodyId, bodyId, StringComparison.Ordinal));
+        if (body is null)
+            return new ToolOutcome.Message("The selected Mountain no longer exists.");
+        if (body.ElevationMeters == elevationMeters) return ToolOutcome.Idle.Instance;
+
+        try
+        {
+            _ = MountainEditing.SetElevation(
+                context.Scene, context.Metrics, bodyId, elevationMeters);
+        }
+        catch (SceneMakerDocumentException exception)
+        {
+            return new ToolOutcome.Message($"Change Mountain Height blocked: {exception.Message}");
+        }
+        return new ToolOutcome.Edit(
+            "Change Mountain Height",
+            document => MountainEditing.SetElevation(
+                document, context.Metrics, bodyId, elevationMeters),
+            Describe: (_, _) =>
+                $"Changed '{bodyId}' top to {elevationMeters:0.###} m.");
+    }
+
     private IReadOnlyList<MountainCurvePointDocument>? MountainCandidatePoints(
         ToolContext context)
     {

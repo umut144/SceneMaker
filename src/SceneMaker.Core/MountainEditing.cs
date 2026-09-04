@@ -71,6 +71,43 @@ public static class MountainEditing
     }
 
     /// <summary>
+    /// Changes one body's absolute top without changing its identity or shape.
+    /// A lower top is valid even when it raises nothing: mountains never cut
+    /// painted Terrain down, and a later edit may make the body effective again.
+    /// </summary>
+    public static SceneDocument SetElevation(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        string mountainBodyId,
+        decimal elevationMeters)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentException.ThrowIfNullOrWhiteSpace(mountainBodyId);
+        if (!metrics.IsElevationAligned(elevationMeters))
+        {
+            throw new SceneMakerDocumentException(
+                FormattableString.Invariant(
+                    $"Mountain elevation {elevationMeters:0.############################} m must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m."));
+        }
+
+        var found = false;
+        var bodies = scene.MountainBodies.Select(body =>
+        {
+            if (!string.Equals(body.MountainBodyId, mountainBodyId, StringComparison.Ordinal))
+                return body;
+            found = true;
+            return body with { ElevationMeters = elevationMeters };
+        }).ToList();
+        if (!found)
+        {
+            throw new SceneMakerDocumentException(
+                $"Mountain body '{mountainBodyId}' does not exist.");
+        }
+        return scene with { MountainBodies = bodies };
+    }
+
+    /// <summary>
     /// Replaces one body's contour without changing its identity or top. The
     /// contour remains authored truth; its cells are derived again wherever
     /// the Scene is drawn or exported.

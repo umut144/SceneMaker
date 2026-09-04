@@ -251,6 +251,14 @@ public sealed partial class SceneCanvas : Control
         return outcome;
     }
 
+    public ToolOutcome SetSelectedMountainElevation(decimal elevationMeters)
+    {
+        if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
+        var outcome = _interaction.SetSelectedMountainElevation(context, elevationMeters);
+        QueueRedraw();
+        return outcome;
+    }
+
     public void ConfigureTerrainAssets(TerrainDisplayCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
