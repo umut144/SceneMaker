@@ -69,17 +69,16 @@ public static class WorkspaceStore
         }
     }
 
-    public static LoadedWorkspace Load(string workspaceDirectory, PolyToolsCatalog catalog)
+    public static LoadedWorkspace Load(string workspaceDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
-        ArgumentNullException.ThrowIfNull(catalog);
         var directory = Path.GetFullPath(workspaceDirectory);
 
         try
         {
             if (!Directory.Exists(directory))
                 throw new SceneMakerDocumentException($"Workspace directory '{directory}' does not exist.");
-            var configuration = WorkspaceConfigurationStore.Load(directory, catalog);
+            var configuration = WorkspaceConfigurationStore.Load(directory);
             var directoryName = Path.GetFileName(directory.TrimEnd(
                 Path.DirectorySeparatorChar,
                 Path.AltDirectorySeparatorChar));

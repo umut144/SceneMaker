@@ -24,8 +24,40 @@ public sealed class WorkspaceSessionTests
         Assert.Equal(
             ["portal", "stone"],
             session.PropAssets.Assets.Select(asset => asset.AssetKey));
+        Assert.Equal("Water", session.TerrainAssets.Resolve("river").Name);
+        Assert.Equal("River", session.Catalog.Resolve("river").Name);
         Assert.Equal(5, session.Catalog.Assets.Count);
         Assert.Equal(session.Configuration.Metrics, session.Metrics);
+    }
+
+    [Fact]
+    public void SceneMakerCanAuthorTerrainThatHasNoPolyToolsAsset()
+    {
+        using var workspace = TestWorkspace.Create();
+        var session = WorkspaceSession.Load(workspace.RootPath);
+
+        var derived = session.WithAssetProfiles(
+            [new WorkspaceAssetProfile(
+                "bog", "Bog", WorkspaceAssetRole.Terrain,
+                "#516B3A", "mud", TerrainAuthoring.Cells)]);
+
+        Assert.Equal("Bog", derived.TerrainAssets.Resolve("bog").Name);
+        Assert.Empty(derived.PropAssets.Assets);
+    }
+
+    [Fact]
+    public void SceneMakerRoleDoesNotComeFromThePolyToolsAssetType()
+    {
+        using var workspace = TestWorkspace.Create();
+        var session = WorkspaceSession.Load(workspace.RootPath);
+
+        var derived = session.WithAssetProfiles(
+            [new WorkspaceAssetProfile(
+                "portal", "Portal Floor", WorkspaceAssetRole.Terrain,
+                "#8E6CFF", "land", TerrainAuthoring.Cells)]);
+
+        Assert.Equal("Portal Floor", derived.TerrainAssets.Resolve("portal").Name);
+        Assert.Empty(derived.PropAssets.Assets);
     }
 
     [Fact]
@@ -64,7 +96,13 @@ public sealed class WorkspaceSessionTests
         var session = WorkspaceSession.Load(workspace.RootPath);
 
         var narrowed = session.WithAssetProfiles(
-            [new WorkspaceAssetProfile("grass", "#99E550", "land", TerrainAuthoring.Cells), new WorkspaceAssetProfile("stone", "#808080")]);
+            [
+                new WorkspaceAssetProfile(
+                    "grass", "Grass", WorkspaceAssetRole.Terrain,
+                    "#99E550", "land", TerrainAuthoring.Cells),
+                new WorkspaceAssetProfile(
+                    "stone", "Stone", WorkspaceAssetRole.Placement, "#808080"),
+            ]);
 
         Assert.Equal(["grass"], narrowed.TerrainAssets.Assets.Select(asset => asset.AssetKey));
         Assert.Equal(["stone"], narrowed.PropAssets.Assets.Select(asset => asset.AssetKey));
@@ -80,18 +118,22 @@ public sealed class WorkspaceSessionTests
         var stored = File.ReadAllText(configPath);
         var session = WorkspaceSession.Load(workspace.RootPath);
 
-        _ = session.WithAssetProfiles([new WorkspaceAssetProfile("grass", "#99E550", "land", TerrainAuthoring.Cells)]);
+        _ = session.WithAssetProfiles(
+            [new WorkspaceAssetProfile(
+                "grass", "Grass", WorkspaceAssetRole.Terrain,
+                "#99E550", "land", TerrainAuthoring.Cells)]);
 
         Assert.Equal(stored, File.ReadAllText(configPath));
     }
 
     [Fact]
-    public void DerivingRejectsAnAssetTheCatalogDoesNotKnow()
+    public void DerivingRejectsAPlacementWhoseGeometryTheCatalogDoesNotKnow()
     {
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
 
         Assert.Throws<SceneMakerDocumentException>(() =>
-            session.WithAssetProfiles([new WorkspaceAssetProfile("nowhere", "#FFFFFF")]));
+            session.WithAssetProfiles([new WorkspaceAssetProfile(
+                "nowhere", "Nowhere", WorkspaceAssetRole.Placement, "#FFFFFF")]));
     }
 }

@@ -3,43 +3,33 @@
 SceneMaker is a standalone semantic scene authoring tool. A workspace is one
 game and contains its own scene/template data and `config.json`.
 
-Today each Workspace consumes a synchronized copy of the current PolyTools
-Runtime Export below `imports/polytools/`. PolyTools Catalog schema 1 is the closed
-Asset set; Runtime Manifest schema 16 supplies geometry, hierarchy, Asset
-References, pivots, and validated gameplay Regions. Authored and
-Component-bound Regions remain distinct, do not contribute to SceneMaker's
-visible Asset bounds, and older Manifest schemas are rejected. SceneMaker never
-discovers packages by scanning directories and never reads a sibling PolyTools
-project at runtime.
+The Workspace configuration is SceneMaker's closed authoring catalog. Besides
+the grid metrics it owns every enabled Asset's stable `asset_key`, display name,
+SceneMaker role, editor color and, for Terrain, its surface token and authoring
+kind. A surface is an open lower_snake_case token such as `land` or `water`,
+held per Asset rather than per cell so that one Terrain Asset cannot contradict
+itself. Terrain and curve Assets need no PolyTools package merely to exist.
 
-The workspace configuration supplies terrain-cell size, authoring/game pixel
-densities, enabled assets, editor colors, the surface each Terrain Asset
-presents to a consumer's simulation, and how each Terrain Asset is authored -
-painted as cells or drawn as a curve; whether an Asset is Terrain or a Prop is
-PolyTools catalog data and is never overridden. A surface is an open
-lower_snake_case token such as `land` or `water`, held per Asset rather than per
-cell so that one Terrain Asset cannot contradict itself. Prop footprints and
-anchors are derived from transformed PolyTools visible geometry and rounded
-outward to whole authoring pixels. Scenes store only semantic terrain, props,
-template anchors, and exact PolyTools `asset_key`s.
+Today each Workspace also consumes a synchronized copy of the current PolyTools
+Runtime Export below `imports/polytools/`. For SceneMaker Assets whose role is
+`placement`, the matching PolyTools Asset contributes visible bounds and its
+pivot/anchor; SceneMaker derives the footprint from that transformed geometry
+and rounds it outward to whole authoring pixels. The current importer still
+loads and validates Catalog schema 1 and every referenced Runtime Manifest
+schema 16, including hierarchy, Asset References and gameplay Regions, even
+though SceneMaker uses none of those other facts. Narrowing that import is
+tracked work. SceneMaker never discovers packages by scanning directories and
+never reads a sibling PolyTools project at runtime.
 
-## Authoring ownership direction
+## Authoring ownership
 
-The synchronized catalog above describes the current implementation, not the
-intended product boundary. SceneMaker's navigation must be explicit and stable;
-it must not grow, shrink or rename its authoring areas from whichever Assets a
-PolyTools export happens to contain. SceneMaker owns its author-facing names,
-areas, semantic roles, colors, surface tokens and authoring kinds. That is what
-lets the River tool offer `Water`, `Lava` or `Mud` without borrowing the name of
-a PolyTools package.
-
-PolyTools is intended to become a narrow, optional geometry source for
-Placements. The join is a stable `asset_key`; the information SceneMaker needs
-from that side is the footprint and pivot/anchor derived from visible geometry.
-Terrain and curve surfaces do not need a PolyTools package merely to exist in
-SceneMaker. The present importer still supplies names, Terrain/Prop
-classification and a closed Asset set, so reaching this boundary is deferred
-work rather than a claim that the code already has it.
+SceneMaker's navigation is explicit and stable: it does not grow, shrink or
+rename its authoring areas from whichever Assets a PolyTools export happens to
+contain. SceneMaker owns its author-facing names, roles, colors, surface tokens
+and authoring kinds. That lets the River tool offer `Water`, `Lava` or `Mud`
+without borrowing the name or type of a PolyTools package. A PolyTools
+`asset_type` is never translated into a SceneMaker role; only a configured
+Placement requests geometry with the same `asset_key`.
 
 The editor calls spatial map objects **Placements** because that is what an
 author does with them. Internal types such as `PropDocument`, the
@@ -324,10 +314,11 @@ composition algorithm a runtime has to follow to agree with SceneMaker's own
 preview. Hand that file to a consumer rather than this one.
 
 SceneMaker has no runtime dependency on PolyTools or the source game project.
-Later consumers receive a small generic JSON export; they resolve the same
-`asset_key`s in their own PolyTools content boundaries. Each export is a
-versioned snapshot of one Scene, the Workspace grid, and derived enabled asset
-profiles; editor colors and raw PolyTools documents are not exported.
+Later consumers receive a small generic JSON export and resolve its stable
+`asset_key`s in their own content boundaries. Each export is a versioned
+snapshot of one Scene, the Workspace grid, and derived enabled Asset profiles;
+editor colors, author-facing display names and raw PolyTools documents are not
+exported.
 
 Scene Templates are exported as their own files rather than embedded in the map
 that uses them, so that a Template can be added, replaced or removed between

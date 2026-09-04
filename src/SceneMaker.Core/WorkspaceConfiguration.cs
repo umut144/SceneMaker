@@ -34,9 +34,20 @@ public enum TerrainAuthoring
 }
 
 /// <summary>
-/// SceneMaker owns enablement, authoring color and, for Terrain, the surface an
-/// Asset presents and the way it is authored. Whether an Asset is Terrain or a
-/// Prop is PolyTools catalog data and is never overridden here.
+/// What an Asset means to SceneMaker's authoring model. This is Workspace data,
+/// never a translation of a PolyTools asset_type.
+/// </summary>
+public enum WorkspaceAssetRole
+{
+    Terrain,
+    Placement,
+}
+
+/// <summary>
+/// SceneMaker's closed authoring identity for one enabled Asset. Display name,
+/// role, color and Terrain semantics all belong to the Workspace; PolyTools may
+/// contribute geometry to a Placement with the same stable key, but it does not
+/// name or classify the Asset for SceneMaker.
 ///
 /// <para><see cref="Surface"/> is the domain a consumer's simulation reasons
 /// about - "land", "water", and whatever comes later. It is an open token on
@@ -46,6 +57,8 @@ public enum TerrainAuthoring
 /// </summary>
 public sealed record WorkspaceAssetProfile(
     string AssetKey,
+    string DisplayName,
+    WorkspaceAssetRole Role,
     string Color,
     string? Surface = null,
     TerrainAuthoring? Authoring = null);
@@ -77,16 +90,15 @@ public sealed class WorkspaceConfiguration
                 $"Workspace '{WorkspaceKey}' does not enable asset_key '{assetKey}'.");
 
     public WorkspaceConfiguration WithAssetProfiles(
-        IEnumerable<WorkspaceAssetProfile> assetProfiles,
-        PolyToolsCatalog catalog) =>
-        WorkspaceConfigurationStore.Create(WorkspaceKey, Grid, assetProfiles, catalog);
+        IEnumerable<WorkspaceAssetProfile> assetProfiles) =>
+        WorkspaceConfigurationStore.Create(WorkspaceKey, Grid, assetProfiles);
 }
 
 public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 7;
+    public const int Version = 8;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -98,17 +110,16 @@ public static class WorkspaceConfigurationStore
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
     };
 
-    public static WorkspaceConfiguration Load(string workspaceDirectory, PolyToolsCatalog catalog)
+    public static WorkspaceConfiguration Load(string workspaceDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
-        ArgumentNullException.ThrowIfNull(catalog);
         var path = Path.Combine(Path.GetFullPath(workspaceDirectory), FileName);
         try
         {
             var document = JsonSerializer.Deserialize<ConfigurationDocument>(
                 File.ReadAllText(path), JsonOptions)
                 ?? throw new SceneMakerDocumentException("Workspace config must not be JSON null.");
-            return Parse(document, catalog);
+            return Parse(document);
         }
         catch (SceneMakerDocumentException)
         {
@@ -124,13 +135,11 @@ public static class WorkspaceConfigurationStore
     public static WorkspaceConfiguration Create(
         string workspaceKey,
         WorkspaceGridConfiguration grid,
-        IEnumerable<WorkspaceAssetProfile> profiles,
-        PolyToolsCatalog catalog)
+        IEnumerable<WorkspaceAssetProfile> profiles)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceKey);
         ArgumentNullException.ThrowIfNull(grid);
         ArgumentNullException.ThrowIfNull(profiles);
-        ArgumentNullException.ThrowIfNull(catalog);
         var document = new ConfigurationDocument
         {
             Format = Format,
@@ -147,12 +156,14 @@ public static class WorkspaceConfigurationStore
             Assets = profiles.Select(profile => new AssetProfileDocument
             {
                 AssetKey = profile.AssetKey,
+                DisplayName = profile.DisplayName,
+                Role = profile.Role,
                 Color = profile.Color,
                 Surface = profile.Surface,
                 Authoring = profile.Authoring,
             }).ToList(),
         };
-        return Parse(document, catalog);
+        return Parse(document);
     }
 
     public static void Save(string workspaceDirectory, WorkspaceConfiguration configuration)
@@ -175,6 +186,8 @@ public static class WorkspaceConfigurationStore
             Assets = configuration.AssetProfiles.Select(profile => new AssetProfileDocument
             {
                 AssetKey = profile.AssetKey,
+                DisplayName = profile.DisplayName,
+                Role = profile.Role,
                 Color = profile.Color,
                 Surface = profile.Surface,
                 Authoring = profile.Authoring,
@@ -209,19 +222,25 @@ public static class WorkspaceConfigurationStore
         AtomicTextFile.WriteNew(path, document);
     }
 
-    private static void ValidateProfile(AssetProfileDocument entry, PolyToolsCatalogAsset catalogAsset)
+    private static void ValidateProfile(AssetProfileDocument entry)
     {
         if (string.IsNullOrWhiteSpace(entry.AssetKey)
+            || string.IsNullOrWhiteSpace(entry.DisplayName)
             || string.IsNullOrWhiteSpace(entry.Color)
             || entry.Color.Length != 7
             || entry.Color[0] != '#'
             || !entry.Color[1..].All(Uri.IsHexDigit))
         {
             throw new SceneMakerDocumentException(
-                "Every Workspace asset profile requires asset_key and a #RRGGBB color.");
+                "Every Workspace asset profile requires asset_key, display_name, role, and a #RRGGBB color.");
         }
 
-        var isTerrain = catalogAsset.AssetType == PolyToolsAssetType.Terrain;
+        if (!Enum.IsDefined(entry.Role))
+        {
+            throw new SceneMakerDocumentException(
+                $"Asset '{entry.AssetKey}' declares an unsupported SceneMaker role.");
+        }
+        var isTerrain = entry.Role == WorkspaceAssetRole.Terrain;
         if (isTerrain && entry.Surface is null)
         {
             throw new SceneMakerDocumentException(
@@ -230,7 +249,7 @@ public static class WorkspaceConfigurationStore
         if (!isTerrain && entry.Surface is not null)
         {
             throw new SceneMakerDocumentException(
-                $"Asset '{entry.AssetKey}' is not Terrain and must not declare a surface.");
+                $"Placement Asset '{entry.AssetKey}' must not declare a surface.");
         }
         // Asked of the Asset instead of guessed from its surface, so that which
         // tools it offers - and whether it may be painted at all - is authored
@@ -243,7 +262,7 @@ public static class WorkspaceConfigurationStore
         if (!isTerrain && entry.Authoring is not null)
         {
             throw new SceneMakerDocumentException(
-                $"Asset '{entry.AssetKey}' is not Terrain and must not declare an authoring.");
+                $"Placement Asset '{entry.AssetKey}' must not declare an authoring.");
         }
         if (entry.Authoring is { } authoring && !Enum.IsDefined(authoring))
         {
@@ -268,19 +287,12 @@ public static class WorkspaceConfigurationStore
         && value.All(static character => character is (>= 'a' and <= 'z') or '_')
         && !value.Contains("__", StringComparison.Ordinal);
 
-    private static WorkspaceConfiguration Parse(
-        ConfigurationDocument document,
-        PolyToolsCatalog catalog)
+    private static WorkspaceConfiguration Parse(ConfigurationDocument document)
     {
         if (document.Format != Format || document.Version != Version)
             throw new SceneMakerDocumentException($"Workspace config must use {Format} version {Version}.");
         if (string.IsNullOrWhiteSpace(document.WorkspaceKey))
             throw new SceneMakerDocumentException("Workspace config requires workspace_key.");
-        if (!string.Equals(document.WorkspaceKey, catalog.WorldKey, StringComparison.Ordinal))
-        {
-            throw new SceneMakerDocumentException(
-                $"Workspace '{document.WorkspaceKey}' requires PolyTools world '{document.WorkspaceKey}', not '{catalog.WorldKey}'.");
-        }
         if (document.Grid is null || document.Grid.TerrainCellMeters <= 0m
             || document.Grid.AuthoringPixelsPerMeter <= 0m || document.Grid.GamePixelsPerMeter <= 0m
             || document.Grid.WaterCellMeters <= 0m
@@ -302,10 +314,15 @@ public static class WorkspaceConfigurationStore
         SortedDictionary<string, WorkspaceAssetProfile> profiles = new(StringComparer.Ordinal);
         foreach (var entry in document.Assets)
         {
-            var catalogAsset = catalog.Resolve(entry.AssetKey);
-            ValidateProfile(entry, catalogAsset);
+            DocumentValidation.ValidateStableId("Workspace asset_key", entry.AssetKey);
+            ValidateProfile(entry);
             var profile = new WorkspaceAssetProfile(
-                entry.AssetKey, entry.Color, entry.Surface, entry.Authoring);
+                entry.AssetKey,
+                entry.DisplayName,
+                entry.Role,
+                entry.Color,
+                entry.Surface,
+                entry.Authoring);
             if (!profiles.TryAdd(entry.AssetKey, profile))
             {
                 throw new SceneMakerDocumentException(
@@ -336,6 +353,8 @@ public static class WorkspaceConfigurationStore
     private sealed record AssetProfileDocument
     {
         public required string AssetKey { get; init; }
+        public required string DisplayName { get; init; }
+        public required WorkspaceAssetRole Role { get; init; }
         public required string Color { get; init; }
         public string? Surface { get; init; }
         public TerrainAuthoring? Authoring { get; init; }

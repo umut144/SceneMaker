@@ -41,11 +41,13 @@ public static class PropDisplayCatalogLoader
 {
     public static PropDisplayCatalog Load(PolyToolsCatalog catalog, WorkspaceConfiguration workspace)
     {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(workspace);
         SortedDictionary<string, PropDisplayAsset> assets = new(StringComparer.Ordinal);
         foreach (var profile in workspace.AssetProfiles)
         {
+            if (profile.Role != WorkspaceAssetRole.Placement) continue;
             var catalogAsset = catalog.Resolve(profile.AssetKey);
-            if (catalogAsset.AssetType != PolyToolsAssetType.Prop) continue;
             assets.Add(profile.AssetKey, Create(
                 profile, catalogAsset, workspace.Grid.AuthoringPixelsPerMeter));
         }
@@ -74,7 +76,7 @@ public static class PropDisplayCatalogLoader
                 $"Asset '{profile.AssetKey}' PolyTools pivot lies outside its visible authoring footprint.");
         return new PropDisplayAsset(
             profile.AssetKey,
-            catalogAsset.Name,
+            profile.DisplayName,
             profile.Color,
             width / authoringPixelsPerMeter,
             height / authoringPixelsPerMeter,

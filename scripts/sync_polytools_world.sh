@@ -18,13 +18,9 @@ cleanup() {
     if [[ -e "$backup_dir/polytools" ]]; then
       mv "$backup_dir/polytools" "$destination_dir"
     fi
-    if [[ -f "$backup_dir/config.json" ]]; then
-      cp "$backup_dir/config.json" "$config_path"
-    fi
   fi
   [[ -z "${staging_dir:-}" ]] || rm -rf -- "$staging_dir"
   [[ -z "${backup_dir:-}" ]] || rm -rf -- "$backup_dir"
-  [[ -z "${staged_config:-}" ]] || rm -f -- "$staged_config"
   if ((status == 0)); then
     printf '%s\n' 'POLYTOOLS -> SCENEMAKER SYNC SUCCESS'
   else
@@ -71,7 +67,7 @@ fi
 world_key="$(jq -r '.world_key' "$source_catalog")"
 if ! jq -e --arg world "$world_key" '
   .format == "scene_maker_workspace"
-  and .version == 7
+  and .version == 8
   and .workspace_key == $world
   and (.grid.terrain_cell_meters | type == "number" and . > 0)
   and (.grid.authoring_pixels_per_meter | type == "number" and . > 0)
@@ -79,28 +75,36 @@ if ! jq -e --arg world "$world_key" '
   and (.grid.water_cell_meters | type == "number" and . > 0)
   and (.grid.elevation_quantum_meters | type == "number" and . > 0)
   and (.assets | type == "array")
+  and all(.assets[];
+    (.asset_key | type == "string" and length > 0)
+    and (.display_name | type == "string" and length > 0)
+    and (.role == "terrain" or .role == "placement")
+    and (.color | type == "string" and test("^#[0-9A-Fa-f]{6}$"))
+    and if .role == "terrain" then
+      (.surface | type == "string" and length > 0)
+      and (.authoring == "cells" or .authoring == "curve")
+    else
+      (has("surface") | not) and (has("authoring") | not)
+    end)
+  and (([.assets[].asset_key] | unique | length) == ([.assets[].asset_key] | length))
 ' "$config_path" >/dev/null; then
-  printf 'ERROR: SceneMaker config must be version 7 for PolyTools world %s.\n' "$world_key" >&2
+  printf 'ERROR: SceneMaker config must be a valid version 8 catalog for PolyTools world %s.\n' "$world_key" >&2
   exit 1
 fi
 if ! jq -e --slurpfile catalog "$source_catalog" '
   . as $config
-  | all($catalog[0].assets[];
-      .asset_type != "terrain"
+  | all($config.assets[];
+      .role != "placement"
       or (.asset_key as $key
-        | any($config.assets[];
-            .asset_key == $key
-            and (.surface | type == "string" and length > 0)
-            and (.authoring == "cells" or .authoring == "curve"))))
+        | any($catalog[0].assets[]; .asset_key == $key)))
 ' "$config_path" >/dev/null; then
-  printf '%s\n' 'ERROR: every synchronized Terrain Asset needs an authored surface and authoring mode in the SceneMaker config.' >&2
+  printf '%s\n' 'ERROR: every SceneMaker Placement needs matching PolyTools geometry.' >&2
   exit 1
 fi
 
 mkdir -p "$import_parent"
 staging_dir="$(mktemp -d "$import_parent/.polytools-staging.XXXXXX")"
 backup_dir="$(mktemp -d "$import_parent/.polytools-backup.XXXXXX")"
-staged_config="$(mktemp "$workspace_dir/.config-staging.XXXXXX")"
 published_import=0
 
 while IFS=$'\t' read -r asset_key asset_type runtime_package; do
@@ -170,33 +174,8 @@ done < <(jq -r '.assets[] | [.asset_key, .asset_type, .runtime_package] | @tsv' 
 
 cp "$source_catalog" "$staging_dir/catalog.json"
 
-jq --slurpfile catalog "$source_catalog" '
-  .assets as $existing
-  | .assets = [
-      $catalog[0].assets[]
-      | select(.asset_type == "terrain" or .asset_type == "props")
-      | . as $source
-      | ($existing | map(select(.asset_key == $source.asset_key)) | first) as $old
-      | (if $source.asset_type == "terrain"
-         then {
-           asset_key: $source.asset_key,
-           color: ($old.color // "#99E550"),
-           surface: $old.surface,
-           authoring: $old.authoring
-         }
-         else {
-           asset_key: $source.asset_key,
-           color: ($old.color // "#808080")
-         }
-         end)
-    ]
-  | .assets |= sort_by(.asset_key)
-' "$config_path" >"$staged_config"
-
 if [[ -e "$destination_dir" ]]; then
   mv "$destination_dir" "$backup_dir/polytools"
 fi
-cp "$config_path" "$backup_dir/config.json"
 mv "$staging_dir" "$destination_dir"
 published_import=1
-mv "$staged_config" "$config_path"

@@ -168,32 +168,28 @@ It should expose mistakes the top-down view cannot: insufficient headroom,
 unsupported or unreachable surfaces, an unintended tunnel roof, and whether a
 boat or walker can actually pass beneath a bridge.
 
-## 8. SceneMaker still borrows its authoring catalog from PolyTools
+## 8. The PolyTools import is still broader than Placement geometry
 
-`PolyToolsCatalogImporter`, `WorkspaceSession`, and the two display-catalog
-loaders currently make the synchronized PolyTools catalog the closed Asset set.
-That gives PolyTools authority over display names and Terrain/Prop
-classification, and a missing or incompatible manifest can prevent the whole
-Workspace from opening even when the author only wants to edit Terrain, River
-or Mountain. It also makes the UI look dynamic by accident: its vocabulary is
-whatever the imported catalog happens to call an Asset.
+SceneMaker now owns its closed authoring catalog in `config.json`: enablement,
+display name, role, editor color, surface token and authoring kind. Terrain and
+curve Assets no longer need a PolyTools entry, and a PolyTools `asset_type`
+cannot decide their SceneMaker role. Placements alone join to imported visible
+bounds and a pivot/anchor by stable `asset_key`.
 
-The intended boundary is narrower. SceneMaker owns its authoring catalog:
-enablement, author-facing display name, SceneMaker role, editor color, surface
-token and authoring kind. Its navigation remains an explicit product structure
-and is never derived from imported packages. A PolyTools adapter may supply a
-Placement's visible footprint and pivot/anchor, joined by a stable `asset_key`;
-those geometry facts are the only PolyTools data SceneMaker currently needs.
-Terrain and curve surfaces must not require a PolyTools package merely to be
-authorable.
+The loader and sync boundary remain broader than that semantic dependency.
+`PolyToolsCatalogImporter` still reads and validates the complete synchronized
+catalog and every referenced Manifest before a Workspace opens, and the sync
+script still copies all packages. A broken, unrelated Terrain or Character
+Manifest can therefore block authors who only need SceneMaker Terrain, River or
+Mountain. Narrow the imported document and synchronization to the geometry
+entries requested by configured Placements, while preserving atomic Workspace
+loading, footprint rounding and anchor behavior pinned by the characterization
+tests.
 
-Do not implement this as another role override layered on top of PolyTools's
-Asset type. Introduce one SceneMaker-owned source of authoring identity and make
-the geometry import an input to the Placement entries that request it. Preserve
-the exact `asset_key` in the export so the consumer can continue resolving its
-own content. Characterization tests must first pin footprint rounding, anchors,
-missing geometry and atomic Workspace loading; this boundary affects session
-construction and is larger than a UI rename.
+The Workspace Asset dialog also has no add-new-profile interaction yet. It can
+edit or remove the profiles already in `config.json`, but a removed or entirely
+new Asset must currently be added by editing that file. Add an explicit Asset
+action before treating this dialog as the complete catalog-management UX.
 
 The editor now says **Placements**, while internal `Prop*` types and the
 persisted `props` array deliberately remain unchanged. Renaming those would be
@@ -203,6 +199,14 @@ not a second copy of `PropDocument`, and should arrive only when that contract
 has a consumer and tests.
 
 ## Done
+
+- SceneMaker owns authoring identity. Workspace config schema 8 added each
+  Asset's `display_name` and SceneMaker `role`; both display catalogs derive
+  their vocabulary and classification from it. Terrain can exist without a
+  PolyTools package, while a Placement uses matching PolyTools data only for
+  footprint and pivot/anchor. The sync no longer rewrites `config.json` from
+  PolyTools, so `Water`, `Lava` or another curve surface remains SceneMaker's
+  choice rather than an imported package name.
 
 - A mountain carries no material. `MountainBodyDocument` lost its `asset_key`
   and Scene schema moved 11 to 12; the four authored documents under

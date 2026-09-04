@@ -32,11 +32,15 @@ public sealed record WorkspaceSession(
     public static WorkspaceSession Load(string workspaceDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
+        var workspace = WorkspaceStore.Load(workspaceDirectory);
+        var configuration = WorkspaceConfigurationStore.Load(workspace.DirectoryPath);
         var catalog = PolyToolsCatalogImporter.Load(workspaceDirectory);
-        // WorkspaceStore.Load already asserts that the configuration names this
-        // directory, which is what makes the reload below consistent with it.
-        var workspace = WorkspaceStore.Load(workspaceDirectory, catalog);
-        var configuration = WorkspaceConfigurationStore.Load(workspace.DirectoryPath, catalog);
+        if (!string.Equals(configuration.WorkspaceKey, catalog.WorldKey, StringComparison.Ordinal))
+        {
+            throw new SceneMakerDocumentException(
+                $"Workspace '{configuration.WorkspaceKey}' requires PolyTools world "
+                + $"'{configuration.WorkspaceKey}', not '{catalog.WorldKey}'.");
+        }
         return Derive(workspace, catalog, configuration);
     }
 
@@ -46,7 +50,7 @@ public sealed record WorkspaceSession(
     /// validate the candidate before persisting and adopting it.
     /// </summary>
     public WorkspaceSession WithAssetProfiles(IEnumerable<WorkspaceAssetProfile> assetProfiles) =>
-        Derive(Workspace, Catalog, Configuration.WithAssetProfiles(assetProfiles, Catalog));
+        Derive(Workspace, Catalog, Configuration.WithAssetProfiles(assetProfiles));
 
     private static WorkspaceSession Derive(
         LoadedWorkspace workspace,
@@ -56,6 +60,6 @@ public sealed record WorkspaceSession(
             workspace,
             catalog,
             configuration,
-            TerrainDisplayCatalogLoader.Load(catalog, configuration),
+            TerrainDisplayCatalogLoader.Load(configuration),
             PropDisplayCatalogLoader.Load(catalog, configuration));
 }

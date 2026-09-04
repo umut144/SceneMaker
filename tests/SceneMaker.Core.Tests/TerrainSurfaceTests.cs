@@ -11,6 +11,26 @@ namespace SceneMaker.Core.Tests;
 public sealed class TerrainSurfaceTests
 {
     [Fact]
+    public void EverySceneMakerAssetRequiresItsOwnDisplayNameAndRole()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var missingName = Assert.Throws<SceneMakerDocumentException>(() =>
+            workspace.Configuration.WithAssetProfiles(
+                [new WorkspaceAssetProfile(
+                    "grass", " ", WorkspaceAssetRole.Terrain,
+                    "#99E550", "land", TerrainAuthoring.Cells)]));
+        var unknownRole = Assert.Throws<SceneMakerDocumentException>(() =>
+            workspace.Configuration.WithAssetProfiles(
+                [new WorkspaceAssetProfile(
+                    "grass", "Grass", (WorkspaceAssetRole)99,
+                    "#99E550", "land", TerrainAuthoring.Cells)]));
+
+        Assert.Contains("display_name", missingName.Message, StringComparison.Ordinal);
+        Assert.Contains("unsupported SceneMaker role", unknownRole.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TerrainCarriesItsSurfaceAndPropsCarryNone()
     {
         using var workspace = TestWorkspace.Create();
@@ -28,8 +48,8 @@ public sealed class TerrainSurfaceTests
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             workspace.Configuration.WithAssetProfiles(
-                [new WorkspaceAssetProfile("grass", "#99E550")],
-                workspace.Catalog));
+                [new WorkspaceAssetProfile(
+                    "grass", "Grass", WorkspaceAssetRole.Terrain, "#99E550")]));
 
         Assert.Contains("requires a surface", exception.Message, StringComparison.Ordinal);
     }
@@ -41,8 +61,8 @@ public sealed class TerrainSurfaceTests
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             workspace.Configuration.WithAssetProfiles(
-                [new WorkspaceAssetProfile("stone", "#808080", "land")],
-                workspace.Catalog));
+                [new WorkspaceAssetProfile(
+                    "stone", "Stone", WorkspaceAssetRole.Placement, "#808080", "land")]));
 
         Assert.Contains("must not declare a surface", exception.Message, StringComparison.Ordinal);
     }
@@ -57,8 +77,9 @@ public sealed class TerrainSurfaceTests
         using var workspace = TestWorkspace.Create();
 
         var narrowed = workspace.Configuration.WithAssetProfiles(
-            [new WorkspaceAssetProfile("grass", "#99E550", surface, TerrainAuthoring.Cells)],
-            workspace.Catalog);
+            [new WorkspaceAssetProfile(
+                "grass", "Grass", WorkspaceAssetRole.Terrain,
+                "#99E550", surface, TerrainAuthoring.Cells)]);
 
         Assert.Equal(surface, narrowed.ResolveAssetProfile("grass").Surface);
     }
@@ -76,8 +97,8 @@ public sealed class TerrainSurfaceTests
 
         Assert.Throws<SceneMakerDocumentException>(() =>
             workspace.Configuration.WithAssetProfiles(
-                [new WorkspaceAssetProfile("grass", "#99E550", surface)],
-                workspace.Catalog));
+                [new WorkspaceAssetProfile(
+                    "grass", "Grass", WorkspaceAssetRole.Terrain, "#99E550", surface)]));
     }
 
     [Fact]
@@ -87,8 +108,8 @@ public sealed class TerrainSurfaceTests
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             workspace.Configuration.WithAssetProfiles(
-                [new WorkspaceAssetProfile("grass", "#99E550", "land")],
-                workspace.Catalog));
+                [new WorkspaceAssetProfile(
+                    "grass", "Grass", WorkspaceAssetRole.Terrain, "#99E550", "land")]));
 
         Assert.Contains("requires an authoring", exception.Message, StringComparison.Ordinal);
     }
@@ -100,8 +121,9 @@ public sealed class TerrainSurfaceTests
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             workspace.Configuration.WithAssetProfiles(
-                [new WorkspaceAssetProfile("stone", "#808080", null, TerrainAuthoring.Cells)],
-                workspace.Catalog));
+                [new WorkspaceAssetProfile(
+                    "stone", "Stone", WorkspaceAssetRole.Placement,
+                    "#808080", null, TerrainAuthoring.Cells)]));
 
         Assert.Contains("must not declare an authoring", exception.Message, StringComparison.Ordinal);
     }
@@ -112,11 +134,14 @@ public sealed class TerrainSurfaceTests
         using var workspace = TestWorkspace.Create();
 
         WorkspaceConfigurationStore.Save(workspace.RootPath, workspace.Configuration);
-        var reloaded = WorkspaceConfigurationStore.Load(workspace.RootPath, workspace.Catalog);
+        var reloaded = WorkspaceConfigurationStore.Load(workspace.RootPath);
 
         Assert.Equal(TerrainAuthoring.Cells, reloaded.ResolveAssetProfile("grass").Authoring);
         Assert.Equal(TerrainAuthoring.Curve, reloaded.ResolveAssetProfile("river").Authoring);
         Assert.Null(reloaded.ResolveAssetProfile("stone").Authoring);
+        Assert.Equal("Water", reloaded.ResolveAssetProfile("river").DisplayName);
+        Assert.Equal(WorkspaceAssetRole.Terrain, reloaded.ResolveAssetProfile("river").Role);
+        Assert.Equal(WorkspaceAssetRole.Placement, reloaded.ResolveAssetProfile("stone").Role);
     }
 
     [Fact]
@@ -147,11 +172,12 @@ public sealed class TerrainSurfaceTests
     {
         using var workspace = TestWorkspace.Create();
         var narrowed = workspace.Configuration.WithAssetProfiles(
-            [new WorkspaceAssetProfile("grass", "#99E550", "swamp", TerrainAuthoring.Cells)],
-            workspace.Catalog);
+            [new WorkspaceAssetProfile(
+                "grass", "Grass", WorkspaceAssetRole.Terrain,
+                "#99E550", "swamp", TerrainAuthoring.Cells)]);
 
         WorkspaceConfigurationStore.Save(workspace.RootPath, narrowed);
-        var reloaded = WorkspaceConfigurationStore.Load(workspace.RootPath, workspace.Catalog);
+        var reloaded = WorkspaceConfigurationStore.Load(workspace.RootPath);
 
         Assert.Equal("swamp", reloaded.ResolveAssetProfile("grass").Surface);
     }

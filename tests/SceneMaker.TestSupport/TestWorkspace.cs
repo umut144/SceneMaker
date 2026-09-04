@@ -79,13 +79,13 @@ public sealed class TestWorkspace : IDisposable
         WriteImport(rootPath, worldKey, secondCurveAsset);
         WriteConfiguration(rootPath, worldKey, secondCurveAsset);
         var catalog = PolyToolsCatalogImporter.Load(rootPath);
-        var configuration = WorkspaceConfigurationStore.Load(rootPath, catalog);
+        var configuration = WorkspaceConfigurationStore.Load(rootPath);
         return new TestWorkspace(
             containerPath,
             rootPath,
             catalog,
             configuration,
-            TerrainDisplayCatalogLoader.Load(catalog, configuration),
+            TerrainDisplayCatalogLoader.Load(configuration),
             PropDisplayCatalogLoader.Load(catalog, configuration));
     }
 
@@ -100,7 +100,8 @@ public sealed class TestWorkspace : IDisposable
         // asset key when they load, so where the entry sits in the file changes
         // nothing, and a suffix keeps the JSON below readable.
         var lava = secondCurveAsset
-            ? ",\n    { \"asset_key\": \"lava\", \"color\": \"#FF6A3C\", "
+            ? ",\n    { \"asset_key\": \"lava\", \"display_name\": \"Lava\", "
+                + "\"role\": \"terrain\", \"color\": \"#FF6A3C\", "
                 + "\"surface\": \"lava\", \"authoring\": \"curve\" }"
             : string.Empty;
         File.WriteAllText(
@@ -108,7 +109,7 @@ public sealed class TestWorkspace : IDisposable
             $$"""
             {
               "format": "scene_maker_workspace",
-              "version": 7,
+              "version": 8,
               "workspace_key": "{{worldKey}}",
               "grid": {
                 "terrain_cell_meters": 1.0,
@@ -118,11 +119,11 @@ public sealed class TestWorkspace : IDisposable
                 "elevation_quantum_meters": 0.125
               },
               "assets": [
-                { "asset_key": "grass", "color": "#99E550", "surface": "land", "authoring": "cells" },
-                { "asset_key": "portal", "color": "#8E6CFF" },
-                { "asset_key": "river", "color": "#3C7DD9", "surface": "water", "authoring": "curve" },
-                { "asset_key": "sand", "color": "#E5C07B", "surface": "sand", "authoring": "cells" },
-                { "asset_key": "stone", "color": "#808080" }{{lava}}
+                { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" },
+                { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF" },
+                { "asset_key": "river", "display_name": "Water", "role": "terrain", "color": "#3C7DD9", "surface": "water", "authoring": "curve" },
+                { "asset_key": "sand", "display_name": "Sand", "role": "terrain", "color": "#E5C07B", "surface": "sand", "authoring": "cells" },
+                { "asset_key": "stone", "display_name": "Stone", "role": "placement", "color": "#808080" }{{lava}}
               ]
             }
             """);

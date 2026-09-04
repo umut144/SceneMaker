@@ -145,8 +145,10 @@ public sealed partial class SceneMakerMain : Control
     private bool _updatingAnchorGroupEdit;
 
     private sealed record WorkspaceAssetEditorRow(
-        PolyToolsCatalogAsset Asset,
+        string AssetKey,
         CheckBox Enabled,
+        LineEdit DisplayName,
+        OptionButton Role,
         LineEdit Color,
         LineEdit Surface,
         OptionButton Authoring);
@@ -1362,21 +1364,24 @@ public sealed partial class SceneMakerMain : Control
         _workspaceAssetEditorRows.Clear();
         _workspaceAssetRows.AddChild(new Label
         {
-            Text = "Assets currently come from the synchronized PolyTools catalog. SceneMaker owns enablement, authoring color, the surface a Terrain Asset presents to the game, and whether it is painted as cells or drawn as a curve; PolyTools currently supplies Terrain-or-Placement classification and Placement geometry.",
+            Text = "SceneMaker owns these authoring Assets: their names, roles, colors and Terrain semantics. PolyTools contributes only the visible footprint and pivot/anchor used by Placement Assets.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
-        foreach (var asset in _controller.Session.Catalog.Assets)
+        foreach (var profile in _controller.Session.Configuration.AssetProfiles)
         {
-            var profile = _controller.Session.Configuration.AssetProfiles
-                .SingleOrDefault(value => value.AssetKey == asset.AssetKey);
-            var isTerrain = asset.AssetType == PolyToolsAssetType.Terrain;
-            var row = new GridContainer { Columns = 5 };
-            var enabled = new CheckBox { Text = asset.AssetKey, ButtonPressed = profile is not null };
+            var isTerrain = profile.Role == WorkspaceAssetRole.Terrain;
+            var row = new GridContainer { Columns = 6 };
+            var enabled = new CheckBox { Text = profile.AssetKey, ButtonPressed = true };
             enabled.CustomMinimumSize = new Vector2(180f, 0f);
-            var color = NewAssetField(profile?.Color ?? string.Empty, "#RRGGBB");
+            var displayName = NewAssetField(profile.DisplayName, "Display name");
+            var role = new OptionButton();
+            role.AddItem("Terrain", (int)WorkspaceAssetRole.Terrain);
+            role.AddItem("Placement", (int)WorkspaceAssetRole.Placement);
+            role.Selected = role.GetItemIndex((int)profile.Role);
+            var color = NewAssetField(profile.Color, "#RRGGBB");
             // Only Terrain presents a surface, and only Terrain may carry one.
             var surface = NewAssetField(
-                profile?.Surface ?? (isTerrain ? DefaultSurface : string.Empty),
+                profile.Surface ?? (isTerrain ? DefaultSurface : string.Empty),
                 isTerrain ? "land" : string.Empty);
             surface.Editable = isTerrain;
             // How a Terrain Asset is authored decides which tools it offers, so
@@ -1384,17 +1389,37 @@ public sealed partial class SceneMakerMain : Control
             var authoring = new OptionButton { Disabled = !isTerrain };
             authoring.AddItem("cells", (int)TerrainAuthoring.Cells);
             authoring.AddItem("curve", (int)TerrainAuthoring.Curve);
-            authoring.Selected = (int)(profile?.Authoring ?? TerrainAuthoring.Cells);
+            authoring.Selected = authoring.GetItemIndex(
+                (int)(profile.Authoring ?? TerrainAuthoring.Cells));
             row.AddChild(enabled);
-            row.AddChild(new Label { Text = asset.AssetType.ToString() });
+            row.AddChild(displayName);
+            row.AddChild(role);
             row.AddChild(color);
             row.AddChild(surface);
             row.AddChild(authoring);
             _workspaceAssetRows.AddChild(row);
-            _workspaceAssetEditorRows.Add(asset.AssetKey,
-                new WorkspaceAssetEditorRow(asset, enabled, color, surface, authoring));
+            var editorRow = new WorkspaceAssetEditorRow(
+                profile.AssetKey,
+                enabled,
+                displayName,
+                role,
+                color,
+                surface,
+                authoring);
+            role.ItemSelected += item => SetWorkspaceAssetRole(editorRow, item);
+            _workspaceAssetEditorRows.Add(profile.AssetKey, editorRow);
         }
         _workspaceAssetsDialog.PopupCentered(new Vector2I(760, 520));
+    }
+
+    private static void SetWorkspaceAssetRole(WorkspaceAssetEditorRow row, long item)
+    {
+        var role = (WorkspaceAssetRole)row.Role.GetItemId((int)item);
+        var isTerrain = role == WorkspaceAssetRole.Terrain;
+        row.Surface.Editable = isTerrain;
+        row.Surface.PlaceholderText = isTerrain ? DefaultSurface : string.Empty;
+        row.Authoring.Disabled = !isTerrain;
+        if (!isTerrain) row.Surface.Text = string.Empty;
     }
 
     /// <summary>What a Terrain Asset presents unless the author says otherwise.</summary>
@@ -1486,13 +1511,16 @@ public sealed partial class SceneMakerMain : Control
         foreach (var row in _workspaceAssetEditorRows.Values)
         {
             if (!row.Enabled.ButtonPressed) continue;
-            var isTerrain = row.Asset.AssetType == PolyToolsAssetType.Terrain;
+            var role = (WorkspaceAssetRole)row.Role.GetItemId(row.Role.Selected);
+            var isTerrain = role == WorkspaceAssetRole.Terrain;
             var surface = isTerrain ? row.Surface.Text.Trim() : null;
             var authoring = isTerrain
                 ? (TerrainAuthoring)row.Authoring.GetItemId(row.Authoring.Selected)
                 : (TerrainAuthoring?)null;
             profiles.Add(new WorkspaceAssetProfile(
-                row.Asset.AssetKey,
+                row.AssetKey,
+                row.DisplayName.Text.Trim(),
+                role,
                 row.Color.Text.Trim(),
                 surface,
                 authoring));

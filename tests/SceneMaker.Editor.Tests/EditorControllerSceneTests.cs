@@ -266,7 +266,9 @@ public sealed class EditorControllerSceneTests
         // the controller refuses a profile set that would orphan an open Scene.
         controller.CloseScene();
         Assert.True(
-            controller.SaveAssetProfiles([new WorkspaceAssetProfile("sand", "#E5C07B", "sand", TerrainAuthoring.Cells)]).Succeeded);
+            controller.SaveAssetProfiles([new WorkspaceAssetProfile(
+                "sand", "Sand", WorkspaceAssetRole.Terrain,
+                "#E5C07B", "sand", TerrainAuthoring.Cells)]).Succeeded);
 
         var restored = new EditorController();
         var report = restored.RestoreRecentSession(recentPath);

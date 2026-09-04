@@ -7,13 +7,14 @@ Runtime Export and copy it into a Workspace-local import boundary.
 
 ## Data ownership
 
-- A Workspace-local `imports/polytools/catalog.json` is the closed source of
-  available Asset identity, type, name, and Runtime package references. It and
-  the referenced Manifests are synchronized copies, never live sibling reads.
-- A workspace represents one PolyTools World/game. Its `config.json` owns grid
-  metrics, enabled assets, and editor colors. The PolyTools catalog decides
-  whether an Asset is Terrain or a Prop; PolyTools geometry owns footprints and
-  anchors. SceneMaker never overrides an Asset's kind.
+- A workspace represents one PolyTools World/game. Its `config.json` is the
+  closed source of SceneMaker Assets and owns each stable `asset_key`, display
+  name, SceneMaker role, editor color and Terrain semantics as well as the grid
+  metrics. None of that authoring identity is inferred from PolyTools.
+- A Workspace-local `imports/polytools/` boundary may contribute visible bounds
+  and pivots/anchors to SceneMaker Assets whose role is `placement`, joined by
+  `asset_key`. Its catalog and referenced Manifests are synchronized copies,
+  never live sibling reads. Terrain Assets require no PolyTools package.
 - Scenes and templates are workspace data. Their documents use `asset_key`s,
   never numeric IDs.
 - No hidden metric defaults, directory-discovered Assets, or game-specific
@@ -70,7 +71,7 @@ unrelated reasons.
 | Schema | Constant | Current |
 | --- | --- | --- |
 | Scene document | `SceneMakerSchemas.SceneVersion` | 12 |
-| Workspace config | `WorkspaceConfigurationStore.Version` | 7 |
+| Workspace config | `WorkspaceConfigurationStore.Version` | 8 |
 | Scene export | `SceneExport.Version` | 9 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 1 |
 | PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 16 |

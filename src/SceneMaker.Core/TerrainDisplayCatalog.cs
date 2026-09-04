@@ -31,16 +31,16 @@ public sealed class TerrainDisplayCatalog
 
 public static class TerrainDisplayCatalogLoader
 {
-    public static TerrainDisplayCatalog Load(PolyToolsCatalog catalog, WorkspaceConfiguration workspace)
+    public static TerrainDisplayCatalog Load(WorkspaceConfiguration workspace)
     {
+        ArgumentNullException.ThrowIfNull(workspace);
         SortedDictionary<string, TerrainDisplayAsset> assets = new(StringComparer.Ordinal);
         foreach (var profile in workspace.AssetProfiles)
         {
-            var catalogAsset = catalog.Resolve(profile.AssetKey);
-            if (catalogAsset.AssetType != PolyToolsAssetType.Terrain) continue;
+            if (profile.Role != WorkspaceAssetRole.Terrain) continue;
             assets.Add(profile.AssetKey, new TerrainDisplayAsset(
                 profile.AssetKey,
-                catalogAsset.Name,
+                profile.DisplayName,
                 profile.Color,
                 // Non-null for every Terrain Asset; the configuration refuses
                 // to load one without it.

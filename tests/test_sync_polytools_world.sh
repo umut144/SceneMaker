@@ -29,7 +29,7 @@ JSON
 cat >"$workspace/config.json" <<'JSON'
 {
   "format": "scene_maker_workspace",
-  "version": 7,
+  "version": 8,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,
@@ -40,7 +40,9 @@ cat >"$workspace/config.json" <<'JSON'
   },
   "assets": [
     {
-      "asset_key": "tree",
+      "asset_key": "bog",
+      "display_name": "Bog",
+      "role": "terrain",
       "color": "#123456",
       "surface": "forest",
       "authoring": "cells"
@@ -99,7 +101,9 @@ SCENEMAKER_WORKSPACE_DIR="$workspace" \
 imported_manifest="$workspace/imports/polytools/PolyToolsRuntimeExports/tree/manifest.json"
 jq -e '.schema_version == 16 and (.regions | length == 2)' "$imported_manifest" >/dev/null
 jq -e '.assets == [{
-  "asset_key": "tree",
+  "asset_key": "bog",
+  "display_name": "Bog",
+  "role": "terrain",
   "color": "#123456",
   "surface": "forest",
   "authoring": "cells"
@@ -108,12 +112,13 @@ published_checksum=$(cksum "$imported_manifest")
 
 valid_config="$test_root/valid-config.json"
 cp "$workspace/config.json" "$valid_config"
-jq '.assets = []' "$workspace/config.json" >"$test_root/missing-profile.json"
-mv "$test_root/missing-profile.json" "$workspace/config.json"
+jq '.assets[0].role = "placement" | .assets[0] |= del(.surface, .authoring)' \
+  "$workspace/config.json" >"$test_root/missing-geometry.json"
+mv "$test_root/missing-geometry.json" "$workspace/config.json"
 if POLYTOOLS_WORLD_DIR="$source_world" \
   SCENEMAKER_WORKSPACE_DIR="$workspace" \
   "$project_directory/scripts/sync_polytools_world.sh"; then
-  printf '%s\n' 'Expected a Terrain Asset without authored Workspace semantics to fail preflight.' >&2
+  printf '%s\n' 'Expected a Placement without matching PolyTools geometry to fail preflight.' >&2
   exit 1
 fi
 test "$(cksum "$imported_manifest")" = "$published_checksum"

@@ -59,7 +59,7 @@ Kontextleiste seines Werkzeugs neben Breite und Höhen:
 
 ```text
 Terrain-Assetleiste:  Terrain ›  ( Grass ) ( Sand )
-River-Kontext:        Surface [ River ▾ ] · Point [ Linear ▾ ] · Width […]
+River-Kontext:        Surface [ Water ▾ ] · Point [ Linear ▾ ] · Width […]
                       · Surface level […] · Snap · Depth […] · Clearance […]
 ```
 
@@ -97,6 +97,12 @@ fehlt. Ein inkompatibles Asset wird nie gewählt, und ein toter aktiver
 Zeichenknopf wird nie angeboten. Das gilt nur für Bereiche, die überhaupt ein
 Material brauchen: `Mountain` bietet keines an und ist deshalb nie aus diesem
 Grund deaktiviert.
+
+Die angebotenen Namen und Rollen kommen aus SceneMakers Workspace-Konfiguration,
+nicht aus PolyTools. Ein Asset kann deshalb etwa `Water` heißen und die Rolle
+`Terrain` tragen, selbst wenn ein gleichnamiger PolyTools-Schlüssel anders
+benannt oder klassifiziert ist. Nur ein Placement benötigt unter demselben
+`asset_key` eine importierte Geometrie für Footprint und Anchor.
 
 Ein Assetwechsel **innerhalb** eines Bereichs wechselt nur das Material — ob
 über die Palette oder über das `Surface`-Feld: die Geometrie eines laufenden
