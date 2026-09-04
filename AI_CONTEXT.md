@@ -105,16 +105,20 @@ arc length, so one river can widen or narrow without being split into bodies.
 The curve arithmetic underneath is not water's own. Flattening a cubic Bezier
 chain, measuring arc length along it and projecting a position onto one of its
 segments live in `BezierChain`, which knows nothing about rivers; a mountain
-outline and a route flatten the same way. What stays in `WaterGeometry` is what
-only a river means: the width along the corridor, the two end caps, and the
-vertical section. Each authored kind keeps its own document record and converts
-into the shared chain - one shared record instead would force every kind to
-carry the others' fields and tie schemas together that have no reason to change
-at the same time. `BezierChain` flattens open chains only. A closed loop is not
-the same thing with its ends joined: it has no first and last point to clamp
-against, its stations wrap, and it needs an orientation before anything can be
-said about its inside, so it gets its own entry point rather than flowing
-quietly through code that clamps.
+outline and a route flatten the same way. `OpenChainCorridor` adds only the
+horizontal band around such an open chain: unrounded width over arc length,
+square caps local to the two outermost segments, bounds and the nearest station
+when two stretches reach the same position. It has no material, vertical or
+raster meaning. `WaterGeometry` converts its own points into that geometry,
+rasters the band at water-grid resolution and supplies the vertical section. A
+later inclined route may reuse the band without becoming a sequence of Terrain
+steps. Each authored kind keeps its own document record and converts into the
+shared geometry - one shared record instead would force every kind to carry the
+others' fields and tie schemas together that have no reason to change at the
+same time. A closed loop is not an open chain with its ends joined: it has no
+first and last point to clamp against, its stations wrap, and it needs an
+orientation before anything can be said about its inside, so it gets its own
+entry point rather than flowing quietly through code that clamps.
 
 A flattened loop comes back as a ring whose first point is not repeated at the
 end, with the way home carried in its own `TotalLength` rather than in the last
