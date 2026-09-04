@@ -394,7 +394,9 @@ und Werkzeugfokus zwei verschiedene Aussagen sind. Die analytische
 Höhenansicht ersetzt diese Farben weiterhin vollständig durch ihre blaue
 Höhenrampe. Die Fläche eines Placements folgt der Höhenbeleuchtung, sein Rahmen
 bleibt dagegen in der unveränderten, im Workspace konfigurierten Assetfarbe;
-bei einer Auswahl ersetzt Gelb diese Kennzeichnung.
+bei einer Auswahl ersetzt Gelb diese Kennzeichnung. Der Rahmen bleibt auch in
+anderen Bereichen deutlich sichtbar: zwei Pixel mit gedimmter Deckkraft,
+drei Pixel im Placement-Bereich und vier Pixel für die gelbe Auswahl.
 
 ### Placements und Untergrund
 

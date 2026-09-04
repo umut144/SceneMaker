@@ -1487,7 +1487,7 @@ public sealed partial class SceneCanvas : Control
             var selected = highlighted && prop.InstanceId == _interaction.SelectedPropInstanceId;
             var outline = highlighted
                 ? assetColor
-                : new Color(assetColor.R, assetColor.G, assetColor.B, 0.32f);
+                : new Color(assetColor.R, assetColor.G, assetColor.B, 0.72f);
             DrawRect(
                 rectangle,
                 new Color(color.R, color.G, color.B, highlighted ? 0.38f : 0.10f));
@@ -1495,7 +1495,7 @@ public sealed partial class SceneCanvas : Control
                 rectangle,
                 selected ? SelectionColor : outline,
                 filled: false,
-                width: selected ? 3f : highlighted ? 2f : 1f);
+                width: selected ? 4f : highlighted ? 3f : 2f);
             DrawAnchor(
                 prop.PositionAuthoringPx.X,
                 prop.PositionAuthoringPx.Y,
