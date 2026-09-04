@@ -320,12 +320,21 @@ damit Zoomen die Bedienbarkeit nicht verändert.
 
 Gezogene Punkte rasten auf dem Terrainraster ein. Handles bleiben relative,
 ungesnappte Offsets und wandern mit dem Punkt; ID und absolute Oberkante des
-Bergs ändern sich nicht. Eine gültige Vorschau trägt die stabile Konturfarbe des
-Bergs. Würde die neue Form sich selbst berühren oder sonst die Konturregeln
-brechen, wird sie rot und Loslassen verwirft nur den Zug. Ein gültiges
-Loslassen ist genau ein Undo-Schritt. Escape und ein Klick ins Leere heben die
-Auswahl auf. Die Draw-Felder `Point` und `Height` sind in diesem Werkzeug
-ausgeblendet, weil die erste Scheibe nur vorhandene Punkte verschiebt.
+Bergs ändern sich nicht. Ist ein Punkt ausgewählt, erscheint das gemeinsame
+`Point`-Feld mit seinem gespeicherten Modus. `Linear` entfernt beide Handles;
+`Aligned` erzeugt zunächst zyklische automatische Handles aus den beiden
+Nachbarn. Danach kann jede Handle-Spitze direkt gezogen werden. Die
+gegenüberliegende Spitze dreht sich auf derselben Tangente mit, behält aber ihre
+eigene Länge.
+
+Eine gültige Vorschau trägt die stabile Konturfarbe des Bergs. Würde ein Punkt-
+oder Handlezug die Form selbst berühren oder sonst die Konturregeln brechen,
+wird sie rot und die Änderung wird nicht gespeichert. Ein ungültiger
+Moduswechsel wird mit demselben Grund abgelehnt und das Feld auf den
+gespeicherten Modus zurückgesetzt. Jede gültige Änderung ist genau ein
+Undo-Schritt. Escape und ein Klick ins Leere heben die Auswahl auf. `Height`
+bleibt in diesem Werkzeug ausgeblendet: diese Scheibe bearbeitet die Form,
+nicht die absolute Oberkante des Körpers.
 
 Die Canvasdarstellung verwendet bereits das gefaltete Höhenfeld aus gemalten
 Zellen und Bergkörpern. Dadurch sieht der Autor genau die Terrainzellen, die

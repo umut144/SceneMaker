@@ -442,6 +442,80 @@ public sealed class ToolMountainTests
     }
 
     [Fact]
+    public void ASelectedAlignedHandleCanBeDraggedWithoutSnapping()
+    {
+        using var workspace = TestWorkspace.Create();
+        var points = MountainEditing.ResolveContour(
+        [
+            new MountainDraftPoint(32, 32, MountainPointMode.Aligned),
+            new MountainDraftPoint(160, 32, MountainPointMode.Aligned),
+            new MountainDraftPoint(160, 160, MountainPointMode.Aligned),
+            new MountainDraftPoint(32, 160, MountainPointMode.Aligned),
+        ]);
+        var scene = MountainEditing.Place(
+            TestScenes.Instance(workspace), workspace.Metrics, points, 4m);
+        var interaction = Mountain(EditorTool.SelectMountain);
+        var context = Context(workspace, scene);
+        var point = scene.MountainBodies[0].Points[1];
+        var anchor = point.PositionAuthoringPx;
+        var handle = point.HandleOutAuthoringPx;
+
+        interaction.PointerPressed(context, Point(anchor.X, anchor.Y), Cell(5, 1));
+        interaction.PointerReleased(context);
+        interaction.PointerPressed(
+            context,
+            Point(anchor.X + handle.X, anchor.Y + handle.Y),
+            Cell((anchor.X + handle.X) / 32, (anchor.Y + handle.Y) / 32));
+        Assert.Equal(MountainHandleSide.Out, interaction.DraggedMountainHandleSide);
+        interaction.PointerDragged(
+            context,
+            Point(anchor.X + handle.X / 2, anchor.Y + handle.Y / 2),
+            Cell(5, 1));
+        var preview = interaction.MountainSelectionPreview(context);
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerReleased(context));
+        var changed = edit.Apply(scene).MountainBodies[0].Points[1];
+
+        Assert.Equal(MountainDraftKind.Ready, preview.Kind);
+        Assert.Equal(handle.X / 2, changed.HandleOutAuthoringPx.X);
+        Assert.Equal(handle.Y / 2, changed.HandleOutAuthoringPx.Y);
+        Assert.Equal(point.HandleInAuthoringPx, changed.HandleInAuthoringPx);
+        Assert.Equal(MountainPointMode.Aligned, changed.Mode);
+    }
+
+    [Fact]
+    public void ThePointFieldChangesTheSelectedStoredPointModeAsOneEdit()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = MountainEditing.Place(
+            TestScenes.Instance(workspace),
+            workspace.Metrics,
+            Square(32, 32, 160, 160),
+            4m);
+        var interaction = Mountain(EditorTool.SelectMountain);
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(32, 32), Cell(1, 1));
+        interaction.PointerReleased(context);
+
+        var align = Assert.IsType<ToolOutcome.Edit>(
+            interaction.SetSelectedMountainPointMode(context, MountainPointMode.Aligned));
+        var aligned = align.Apply(scene);
+        interaction.SceneChanged(scene, aligned);
+
+        Assert.Equal(0, interaction.SelectedMountainPointIndex);
+        Assert.Equal(MountainPointMode.Aligned, aligned.MountainBodies[0].Points[0].Mode);
+        Assert.False(aligned.MountainBodies[0].Points[0].HandleInAuthoringPx.IsZero());
+        Assert.False(aligned.MountainBodies[0].Points[0].HandleOutAuthoringPx.IsZero());
+
+        var makeLinear = Assert.IsType<ToolOutcome.Edit>(
+            interaction.SetSelectedMountainPointMode(
+                Context(workspace, aligned), MountainPointMode.Linear));
+        var linear = makeLinear.Apply(aligned).MountainBodies[0].Points[0];
+        Assert.Equal(MountainPointMode.Linear, linear.Mode);
+        Assert.True(linear.HandleInAuthoringPx.IsZero());
+        Assert.True(linear.HandleOutAuthoringPx.IsZero());
+    }
+
+    [Fact]
     public void AnInvalidPointMoveTurnsThePreviewBlockedAndIsNotCommitted()
     {
         using var workspace = TestWorkspace.Create();

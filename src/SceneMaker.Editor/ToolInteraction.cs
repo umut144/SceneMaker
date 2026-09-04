@@ -31,6 +31,8 @@ public sealed class ToolInteraction
     private MountainDraftPoint? _mountainPending;
     private int? _draggedMountainPointIndex;
     private AuthoringPoint? _draggedMountainPointPosition;
+    private MountainHandleSide? _draggedMountainHandleSide;
+    private AuthoringPixelOffset? _draggedMountainHandleOffset;
     private string? _draggedAnchorId;
     private AuthoringPoint? _draggedAnchorPosition;
 
@@ -44,6 +46,7 @@ public sealed class ToolInteraction
     public string? SelectedPropInstanceId { get; private set; }
     public string? SelectedTemplateAnchorId { get; private set; }
     public string? SelectedMountainBodyId { get; private set; }
+    public int? SelectedMountainPointIndex { get; private set; }
 
     public AuthoringPoint? PointerAuthoring => _pointerAuthoring;
     public TerrainCellCoordinate? PointerCell => _pointerCell;
@@ -70,6 +73,7 @@ public sealed class ToolInteraction
 
     public int? DraggedMountainPointIndex => _draggedMountainPointIndex;
     public AuthoringPoint? DraggedMountainPointPosition => _draggedMountainPointPosition;
+    public MountainHandleSide? DraggedMountainHandleSide => _draggedMountainHandleSide;
 
     public string? DraggedAnchorId => _draggedAnchorId;
     public AuthoringPoint? DraggedAnchorPosition => _draggedAnchorPosition;
@@ -160,6 +164,7 @@ public sealed class ToolInteraction
         SelectedPropInstanceId = null;
         SelectedTemplateAnchorId = null;
         SelectedMountainBodyId = null;
+        SelectedMountainPointIndex = null;
     }
 
     public void PointerMoved(AuthoringPoint authoring, TerrainCellCoordinate cell)
@@ -242,9 +247,18 @@ public sealed class ToolInteraction
             && after.MountainBodies.All(body => body.MountainBodyId != mountainBodyId))
         {
             SelectedMountainBodyId = null;
+            SelectedMountainPointIndex = null;
+        }
+        if (SelectedMountainBodyId is { } selectedBodyId
+            && SelectedMountainPointIndex is { } selectedPointIndex
+            && after.MountainBodies.First(body => body.MountainBodyId == selectedBodyId)
+                .Points.Count <= selectedPointIndex)
+        {
+            SelectedMountainPointIndex = null;
         }
         if (_draggedAnchorId is not null) ClearAnchorDrag();
         if (_draggedMountainPointIndex is not null) ClearMountainPointDrag();
+        if (_draggedMountainHandleSide is not null) ClearMountainHandleDrag();
     }
 
     public ToolOutcome PointerPressed(
@@ -291,6 +305,9 @@ public sealed class ToolInteraction
                                           && _mountainPending is not null:
                 return DragMountainHandle(context, authoring);
             case EditorMode.Mountain when ActiveTool == EditorTool.SelectMountain
+                                          && _draggedMountainHandleSide is not null:
+                return DragSelectedMountainHandle(context, authoring);
+            case EditorMode.Mountain when ActiveTool == EditorTool.SelectMountain
                                           && _draggedMountainPointIndex is not null:
                 return DragSelectedMountainPoint(context, authoring);
             case EditorMode.Props when ActiveTool == EditorTool.Pencil && EraserEnabled:
@@ -319,6 +336,7 @@ public sealed class ToolInteraction
 
         if (_riverPending is not null) return CommitRiverPoint();
         if (_mountainPending is not null) return CommitMountainPoint(context);
+        if (_draggedMountainHandleSide is not null) return FinishMountainHandleMove(context);
         if (_draggedMountainPointIndex is not null) return FinishMountainPointMove(context);
 
         if (_draggedAnchorId is { } anchorId && _draggedAnchorPosition is { } position)
@@ -340,7 +358,9 @@ public sealed class ToolInteraction
         {
             if (key == ToolKey.Enter) return ToolOutcome.Idle.Instance;
             SelectedMountainBodyId = null;
+            SelectedMountainPointIndex = null;
             ClearMountainPointDrag();
+            ClearMountainHandleDrag();
             return new ToolOutcome.Message("Mountain selection cleared.");
         }
         if (Mode != EditorMode.Props || ActiveTool != EditorTool.Line)
@@ -521,8 +541,7 @@ public sealed class ToolInteraction
             context.Scene,
             ActiveTool,
             SelectedMountainBodyId,
-            _draggedMountainPointIndex,
-            _draggedMountainPointPosition);
+            MountainCandidatePoints(context));
     }
 
     private ToolOutcome SelectOrBeginMountainPoint(
@@ -530,10 +549,24 @@ public sealed class ToolInteraction
         AuthoringPoint point,
         TerrainCellCoordinate cell)
     {
+        var handleHit = FindMountainHandle(context, point);
+        if (handleHit is not null)
+        {
+            SelectedMountainPointIndex = handleHit.PointIndex;
+            ClearMountainPointDrag();
+            _draggedMountainHandleSide = handleHit.Side;
+            _draggedMountainHandleOffset = handleHit.Offset;
+            return new ToolOutcome.Message(
+                $"Selected '{SelectedMountainBodyId}' · point {handleHit.PointIndex + 1} "
+                + $"{handleHit.Side.ToString().ToLowerInvariant()} handle; drag to shape it.");
+        }
+
         var pointHit = FindMountainPoint(context, point);
         if (pointHit is not null)
         {
             SelectedMountainBodyId = pointHit.Body.MountainBodyId;
+            SelectedMountainPointIndex = pointHit.PointIndex;
+            ClearMountainHandleDrag();
             _draggedMountainPointIndex = pointHit.PointIndex;
             var position = pointHit.Body.Points[pointHit.PointIndex].PositionAuthoringPx;
             _draggedMountainPointPosition = new AuthoringPoint(position.X, position.Y);
@@ -543,7 +576,9 @@ public sealed class ToolInteraction
 
         var body = MountainEditing.FindAtCell(context.Scene, context.Metrics, cell);
         SelectedMountainBodyId = body?.MountainBodyId;
+        SelectedMountainPointIndex = null;
         ClearMountainPointDrag();
+        ClearMountainHandleDrag();
         return new ToolOutcome.Message(body is null
             ? "No Mountain selected."
             : $"Selected '{body.MountainBodyId}' · top {body.ElevationMeters:0.###} m · {body.Points.Count} points.");
@@ -553,6 +588,25 @@ public sealed class ToolInteraction
     {
         var snapped = SnapToGrid(context, point);
         if (IsInsideScene(context, snapped)) _draggedMountainPointPosition = snapped;
+        return ToolOutcome.Idle.Instance;
+    }
+
+    private ToolOutcome DragSelectedMountainHandle(ToolContext context, AuthoringPoint point)
+    {
+        if (SelectedMountainBodyId is not { } bodyId
+            || SelectedMountainPointIndex is not { } pointIndex)
+        {
+            return ToolOutcome.Idle.Instance;
+        }
+        var body = context.Scene.MountainBodies.FirstOrDefault(candidate => string.Equals(
+            candidate.MountainBodyId, bodyId, StringComparison.Ordinal));
+        if (body is null || pointIndex >= body.Points.Count) return ToolOutcome.Idle.Instance;
+        var anchor = body.Points[pointIndex].PositionAuthoringPx;
+        _draggedMountainHandleOffset = new AuthoringPixelOffset
+        {
+            X = point.X - anchor.X,
+            Y = point.Y - anchor.Y,
+        };
         return ToolOutcome.Idle.Instance;
     }
 
@@ -567,26 +621,118 @@ public sealed class ToolInteraction
         }
 
         var preview = MountainSelectionPreview(context);
+        ClearMountainPointDrag();
+        return FinishMountainReshape(
+            context,
+            preview,
+            "Move Mountain Point",
+            $"Moved point {pointIndex + 1} of '{bodyId}' to ({position.X}, {position.Y}).");
+    }
+
+    private ToolOutcome FinishMountainHandleMove(ToolContext context)
+    {
+        if (SelectedMountainBodyId is not { } bodyId
+            || SelectedMountainPointIndex is not { } pointIndex
+            || _draggedMountainHandleSide is not { } side)
+        {
+            ClearMountainHandleDrag();
+            return ToolOutcome.Idle.Instance;
+        }
+
+        var preview = MountainSelectionPreview(context);
+        ClearMountainHandleDrag();
+        return FinishMountainReshape(
+            context,
+            preview,
+            "Move Mountain Handle",
+            $"Moved {side.ToString().ToLowerInvariant()} handle of point {pointIndex + 1} "
+                + $"on '{bodyId}'.");
+    }
+
+    private static ToolOutcome FinishMountainReshape(
+        ToolContext context,
+        MountainSelectionPreview preview,
+        string editName,
+        string description)
+    {
+        if (preview.Kind == MountainDraftKind.Blocked || preview.Body is null)
+            return new ToolOutcome.Message($"{editName} blocked: {preview.Explanation}");
+        var bodyId = preview.Body.MountainBodyId;
         var stored = context.Scene.MountainBodies.FirstOrDefault(body => string.Equals(
             body.MountainBodyId, bodyId, StringComparison.Ordinal));
-        ClearMountainPointDrag();
-        if (stored is null) return new ToolOutcome.Message("Move Mountain Point: body no longer exists.");
-
-        var previous = stored.Points[pointIndex].PositionAuthoringPx;
-        if (previous.X == position.X && previous.Y == position.Y)
-            return ToolOutcome.Idle.Instance;
-        if (preview.Kind == MountainDraftKind.Blocked || preview.Body is null)
-        {
-            return new ToolOutcome.Message(
-                $"Move Mountain Point blocked: {preview.Explanation}");
-        }
+        if (stored is null) return new ToolOutcome.Message($"{editName}: body no longer exists.");
+        if (stored.Points.SequenceEqual(preview.Body.Points)) return ToolOutcome.Idle.Instance;
 
         var points = preview.Body.Points;
         return new ToolOutcome.Edit(
-            "Move Mountain Point",
+            editName,
+            document => MountainEditing.Reshape(document, bodyId, points),
+            Describe: (_, _) => description);
+    }
+
+    /// <summary>Changes the selected authored point through the normal edit path.</summary>
+    public ToolOutcome SetSelectedMountainPointMode(
+        ToolContext context,
+        MountainPointMode mode)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (Mode != EditorMode.Mountain || ActiveTool != EditorTool.SelectMountain
+            || SelectedMountainBodyId is not { } bodyId
+            || SelectedMountainPointIndex is not { } pointIndex)
+        {
+            return new ToolOutcome.Message("Select a Mountain point before changing its mode.");
+        }
+
+        var body = context.Scene.MountainBodies.FirstOrDefault(candidate => string.Equals(
+            candidate.MountainBodyId, bodyId, StringComparison.Ordinal));
+        if (body is null || pointIndex >= body.Points.Count)
+            return new ToolOutcome.Message("The selected Mountain point no longer exists.");
+        if (body.Points[pointIndex].Mode == mode) return ToolOutcome.Idle.Instance;
+
+        var points = MountainEditing.WithPointMode(body.Points, pointIndex, mode);
+        var reshape = MountainEditing.TryReshape(context.Scene, bodyId, points);
+        if (reshape.Body is null)
+        {
+            return new ToolOutcome.Message(
+                $"Change Mountain Point blocked: {reshape.Reason}");
+        }
+        return new ToolOutcome.Edit(
+            "Change Mountain Point",
             document => MountainEditing.Reshape(document, bodyId, points),
             Describe: (_, _) =>
-                $"Moved point {pointIndex + 1} of '{bodyId}' to ({position.X}, {position.Y}).");
+                $"Changed point {pointIndex + 1} of '{bodyId}' to {mode}.");
+    }
+
+    private IReadOnlyList<MountainCurvePointDocument>? MountainCandidatePoints(
+        ToolContext context)
+    {
+        if (SelectedMountainBodyId is not { } bodyId) return null;
+        var body = context.Scene.MountainBodies.FirstOrDefault(candidate => string.Equals(
+            candidate.MountainBodyId, bodyId, StringComparison.Ordinal));
+        if (body is null) return null;
+
+        if (_draggedMountainPointIndex is { } pointIndex
+            && _draggedMountainPointPosition is { } position)
+        {
+            var points = body.Points.ToList();
+            points[pointIndex] = points[pointIndex] with
+            {
+                PositionAuthoringPx = new AuthoringPixelPosition
+                {
+                    X = position.X,
+                    Y = position.Y,
+                },
+            };
+            return points;
+        }
+        if (_draggedMountainHandleSide is { } side
+            && _draggedMountainHandleOffset is { } offset
+            && SelectedMountainPointIndex is { } selectedPointIndex)
+        {
+            return MountainEditing.WithMovedHandle(
+                body.Points, selectedPointIndex, side, offset);
+        }
+        return null;
     }
 
     private MountainPointHit? FindMountainPoint(ToolContext context, AuthoringPoint point)
@@ -610,9 +756,58 @@ public sealed class ToolInteraction
             .FirstOrDefault();
     }
 
+    private MountainHandleHit? FindMountainHandle(ToolContext context, AuthoringPoint point)
+    {
+        if (SelectedMountainBodyId is not { } bodyId) return null;
+        var body = context.Scene.MountainBodies.FirstOrDefault(candidate => string.Equals(
+            candidate.MountainBodyId, bodyId, StringComparison.Ordinal));
+        if (body is null) return null;
+
+        var maximumDistanceSquared = context.PointerHitRadiusAuthoringPixels
+            * context.PointerHitRadiusAuthoringPixels;
+        List<MountainHandleHit> hits = [];
+        for (var index = 0; index < body.Points.Count; index++)
+        {
+            var curvePoint = body.Points[index];
+            if (curvePoint.Mode != MountainPointMode.Aligned) continue;
+            AddHandleHit(hits, point, curvePoint, index, MountainHandleSide.In);
+            AddHandleHit(hits, point, curvePoint, index, MountainHandleSide.Out);
+        }
+        return hits
+            .Where(hit => hit.DistanceSquared <= maximumDistanceSquared)
+            .OrderByDescending(hit => hit.PointIndex == SelectedMountainPointIndex)
+            .ThenBy(static hit => hit.DistanceSquared)
+            .ThenBy(static hit => hit.PointIndex)
+            .ThenBy(static hit => hit.Side)
+            .FirstOrDefault();
+    }
+
+    private static void AddHandleHit(
+        ICollection<MountainHandleHit> hits,
+        AuthoringPoint pointer,
+        MountainCurvePointDocument point,
+        int pointIndex,
+        MountainHandleSide side)
+    {
+        var offset = side == MountainHandleSide.In
+            ? point.HandleInAuthoringPx
+            : point.HandleOutAuthoringPx;
+        if (offset.IsZero()) return;
+        var deltaX = (double)point.PositionAuthoringPx.X + offset.X - pointer.X;
+        var deltaY = (double)point.PositionAuthoringPx.Y + offset.Y - pointer.Y;
+        hits.Add(new MountainHandleHit(
+            pointIndex, side, offset, deltaX * deltaX + deltaY * deltaY));
+    }
+
     private sealed record MountainPointHit(
         MountainBodyDocument Body,
         int PointIndex,
+        double DistanceSquared);
+
+    private sealed record MountainHandleHit(
+        int PointIndex,
+        MountainHandleSide Side,
+        AuthoringPixelOffset Offset,
         double DistanceSquared);
 
     private ToolOutcome FinishMountain(ToolContext context)
@@ -1154,6 +1349,7 @@ public sealed class ToolInteraction
         ClearTerrainLine();
         ClearAnchorDrag();
         ClearMountainPointDrag();
+        ClearMountainHandleDrag();
         ClearRiverDraft();
         ClearMountainDraft();
     }
@@ -1174,6 +1370,12 @@ public sealed class ToolInteraction
     {
         _draggedMountainPointIndex = null;
         _draggedMountainPointPosition = null;
+    }
+
+    private void ClearMountainHandleDrag()
+    {
+        _draggedMountainHandleSide = null;
+        _draggedMountainHandleOffset = null;
     }
 
     private void ClearPropLine()

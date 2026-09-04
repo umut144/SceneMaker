@@ -9,6 +9,13 @@ public readonly record struct MountainDraftPoint(
     MountainPointMode Mode,
     AuthoringPixelOffset? DraggedHandleOut = null);
 
+/// <summary>Which Bezier handle of a mountain point is being edited.</summary>
+public enum MountainHandleSide
+{
+    In,
+    Out,
+}
+
 /// <summary>Pure edits for closed, level-topped mountain bodies.</summary>
 public static class MountainEditing
 {
@@ -253,6 +260,106 @@ public static class MountainEditing
             ? AuthoringPixelOffset.Zero
             : handleOut ?? AuthoringPixelOffset.Zero,
     };
+
+    /// <summary>
+    /// Returns one contour with a point changed between a sharp linear corner
+    /// and an aligned Bezier point. Turning alignment on supplies useful cyclic
+    /// automatic handles; turning it off removes both handles.
+    /// </summary>
+    public static IReadOnlyList<MountainCurvePointDocument> WithPointMode(
+        IReadOnlyList<MountainCurvePointDocument> points,
+        int pointIndex,
+        MountainPointMode mode)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        if (pointIndex < 0 || pointIndex >= points.Count)
+            throw new ArgumentOutOfRangeException(nameof(pointIndex));
+
+        var changed = points.ToList();
+        var point = points[pointIndex];
+        if (mode == MountainPointMode.Linear)
+        {
+            changed[pointIndex] = point with
+            {
+                Mode = mode,
+                HandleInAuthoringPx = AuthoringPixelOffset.Zero,
+                HandleOutAuthoringPx = AuthoringPixelOffset.Zero,
+            };
+            return changed;
+        }
+
+        var current = DraftOf(point);
+        var previous = DraftOf(points[(pointIndex + points.Count - 1) % points.Count]);
+        var next = DraftOf(points[(pointIndex + 1) % points.Count]);
+        var (handleIn, handleOut) = AutomaticHandles(current, previous, next);
+        changed[pointIndex] = point with
+        {
+            Mode = mode,
+            HandleInAuthoringPx = handleIn,
+            HandleOutAuthoringPx = handleOut,
+        };
+        return changed;
+    }
+
+    /// <summary>
+    /// Moves one handle of an aligned point. The opposite handle keeps its
+    /// length and turns to remain collinear, which is the persisted meaning of
+    /// Aligned: one tangent with independently adjustable lengths.
+    /// </summary>
+    public static IReadOnlyList<MountainCurvePointDocument> WithMovedHandle(
+        IReadOnlyList<MountainCurvePointDocument> points,
+        int pointIndex,
+        MountainHandleSide side,
+        AuthoringPixelOffset offset)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        ArgumentNullException.ThrowIfNull(offset);
+        if (!Enum.IsDefined(side)) throw new ArgumentOutOfRangeException(nameof(side));
+        if (pointIndex < 0 || pointIndex >= points.Count)
+            throw new ArgumentOutOfRangeException(nameof(pointIndex));
+        var point = points[pointIndex];
+        if (point.Mode != MountainPointMode.Aligned)
+            throw new SceneMakerDocumentException(
+                $"Mountain point {pointIndex} is Linear and has no handles to move.");
+
+        var changed = points.ToList();
+        changed[pointIndex] = side == MountainHandleSide.In
+            ? point with
+            {
+                HandleInAuthoringPx = offset,
+                HandleOutAuthoringPx = OppositeAlong(
+                    offset, point.HandleOutAuthoringPx),
+            }
+            : point with
+            {
+                HandleInAuthoringPx = OppositeAlong(
+                    offset, point.HandleInAuthoringPx),
+                HandleOutAuthoringPx = offset,
+            };
+        return changed;
+    }
+
+    private static MountainDraftPoint DraftOf(MountainCurvePointDocument point) => new(
+        point.PositionAuthoringPx.X,
+        point.PositionAuthoringPx.Y,
+        point.Mode);
+
+    private static AuthoringPixelOffset OppositeAlong(
+        AuthoringPixelOffset direction,
+        AuthoringPixelOffset previousOpposite)
+    {
+        var directionLength = Math.Sqrt(
+            (double)direction.X * direction.X + (double)direction.Y * direction.Y);
+        var oppositeLength = Math.Sqrt(
+            (double)previousOpposite.X * previousOpposite.X
+            + (double)previousOpposite.Y * previousOpposite.Y);
+        return directionLength <= 0.0 || oppositeLength <= 0.0
+            ? previousOpposite
+            : Offset(
+                -direction.X / directionLength * oppositeLength,
+                -direction.Y / directionLength * oppositeLength);
+    }
 
     private static AuthoringPixelOffset Orient(
         AuthoringPixelOffset handleOut,

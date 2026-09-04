@@ -196,6 +196,9 @@ public sealed partial class SceneCanvas : Control
     /// <summary>The Template Anchor the tools currently have selected, if any.</summary>
     public string? SelectedTemplateAnchorId => _interaction.SelectedTemplateAnchorId;
 
+    public int? SelectedMountainPointIndex => _interaction.SelectedMountainPointIndex;
+    public string? SelectedMountainBodyId => _interaction.SelectedMountainBodyId;
+
     public event Action? ViewChanged;
 
     /// <summary>
@@ -236,6 +239,14 @@ public sealed partial class SceneCanvas : Control
     public ToolOutcome SetEraserEnabled(bool enabled)
     {
         var outcome = _interaction.SetEraserEnabled(enabled);
+        QueueRedraw();
+        return outcome;
+    }
+
+    public ToolOutcome SetSelectedMountainPointMode(MountainPointMode mode)
+    {
+        if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
+        var outcome = _interaction.SetSelectedMountainPointMode(context, mode);
         QueueRedraw();
         return outcome;
     }
@@ -1005,13 +1016,35 @@ public sealed partial class SceneCanvas : Control
         {
             var point = body.Points[index];
             var centre = Screen(point.PositionAuthoringPx.X, point.PositionAuthoringPx.Y);
-            DrawHandle(centre, point.PositionAuthoringPx, point.HandleInAuthoringPx, Screen);
-            DrawHandle(centre, point.PositionAuthoringPx, point.HandleOutAuthoringPx, Screen);
+            DrawMountainSelectionHandle(
+                centre, point, index, MountainHandleSide.In, Screen);
+            DrawMountainSelectionHandle(
+                centre, point, index, MountainHandleSide.Out, Screen);
             DrawCircle(
                 centre,
-                _interaction.DraggedMountainPointIndex == index ? 6.0f : 4.0f,
+                _interaction.SelectedMountainPointIndex == index ? 6.0f : 4.0f,
                 color);
         }
+    }
+
+    private void DrawMountainSelectionHandle(
+        Vector2 centre,
+        MountainCurvePointDocument point,
+        int pointIndex,
+        MountainHandleSide side,
+        Func<double, double, Vector2> screen)
+    {
+        var handle = side == MountainHandleSide.In
+            ? point.HandleInAuthoringPx
+            : point.HandleOutAuthoringPx;
+        if (handle.IsZero()) return;
+        var tip = screen(
+            point.PositionAuthoringPx.X + handle.X,
+            point.PositionAuthoringPx.Y + handle.Y);
+        DrawLine(centre, tip, WaterHandleColor, 1.5f);
+        var selected = _interaction.SelectedMountainPointIndex == pointIndex;
+        var dragged = selected && _interaction.DraggedMountainHandleSide == side;
+        DrawCircle(tip, dragged ? 5.0f : selected ? 4.0f : 3.0f, WaterHandleColor);
     }
 
     /// <summary>

@@ -1804,6 +1804,12 @@ public sealed partial class SceneMakerMain : Control
     private void SetCurvePointMode(long item)
     {
         var aligned = _curvePointModeEdit.GetItemId((int)item) == CurvePointModeAligned;
+        if (_interaction.ActiveTool == EditorTool.SelectMountain)
+        {
+            HandleToolOutcome(_canvas.SetSelectedMountainPointMode(
+                aligned ? MountainPointMode.Aligned : MountainPointMode.Linear));
+            return;
+        }
         if (_interaction.ActiveTool == EditorTool.DrawMountain)
         {
             _interaction.State.SetMountainPointMode(
@@ -1893,7 +1899,16 @@ public sealed partial class SceneMakerMain : Control
         var mountainActive = _interaction.Mode == EditorMode.Mountain;
         var mountainDrawing = mountainActive
             && _interaction.ActiveTool == EditorTool.DrawMountain;
-        var curveActive = riverActive || mountainDrawing;
+        var selectedMountainPoint = mountainActive
+            && _interaction.ActiveTool == EditorTool.SelectMountain
+            && _canvas.SelectedMountainBodyId is { } selectedBodyId
+            && _canvas.SelectedMountainPointIndex is { } selectedPointIndex
+            ? _controller.Document?.MountainBodies
+                .FirstOrDefault(body => body.MountainBodyId == selectedBodyId)
+                ?.Points.ElementAtOrDefault(selectedPointIndex)
+            : null;
+        var mountainPointEditing = selectedMountainPoint is not null;
+        var curveActive = riverActive || mountainDrawing || mountainPointEditing;
         _toolContextSeparator.Visible = propLineActive || curveActive;
         _propLineOffsetLabel.Visible = propLineActive;
         _propLineOffsetEdit.Visible = propLineActive;
@@ -1907,10 +1922,16 @@ public sealed partial class SceneMakerMain : Control
         _surfaceEdit.Visible = surfaceActive;
         // The two tools keep their own point mode; the shared control only
         // shows whichever one the active tool authors with.
-        var aligned = mountainDrawing
-            ? _interaction.State.MountainPointMode == MountainPointMode.Aligned
-            : _interaction.State.WaterPointMode == WaterPointMode.Aligned;
+        var aligned = mountainPointEditing
+            ? selectedMountainPoint!.Mode == MountainPointMode.Aligned
+            : mountainDrawing
+                ? _interaction.State.MountainPointMode == MountainPointMode.Aligned
+                : _interaction.State.WaterPointMode == WaterPointMode.Aligned;
         SelectCurvePointModeItem(aligned ? CurvePointModeAligned : CurvePointModeLinear);
+        _curvePointModeEdit.TooltipText = mountainPointEditing
+            ? "Changes the selected authored point. Aligned creates editable cyclic Bezier handles."
+            : "How the next curve point's handles behave. Switchable while drawing; "
+                + "it decides what the next point does and leaves the placed ones alone.";
         _riverWidthLabel.Visible = riverActive;
         _riverWidthEdit.Visible = riverActive;
         _snapWaterToggle.Visible = riverActive;
@@ -2020,6 +2041,7 @@ public sealed partial class SceneMakerMain : Control
                 ExecuteSceneCommand(edit);
                 break;
         }
+        UpdateToolContextLabel();
     }
 
     /// <summary>

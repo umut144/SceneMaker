@@ -30,6 +30,46 @@ public sealed class MountainGeometryTests
     }
 
     [Fact]
+    public void TurningAStoredPointAlignedCreatesCyclicHandlesOnlyForThatPoint()
+    {
+        var points = Square(32, 32, 160, 160);
+
+        var changed = MountainEditing.WithPointMode(points, 0, MountainPointMode.Aligned);
+
+        Assert.Equal(MountainPointMode.Aligned, changed[0].Mode);
+        Assert.False(changed[0].HandleInAuthoringPx.IsZero());
+        Assert.False(changed[0].HandleOutAuthoringPx.IsZero());
+        Assert.Same(points[1], changed[1]);
+
+        var linear = MountainEditing.WithPointMode(changed, 0, MountainPointMode.Linear);
+        Assert.Equal(MountainPointMode.Linear, linear[0].Mode);
+        Assert.True(linear[0].HandleInAuthoringPx.IsZero());
+        Assert.True(linear[0].HandleOutAuthoringPx.IsZero());
+    }
+
+    [Fact]
+    public void MovingOneAlignedHandleRotatesTheOtherWithoutChangingItsLength()
+    {
+        var points = Square(32, 32, 160, 160).ToList();
+        points[1] = MountainEditing.Point(
+            160,
+            32,
+            MountainPointMode.Aligned,
+            new AuthoringPixelOffset { X = -10, Y = 0 },
+            new AuthoringPixelOffset { X = 20, Y = 0 });
+
+        var changed = MountainEditing.WithMovedHandle(
+            points,
+            1,
+            MountainHandleSide.Out,
+            new AuthoringPixelOffset { X = 0, Y = 20 });
+
+        Assert.Equal(new AuthoringPixelOffset { X = 0, Y = 20 }, changed[1].HandleOutAuthoringPx);
+        Assert.Equal(new AuthoringPixelOffset { X = 0, Y = -10 }, changed[1].HandleInAuthoringPx);
+        Assert.Same(points[0], changed[0]);
+    }
+
+    [Fact]
     public void PickingAnOverlapFindsTheHighestMountain()
     {
         using var workspace = TestWorkspace.Create();

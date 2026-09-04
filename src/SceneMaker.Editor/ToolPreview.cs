@@ -382,8 +382,7 @@ public static class ToolPreviewBuilder
         SceneDocument scene,
         EditorTool tool,
         string? selectedMountainBodyId,
-        int? draggedPointIndex,
-        AuthoringPoint? draggedPointPosition)
+        IReadOnlyList<MountainCurvePointDocument>? candidatePoints)
     {
         ArgumentNullException.ThrowIfNull(scene);
         if (tool != EditorTool.SelectMountain || selectedMountainBodyId is null)
@@ -393,8 +392,7 @@ public static class ToolPreviewBuilder
             body.MountainBodyId, selectedMountainBodyId, StringComparison.Ordinal));
         if (stored is null) return MountainSelectionPreview.Empty;
 
-        if (draggedPointIndex is not { } pointIndex
-            || draggedPointPosition is not { } position)
+        if (candidatePoints is null)
         {
             return new MountainSelectionPreview(
                 stored,
@@ -402,18 +400,7 @@ public static class ToolPreviewBuilder
                 MountainDraftKind.Ready,
                 Explanation: null);
         }
-        if (pointIndex < 0 || pointIndex >= stored.Points.Count)
-            return MountainSelectionPreview.Empty;
-
-        var points = stored.Points.ToList();
-        points[pointIndex] = points[pointIndex] with
-        {
-            PositionAuthoringPx = new AuthoringPixelPosition
-            {
-                X = position.X,
-                Y = position.Y,
-            },
-        };
+        var points = candidatePoints.ToList();
         var candidate = stored with { Points = points };
         var outline = MountainGeometry.Flatten(candidate).Points;
         var reshape = MountainEditing.TryReshape(scene, stored.MountainBodyId, points);

@@ -203,9 +203,15 @@ closing Bezier edge has no special endpoint behaviour.
 click on a body selects the topmost contour covering the visible Terrain cell;
 an authored point within a screen-sized hit radius takes precedence and begins
 a drag. The point snaps to the Terrain grid while both handle offsets, body ID
-and absolute top remain unchanged. The live contour uses the same reshape check
-as pointer release: a valid candidate keeps the body's palette colour, an
-invalid one turns red and is not committed. The move is one undoable edit.
+and absolute top remain unchanged. A selected point exposes the shared `Point`
+field: Linear removes its handles, while Aligned creates cyclic automatic
+handles from its two neighbours. Either handle tip can then be dragged without
+snapping. The opposite tip turns with it but keeps its own length, which is the
+meaning of Aligned in the stored document. During a drag the live contour uses
+the same reshape check as pointer release: a valid candidate keeps the body's
+palette colour, an invalid one turns red and is not committed. A mode change is
+checked before its edit is offered and is likewise refused with its reason.
+Point moves, handle moves and mode changes are each one undoable edit.
 
 The draft has three states and they answer one question - what would Enter do.
 Too few points is Incomplete and drawn neutrally, because a contour that is not
