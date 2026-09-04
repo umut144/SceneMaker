@@ -86,6 +86,23 @@ public sealed class VoxelToolInteractionTests
         Assert.Single(interaction.PathDraft);
     }
 
+    [Fact]
+    public void DraggingAPathPointPullsAlignedBezierHandles()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.EmptyInstance();
+        var interaction = new VoxelToolInteraction();
+        var context = Context(workspace, scene, VoxelAuthoringTool.Path);
+        interaction.PointerPressed(context, default, new VoxelPointMeters(2m, 0m, 2m));
+
+        interaction.PointerDragged(
+            context, default, new VoxelPointMeters(4m, 0m, 3m));
+
+        var point = Assert.Single(interaction.PathDraft);
+        Assert.Equal(new VoxelPlanOffsetMeters(2m, 1m), point.HandleOut);
+        Assert.Equal(new VoxelPlanOffsetMeters(-2m, -1m), point.HandleIn);
+    }
+
     private static VoxelToolContext Context(
         TestWorkspace workspace,
         SceneDocument scene,

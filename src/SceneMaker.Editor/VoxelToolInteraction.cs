@@ -80,10 +80,12 @@ public sealed class VoxelToolInteraction
     public ToolOutcome PointerDragged(
         VoxelToolContext context,
         VoxelCoordinate voxel,
-        VoxelPointMeters metricPoint) =>
-        context.Settings.Tool == VoxelAuthoringTool.Tile
-            ? Tile(context, voxel)
-            : ToolOutcome.Idle.Instance;
+        VoxelPointMeters metricPoint) => context.Settings.Tool switch
+        {
+            VoxelAuthoringTool.Tile => Tile(context, voxel),
+            VoxelAuthoringTool.Path => PullPathHandle(context, metricPoint),
+            _ => ToolOutcome.Idle.Instance,
+        };
 
     public ToolOutcome KeyPressed(VoxelToolContext context, ToolKey key)
     {
@@ -150,6 +152,24 @@ public sealed class VoxelToolInteraction
             elevation));
         return new ToolOutcome.Message(
             $"VoxelPath point {_pathDraft.Count}: elevation {elevation:0.###} m; Enter builds the corridor.");
+    }
+
+    private ToolOutcome PullPathHandle(VoxelToolContext context, VoxelPointMeters point)
+    {
+        if (_pathDraft.Count == 0) return ToolOutcome.Idle.Instance;
+        var snapped = SnapPlan(context.Metrics, point);
+        var current = _pathDraft[^1];
+        var offset = new VoxelPlanOffsetMeters(
+            Snap(context.Metrics, snapped.X - current.Position.X),
+            Snap(context.Metrics, snapped.Z - current.Position.Z));
+        if (offset == VoxelPlanOffsetMeters.Zero) return ToolOutcome.Idle.Instance;
+        _pathDraft[^1] = current with
+        {
+            HandleIn = new VoxelPlanOffsetMeters(-offset.X, -offset.Z),
+            HandleOut = offset,
+        };
+        return new ToolOutcome.Message(
+            $"VoxelPath point {_pathDraft.Count}: aligned Bezier handle {offset.X:0.###}, {offset.Z:0.###} m.");
     }
 
     private ToolOutcome CommitHill(VoxelToolContext context)

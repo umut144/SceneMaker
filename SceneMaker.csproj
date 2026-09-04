@@ -2,6 +2,7 @@
   <PropertyGroup>
     <!-- Repeated from Directory.Build.props: Godot writes this file itself. -->
     <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>WorldVoxMaker</AssemblyName>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <RootNamespace>SceneMaker.App</RootNamespace>
     <DefaultItemExcludes>$(DefaultItemExcludes);src/SceneMaker.Core/**;src/SceneMaker.Editor/**;src/SceneMaker.Cli/**;tests/**;.godot/**</DefaultItemExcludes>

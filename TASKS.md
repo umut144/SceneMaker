@@ -7,21 +7,20 @@ so a later reader can decide rather than rediscover.
 Read `AGENTS.md` first — the rules there are what the fixes below have to stay
 inside.
 
-## 0. WorldVoxMaker App cutover is not complete
+## 0. Legacy source/schema removal remains after the WorldVoxMaker cutover
 
 Core now owns the sparse Voxel Grid, Tile/Hill/Path operations, primitive
 library, three export projections, schema-15 persistence, Workspace voxel
 metrics and voxel-aware Template composition. Editor owns the pointer-following
-cross-section projection. The Godot App still presents SceneMaker's legacy 2D
-Terrain/River/Ramp/Hill controls and does not yet render or edit `voxel_cells`.
+cross-section projection. The running Godot App is now WorldVoxMaker and authors
+`voxel_cells` through a 3D camera, picking and the three voxel tool contexts.
 
-Cost: the new model is testable and serializable but cannot yet be authored
-end-to-end from the running Godot UI. The cutover must replace `SceneCanvas`'s
-2D drawing/input plumbing with a 3D camera, voxel picking/mesh rendering and the
-three voxel tool contexts; then delete the legacy document fields and systems,
-rename the solution/projects, and switch CLI export selection to
-`VoxelExportPipeline`. Do this as an explicit schema cut, not by teaching old
-heightfield tools to mutate voxel data.
+Cost: unused legacy App/Editor sources and the schema-15 Terrain, Water, Route
+Surface and Elevation Region fields still compile beside the live product. They
+increase build and maintenance surface and keep internal `SceneMaker` namespaces
+and project paths alive. Delete them together in the next explicit schema cut,
+after the last legacy export consumer has moved; do not teach those old tools to
+mutate voxel data. The CLI and live App already default to the voxel pipeline.
 
 ## 1. Instance IDs stop reading in numeric order past 9 999
 

@@ -22,6 +22,9 @@ cutover and must not become inputs to new voxel operations.
 
 The solution and namespaces retain their `SceneMaker` names during this
 transition so commits remain buildable; product-facing naming is WorldVoxMaker.
+The Godot main scene and produced application assembly are already named
+WorldVoxMaker and run the 3D voxel authoring shell; only dormant legacy source
+and internal project/namespace names remain for the final deletion cut.
 
 # Legacy SceneMaker context
 
