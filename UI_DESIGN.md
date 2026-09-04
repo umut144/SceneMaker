@@ -37,7 +37,7 @@ Canvas und damit gegenüber der linken `ToolBar`.
 
 Die Werkzeugauswahl besteht aus drei unabhängigen Dimensionen:
 
-- `EditorMode` bestimmt den **Bereich**: `Terrain`, `River`, `Ramp`, `Hill`,
+- `EditorMode` bestimmt den **Bereich**: `Terrain`, `River`, `Path`, `Hill`,
   `Placements` oder `Templates`.
 - `EditorTool` bestimmt das primäre Werkzeug innerhalb dieses Bereichs.
 - Das gewählte Terrain-Asset bestimmt das **Material** und sonst nichts.
@@ -48,7 +48,7 @@ Die Navigation ist zweistufig, wie bei den übrigen Bereichen auch:
 Übersicht:  [ Terrain ] [ Landscape ] [ Placements ] [ Scene Templates ] [ Map ]
                               │
                               ▼
-Kontext:    [ ← ]  Landscape ›  ( River )  ( Ramp )  ( Hill )
+Kontext:    [ ← ]  Landscape ›  ( River )  ( Path )  ( Hill )
 ```
 
 Das Material erscheint dort nicht noch einmal. Ein Bereich, der Zellen malt,
@@ -78,7 +78,7 @@ Surface-Token — aber gefragt wird es jetzt von der Assetleiste:
 | --- | --- | --- |
 | `Terrain` | `Pencil`, `Line`, `Terrain Fill` | `authoring: "cells"`, als Palette |
 | `River` | `Draw River` | `authoring: "curve"`, als `Surface`-Feld |
-| `Ramp` | `Draw Ramp` | alle Terrain-Assets, als `Surface`-Feld |
+| `Path` | `Draw Path` | alle Terrain-Assets, als `Surface`-Feld |
 | `Hill` | `Draw Hill`, `Select Hill` | — |
 | `Placements` | `Selector`, `Pencil`, `Line` | — |
 | `Templates` | `Selector`, `Anchor Move` | — |
@@ -90,13 +90,13 @@ etwa Sand über das Grass des Hügelrückens. Jeder Bereich merkt sich sein zule
 gewähltes Asset getrennt, damit man den Pinsel dort wiederfindet, wo man ihn
 abgelegt hat.
 
-`Ramp` ist eine eigenständige Oberfläche über dem Terrain. Deshalb darf sie
+`Path` ist eine eigenständige Oberfläche über dem Terrain. Deshalb darf er
 jedes Terrain-Asset präsentieren, auch wenn dessen normale Authoring-Art
-`cells` oder `curve` ist. Ihr offener Bezier-Entwurf speichert Höhe und Breite
+`cells` oder `curve` ist. Sein offener Bezier-Entwurf speichert Höhe und Breite
 pro Punkt; Punktpositionen rasten horizontal nicht am Terrain-Raster ein:
 
 ```text
-Ramp-Kontext:  Surface [ Grass ▾ ] · Point [ Linear ▾ ] · Width […] · Height […]
+Path-Kontext:  Surface [ Grass ▾ ] · Point [ Linear ▾ ] · Width […] · Height […]
 ```
 
 Der Canvas zeichnet das kontinuierliche Band in der Assetfarbe mit sichtbarer

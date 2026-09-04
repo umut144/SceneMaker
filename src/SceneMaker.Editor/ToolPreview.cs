@@ -37,7 +37,7 @@ public sealed record WaterDraftPreview(
 }
 
 /// <summary>
-/// The open Ramp being drawn. A prepared surface is present only when at least
+/// The open Path being drawn. A prepared surface is present only when at least
 /// two points form valid route geometry; the same value is used by the canvas
 /// and by Enter.
 /// </summary>
@@ -267,7 +267,7 @@ public static class ToolPreviewBuilder
     {
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(draft);
-        if (tool != EditorTool.DrawRamp) return RouteDraftPreview.Empty;
+        if (tool != EditorTool.DrawPath) return RouteDraftPreview.Empty;
 
         List<RouteDraftPoint> points = [.. draft];
         if (pending is { } value
@@ -287,7 +287,7 @@ public static class ToolPreviewBuilder
                 points,
                 curve,
                 null,
-                "a Ramp needs at least two points");
+                "a Path needs at least two points");
         }
 
         try

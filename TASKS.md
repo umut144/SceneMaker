@@ -164,14 +164,14 @@ support height at every point. Width and height interpolate over arc length;
 the intermediate height stays continuous rather than being snapped into cell
 steps. Its grade report is descriptive geometry, not an Actor capability.
 Authoring schema 13 introduced routes with a Terrain-role material; schema 14
-keeps them unchanged. `Draw Ramp` now authors a free open Bezier curve with
-height and width per point, previews the continuous band in the Canvas and
-erases the whole route. The Landscape navigation and context controls are
-present, and the height view colours its interpolated surface. Export schema 9
-still warns and omits routes. Traversal profiles still belong in Workspace
-configuration before a tool or generator can judge whether an Actor can use a
-route. Export support, selection/point reshaping and the overlapping-station
-semantics needed by helixes remain separate later slices.
+keeps them unchanged. The author-facing `Draw Path` tool now authors a free
+open Bezier curve with height and width per point, previews the continuous band
+in the Canvas and erases the whole route. The Landscape navigation and context
+controls are present, and the height view colours its interpolated surface.
+Export schema 9 still warns and omits routes. Traversal profiles still belong
+in Workspace configuration before a tool or generator can judge whether an
+Actor can use a route. Export support, selection/point reshaping and the
+overlapping-station semantics needed by helixes remain separate later slices.
 
 The same analysis should lead to a generated first-person LookDev mode. It is
 DOOM-like in use - enter the authored map, walk it and inspect stairs, tunnels,

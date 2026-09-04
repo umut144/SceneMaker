@@ -38,14 +38,14 @@ public static class RouteSurfaceEditing
         ArgumentNullException.ThrowIfNull(points);
         _ = terrainAssets.Resolve(assetKey);
         if (points.Count < 2)
-            throw new SceneMakerDocumentException("A ramp needs at least two points.");
+            throw new SceneMakerDocumentException("A Path needs at least two points.");
         if (points.Any(static point => point.WidthMeters <= 0m))
-            throw new SceneMakerDocumentException("A ramp needs a positive width at every point.");
+            throw new SceneMakerDocumentException("A Path needs a positive width at every point.");
         if (points.Any(point => !metrics.IsElevationAligned(point.ElevationMeters)))
         {
             throw new SceneMakerDocumentException(
                 FormattableString.Invariant(
-                    $"Ramp heights must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m."));
+                    $"Path heights must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m."));
         }
 
         var route = new RouteSurfaceDocument

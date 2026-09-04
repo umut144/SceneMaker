@@ -5,17 +5,17 @@ using Xunit;
 
 namespace SceneMaker.Editor.Tests;
 
-public sealed class ToolRampTests
+public sealed class ToolPathTests
 {
     [Fact]
-    public void AFreeOpenCurveAuthorsAnAscendingRamp()
+    public void AFreeOpenCurveAuthorsAnAscendingPath()
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Ramp();
+        var interaction = Path();
 
         Place(interaction, Context(workspace, scene, 1m), 35, 47);
-        interaction.State.SetRampWidth(3m);
+        interaction.State.SetPathWidth(3m);
         Place(interaction, Context(workspace, scene, 2m), 157, 91);
         var edit = Assert.IsType<ToolOutcome.Edit>(
             interaction.KeyPressed(Context(workspace, scene, 2m), ToolKey.Enter));
@@ -27,7 +27,7 @@ public sealed class ToolRampTests
         Assert.Equal([47, 91], route.Points.Select(static point => point.PositionAuthoringPx.Y));
         Assert.Equal([1m, 2m], route.Points.Select(static point => point.ElevationMeters));
         Assert.Equal([2m, 3m], route.Points.Select(static point => point.WidthMeters));
-        Assert.Empty(interaction.RampDraft);
+        Assert.Empty(interaction.PathDraft);
         Assert.Null(edit.StrokeKey);
     }
 
@@ -36,7 +36,7 @@ public sealed class ToolRampTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Ramp();
+        var interaction = Path();
 
         Place(interaction, Context(workspace, scene, 2m), 32, 32);
         Place(interaction, Context(workspace, scene, 1m), 160, 32);
@@ -54,13 +54,13 @@ public sealed class ToolRampTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Ramp();
+        var interaction = Path();
 
         Place(interaction, Context(workspace, scene, 1m), 32, 32);
         Place(interaction, Context(workspace, scene, 2m), 160, 32);
         var changed = Context(workspace, scene, 2m, "river");
 
-        Assert.Equal(2, interaction.RampDraft.Count);
+        Assert.Equal(2, interaction.PathDraft.Count);
         var edit = Assert.IsType<ToolOutcome.Edit>(
             interaction.KeyPressed(changed, ToolKey.Enter));
         Assert.Equal("river", Assert.Single(edit.Apply(scene).RouteSurfaces).AssetKey);
@@ -71,7 +71,7 @@ public sealed class ToolRampTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Ramp();
+        var interaction = Path();
         var context = Context(workspace, scene, 1m);
         interaction.State.SetRoutePointMode(RoutePointMode.Aligned);
 
@@ -79,7 +79,7 @@ public sealed class ToolRampTests
         interaction.PointerDragged(context, Point(67, 79), Cell(2, 2));
         interaction.PointerReleased(context);
 
-        var point = Assert.Single(interaction.RampDraft);
+        var point = Assert.Single(interaction.PathDraft);
         Assert.Equal(new AuthoringPixelOffset { X = 32, Y = 32 }, point.DraggedHandleOut);
         Assert.Equal((35, 47), (point.X, point.Y));
     }
@@ -89,13 +89,13 @@ public sealed class ToolRampTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Ramp();
+        var interaction = Path();
         var context = Context(workspace, scene, 1m);
 
         Place(interaction, context, 32, 32);
         Place(interaction, context, 32, 32);
 
-        Assert.Single(interaction.RampDraft);
+        Assert.Single(interaction.PathDraft);
     }
 
     [Fact]
@@ -103,12 +103,12 @@ public sealed class ToolRampTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Ramp();
+        var interaction = Path();
 
         Place(interaction, Context(workspace, scene, 1m), 32, 64);
         Place(interaction, Context(workspace, scene, 2m), 160, 64);
 
-        var preview = interaction.RampPreview(Context(workspace, scene, 2m));
+        var preview = interaction.PathPreview(Context(workspace, scene, 2m));
         var surface = Assert.IsType<PreparedRouteSurface>(preview.Surface);
         Assert.Equal(2, preview.Curve.Count);
         Assert.Equal(1m, surface.Points[0].ElevationMeters);
@@ -120,20 +120,20 @@ public sealed class ToolRampTests
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
-        var interaction = Ramp();
+        var interaction = Path();
         Place(interaction, Context(workspace, scene, 1m), 32, 32);
 
         var outcome = interaction.SetEraserEnabled(true);
 
         Assert.Equal(
-            "The unfinished Ramp of 1 point was discarded.",
+            "The unfinished Path of 1 point was discarded.",
             Assert.IsType<ToolOutcome.Message>(outcome).Text);
-        Assert.Empty(interaction.RampDraft);
+        Assert.Empty(interaction.PathDraft);
         Assert.False(interaction.HasUnfinishedDraft);
     }
 
     [Fact]
-    public void TheEraserRemovesTheWholeRampBand()
+    public void TheEraserRemovesTheWholePathBand()
     {
         using var workspace = TestWorkspace.Create();
         var scene = RouteSurfaceEditing.Place(
@@ -145,7 +145,7 @@ public sealed class ToolRampTests
                 RouteSurfaceEditing.Point(160, 64, RoutePointMode.Linear, 2m, 2m),
             ],
             "grass");
-        var interaction = Ramp();
+        var interaction = Path();
         interaction.SetEraserEnabled(true);
 
         var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerPressed(
@@ -154,11 +154,11 @@ public sealed class ToolRampTests
         Assert.Empty(edit.Apply(scene).RouteSurfaces);
     }
 
-    private static ToolInteraction Ramp()
+    private static ToolInteraction Path()
     {
         var interaction = new ToolInteraction();
-        interaction.SelectMode(EditorMode.Ramp);
-        interaction.SelectTool(EditorTool.DrawRamp);
+        interaction.SelectMode(EditorMode.Path);
+        interaction.SelectTool(EditorTool.DrawPath);
         interaction.State.SelectTerrainAsset("grass");
         return interaction;
     }

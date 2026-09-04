@@ -6,7 +6,7 @@ using SceneMaker.Core;
 namespace SceneMaker.Editor;
 
 /// <summary>
-/// The area of a Scene being authored. Terrain, River, Ramp and ElevationRegion
+/// The area of a Scene being authored. Terrain, River, Path and ElevationRegion
 /// are separate areas because they author different geometry: painted cells,
 /// a cut-and-fill curve, an independent route band, and a closed contour.
 /// `Landscape` is not one of them - it is a caption the navigation draws around
@@ -17,7 +17,7 @@ public enum EditorMode
 {
     Terrain,
     River,
-    Ramp,
+    Path,
     ElevationRegion,
     Props,
     Templates,
@@ -30,7 +30,7 @@ public enum EditorTool
     Line,
     Fill,
     DrawRiver,
-    DrawRamp,
+    DrawPath,
     DrawElevationRegion,
     SelectElevationRegion,
     AnchorPlace,
@@ -61,7 +61,7 @@ public static class EditorToolRegistry
             EditorMode.Terrain, EditorMode.Props),
         Define(EditorTool.Fill, "Fill", "fill.svg", EditorMode.Terrain),
         Define(EditorTool.DrawRiver, "Draw River", "river.svg", EditorMode.River),
-        Define(EditorTool.DrawRamp, "Draw Ramp", "line.svg", EditorMode.Ramp),
+        Define(EditorTool.DrawPath, "Draw Path", "line.svg", EditorMode.Path),
         Define(EditorTool.DrawElevationRegion, "Draw Hill", "mountain.svg", EditorMode.ElevationRegion),
         Define(EditorTool.SelectElevationRegion, "Select Hill", "select.svg", EditorMode.ElevationRegion),
         Define(EditorTool.AnchorMove, "Move Anchor", "move.svg", EditorMode.Templates),
@@ -84,7 +84,7 @@ public static class EditorToolRegistry
     {
         EditorMode.Terrain => EditorTool.Pencil,
         EditorMode.River => EditorTool.DrawRiver,
-        EditorMode.Ramp => EditorTool.DrawRamp,
+        EditorMode.Path => EditorTool.DrawPath,
         EditorMode.ElevationRegion => EditorTool.DrawElevationRegion,
         EditorMode.Props => EditorTool.Pencil,
         EditorMode.Templates => EditorTool.Selector,
@@ -115,7 +115,7 @@ public static class EditorToolRegistry
     {
         EditorMode.Terrain => "Terrain",
         EditorMode.River => "River",
-        EditorMode.Ramp => "Ramp",
+        EditorMode.Path => "Path",
         EditorMode.ElevationRegion => "Hill",
         // The persisted model and the PolyTools adapter still call these Props,
         // but authors place map content here. Keep that implementation detail
@@ -146,7 +146,7 @@ public static class EditorToolRegistry
 ///
 /// <para>Both are decisions, not drawing, so they live here rather than in the
 /// code that builds buttons: the rules that River offers curve-authored Assets
-/// while Ramp may present every Terrain Asset have to be testable, and there
+/// while Path may present every Terrain Asset have to be testable, and there
 /// are no tests against the Godot application.</para>
 /// </summary>
 public static class TerrainAreaAssets
@@ -162,7 +162,7 @@ public static class TerrainAreaAssets
         TerrainDisplayCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        if (mode == EditorMode.Ramp) return catalog.Assets;
+        if (mode == EditorMode.Path) return catalog.Assets;
         if (EditorToolRegistry.TerrainAuthoringFor(mode) is not { } authoring) return [];
         return catalog.Assets.Where(asset => asset.Authoring == authoring).ToList();
     }
@@ -191,10 +191,10 @@ public static class TerrainAreaAssets
     /// The Surface field an area shows, or null for an area that shows none.
     ///
     /// <para>An area that paints cells carries its material as a palette: a bar
-    /// of Assets to switch between while drawing. River and Ramp carry it as one
+    /// of Assets to switch between while drawing. River and Path carry it as one
     /// property of the body being drawn, beside width and heights, which is why
     /// it belongs in that tool's context bar and not in a second navigation
-    /// row. River filters by native curve authoring; an independent Ramp can
+    /// row. River filters by native curve authoring; an independent Path can
     /// present any Terrain Asset.</para>
     ///
     /// <para>The field is a choice of <c>asset_key</c>. It never reads or writes
@@ -207,7 +207,7 @@ public static class TerrainAreaAssets
         TerrainDisplayCatalog catalog,
         string? remembered)
     {
-        if (mode != EditorMode.Ramp
+        if (mode != EditorMode.Path
             && EditorToolRegistry.TerrainAuthoringFor(mode) != TerrainAuthoring.Curve)
         {
             return null;
@@ -261,7 +261,7 @@ public sealed class EditorInteractionState
     /// </summary>
     public WaterPointMode WaterPointMode { get; private set; } = WaterPointMode.Linear;
 
-    /// <summary>How the next point of an open Ramp behaves.</summary>
+    /// <summary>How the next point of an open Path behaves.</summary>
     public RoutePointMode RoutePointMode { get; private set; } = RoutePointMode.Linear;
 
     /// <summary>How the next point of a closed hill contour behaves.</summary>
@@ -274,8 +274,8 @@ public sealed class EditorInteractionState
     /// </summary>
     public decimal RiverWidthMeters { get; private set; } = DefaultRiverWidthMeters;
 
-    /// <summary>The full width authored onto the next Ramp point.</summary>
-    public decimal RampWidthMeters { get; private set; } = RouteSurfaceEditing.DefaultWidthMeters;
+    /// <summary>The full width authored onto the next Path point.</summary>
+    public decimal PathWidthMeters { get; private set; } = RouteSurfaceEditing.DefaultWidthMeters;
 
     public const decimal DefaultRiverWidthMeters = WaterEditing.DefaultWidthMeters;
 
@@ -357,10 +357,10 @@ public sealed class EditorInteractionState
         RiverWidthMeters = widthMeters;
     }
 
-    public void SetRampWidth(decimal widthMeters)
+    public void SetPathWidth(decimal widthMeters)
     {
         if (widthMeters <= 0m) throw new ArgumentOutOfRangeException(nameof(widthMeters));
-        RampWidthMeters = widthMeters;
+        PathWidthMeters = widthMeters;
     }
 
     public void SetWaterElevation(decimal elevationMeters) =>

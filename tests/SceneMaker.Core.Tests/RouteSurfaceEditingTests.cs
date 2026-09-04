@@ -6,7 +6,7 @@ namespace SceneMaker.Core.Tests;
 public sealed class RouteSurfaceEditingTests
 {
     [Fact]
-    public void PlaceAuthorsOneRampWithPerPointHeightAndWidth()
+    public void PlaceAuthorsOnePathWithPerPointHeightAndWidth()
     {
         using var workspace = TestWorkspace.Create();
         var scene = RouteSurfaceEditing.Place(

@@ -505,7 +505,7 @@ public sealed partial class SceneCanvas : Control
             zoom,
             heightAuthoringPixels,
             elevationRange,
-            highlighted: Mode == EditorMode.Ramp);
+            highlighted: Mode == EditorMode.Path);
         DrawElevationRegionOutlines(
             document,
             pan,
@@ -534,8 +534,8 @@ public sealed partial class SceneCanvas : Control
             case EditorMode.River:
                 DrawWaterToolPreview(document, pan, zoom, heightAuthoringPixels);
                 break;
-            case EditorMode.Ramp:
-                DrawRampToolPreview(document, pan, zoom, heightAuthoringPixels);
+            case EditorMode.Path:
+                DrawPathToolPreview(document, pan, zoom, heightAuthoringPixels);
                 break;
             case EditorMode.ElevationRegion:
                 DrawElevationRegionToolPreview(document, pan, zoom, heightAuthoringPixels);
@@ -1051,7 +1051,7 @@ public sealed partial class SceneCanvas : Control
         }
     }
 
-    private void DrawRampToolPreview(
+    private void DrawPathToolPreview(
         SceneDocument document,
         Vector2 pan,
         float zoom,
@@ -1072,7 +1072,7 @@ public sealed partial class SceneCanvas : Control
             return;
         }
 
-        var preview = _interaction.RampPreview(CurrentContext()!);
+        var preview = _interaction.PathPreview(CurrentContext()!);
         if (preview.Points.Count == 0) return;
         var fill = SelectedTerrainAssetKey is { } assetKey
             && _terrainColors.TryGetValue(assetKey, out var assetColor)

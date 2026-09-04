@@ -58,9 +58,9 @@ its Assets by, and it makes two mistakes impossible: a river painted cell by
 cell, and a river made of grass.
 
 The editor asks that question of the area rather than of the Asset. Terrain,
-River, Ramp and Hill are separate areas because they author different geometry.
+River, Path and Hill are separate areas because they author different geometry.
 Terrain offers the cell-authored Assets; River offers the curve-authored Assets
-in its `Surface` field; Ramp may present any Terrain Asset on an independent
+in its `Surface` field; Path may present any Terrain Asset on an independent
 route band; Hill authors shape and height only and so has no material to offer.
 It used to run the other way, with the chosen Asset swapping the tool out from
 under the author, which meant choosing a river silently ended a hill contour
@@ -137,7 +137,7 @@ quantum, but their horizontal positions do not snap to either raster. Equal
 neighbour positions are valid when their Bezier handles create real arc length,
 which a generated loop may need. Templates refuse routes until composition can
 translate them. Export schema 9 cannot carry them and warns instead of silently
-dropping them. `Draw Ramp` is exposed beside River and Hill under Landscape;
+dropping them. `Draw Path` is exposed beside River and Hill under Landscape;
 its context bar carries Surface, point mode, width and the shared absolute
 Height. The canvas draws the continuous material-coloured band and its
 centerline, while the height view colours that band from its interpolated
@@ -311,8 +311,9 @@ may therefore have a surface that is not itself a multiple of the quantum.
 Cuts apply to Terrain and never to fills. That one sentence is what will let a
 bridge deck cross the river it spans without the river carving it away.
 
-A ramp is an independently materialized open route rather than a sequence of
-raised Terrain cells. Every authored point carries an absolute surface height
+A Path is an independently materialized open route rather than a sequence of
+raised Terrain cells. It can describe a level way, a ramp or a descent. Every
+authored point carries an absolute surface height
 and a full width; both are interpolated continuously over Bezier arc length.
 The point positions are deliberately free in plan instead of snapping to the
 Terrain grid. `RouteSurfaceEditing` authors and removes the body, while
