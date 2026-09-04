@@ -312,6 +312,16 @@ arc length. Nor does it turn interpolation into steps. A water cell or derived
 Path point may therefore have a surface that is not itself a multiple of the
 quantum.
 
+The ordinary Canvas keeps Asset hue as material identity and multiplies it by
+an engine-neutral elevation-lighting answer from the Editor layer. An absolute
+surface at `1 m` is the fixed 45% anchor; represented elevations below it fade
+toward a 25% floor, while the complete Scene's highest represented surface
+above it reaches 100%. Terrain after hill folding, water surfaces, Path
+triangles and Props all use that rule. The analytical height view remains a
+different projection and replaces Asset colour with its blue ramp. The range
+belongs to the complete document rather than a future clipped Section result,
+so moving a clipping plane cannot relight everything left below it.
+
 Cuts apply to Terrain and never to fills. That one sentence is what will let a
 bridge deck cross the river it spans without the river carving it away.
 

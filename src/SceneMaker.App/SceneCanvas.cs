@@ -486,7 +486,11 @@ public sealed partial class SceneCanvas : Control
         var sceneRect = new Rect2(pan, sceneSize);
         DrawRect(sceneRect, SceneBackground);
 
-        var elevationRange = _heatmapEnabled ? ElevationRange(document) : null;
+        // The ordinary view and the analytical height view share the complete
+        // Scene range but interpret it differently. Keeping the full range in
+        // the ordinary view is what will let a Section plane move later without
+        // making every surviving surface change brightness.
+        var elevationRange = ElevationRange(document);
         DrawTerrain(
             document,
             pan,
@@ -589,7 +593,8 @@ public sealed partial class SceneCanvas : Control
             highlighted: Mode == EditorMode.Templates);
 
         DrawRect(sceneRect, SceneBorder, filled: false, width: 2.0f);
-        if (elevationRange is { } range) DrawElevationLegend(document, range);
+        if (_heatmapEnabled && elevationRange is { } range)
+            DrawElevationLegend(document, range);
     }
 
     /// <summary>
@@ -710,11 +715,14 @@ public sealed partial class SceneCanvas : Control
                          static route => route.Points.Select(
                              static point => point.ElevationMeters)))
                      .Concat(WaterOverlays(document).SelectMany(
-                         overlay => overlay.Cells.Select(WaterElevation)));
+                         overlay => overlay.Cells.Select(cell => _heatmapEnabled
+                             ? WaterElevation(cell)
+                             : cell.SurfaceMeters)));
         // An unfinished Path is already geometry the author is judging. Include
         // it in the same scale as the Scene, so Auto start can be verified in
         // the height view before Enter instead of being hidden by Asset colour.
-        if (Mode == EditorMode.Path
+        if (_heatmapEnabled
+            && Mode == EditorMode.Path
             && !EraserEnabled
             && CurrentContext() is { } context)
         {
@@ -756,6 +764,25 @@ public sealed partial class SceneCanvas : Control
         return ElevationRamp[lower].Lerp(ElevationRamp[lower + 1], scaled - lower);
     }
 
+    /// <summary>
+    /// Keeps an Asset's hue while making its absolute surface height legible in
+    /// the ordinary Canvas. Alpha belongs to area emphasis and is intentionally
+    /// left alone.
+    /// </summary>
+    private static Color LitSurfaceColor(
+        Color assetColor,
+        decimal elevation,
+        (decimal Low, decimal High) range)
+    {
+        var brightness = (float)SurfaceElevationLighting.Brightness(
+            elevation, range.Low, range.High);
+        return new Color(
+            assetColor.R * brightness,
+            assetColor.G * brightness,
+            assetColor.B * brightness,
+            assetColor.A);
+    }
+
     private void DrawTerrain(
         SceneDocument document,
         Vector2 pan,
@@ -767,8 +794,16 @@ public sealed partial class SceneCanvas : Control
         foreach (var cell in EffectiveTerrain(document))
         {
             Color color;
-            if (range is { } span) color = ElevationColor(cell.ElevationMeters, span);
-            else if (!_terrainColors.TryGetValue(cell.AssetKey, out color)) continue;
+            if (_heatmapEnabled && range is { } heatmapSpan)
+            {
+                color = ElevationColor(cell.ElevationMeters, heatmapSpan);
+            }
+            else
+            {
+                if (!_terrainColors.TryGetValue(cell.AssetKey, out color)) continue;
+                if (range is { } lightingSpan)
+                    color = LitSurfaceColor(color, cell.ElevationMeters, lightingSpan);
+            }
             var rectangle = new Rect2(
                 pan + new Vector2(
                     cell.X * cellSize,
@@ -804,11 +839,19 @@ public sealed partial class SceneCanvas : Control
         {
             foreach (var cell in overlay.Cells)
             {
-                var color = range is { } span
-                    ? ElevationColor(WaterElevation(cell), span)
-                    : highlighted
-                        ? overlay.Color
-                        : new Color(overlay.Color.R, overlay.Color.G, overlay.Color.B, 0.24f);
+                Color color;
+                if (_heatmapEnabled && range is { } heatmapSpan)
+                {
+                    color = ElevationColor(WaterElevation(cell), heatmapSpan);
+                }
+                else
+                {
+                    color = range is { } lightingSpan
+                        ? LitSurfaceColor(overlay.Color, cell.SurfaceMeters, lightingSpan)
+                        : overlay.Color;
+                    if (!highlighted)
+                        color = new Color(color.R, color.G, color.B, 0.24f);
+                }
                 var rectangle = new Rect2(
                     pan + new Vector2(cell.X * cellSize, (rows - cell.Y - 1) * cellSize),
                     new Vector2(cellSize, cellSize));
@@ -923,12 +966,13 @@ public sealed partial class SceneCanvas : Control
                     chain.StartX - normalX * segment.StartHalfWidth,
                     chain.StartY - normalY * segment.StartHalfWidth),
             ];
-            var segmentColor = range is { } elevationRange
-                ? ElevationColor(
-                    (decimal)surface.ElevationAt(
-                        segment.Chain.StartStation + (length / 2.0)),
-                    elevationRange)
-                : color;
+            var elevation = (decimal)surface.ElevationAt(
+                segment.Chain.StartStation + (length / 2.0));
+            var segmentColor = range is not { } elevationRange
+                ? color
+                : _heatmapEnabled
+                    ? ElevationColor(elevation, elevationRange)
+                    : LitSurfaceColor(color, elevation, elevationRange);
             DrawColoredPolygon(polygon, segmentColor);
             if (!segment.CapsAtStart)
                 DrawCircle(
@@ -966,11 +1010,13 @@ public sealed partial class SceneCanvas : Control
             var first = bake.Vertices[bake.TriangleIndices[index]];
             var second = bake.Vertices[bake.TriangleIndices[index + 1]];
             var third = bake.Vertices[bake.TriangleIndices[index + 2]];
-            var triangleColor = range is { } elevationRange
-                ? ElevationColor(
-                    (first.ElevationMeters + second.ElevationMeters + third.ElevationMeters) / 3m,
-                    elevationRange)
-                : color;
+            var elevation =
+                (first.ElevationMeters + second.ElevationMeters + third.ElevationMeters) / 3m;
+            var triangleColor = range is not { } elevationRange
+                ? color
+                : _heatmapEnabled
+                    ? ElevationColor(elevation, elevationRange)
+                    : LitSurfaceColor(color, elevation, elevationRange);
             DrawColoredPolygon(
                 [Screen(first), Screen(second), Screen(third)],
                 triangleColor);
@@ -1432,9 +1478,12 @@ public sealed partial class SceneCanvas : Control
                 pan,
                 zoom,
                 sceneHeightAuthoringPixels);
-            var color = range is { } propSpan
-                ? ElevationColor(prop.ElevationMeters, propSpan)
-                : Color.FromHtml(asset.Color);
+            var assetColor = Color.FromHtml(asset.Color);
+            var color = range is not { } propSpan
+                ? assetColor
+                : _heatmapEnabled
+                    ? ElevationColor(prop.ElevationMeters, propSpan)
+                    : LitSurfaceColor(assetColor, prop.ElevationMeters, propSpan);
             var selected = highlighted && prop.InstanceId == _interaction.SelectedPropInstanceId;
             var outline = highlighted
                 ? color

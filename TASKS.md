@@ -204,12 +204,11 @@ has a consumer and tests.
 
 ## 8. Horizontal sections and Paths that excavate Terrain
 
-The next Layered-3D authoring slice should make height legible in the ordinary
-Canvas before it adds another analytical view. Asset hue remains the material
-identity, while visible surface elevation changes its brightness. A surface at
-`1 m` is shown at 45% of its Asset colour and higher visible surfaces become
-brighter. The exact lower clamp and the transfer from that fixed anchor to the
-brightest authored elevation remain presentation tuning; changing the
+Height is now legible in the ordinary Canvas before another analytical view is
+added. Asset hue remains the material identity, while visible surface elevation
+changes its brightness. A surface at `1 m` is shown at 45% of its Asset colour,
+represented elevations below it fade toward a 25% floor, and the complete
+Scene's highest represented surface above it reaches full colour. Changing the
 horizontal section elevation must not renormalize the colours and make the
 whole Canvas jump. The existing height view remains the precise numerical
 inspection tool.
@@ -260,11 +259,11 @@ been clipped away and the real Path floor becomes visible. Exactly overlapping
 Paths remain ambiguous from above; do not hide that with an arbitrary semantic
 choice.
 
-Implement this as focused slices: elevation lighting; the three-way ordinary,
-height and Section view plus shared column resolution; subtractive segment
-documents and editing; cut bake/export with a corresponding consumer-version
-bump; then wire picking and manual acceptance of an additive-to-tunnel-to-
-additive Path through a hill. Export must never silently omit excavation.
+Implement the remaining work as focused slices: the three-way ordinary, height
+and Section view plus shared column resolution; subtractive segment documents
+and editing; cut bake/export with a corresponding consumer-version bump; then
+wire picking and manual acceptance of an additive-to-tunnel-to-additive Path
+through a hill. Export must never silently omit excavation.
 
 A later, separate profile-section tool may project a marked region onto X-Z or
 Y-Z. Its purpose is to inspect stacked tunnels, floors, ceilings, clearance,

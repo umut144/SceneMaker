@@ -383,6 +383,17 @@ Die Canvasdarstellung verwendet bereits das gefaltete Höhenfeld aus gemalten
 Zellen und Höhenregionn. Dadurch sieht der Autor genau die Terrainzellen, die
 auch der Export erhält.
 
+In der gewöhnlichen Assetansicht bleibt die Farbe das Materialsignal, trägt
+aber zugleich eine zurückhaltende Höhenbeleuchtung. `1 m` erscheint mit 45%
+der konfigurierten Assetfarbe; niedrigere Oberflächen werden bis 25%
+abgedunkelt und die höchste in der vollständigen Scene vertretene Oberfläche
+oberhalb von `1 m` erreicht die volle Farbe. Terrain einschließlich gefalteter
+Hills, River-Oberflächen, Paths und Placements folgen derselben Skala. Bereichs-
+fremde Geometrie behält zusätzlich ihre bisherige Transparenz, weil Helligkeit
+und Werkzeugfokus zwei verschiedene Aussagen sind. Die analytische
+Höhenansicht ersetzt diese Farben weiterhin vollständig durch ihre blaue
+Höhenrampe.
+
 ### Placements und Untergrund
 
 Ein Placement braucht kein Terrain unter sich. Seine Höhe ist absolut, also
