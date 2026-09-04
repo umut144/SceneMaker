@@ -34,7 +34,7 @@ public sealed class PropDisplayCatalog
         _byKey.TryGetValue(assetKey, out var asset)
             ? asset
             : throw new SceneMakerDocumentException(
-                $"Prop asset_key '{assetKey}' is not enabled in this Workspace.");
+                $"Placement asset_key '{assetKey}' is not enabled in this Workspace.");
 }
 
 public static class PropDisplayCatalogLoader

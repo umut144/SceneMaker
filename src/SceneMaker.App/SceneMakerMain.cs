@@ -220,7 +220,11 @@ public sealed partial class SceneMakerMain : Control
         _landscapeNavigationButton.CustomMinimumSize = new Vector2(130f, 0f);
         _landscapeNavigationButton.Pressed += SelectLandscapeContext;
         _overviewNavigationBar.AddChild(_landscapeNavigationButton);
-        AddPerspectiveButton(_overviewNavigationBar, "Props", available: true, "Prop authoring view");
+        AddPerspectiveButton(
+            _overviewNavigationBar,
+            "Placements",
+            available: true,
+            "Placement authoring view");
         AddPerspectiveButton(
             _overviewNavigationBar,
             "Scene Templates",
@@ -355,7 +359,7 @@ public sealed partial class SceneMakerMain : Control
         _elevationEdit.ValueChanged += SetAuthoringElevation;
         _contextMenuBar.AddChild(_elevationEdit);
         _propLineOffsetLabel.Name = "PropLineOffsetLabel";
-        _propLineOffsetLabel.Text = "Prop Offset";
+        _propLineOffsetLabel.Text = "Placement Offset";
         _propLineOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
         _contextMenuBar.AddChild(_propLineOffsetLabel);
         _propLineOffsetEdit.Name = "PropLineOffset";
@@ -519,7 +523,8 @@ public sealed partial class SceneMakerMain : Control
         _heatmapToggle.Text = "m";
         _heatmapToggle.Alignment = HorizontalAlignment.Center;
         _heatmapToggle.ToggleMode = true;
-        _heatmapToggle.TooltipText = "Show Terrain, Props and Water by height instead of by Asset";
+        _heatmapToggle.TooltipText =
+            "Show Terrain, Placements and Water by height instead of by Asset";
         _heatmapToggle.CustomMinimumSize = new Vector2(42f, 42f);
         _heatmapToggle.Toggled += SetHeatmapEnabled;
         _toolOptionsBar.AddChild(_heatmapToggle);
@@ -537,7 +542,7 @@ public sealed partial class SceneMakerMain : Control
         waterHeatmapMenu.IdPressed += SetWaterHeatmapValue;
         CheckWaterHeatmapItem(WaterHeatmapValue.Surface);
         _waterHeatmapValueEdit.TooltipText =
-            "Which boundary of every water span the height view shows. Terrain and Props "
+            "Which boundary of every water span the height view shows. Terrain and Placements "
             + "continue to show their own elevation.";
         _toolOptionsBar.AddChild(_waterHeatmapValueEdit);
         UpdateToolContextLabel();
@@ -745,7 +750,7 @@ public sealed partial class SceneMakerMain : Control
 
     private void BuildPropAssetBar()
     {
-        _propAssetBar.AddChild(new Label { Text = "Props  ›" });
+        _propAssetBar.AddChild(new Label { Text = "Placements  ›" });
         foreach (var asset in _controller.Session?.PropAssets.Assets ?? [])
         {
             var button = new Button
@@ -1064,7 +1069,7 @@ public sealed partial class SceneMakerMain : Control
         sceneFields.AddChild(new Label { Text = "Ground height" });
         ConfigureElevationInput(_sceneElevationEdit);
         _sceneElevationEdit.TooltipText =
-            "The height a newly authored cell or Prop takes in this Scene.";
+            "The height a newly authored cell or Placement takes in this Scene.";
         sceneFields.AddChild(_sceneElevationEdit);
         sceneFields.AddChild(new Control());
         _templateCreationFields.AddChild(new Label { Text = "Template group" });
@@ -1256,7 +1261,7 @@ public sealed partial class SceneMakerMain : Control
         "Terrain" => EditorMode.Terrain,
         "River" => EditorMode.River,
         "Mountain" => EditorMode.Mountain,
-        "Props" => EditorMode.Props,
+        "Placements" => EditorMode.Props,
         "Scene Templates" => EditorMode.Templates,
         _ => throw new ArgumentOutOfRangeException(nameof(perspective)),
     };
@@ -1357,7 +1362,7 @@ public sealed partial class SceneMakerMain : Control
         _workspaceAssetEditorRows.Clear();
         _workspaceAssetRows.AddChild(new Label
         {
-            Text = "Assets come from the synchronized PolyTools catalog. SceneMaker owns enablement, authoring color, the surface a Terrain Asset presents to the game, and whether it is painted as cells or drawn as a curve; whether an Asset is Terrain or a Prop is PolyTools data.",
+            Text = "Assets currently come from the synchronized PolyTools catalog. SceneMaker owns enablement, authoring color, the surface a Terrain Asset presents to the game, and whether it is painted as cells or drawn as a curve; PolyTools currently supplies Terrain-or-Placement classification and Placement geometry.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         foreach (var asset in _controller.Session.Catalog.Assets)
@@ -1745,7 +1750,7 @@ public sealed partial class SceneMakerMain : Control
     {
         var offset = checked((int)value);
         _interaction.State.SetPropLineOffset(offset);
-        SetStatus($"Prop Line offset set to {offset} authoring px.");
+        SetStatus($"Placement Line offset set to {offset} authoring px.");
     }
 
     /// <summary>
@@ -1916,7 +1921,7 @@ public sealed partial class SceneMakerMain : Control
     {
         var asset = _controller.Session!.PropAssets.Resolve(assetKey);
         _canvas.SelectedPropAssetKey = assetKey;
-        SetStatus($"Selected Prop '{asset.Name}' · footprint {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels}).");
+        SetStatus($"Selected Placement '{asset.Name}' · footprint {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels}).");
     }
 
     private void BeginTemplateAnchorPlacement()

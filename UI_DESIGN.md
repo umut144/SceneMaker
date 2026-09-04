@@ -37,15 +37,15 @@ Canvas und damit gegenüber der linken `ToolBar`.
 
 Die Werkzeugauswahl besteht aus drei unabhängigen Dimensionen:
 
-- `EditorMode` bestimmt den **Bereich**: `Terrain`, `River`, `Mountain`, `Props`
-  oder `Templates`.
+- `EditorMode` bestimmt den **Bereich**: `Terrain`, `River`, `Mountain`,
+  `Placements` oder `Templates`.
 - `EditorTool` bestimmt das primäre Werkzeug innerhalb dieses Bereichs.
 - Das gewählte Terrain-Asset bestimmt das **Material** und sonst nichts.
 
 Die Navigation ist zweistufig, wie bei den übrigen Bereichen auch:
 
 ```text
-Übersicht:  [ Terrain ]  [ Landscape ]  [ Props ]  [ Scene Templates ]  [ Map ]
+Übersicht:  [ Terrain ] [ Landscape ] [ Placements ] [ Scene Templates ] [ Map ]
                               │
                               ▼
 Kontext:    [ ← ]  Landscape ›  ( River )  ( Mountain )
@@ -79,7 +79,7 @@ Surface-Token — aber gefragt wird es jetzt von der Assetleiste:
 | `Terrain` | `Pencil`, `Line`, `Terrain Fill` | `authoring: "cells"`, als Palette |
 | `River` | `Draw River` | `authoring: "curve"`, als `Surface`-Feld |
 | `Mountain` | `Draw Mountain` | — |
-| `Props` | `Selector`, `Pencil`, `Line` | — |
+| `Placements` | `Selector`, `Pencil`, `Line` | — |
 | `Templates` | `Selector`, `Anchor Move` | — |
 
 `Mountain` bietet keine Assets an, weil ein Bergkörper keines trägt: er
@@ -116,8 +116,10 @@ getrennte Konzepte.
 
 Der aktive Tool-Kontext ist immer die Kombination aus Modus und Werkzeug. Das
 horizontale `ContextMenu` zeigt diese Kombination beispielsweise als
-`Terrain:Line` oder `Prop:Line`. Jeder Modus merkt sich sein zuletzt
-ausgewähltes Werkzeug.
+`Terrain:Line` oder `Placement:Line`. Jeder Modus merkt sich sein zuletzt
+ausgewähltes Werkzeug. `Placement` ist dabei die Sprache der Oberfläche; der
+interne Modus `EditorMode.Props` und das persistierte Feld `props` bleiben bis
+zu einer bewusst geplanten Schemaänderung unverändert.
 
 Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
 
@@ -125,7 +127,7 @@ Die konkrete Pointer-Interaktion gehört ebenfalls zum Tool-Kontext:
   beziehungsweise löscht direkt.
 - `Terrain:Line` beginnt beim Drücken der linken Maustaste, zeigt während des
   Ziehens alle betroffenen Tiles und führt die Linie beim Loslassen aus.
-- `Prop:Line` behält Startpunkt, Endpunkt und die Bestätigung mit Enter als
+- `Placement:Line` behält Startpunkt, Endpunkt und die Bestätigung mit Enter als
   getrennte Schritte.
 - `River:Draw River` zeichnet eine offene Bezier-Kurve: Drücken legt einen
   Kurvenpunkt auf dem Wasserraster fest, Ziehen zieht sein Handle heraus,
@@ -142,8 +144,8 @@ Auswirkung vor dem Ausführen sichtbar ist.
 
 Das ContextMenu enthält durchgehend `Height` in Metern. Seine Schrittweite ist
 `elevation_quantum_meters` aus dem offenen Workspace; direkt eingegebene Werte
-werden ebenfalls darauf gerundet. Der Wert gilt für Terrain und Props
-gleichermaßen: gemalte Zellen und gesetzte Props entstehen auf dieser Höhe.
+werden ebenfalls darauf gerundet. Der Wert gilt für Terrain und Placements
+gleichermaßen: gemalte Zellen und gesetzte Placements entstehen auf dieser Höhe.
 
 Ohne offenen Workspace sind `Height`, `Water` und das `Ground height` des
 Scene-Dialogs deaktiviert, weil es ohne Workspace kein gültiges Höhenquantum
@@ -212,7 +214,7 @@ verschiebt also keinen Fluss. Liegt unter einem Punkt kein Terrain, erbt er die
 Höhe seines Vorgängers, und die Statuszeile sagt es.
 
 `Height` ist bei `Draw River` deshalb ausgeblendet: es authoriert Terrain und
-Props, und Wasser bringt seine eigenen drei Werte mit.
+Placements, und Wasser bringt seine eigenen drei Werte mit.
 
 Der fertige Fluss ist **ein** Bearbeitungsschritt: ein Rückgängig nimmt danach
 den ganzen Fluss zurück, nicht seinen letzten Punkt. Während des Zeichnens gilt
@@ -292,7 +294,7 @@ reine Editorfarbe — sie steht nicht im Dokument, nicht im Export und bedeutet 
 Spiel nichts. In `Terrain` und `Mountain` ist die Kontur voll sichtbar — im Terrain-Bereich
 ist sie das einzige unmittelbare Signal, dass dort ein authorierter Bergkörper
 liegt. Der `Map`-Kontext ist eine strukturelle Übersicht und zeigt sie ebenfalls
-voll. In `River`, `Props` und `Templates` wird sie wie alles Bereichsfremde
+voll. In `River`, `Placements` und `Templates` wird sie wie alles Bereichsfremde
 gedimmt.
 
 Ein begonnener Entwurf verschwindet nie stillschweigend. Ein Bereichswechsel,
@@ -306,21 +308,21 @@ Die Canvasdarstellung verwendet bereits das gefaltete Höhenfeld aus gemalten
 Zellen und Bergkörpern. Dadurch sieht der Autor genau die Terrainzellen, die
 auch der Export erhält.
 
-### Props und Untergrund
+### Placements und Untergrund
 
-Ein Prop braucht kein Terrain unter sich. Seine Höhe ist absolut, also steht
-schon fest, wo er ist; der Boden darunter ist eine eigene Tatsache und keine
-Bedingung. Ein frei stehender Prop wird deshalb weder markiert noch gewarnt noch
-blockiert: die Vorschau ist normal gültig, der fertige Prop wird wie jeder
-andere gezeichnet, und Radieren von Terrain oder eines Bergkörpers unter ihm
-ändert an ihm nichts. Blockiert wird weiterhin nur, was die Geometrie allein
-entscheiden kann — ein Footprint außerhalb der Scene und ein Footprint, der
-einen anderen Prop berührt.
+Ein Placement braucht kein Terrain unter sich. Seine Höhe ist absolut, also
+steht schon fest, wo es ist; der Boden darunter ist eine eigene Tatsache und
+keine Bedingung. Ein frei stehendes Placement wird deshalb weder markiert noch
+gewarnt noch blockiert: die Vorschau ist normal gültig, das fertige Placement
+wird wie jedes andere gezeichnet, und Radieren von Terrain oder eines
+Bergkörpers unter ihm ändert an ihm nichts. Blockiert wird weiterhin nur, was
+die Geometrie allein entscheiden kann — ein Footprint außerhalb der Scene und
+ein Footprint, der ein anderes Placement berührt.
 
-### Prop:Line
+### Placement:Line
 
-Das ContextMenu von `Prop:Line` enthält den ganzzahligen Wert
-`Prop Offset` in Authoring-Pixeln. Der Wert ist nicht negativ und wird zum
+Das ContextMenu von `Placement:Line` enthält den ganzzahligen Wert
+`Placement Offset` in Authoring-Pixeln. Der Wert ist nicht negativ und wird zum
 berechneten Footprint-Abstand entlang der Linie addiert. `0` erzeugt das
 lückenlose Standardverhalten. Der Offset beeinflusst Vorschau, Platzierung und
 Line-Eraser und bleibt reiner Session-Zustand.
@@ -331,11 +333,11 @@ Die rechte Leiste trennt zwei Sorten Schalter durch einen Separator. Oberhalb
 steht, was die Werkzeuge *anders arbeiten* lässt — derzeit der `Eraser`.
 Unterhalb steht, was die Karte *anders aussehen* lässt.
 
-Dort sitzt die Höhenansicht (`m`). Sie färbt Terrain, Props und Wasser nach ihrer
+Dort sitzt die Höhenansicht (`m`). Sie färbt Terrain, Placements und Wasser nach ihrer
 Höhe statt nach ihrem Asset, mit einem einzigen Blauton von dunkel nach hell:
 tiefer Grund tritt zum Hintergrund zurück, hoher Grund hebt sich ab. Wasser hat
 drei relevante Grenzen; die Auswahl unter dem aktivierten Schalter zeigt
-wahlweise `Surface`, `Bed` oder `Cut top`. Terrain und Props behalten dabei ihre
+wahlweise `Surface`, `Bed` oder `Cut top`. Terrain und Placements behalten dabei ihre
 eigene Elevation, sodass alles auf derselben Skala vergleichbar bleibt. Die
 Skala spannt sich über die tatsächlich vorkommenden Höhen der Scene, und eine
 Legende oben rechts auf der Canvas nennt Auswahl und beide Enden — ohne sie
@@ -396,7 +398,7 @@ Jede Bearbeitung landet in einer Historie unveränderlicher Scene-Dokumente:
   stellt wieder her. Dieselben Schritte liegen als Schaltflächen rechts in der
   Dokument-Infoleiste.
 - Solange ein Werkzeug einen **unfertigen Entwurf** hält — ein Fluss im
-  Zeichnen, eine Prop-Linie mit festgelegtem Startpunkt — gehören beide Tasten
+  Zeichnen, eine Placement-Linie mit festgelegtem Startpunkt — gehören beide Tasten
   dem Entwurf. Rückgängig nimmt den zuletzt gesetzten Punkt zurück, genau wie
   Escape; Wiederherstellen hat dort nichts zurückzugeben und sagt das. Erst wenn
   der Entwurf leer ist, greifen beide wieder auf die Historie zu. Andernfalls

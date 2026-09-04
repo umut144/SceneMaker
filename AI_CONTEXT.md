@@ -3,8 +3,8 @@
 SceneMaker is a standalone semantic scene authoring tool. A workspace is one
 game and contains its own scene/template data and `config.json`.
 
-Each Workspace consumes a synchronized copy of the current PolyTools Runtime
-Export below `imports/polytools/`. PolyTools Catalog schema 1 is the closed
+Today each Workspace consumes a synchronized copy of the current PolyTools
+Runtime Export below `imports/polytools/`. PolyTools Catalog schema 1 is the closed
 Asset set; Runtime Manifest schema 16 supplies geometry, hierarchy, Asset
 References, pivots, and validated gameplay Regions. Authored and
 Component-bound Regions remain distinct, do not contribute to SceneMaker's
@@ -22,6 +22,32 @@ cell so that one Terrain Asset cannot contradict itself. Prop footprints and
 anchors are derived from transformed PolyTools visible geometry and rounded
 outward to whole authoring pixels. Scenes store only semantic terrain, props,
 template anchors, and exact PolyTools `asset_key`s.
+
+## Authoring ownership direction
+
+The synchronized catalog above describes the current implementation, not the
+intended product boundary. SceneMaker's navigation must be explicit and stable;
+it must not grow, shrink or rename its authoring areas from whichever Assets a
+PolyTools export happens to contain. SceneMaker owns its author-facing names,
+areas, semantic roles, colors, surface tokens and authoring kinds. That is what
+lets the River tool offer `Water`, `Lava` or `Mud` without borrowing the name of
+a PolyTools package.
+
+PolyTools is intended to become a narrow, optional geometry source for
+Placements. The join is a stable `asset_key`; the information SceneMaker needs
+from that side is the footprint and pivot/anchor derived from visible geometry.
+Terrain and curve surfaces do not need a PolyTools package merely to exist in
+SceneMaker. The present importer still supplies names, Terrain/Prop
+classification and a closed Asset set, so reaching this boundary is deferred
+work rather than a claim that the code already has it.
+
+The editor calls spatial map objects **Placements** because that is what an
+author does with them. Internal types such as `PropDocument`, the
+`EditorMode.Props` enum member and the persisted `props` field remain unchanged
+for now, avoiding a schema and consumer migration for terminology alone.
+Transitions are not being inferred from PolyTools Props or reintroduced as a
+second identical record. They get their own SceneMaker model only when the
+simulation has a concrete transition contract it can consume and test.
 
 New workspace configurations explicitly start with 1 m terrain cells at 32
 authoring pixels and 192 game pixels per meter. These values remain authored

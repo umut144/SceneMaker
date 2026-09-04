@@ -69,7 +69,7 @@ public static partial class DocumentValidation
             }
             if (prop.PositionAuthoringPx is null)
                 throw new SceneMakerDocumentException(
-                    $"Prop '{prop.InstanceId}' requires position_authoring_px.");
+                    $"Placement '{prop.InstanceId}' requires position_authoring_px.");
             previousInstanceId = prop.InstanceId;
         }
 
@@ -146,7 +146,7 @@ public static partial class DocumentValidation
         foreach (var prop in document.Props)
         {
             ValidateElevation(
-                $"Prop '{prop.InstanceId}' elevation_meters",
+                $"Placement '{prop.InstanceId}' elevation_meters",
                 prop.ElevationMeters,
                 metrics);
         }

@@ -85,11 +85,11 @@ public static class PropEditing
         }
         catch (OverflowException)
         {
-            return new PropValidationResult(false, "Prop coordinates exceed the supported range.");
+            return new PropValidationResult(false, "Placement coordinates exceed the supported range.");
         }
 
         if (!IsInsideScene(scene, candidate, propAssets.Metrics))
-            return new PropValidationResult(false, "Prop footprint lies outside the Scene bounds.");
+            return new PropValidationResult(false, "Placement footprint lies outside the Scene bounds.");
 
         foreach (var existing in scene.Props)
         {
@@ -101,7 +101,7 @@ public static class PropEditing
             if (candidate.Overlaps(existingBounds))
                 return new PropValidationResult(
                     false,
-                    $"Prop footprint overlaps '{existing.InstanceId}'.");
+                    $"Placement footprint overlaps '{existing.InstanceId}'.");
         }
         return PropValidationResult.Valid;
     }
@@ -201,10 +201,10 @@ public static class PropEditing
                 prop.PositionAuthoringPx.Y);
             if (!IsInsideScene(scene, bounds, propAssets.Metrics))
                 throw new SceneMakerDocumentException(
-                    "Prop footprint lies outside the Scene bounds.");
+                    "Placement footprint lies outside the Scene bounds.");
             if (accepted.Any(bounds.Overlaps))
                 throw new SceneMakerDocumentException(
-                    $"Prop '{prop.InstanceId}' overlaps another Prop footprint.");
+                    $"Placement '{prop.InstanceId}' overlaps another Placement footprint.");
             accepted.Add(bounds);
         }
     }

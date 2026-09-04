@@ -168,6 +168,40 @@ It should expose mistakes the top-down view cannot: insufficient headroom,
 unsupported or unreachable surfaces, an unintended tunnel roof, and whether a
 boat or walker can actually pass beneath a bridge.
 
+## 8. SceneMaker still borrows its authoring catalog from PolyTools
+
+`PolyToolsCatalogImporter`, `WorkspaceSession`, and the two display-catalog
+loaders currently make the synchronized PolyTools catalog the closed Asset set.
+That gives PolyTools authority over display names and Terrain/Prop
+classification, and a missing or incompatible manifest can prevent the whole
+Workspace from opening even when the author only wants to edit Terrain, River
+or Mountain. It also makes the UI look dynamic by accident: its vocabulary is
+whatever the imported catalog happens to call an Asset.
+
+The intended boundary is narrower. SceneMaker owns its authoring catalog:
+enablement, author-facing display name, SceneMaker role, editor color, surface
+token and authoring kind. Its navigation remains an explicit product structure
+and is never derived from imported packages. A PolyTools adapter may supply a
+Placement's visible footprint and pivot/anchor, joined by a stable `asset_key`;
+those geometry facts are the only PolyTools data SceneMaker currently needs.
+Terrain and curve surfaces must not require a PolyTools package merely to be
+authorable.
+
+Do not implement this as another role override layered on top of PolyTools's
+Asset type. Introduce one SceneMaker-owned source of authoring identity and make
+the geometry import an input to the Placement entries that request it. Preserve
+the exact `asset_key` in the export so the consumer can continue resolving its
+own content. Characterization tests must first pin footprint rounding, anchors,
+missing geometry and atomic Workspace loading; this boundary affects session
+construction and is larger than a UI rename.
+
+The editor now says **Placements**, while internal `Prop*` types and the
+persisted `props` array deliberately remain unchanged. Renaming those would be
+a Scene/export migration with no present runtime benefit. Likewise, do not add
+Transitions yet: they need their own simulation-owned target/region contract,
+not a second copy of `PropDocument`, and should arrive only when that contract
+has a consumer and tests.
+
 ## Done
 
 - A mountain carries no material. `MountainBodyDocument` lost its `asset_key`

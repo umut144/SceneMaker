@@ -109,7 +109,10 @@ public static class EditorToolRegistry
         EditorMode.Terrain => "Terrain",
         EditorMode.River => "River",
         EditorMode.Mountain => "Mountain",
-        EditorMode.Props => "Prop",
+        // The persisted model and the PolyTools adapter still call these Props,
+        // but authors place map content here. Keep that implementation detail
+        // out of the tool context while the document contract stays stable.
+        EditorMode.Props => "Placement",
         EditorMode.Templates => "Template",
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };

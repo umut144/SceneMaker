@@ -43,11 +43,13 @@ public sealed class ElevationQuantumTests
     }
 
     [Theory]
-    [InlineData("scene")]
-    [InlineData("terrain")]
-    [InlineData("prop")]
-    [InlineData("water")]
-    public void AnOffQuantumAuthoredAbsoluteHeightNamesItsOwner(string owner)
+    [InlineData("scene", "scene")]
+    [InlineData("terrain", "terrain")]
+    [InlineData("prop", "placement")]
+    [InlineData("water", "water")]
+    public void AnOffQuantumAuthoredAbsoluteHeightNamesItsOwner(
+        string owner,
+        string expectedLabel)
     {
         using var workspace = TestWorkspace.Create();
         var scene = SceneWithOffQuantumHeight(workspace, owner);
@@ -55,7 +57,7 @@ public sealed class ElevationQuantumTests
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             DocumentValidation.ValidateGrid(scene, workspace.Metrics));
 
-        Assert.Contains(owner, exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(expectedLabel, exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("0.125 m", exception.Message, StringComparison.Ordinal);
         Assert.Contains("1.1 m", exception.Message, StringComparison.Ordinal);
     }

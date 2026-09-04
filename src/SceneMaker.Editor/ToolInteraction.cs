@@ -140,7 +140,7 @@ public sealed class ToolInteraction
         if (Mode == EditorMode.Props && ActiveTool == EditorTool.Line
             && (_propLineStart is not null || _propLineEnd is not null))
         {
-            return "The unfinished Prop line was discarded.";
+            return "The unfinished Placement line was discarded.";
         }
         return null;
     }
@@ -331,7 +331,7 @@ public sealed class ToolInteraction
                 : "Line Draw: choose and lock an end point before confirming.");
         }
         if (context.SelectedPropAssetKey is not { } assetKey)
-            return new ToolOutcome.Message("Line Draw: choose a Prop asset first.");
+            return new ToolOutcome.Message("Line Draw: choose a Placement asset first.");
 
         if (EraserEnabled)
         {
@@ -344,7 +344,7 @@ public sealed class ToolInteraction
         if (blocked > 0)
         {
             return new ToolOutcome.Message(
-                $"Line Draw blocked: {blocked} of {preview.Count} Prop previews are invalid.");
+                $"Line Draw blocked: {blocked} of {preview.Count} Placement previews are invalid.");
         }
 
         ClearPropLine();
@@ -364,7 +364,7 @@ public sealed class ToolInteraction
             Describe: (before, after) =>
             {
                 var added = after.Props.Count - before.Props.Count;
-                return $"Line Draw placed {added} Prop{Plural(added)} with exact non-overlapping footprints.";
+                return $"Line Draw placed {added} Placement{Plural(added)} with exact non-overlapping footprints.";
             });
     }
 
@@ -565,7 +565,7 @@ public sealed class ToolInteraction
                 var found = PropEditing.FindAt(context.Scene, context.PropAssets, point.X, point.Y);
                 SelectedPropInstanceId = found?.InstanceId;
                 return new ToolOutcome.Message(found is null
-                    ? "No Prop selected."
+                    ? "No Placement selected."
                     : $"Selected '{found.InstanceId}' · anchor ({found.PositionAuthoringPx.X}, {found.PositionAuthoringPx.Y}).");
 
             case EditorTool.Pencil when EraserEnabled:
@@ -957,7 +957,7 @@ public sealed class ToolInteraction
             "Eraser",
             document => PropEditing.EraseAt(document, context.PropAssets, point.X, point.Y),
             strokeKey,
-            Describe: (_, _) => $"Erased Prop at ({point.X}, {point.Y}) authoring px.");
+            Describe: (_, _) => $"Erased Placement at ({point.X}, {point.Y}) authoring px.");
 
     private ToolOutcome ErasePropLine(
         ToolContext context,
@@ -982,7 +982,7 @@ public sealed class ToolInteraction
             Describe: (before, after) =>
             {
                 var erased = before.Props.Count - after.Props.Count;
-                return $"Line Eraser removed {erased} Prop{Plural(erased)}.";
+                return $"Line Eraser removed {erased} Placement{Plural(erased)}.";
             });
     }
 

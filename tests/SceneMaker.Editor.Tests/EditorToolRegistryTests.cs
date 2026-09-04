@@ -26,6 +26,12 @@ public sealed class EditorToolRegistryTests
     }
 
     [Fact]
+    public void TheInternalPropsModeIsPresentedToAuthorsAsPlacements()
+    {
+        Assert.Equal("Placement", EditorToolRegistry.ModeDisplayName(EditorMode.Props));
+    }
+
+    [Fact]
     public void EveryToolResolvesToItsOwnDefinition()
     {
         foreach (var tool in Enum.GetValues<EditorTool>())
