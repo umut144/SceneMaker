@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 16,
+  "version": 17,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60618,6 +60618,54 @@
           "clearance_above_meters": null
         }
       ]
+    },
+    {
+      "route_surface_id": "route_0004",
+      "asset_key": "grass",
+      "points": [
+        {
+          "position_authoring_px": {
+            "x": 2013,
+            "y": 1045
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "width_meters": 2.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2677,
+            "y": 323
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1,
+          "width_meters": 2.0
+        }
+      ],
+      "segments": [
+        {
+          "segment_id": "route_0004.segment_0001",
+          "grade_percent": 0,
+          "operation": "subtractive",
+          "clearance_above_meters": 2.0
+        }
+      ]
     }
   ],
   "water_bodies": [
@@ -60762,6 +60810,7 @@
       ]
     }
   ],
+  "bridges": [],
   "template_definition": null,
   "template_anchors": [
     {

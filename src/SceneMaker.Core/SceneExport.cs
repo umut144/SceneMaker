@@ -357,6 +357,17 @@ public static class SceneExport
         PropEditing.ValidateAssetReferences(scene, propAssets);
         RouteSurfaceEditing.ValidateAssetReferences(scene, terrainAssets);
         WaterEditing.ValidateAssetReferences(scene, terrainAssets);
+
+        // Authoring leads the runtime contract here as it did for excavating
+        // Paths: refusing outright is the one thing that cannot lose a bridge
+        // silently, and it costs nothing today because no Scene can hold one
+        // until the tool exists.
+        if (scene.Bridges.Count > 0)
+        {
+            throw new SceneMakerDocumentException(
+                $"Bridge '{scene.Bridges[0].BridgeId}' cannot be exported: export "
+                + $"schema {Version} has no representation for a bridge yet.");
+        }
     }
 
     private sealed record ExportDocument

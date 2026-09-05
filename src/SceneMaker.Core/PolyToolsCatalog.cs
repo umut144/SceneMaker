@@ -17,7 +17,15 @@ public sealed record AssetBoundsMeters(
 /// </summary>
 public sealed record PolyToolsComponentBounds(
     string Name,
-    AssetBoundsMeters BoundsMeters);
+    AssetBoundsMeters BoundsMeters,
+
+    /// <summary>
+    /// What this part alone occupies: the collision Regions whose source is
+    /// this Component or one below it. An Asset's own collision answer covers
+    /// everything it is made of, which is the wrong answer for a part that
+    /// gets set somewhere by itself. Null when no Region hangs on this part.
+    /// </summary>
+    AssetBoundsMeters? CollisionBoundsMeters);
 
 public sealed record PolyToolsCatalogAsset(
     string AssetKey,
@@ -460,13 +468,20 @@ public static class PolyToolsCatalogImporter
     /// that is allowed is not a question about geometry, so it is answered
     /// where roles are known rather than here.</para>
     /// </summary>
-    private static AssetBoundsMeters? CollisionBounds(RuntimeManifest manifest)
+    private static AssetBoundsMeters? CollisionBounds(
+        RuntimeManifest manifest,
+        IReadOnlySet<string>? limitToComponentIds = null)
     {
         var assetRoot = Transform.Translation(-manifest.AssetPivot.X, -manifest.AssetPivot.Y);
         Bounds? bounds = null;
         foreach (var region in manifest.Regions)
         {
             if (!StringComparer.Ordinal.Equals(region.Role, RuntimeRegion.CollisionRole)) continue;
+            if (limitToComponentIds is not null
+                && !limitToComponentIds.Contains(region.SourceComponentId))
+            {
+                continue;
+            }
             var source = manifest.Components[region.SourceComponentId];
             var world = assetRoot.Compose(ComponentWorldTransform(
                 source,
@@ -557,7 +572,8 @@ public static class PolyToolsCatalogImporter
                     checked((decimal)bounds.Value.MinimumX),
                     checked((decimal)bounds.Value.MinimumY),
                     checked((decimal)bounds.Value.MaximumX),
-                    checked((decimal)bounds.Value.MaximumY))));
+                    checked((decimal)bounds.Value.MaximumY)),
+                CollisionBounds(manifest, seen)));
         }
         return [.. named.OrderBy(static entry => entry.Name, StringComparer.Ordinal)];
     }

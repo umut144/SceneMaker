@@ -107,6 +107,22 @@ public static class PropEditing
                     false,
                     $"Placement collides with '{existing.InstanceId}'.");
         }
+
+        // A bridge post is not a Prop in the document, but it stands in the
+        // same map and takes the same space. "Occupied" has to mean one thing
+        // whoever asks, or a Placement could be set into a post that a bridge
+        // would refuse to set into the Placement.
+        foreach (var bridge in scene.Bridges)
+        {
+            if (BridgeEditing
+                .PostBounds(propAssets.Metrics, propAssets, bridge)
+                .Any(candidateCollision.Overlaps))
+            {
+                return new PropValidationResult(
+                    false,
+                    $"Placement collides with a post of bridge '{bridge.BridgeId}'.");
+            }
+        }
         return PropValidationResult.Valid;
     }
 
@@ -200,6 +216,8 @@ public static class PropEditing
         // free. Asking both of the footprint would refuse documents that
         // placing them was allowed to produce.
         List<PropBoundsAuthoringPixels> accepted = [];
+        foreach (var bridge in scene.Bridges)
+            accepted.AddRange(BridgeEditing.PostBounds(propAssets.Metrics, propAssets, bridge));
         foreach (var prop in scene.Props)
         {
             var asset = propAssets.Resolve(prop.AssetKey);
@@ -216,7 +234,7 @@ public static class PropEditing
                 prop.PositionAuthoringPx.Y);
             if (accepted.Any(collision.Overlaps))
                 throw new SceneMakerDocumentException(
-                    $"Placement '{prop.InstanceId}' collides with another Placement.");
+                    $"Placement '{prop.InstanceId}' collides with something already in the Scene.");
             accepted.Add(collision);
         }
     }

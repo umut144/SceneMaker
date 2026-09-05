@@ -75,6 +75,7 @@ public static partial class DocumentValidation
 
         ValidateElevationRegions(document);
         ValidateRouteSurfaces(document);
+        ValidateBridges(document);
         ValidateWaterBodies(document);
 
         if (document.TemplateAnchors is null)
@@ -103,6 +104,8 @@ public static partial class DocumentValidation
                 throw new SceneMakerDocumentException("Scene Template cannot own water bodies.");
             if (document.ElevationRegions.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own elevation regions.");
+            if (document.Bridges.Count > 0)
+                throw new SceneMakerDocumentException("Scene Template cannot own bridges.");
             ValidateGroupNumber("Scene Template", document.TemplateDefinition.GroupNumber);
         }
 
@@ -172,6 +175,31 @@ public static partial class DocumentValidation
             }
         }
         _ = ElevationRegionGeometry.EffectiveTerrainCells(document, metrics);
+
+        foreach (var bridge in document.Bridges)
+        {
+            // One height for the whole span, chosen directly, so it sits on
+            // the quantum like every other directly authored elevation.
+            ValidateElevation(
+                $"Bridge '{bridge.BridgeId}' elevation_meters",
+                bridge.ElevationMeters,
+                metrics);
+
+            // A deck is a continuous band like a route, so its ends stay
+            // inside the Scene without being held to either raster. Whether
+            // its corners reach past the edge is a question about the width
+            // too, and the editing operation answers it.
+            ValidateAuthoringPosition(
+                $"Bridge '{bridge.BridgeId}' start",
+                bridge.StartAuthoringPx,
+                document.SizeCells,
+                metrics.AuthoringPixelsPerTerrainCell);
+            ValidateAuthoringPosition(
+                $"Bridge '{bridge.BridgeId}' end",
+                bridge.EndAuthoringPx,
+                document.SizeCells,
+                metrics.AuthoringPixelsPerTerrainCell);
+        }
 
         foreach (var route in document.RouteSurfaces)
         {
@@ -271,6 +299,49 @@ public static partial class DocumentValidation
                 }
             }
             _ = ElevationRegionGeometry.RequireContour(body);
+        }
+    }
+
+    /// <summary>
+    /// Checks what a bridge is on its own terms. Whether its posts can stand
+    /// where they would stand is a question about the rest of the Scene and
+    /// about the Workspace's Assets, so it belongs to the editing operation
+    /// rather than to the document shape.
+    /// </summary>
+    private static void ValidateBridges(SceneDocument document)
+    {
+        if (document.Bridges is null)
+            throw new SceneMakerDocumentException("Scene requires bridges.");
+
+        string? previousBridgeId = null;
+        foreach (var bridge in document.Bridges)
+        {
+            ValidateStableId("bridge_id", bridge.BridgeId);
+            if (previousBridgeId is not null
+                && string.CompareOrdinal(bridge.BridgeId, previousBridgeId) <= 0)
+            {
+                throw new SceneMakerDocumentException(
+                    "Bridges must have unique IDs in canonical ordinal order.");
+            }
+            previousBridgeId = bridge.BridgeId;
+
+            var label = $"Bridge '{bridge.BridgeId}'";
+            if (string.IsNullOrWhiteSpace(bridge.AssetKey))
+                throw new SceneMakerDocumentException($"{label} requires an asset_key.");
+            if (string.IsNullOrWhiteSpace(bridge.AnchorAssetKey))
+                throw new SceneMakerDocumentException($"{label} requires an anchor_asset_key.");
+            if (bridge.WidthMeters <= 0m)
+                throw new SceneMakerDocumentException($"{label} requires a positive width_meters.");
+            if (bridge.StartAuthoringPx is null || bridge.EndAuthoringPx is null)
+                throw new SceneMakerDocumentException($"{label} requires both ends.");
+
+            // A span with no length has no direction, and without one there is
+            // no left and no right to put a post on.
+            if (bridge.StartAuthoringPx.X == bridge.EndAuthoringPx.X
+                && bridge.StartAuthoringPx.Y == bridge.EndAuthoringPx.Y)
+            {
+                throw new SceneMakerDocumentException($"{label} has both ends in the same place.");
+            }
         }
     }
 

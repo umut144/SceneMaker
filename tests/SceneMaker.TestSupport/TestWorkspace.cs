@@ -206,6 +206,22 @@ public sealed class TestWorkspace : IDisposable
     {
         var directory = Path.Combine(importDirectory, "PolyToolsRuntimeExports", assetKey);
         Directory.CreateDirectory(directory);
+        // The named part answers for itself: a bridge sets posts, and a post
+        // has to say what it occupies where it stands.
+        var partRegion = withNamedPart
+            ? """
+            ,
+                {
+                  "region_id": "collision_0002",
+                  "name": "post_collision",
+                  "role": "collision",
+                  "geometry_source": "authored",
+                  "source_component_id": "post",
+                  "vertices": [[0.25, 0.5], [0.75, 0.5], [0.75, 1.0]],
+                  "indices": [0, 1, 2]
+                }
+            """
+            : string.Empty;
         var part = withNamedPart
             ? """
             ,
@@ -261,7 +277,7 @@ public sealed class TestWorkspace : IDisposable
                   "source_component_id": "body",
                   "vertices": [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
                   "indices": [0, 1, 2]
-                }
+                }{{partRegion}}
               ]
             }
             """);

@@ -13,7 +13,14 @@ public sealed record PropAnchorComponent(
     int OffsetXAuthoringPixels,
     int OffsetYAuthoringPixels,
     int WidthAuthoringPixels,
-    int HeightAuthoringPixels);
+    int HeightAuthoringPixels,
+
+    /// <summary>
+    /// What this part occupies on its own, from the collision Regions hanging
+    /// on it rather than from the whole Asset's. A bridge sets posts, and a
+    /// post has to answer for a post rather than for a bridge.
+    /// </summary>
+    PropCollisionBox Collision);
 
 /// <summary>
 /// What a Placement occupies where it stands, as a box measured from its own
@@ -139,9 +146,21 @@ public static class PropDisplayCatalogLoader
             throw new SceneMakerDocumentException(
                 $"Placement Asset '{profile.AssetKey}' has no PolyTools Region with the collision role, so nothing says what it occupies.");
         }
+        return Box(
+            bounds,
+            authoringPixelsPerMeter,
+            $"Placement Asset '{profile.AssetKey}' collision");
+    }
 
-        // Rounded outward like the footprint: a Placement never occupies less
-        // than the geometry it was authored with.
+    /// <summary>
+    /// Metre bounds as a box measured from the Asset's anchor, rounded outward
+    /// so nothing ever reads as smaller than the geometry it stands for.
+    /// </summary>
+    private static PropCollisionBox Box(
+        AssetBoundsMeters bounds,
+        decimal authoringPixelsPerMeter,
+        string label)
+    {
         var left = checked((int)decimal.Floor(bounds.MinimumX * authoringPixelsPerMeter));
         var bottom = checked((int)decimal.Floor(bounds.MinimumY * authoringPixelsPerMeter));
         var right = checked((int)decimal.Ceiling(bounds.MaximumX * authoringPixelsPerMeter));
@@ -149,10 +168,7 @@ public static class PropDisplayCatalogLoader
         var width = checked(right - left);
         var height = checked(top - bottom);
         if (width <= 0 || height <= 0)
-        {
-            throw new SceneMakerDocumentException(
-                $"Placement Asset '{profile.AssetKey}' has an empty collision footprint.");
-        }
+            throw new SceneMakerDocumentException($"{label} has an empty authoring footprint.");
         return new PropCollisionBox(left, bottom, width, height);
     }
 
@@ -184,18 +200,27 @@ public static class PropDisplayCatalogLoader
 
         // Rounded outward on the same grid as the visible footprint, so a part
         // never reads as smaller than the geometry it stands for.
-        var bounds = matches[0].BoundsMeters;
-        var left = checked((int)decimal.Floor(bounds.MinimumX * authoringPixelsPerMeter));
-        var bottom = checked((int)decimal.Floor(bounds.MinimumY * authoringPixelsPerMeter));
-        var right = checked((int)decimal.Ceiling(bounds.MaximumX * authoringPixelsPerMeter));
-        var top = checked((int)decimal.Ceiling(bounds.MaximumY * authoringPixelsPerMeter));
-        var width = checked(right - left);
-        var height = checked(top - bottom);
-        if (width <= 0 || height <= 0)
+        var box = Box(
+            matches[0].BoundsMeters,
+            authoringPixelsPerMeter,
+            $"Asset '{profile.AssetKey}' anchor_component '{name}'");
+
+        // A part that gets set somewhere has to say what it occupies there,
+        // for the same reason the whole Asset does.
+        if (matches[0].CollisionBoundsMeters is not { } collisionBounds)
         {
             throw new SceneMakerDocumentException(
-                $"Asset '{profile.AssetKey}' anchor_component '{name}' has an empty authoring footprint.");
+                $"Asset '{profile.AssetKey}' anchor_component '{name}' carries no collision Region, so nothing says what the part occupies.");
         }
-        return new PropAnchorComponent(name, left, bottom, width, height);
+        return new PropAnchorComponent(
+            name,
+            box.OffsetXAuthoringPixels,
+            box.OffsetYAuthoringPixels,
+            box.WidthAuthoringPixels,
+            box.HeightAuthoringPixels,
+            Box(
+                collisionBounds,
+                authoringPixelsPerMeter,
+                $"Asset '{profile.AssetKey}' anchor_component '{name}' collision"));
     }
 }

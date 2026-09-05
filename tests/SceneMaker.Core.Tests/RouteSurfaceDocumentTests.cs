@@ -14,7 +14,7 @@ public sealed class RouteSurfaceDocumentTests
 
         var restored = DocumentJson.DeserializeScene(DocumentJson.Serialize(scene));
 
-        Assert.Equal(16, restored.Version);
+        Assert.Equal(17, restored.Version);
         var route = Assert.Single(restored.RouteSurfaces);
         Assert.Equal("route_0001", route.RouteSurfaceId);
         Assert.Equal("grass", route.AssetKey);

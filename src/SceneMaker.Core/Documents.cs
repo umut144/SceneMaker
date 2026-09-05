@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 16;
+    public const int SceneVersion = 17;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -171,6 +171,51 @@ public sealed record RouteSurfaceSegmentDocument
 }
 
 /// <summary>
+/// A straight, level span between two ends. Its deck is geometrically a Path
+/// with two linear points at one height and is built from the same geometry,
+/// but it keeps its own record: a Path carries per-segment grade and an
+/// additive/subtractive operation that a bridge has no meaning for, and a
+/// bridge carries an anchor Asset and a two-point rule that a Path must not be
+/// held to. One shared record would give each kind the other's fields and two
+/// mutually exclusive sets of rules.
+///
+/// <para>Everything derivable is derived. The length follows from the two
+/// ends, and the four corner posts follow from the ends together with the
+/// width - so changing the width moves them, deleting the bridge deletes them,
+/// and moving the bridge takes them along, none of which needs a second thing
+/// to be kept in step.</para>
+/// </summary>
+public sealed record BridgeDocument
+{
+    public required string BridgeId { get; init; }
+
+    /// <summary>The Terrain Asset whose surface the deck presents.</summary>
+    public required string AssetKey { get; init; }
+
+    /// <summary>
+    /// The Placement Asset whose named Component stands at each corner. The
+    /// bridge points at the Asset rather than at the part, because
+    /// <c>anchor_component</c> is what says which part an Asset offers, and
+    /// naming a Component here would make a PolyTools composition detail into
+    /// authored map identity.
+    /// </summary>
+    public required string AnchorAssetKey { get; init; }
+
+    public required AuthoringPixelPosition StartAuthoringPx { get; init; }
+    public required AuthoringPixelPosition EndAuthoringPx { get; init; }
+
+    /// <summary>The full deck width, perpendicular to start-to-end.</summary>
+    public required decimal WidthMeters { get; init; }
+
+    /// <summary>
+    /// The deck surface, absolute and on the Workspace elevation quantum. One
+    /// number for the whole span: a bridge is level until a case needs a
+    /// climbing one, and a Path already authors that case.
+    /// </summary>
+    public required decimal ElevationMeters { get; init; }
+}
+
+/// <summary>
 /// An independently materialized surface along an open route. Unlike a
 /// hill it can cross an unpainted position, so it carries the Terrain Asset
 /// whose surface it presents instead of inheriting material from cells below.
@@ -326,6 +371,12 @@ public sealed record SceneDocument
     /// </summary>
     public required List<WaterBodyDocument> WaterBodies { get; init; }
 
+    /// <summary>
+    /// Straight level spans. Their decks are independent surfaces like a
+    /// Path's, and their corner posts are derived rather than stored.
+    /// </summary>
+    public required List<BridgeDocument> Bridges { get; init; }
+
     public required TemplateDefinitionDocument? TemplateDefinition { get; init; }
     public required List<TemplateAnchorDocument> TemplateAnchors { get; init; }
 
@@ -405,6 +456,7 @@ public sealed record SceneDocument
         ElevationRegions = [],
         RouteSurfaces = [],
         WaterBodies = [],
+        Bridges = [],
         TemplateDefinition = templateDefinition,
         TemplateAnchors = [],
         DefaultElevationMeters = defaultElevationMeters,

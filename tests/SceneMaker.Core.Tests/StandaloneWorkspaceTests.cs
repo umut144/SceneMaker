@@ -752,7 +752,11 @@ public sealed class StandaloneWorkspaceTests
     public void AWorkspaceNamesTheComponentAPlacementOffersAsItsOwnPart()
     {
         using var directory = TemporaryDirectory.Create();
-        WritePolyToolsImport(directory.Path, "parts01", treeComponents: NamedParts);
+        WritePolyToolsImport(
+            directory.Path,
+            "parts01",
+            treeComponents: NamedParts,
+            regions: NamedPartsRegions);
         WriteConfig(directory.Path, "parts01", 1m, 10m, 40m, """
             { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "anchor_component": "post" }
         """);
@@ -836,6 +840,33 @@ public sealed class StandaloneWorkspaceTests
             exception.Message,
             StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// One Region for the whole Asset and one for the post, so the part can
+    /// answer for itself rather than for everything the Asset is made of.
+    /// </summary>
+    private const string NamedPartsRegions = """
+        [
+          {
+            "region_id": "collision_0001",
+            "name": "body_collision",
+            "role": "collision",
+            "geometry_source": "authored",
+            "source_component_id": "body",
+            "vertices": [[0.0, 0.0], [4.0, 0.0], [4.0, 4.0]],
+            "indices": [0, 1, 2]
+          },
+          {
+            "region_id": "collision_0002",
+            "name": "post_collision",
+            "role": "collision",
+            "geometry_source": "authored",
+            "source_component_id": "post",
+            "vertices": [[1.0, 1.0], [2.0, 1.0], [2.0, 2.0]],
+            "indices": [0, 1, 2]
+          }
+        ]
+        """;
 
     /// <summary>
     /// A body at 0..4 m, a post at 1..2 m inside it, and a cap under the post

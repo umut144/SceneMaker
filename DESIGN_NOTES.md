@@ -206,6 +206,25 @@ later costs more than naming it now.
 readout. It deliberately does not offer grade, operation or clearance: a tool
 that greys out half its context bar is a second tool.
 
+### What is built
+
+Scene schema 17 persists the record above. `BridgeGeometry` derives the four
+corners and hands the deck to `RouteSurfaceGeometry` as the two-point chain it
+is, so a bridge has no idea of a band of its own. `BridgeEditing` places,
+removes and finds one, and answers the draft and the commit with the same call:
+representable numbers, a height on the quantum, two different ends, every
+corner inside the Scene, and all four posts free - of Placements and of the
+posts of every other bridge. A bridge is authored whole, so it is refused
+whole rather than placed with three posts.
+
+The occupancy rule is symmetric in both directions now: `PropEditing` reads
+bridge posts too, so a Placement cannot be set into a post that a bridge would
+have refused to set into the Placement.
+
+Export 11 refuses a Scene holding a bridge rather than dropping it, the same
+way export 10 refused an excavating Path. It costs nothing while no tool can
+author one, and it is the one thing that cannot lose a bridge silently.
+
 ### Not in the first slice
 
 A Scene Template cannot carry a bridge yet, for the reason it cannot carry

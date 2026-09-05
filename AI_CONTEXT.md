@@ -458,6 +458,35 @@ what the simulation reads; the smooth mesh is presentation, and the authored
 curve travels in the export so a consumer that wants a smooth band instead of a
 marched one has it.
 
+## Bridges
+
+A bridge is a straight level span with its own record. Its deck is
+geometrically a two-point Path at one height and is built by the same
+`RouteSurfaceGeometry`, but it keeps its own document because a Path carries
+per-segment grade and an additive/subtractive operation a bridge has no meaning
+for, while a bridge carries an anchor Asset and a two-point rule a Path must not
+be held to.
+
+Six numbers are authored - deck Asset, anchor Asset, two ends, width, height -
+and everything else follows from them. The length is the distance between the
+ends and is shown rather than stored. The four corner posts are derived on
+every question rather than kept, which is what makes widening a bridge move
+them, deleting it take them along, and moving it carry them: there is no second
+record to fall out of step. Left and right mean a quarter turn counter-clockwise
+from start towards end, which in SceneMaker's y-up space is the northern side of
+an eastward span.
+
+The post is not a Prop and not an Asset of its own. PolyTools exports it as a
+Component of the bridge model, and a Prop must never name a Component -
+`asset_key` is the whole of its identity, so a composition rename in PolyTools
+would otherwise break authored maps. The Workspace names the part once, on the
+Asset, through `anchor_component`.
+
+Ends do not snap, and neither does the angle. A deck is read as continuous
+geometry rather than through a raster, which is the same reason Path points are
+free while hill anchors snap; arbitrarily angled bridges are a deliberate
+property of the authored world.
+
 ## Template Anchors and groups
 
 The authored Scene Instance is the fixed part of a map. Template Anchors are
