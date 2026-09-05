@@ -12,7 +12,7 @@ public readonly record struct RouteSurfaceRasterCell(
     string RouteSurfaceId);
 
 /// <summary>One Terrain cut sampled from a subtractive authored Path segment.</summary>
-public readonly record struct RouteSurfaceRasterCut(
+internal readonly record struct RouteSurfaceRasterCut(
     int X,
     int Y,
     decimal BottomMeters,
@@ -40,7 +40,7 @@ public static class RouteSurfaceRaster
     /// triangles used by <see cref="Cells"/>. Their Path surface remains a
     /// separate cell; this answer is only the Terrain volume above it.
     /// </summary>
-    public static IReadOnlyList<RouteSurfaceRasterCut> Cuts(
+    internal static IReadOnlyList<RouteSurfaceRasterCut> Cuts(
         SceneDocument scene,
         WorkspaceMetrics metrics) => Prepare(scene, metrics).Cuts;
 
@@ -79,9 +79,14 @@ public static class RouteSurfaceRaster
                 }
 
                 var baked = bake.Segments[segmentIndex];
-                foreach (var triangleOffset in
-                         RouteSurfaceBake.TriangleOffsetsForSegment(bake, baked))
+                if (!StringComparer.Ordinal.Equals(authored.SegmentId, baked.SegmentId))
                 {
+                    throw new SceneMakerDocumentException(
+                        $"Path segment '{authored.SegmentId}' does not match its baked interval.");
+                }
+                foreach (var triangle in RouteSurfaceBake.TrianglesForSegment(bake, baked))
+                {
+                    var triangleOffset = triangle.TriangleOffset;
                     AddTriangleCuts(
                         cuts,
                         scene,
@@ -91,7 +96,8 @@ public static class RouteSurfaceRaster
                         authored.ClearanceAboveMeters.Value,
                         bake.Vertices[bake.TriangleIndices[triangleOffset]],
                         bake.Vertices[bake.TriangleIndices[triangleOffset + 1]],
-                        bake.Vertices[bake.TriangleIndices[triangleOffset + 2]]);
+                        bake.Vertices[bake.TriangleIndices[triangleOffset + 2]],
+                        PortalClipsFor(bake, triangle));
                 }
             }
         }
@@ -181,10 +187,17 @@ public static class RouteSurfaceRaster
         decimal clearanceAboveMeters,
         RouteSurfaceBakeVertex first,
         RouteSurfaceBakeVertex second,
-        RouteSurfaceBakeVertex third)
+        RouteSurfaceBakeVertex third,
+        PortalClips portalClips)
     {
         foreach (var sample in TriangleSamples(scene, metrics, first, second, third))
         {
+            if (!portalClips.Contains(
+                    sample.X * metrics.WaterCellMeters + metrics.WaterCellMeters / 2m,
+                    sample.Y * metrics.WaterCellMeters + metrics.WaterCellMeters / 2m))
+            {
+                continue;
+            }
             cuts.Add(new RouteSurfaceRasterCut(
                 sample.X,
                 sample.Y,
@@ -193,6 +206,63 @@ public static class RouteSurfaceRaster
                 routeSurfaceId,
                 segmentId));
         }
+    }
+
+    private static PortalClips PortalClipsFor(
+        BakedRouteSurface bake,
+        RouteSurfaceBakeTriangle triangle)
+    {
+        return new PortalClips(
+            triangle.StartPortalSampleIndex is { } start
+                ? PortalClipFor(bake, start, keepAfter: true)
+                : null,
+            triangle.EndPortalSampleIndex is { } end
+                ? PortalClipFor(bake, end, keepAfter: false)
+                : null);
+    }
+
+    private static PortalClip PortalClipFor(
+        BakedRouteSurface bake,
+        int sampleIndex,
+        bool keepAfter)
+    {
+        if (sampleIndex <= 0 || sampleIndex + 1 >= bake.CenterlineSamples.Count)
+        {
+            throw new SceneMakerDocumentException(
+                $"Path '{bake.RouteSurfaceId}' has a portal outside its baked centerline.");
+        }
+
+        var before = bake.CenterlineSamples[sampleIndex - 1];
+        var portal = bake.CenterlineSamples[sampleIndex];
+        var after = bake.CenterlineSamples[sampleIndex + 1];
+        var incomingX = portal.XMeters - before.XMeters;
+        var incomingY = portal.YMeters - before.YMeters;
+        var outgoingX = after.XMeters - portal.XMeters;
+        var outgoingY = after.YMeters - portal.YMeters;
+        var incomingLength = Math.Sqrt((double)(incomingX * incomingX + incomingY * incomingY));
+        var outgoingLength = Math.Sqrt((double)(outgoingX * outgoingX + outgoingY * outgoingY));
+        if (!double.IsFinite(incomingLength)
+            || !double.IsFinite(outgoingLength)
+            || incomingLength <= 0.0
+            || outgoingLength <= 0.0)
+        {
+            throw new SceneMakerDocumentException(
+                $"Path '{bake.RouteSurfaceId}' has no direction at a baked portal.");
+        }
+
+        var tangentX = (double)incomingX / incomingLength + (double)outgoingX / outgoingLength;
+        var tangentY = (double)incomingY / incomingLength + (double)outgoingY / outgoingLength;
+        if (tangentX * tangentX + tangentY * tangentY <= 1e-18)
+        {
+            tangentX = (double)outgoingX / outgoingLength;
+            tangentY = (double)outgoingY / outgoingLength;
+        }
+        return new PortalClip(
+            portal.XMeters,
+            portal.YMeters,
+            (decimal)tangentX,
+            (decimal)tangentY,
+            keepAfter);
     }
 
     private static int CellAtOrAfter(
@@ -217,8 +287,9 @@ public static class RouteSurfaceRaster
 
     /// <summary>
     /// Barycentric interpolation over the baked triangle. Boundaries are
-    /// inclusive, so adjacent triangles agree on their shared edge and the
-    /// HashSet removes the identical sample.
+    /// inclusive. Adjacent triangles can differ at the last decimal place on
+    /// their shared edge; the raster sets make exact duplicates harmless and
+    /// the later cut merge absorbs equivalent neighbouring samples.
     /// </summary>
     private static decimal? ElevationAt(
         decimal x,
@@ -250,6 +321,28 @@ public static class RouteSurfaceRaster
 
     private static decimal Cross(decimal ax, decimal ay, decimal bx, decimal by) =>
         ax * by - ay * bx;
+
+    private readonly record struct PortalClip(
+        decimal XMeters,
+        decimal YMeters,
+        decimal TangentX,
+        decimal TangentY,
+        bool KeepAfter)
+    {
+        public bool Contains(decimal xMeters, decimal yMeters)
+        {
+            var side = (xMeters - XMeters) * TangentX
+                + (yMeters - YMeters) * TangentY;
+            return KeepAfter ? side >= 0m : side <= 0m;
+        }
+    }
+
+    private readonly record struct PortalClips(PortalClip? Start, PortalClip? End)
+    {
+        public bool Contains(decimal xMeters, decimal yMeters) =>
+            (Start is not { } start || start.Contains(xMeters, yMeters))
+            && (End is not { } end || end.Contains(xMeters, yMeters));
+    }
 
     private readonly record struct TriangleSample(int X, int Y, decimal ElevationMeters);
 }

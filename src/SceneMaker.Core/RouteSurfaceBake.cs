@@ -52,6 +52,18 @@ public sealed record BakedRouteSurface
 }
 
 /// <summary>
+/// One baked triangle used by an authored segment. Round-join triangles at an
+/// authored boundary are shared by both neighbours, but each neighbour owns
+/// only its side of the portal plane when the triangle is used for a cut. The
+/// same plane also clips the adjacent quad, so a corner cannot protrude through
+/// an operation boundary merely because its two tangents differ.
+/// </summary>
+internal readonly record struct RouteSurfaceBakeTriangle(
+    int TriangleOffset,
+    int? StartPortalSampleIndex,
+    int? EndPortalSampleIndex);
+
+/// <summary>
 /// Bakes the exact Path primitives used by the Canvas into engine-neutral
 /// runtime geometry. Consumers never need to flatten Beziers, interpolate
 /// width or elevation, or choose join and cap rules independently.
@@ -136,12 +148,12 @@ public static class RouteSurfaceBake
     }
 
     /// <summary>
-    /// Triangle offsets belonging to one authored interval. The bake writes
-    /// every flattened-segment quad first and then every interior round join;
-    /// a join on an authored boundary belongs to both adjacent intervals. That
-    /// shared ownership closes a subtractive corridor cleanly at a portal.
+    /// Baked triangles belonging to one authored interval. The bake writes
+    /// every flattened-segment quad first and then every interior round join.
+    /// A join on an authored boundary belongs to both adjacent intervals; its
+    /// portal half keeps the two operations from crossing that boundary.
     /// </summary>
-    internal static IEnumerable<int> TriangleOffsetsForSegment(
+    internal static IEnumerable<RouteSurfaceBakeTriangle> TrianglesForSegment(
         BakedRouteSurface bake,
         RouteSurfaceBakeSegment segment)
     {
@@ -155,12 +167,33 @@ public static class RouteSurfaceBake
             throw new SceneMakerDocumentException(
                 $"Path segment '{segment.SegmentId}' has an invalid baked sample range.");
         }
+        var expectedTriangleIndexCount = flattenedSegmentCount * 6
+            + Math.Max(0, flattenedSegmentCount - 1) * RoundJoinSides * 3;
+        if (bake.TriangleIndices.Count != expectedTriangleIndexCount)
+        {
+            throw new SceneMakerDocumentException(
+                $"Path '{bake.RouteSurfaceId}' has an unexpected baked triangle layout.");
+        }
 
         for (var sample = segment.StartSampleIndex; sample < segment.EndSampleIndex; sample++)
         {
             var quadOffset = sample * 6;
-            yield return quadOffset;
-            yield return quadOffset + 3;
+            int? startPortal = sample == segment.StartSampleIndex
+                && segment.StartSampleIndex > 0
+                    ? segment.StartSampleIndex
+                    : null;
+            int? endPortal = sample + 1 == segment.EndSampleIndex
+                && segment.EndSampleIndex < flattenedSegmentCount
+                    ? segment.EndSampleIndex
+                    : null;
+            yield return new RouteSurfaceBakeTriangle(
+                quadOffset,
+                startPortal,
+                endPortal);
+            yield return new RouteSurfaceBakeTriangle(
+                quadOffset + 3,
+                startPortal,
+                endPortal);
         }
 
         var joinsOffset = flattenedSegmentCount * 6;
@@ -170,8 +203,15 @@ public static class RouteSurfaceBake
         {
             var joinOffset = joinsOffset
                 + (sample - 1) * RoundJoinSides * 3;
+            int? startPortal = sample == segment.StartSampleIndex ? sample : null;
+            int? endPortal = sample == segment.EndSampleIndex ? sample : null;
             for (var side = 0; side < RoundJoinSides; side++)
-                yield return joinOffset + side * 3;
+            {
+                yield return new RouteSurfaceBakeTriangle(
+                    joinOffset + side * 3,
+                    startPortal,
+                    endPortal);
+            }
         }
     }
 

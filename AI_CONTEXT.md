@@ -348,7 +348,12 @@ is also why clipping exactly at a hill top keeps the hill visible. The current
 lookup quantizes an arbitrary authoring position to the Workspace water grid
 because that is the finest authored volumetric raster. The authoring-position
 entry keeps that query engine-neutral while continuous Path cuts use the same
-cell centres.
+baked triangles as the visible Path at water-cell centres. At an authored
+operation transition, the round join remains one visible surface but a shared
+bisecting plane gives each segment only its own half for excavation. The
+authored point is therefore the exact portal: an additive neighbour is not cut,
+while two subtractive neighbours can apply different clearances on their
+respective sides.
 
 The Canvas now exposes that answer as a third, transient presentation beside
 the ordinary Asset view and the blue height map. `CanvasViewState` owns the

@@ -499,10 +499,108 @@ public sealed class LayeredSceneColumnsTests
         var columns = LayeredSceneColumns.Prepare(scene, workspace.Metrics);
 
         Assert.Equal(2, columns.AtWaterCell(0, 0).TerrainSolids.Count);
-        Assert.Equal(2, columns.AtWaterCell(2, 0).TerrainSolids.Count);
+        Assert.Single(columns.AtWaterCell(2, 0).TerrainSolids);
+        Assert.Equal(10m, columns.AtWaterCell(2, 0).TerrainSolids[0].TopMeters);
         Assert.Single(columns.AtWaterCell(3, 0).TerrainSolids);
         Assert.Equal(10m, columns.AtWaterCell(3, 0).TerrainSolids[0].TopMeters);
         Assert.Equal(10m, columns.AtWaterCell(3, 0).VisibleAt()!.ElevationMeters);
+    }
+
+    [Fact]
+    public void TwoSubtractiveSidesKeepTheirOwnClearanceAtThePortal()
+    {
+        using var workspace = TestWorkspace.Create();
+        var route = new RouteSurfaceDocument
+        {
+            RouteSurfaceId = "route_0001",
+            AssetKey = "grass",
+            Points =
+            [
+                RoutePoint(0, 8, 2m, 0.5m),
+                RoutePoint(32, 8, 2m, 0.5m),
+                RoutePoint(64, 8, 2m, 0.5m),
+            ],
+            Segments =
+            [
+                Segment("route_0001", 1, RouteSegmentOperation.Subtractive, 1m),
+                Segment("route_0001", 2, RouteSegmentOperation.Subtractive, 3m),
+            ],
+        };
+        var scene = Hill(TestScenes.Instance(workspace), workspace, 10m, 64) with
+        {
+            RouteSurfaces = [route],
+        };
+        var columns = LayeredSceneColumns.Prepare(scene, workspace.Metrics);
+
+        Assert.Equal(
+            [(decimal?)null, 2m, 3m, 10m],
+            columns.AtWaterCell(1, 0).TerrainSolids
+                .SelectMany(static span => new[] { span.BottomMeters, span.TopMeters }));
+        Assert.Equal(
+            [(decimal?)null, 2m, 5m, 10m],
+            columns.AtWaterCell(2, 0).TerrainSolids
+                .SelectMany(static span => new[] { span.BottomMeters, span.TopMeters }));
+    }
+
+    [Fact]
+    public void ACornerPortalDoesNotLetTheTunnelCutBackIntoTheAdditiveSide()
+    {
+        using var workspace = TestWorkspace.Create();
+        var route = new RouteSurfaceDocument
+        {
+            RouteSurfaceId = "route_0001",
+            AssetKey = "grass",
+            Points =
+            [
+                RoutePoint(0, 32, 2m, 2m),
+                RoutePoint(64, 32, 2m, 2m),
+                RoutePoint(64, 96, 2m, 2m),
+            ],
+            Segments =
+            [
+                Segment("route_0001", 1, RouteSegmentOperation.Additive),
+                Segment("route_0001", 2, RouteSegmentOperation.Subtractive, 3m),
+            ],
+        };
+        var scene = Hill(TestScenes.Instance(workspace), workspace, 10m, 128) with
+        {
+            RouteSurfaces = [route],
+        };
+        var columns = LayeredSceneColumns.Prepare(scene, workspace.Metrics);
+
+        Assert.Single(columns.AtWaterCell(2, 2).TerrainSolids);
+        Assert.Equal(10m, columns.AtWaterCell(2, 2).TerrainSolids[0].TopMeters);
+        Assert.Equal(
+            [(decimal?)null, 2m, 5m, 10m],
+            columns.AtWaterCell(3, 3).TerrainSolids
+                .SelectMany(static span => new[] { span.BottomMeters, span.TopMeters }));
+    }
+
+    [Fact]
+    public void ACutEndingAtTheTerrainTopLeavesNoZeroHeightRoof()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Hill(TestScenes.Instance(workspace), workspace, 5m) with
+        {
+            RouteSurfaces =
+            [
+                Route(
+                    "route_0001",
+                    RoutePoint(0, 8, 2m, 0.5m),
+                    RoutePoint(32, 8, 2m, 0.5m),
+                    operation: RouteSegmentOperation.Subtractive,
+                    clearance: 3m),
+            ],
+        };
+
+        var column = LayeredSceneColumns.Prepare(scene, workspace.Metrics).AtWaterCell(0, 0);
+
+        Assert.Equal(
+            [new LayeredColumnSpan(
+                null, 2m, "grass", LayeredColumnSpanKind.TerrainSolid, null)],
+            column.TerrainSolids);
+        Assert.Equal(2m, column.VisibleAt()!.ElevationMeters);
+        Assert.Equal(LayeredColumnSpanKind.IndependentSurface, column.VisibleAt()!.Kind);
     }
 
     [Fact]

@@ -234,7 +234,10 @@ Its Canvas projection is limited to the contents resolved by
 Path surfaces. `RouteSurfaceRaster` samples the same baked triangles used by
 Canvas and export at water-cell centres, preserving continuous height, stacked
 surfaces and Terrain occlusion. Subtractive intervals now contribute cuts from
-only their own baked quads and shared portal joins; these cuts affect Terrain
+only their own baked quads and their half of a shared portal join. A single
+bisecting plane through the authored transition divides that join, so an
+additive neighbour is not excavated and two subtractive neighbours may keep
+different clearances on their respective sides. These cuts affect Terrain
 alone and retain every Path floor. Placements stay hidden rather than
 painted over a clipped roof with a false draw-order answer until they acquire
 an actual layered-surface or occlusion rule.
