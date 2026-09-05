@@ -2,6 +2,19 @@ using System.Collections.ObjectModel;
 
 namespace SceneMaker.Core;
 
+/// <summary>
+/// One part of a Placement that the Workspace named, as a box measured from
+/// the Placement's own anchor. A bridge sets its posts by it, and the Canvas
+/// draws it where that part sits inside the whole Asset. Offsets are signed
+/// because a part need not surround the anchor.
+/// </summary>
+public sealed record PropAnchorComponent(
+    string Name,
+    int OffsetXAuthoringPixels,
+    int OffsetYAuthoringPixels,
+    int WidthAuthoringPixels,
+    int HeightAuthoringPixels);
+
 public sealed record PropDisplayAsset(
     string AssetKey,
     string Name,
@@ -13,7 +26,8 @@ public sealed record PropDisplayAsset(
     int FootprintWidthAuthoringPixels,
     int FootprintHeightAuthoringPixels,
     int AnchorXAuthoringPixels,
-    int AnchorYAuthoringPixels);
+    int AnchorYAuthoringPixels,
+    PropAnchorComponent? AnchorComponent = null);
 
 public sealed class PropDisplayCatalog
 {
@@ -60,6 +74,8 @@ public static class PropDisplayCatalogLoader
         decimal authoringPixelsPerMeter)
     {
         var bounds = catalogAsset.BoundsMeters;
+        var anchorComponent = ResolveAnchorComponent(
+            profile, catalogAsset, authoringPixelsPerMeter);
         var left = checked((int)decimal.Floor(bounds.MinimumX * authoringPixelsPerMeter));
         var bottom = checked((int)decimal.Floor(bounds.MinimumY * authoringPixelsPerMeter));
         var right = checked((int)decimal.Ceiling(bounds.MaximumX * authoringPixelsPerMeter));
@@ -85,6 +101,50 @@ public static class PropDisplayCatalogLoader
             width,
             height,
             anchorX,
-            anchorY);
+            anchorY,
+            anchorComponent);
+    }
+
+    /// <summary>
+    /// Resolves the Component the Workspace named on this Placement. A name
+    /// that matches nothing, or more than one part, is refused rather than
+    /// quietly ignored: something authored it deliberately, and drawing the
+    /// wrong part - or none - is worse than a load that says why.
+    /// </summary>
+    private static PropAnchorComponent? ResolveAnchorComponent(
+        WorkspaceAssetProfile profile,
+        PolyToolsCatalogAsset catalogAsset,
+        decimal authoringPixelsPerMeter)
+    {
+        if (profile.AnchorComponent is not { } name) return null;
+        var matches = catalogAsset.Components
+            .Where(component => StringComparer.Ordinal.Equals(component.Name, name))
+            .ToList();
+        if (matches.Count == 0)
+        {
+            throw new SceneMakerDocumentException(
+                $"Asset '{profile.AssetKey}' names anchor_component '{name}', which its PolyTools geometry does not contain.");
+        }
+        if (matches.Count > 1)
+        {
+            throw new SceneMakerDocumentException(
+                $"Asset '{profile.AssetKey}' names anchor_component '{name}', which its PolyTools geometry contains {matches.Count} times.");
+        }
+
+        // Rounded outward on the same grid as the visible footprint, so a part
+        // never reads as smaller than the geometry it stands for.
+        var bounds = matches[0].BoundsMeters;
+        var left = checked((int)decimal.Floor(bounds.MinimumX * authoringPixelsPerMeter));
+        var bottom = checked((int)decimal.Floor(bounds.MinimumY * authoringPixelsPerMeter));
+        var right = checked((int)decimal.Ceiling(bounds.MaximumX * authoringPixelsPerMeter));
+        var top = checked((int)decimal.Ceiling(bounds.MaximumY * authoringPixelsPerMeter));
+        var width = checked(right - left);
+        var height = checked(top - bottom);
+        if (width <= 0 || height <= 0)
+        {
+            throw new SceneMakerDocumentException(
+                $"Asset '{profile.AssetKey}' anchor_component '{name}' has an empty authoring footprint.");
+        }
+        return new PropAnchorComponent(name, left, bottom, width, height);
     }
 }

@@ -297,12 +297,12 @@ public sealed class StandaloneWorkspaceTests
             32m,
             192m,
             """{ "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" }""",
-            version: 7);
+            version: 8);
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             WorkspaceConfigurationStore.Load(directory.Path));
 
-        Assert.Contains("version 8", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("version 9", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -605,6 +605,171 @@ public sealed class StandaloneWorkspaceTests
     /// Terrain cell, the coarsest water grid the metrics allow, because most of
     /// these tests are about Terrain and Props and only need water to be valid.
     /// </summary>
+
+    /// <summary>
+    /// A bridge sets posts, not whole bridges. The Workspace therefore names
+    /// which Component of a Placement it means, and the import answers with
+    /// that part's own box measured from the Placement's anchor - including
+    /// everything hanging under it, because a part is what it covers together
+    /// with its children.
+    /// </summary>
+    [Fact]
+    public void AWorkspaceNamesTheComponentAPlacementOffersAsItsOwnPart()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "parts01", treeComponents: NamedParts);
+        WriteConfig(directory.Path, "parts01", 1m, 10m, 40m, """
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "anchor_component": "post" }
+        """);
+
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+        var workspace = WorkspaceConfigurationStore.Load(directory.Path);
+        var tree = PropDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
+
+        // The whole Asset is unchanged: naming a part is a question about it,
+        // not an edit to it.
+        Assert.Equal(40, tree.FootprintWidthAuthoringPixels);
+        Assert.Equal(40, tree.FootprintHeightAuthoringPixels);
+
+        var post = Assert.IsType<PropAnchorComponent>(tree.AnchorComponent);
+        Assert.Equal("post", post.Name);
+        Assert.Equal(10, post.OffsetXAuthoringPixels);
+        Assert.Equal(10, post.OffsetYAuthoringPixels);
+        Assert.Equal(10, post.WidthAuthoringPixels);
+
+        // 10..30 rather than 10..20: the cap hanging under the post belongs to
+        // it, so the part reaches as high as its children do.
+        Assert.Equal(20, post.HeightAuthoringPixels);
+    }
+
+    [Fact]
+    public void APlacementWithoutANamedComponentOffersNoPart()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "parts02", treeComponents: NamedParts);
+        WriteConfig(directory.Path, "parts02", 1m, 10m, 40m, """
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+        """);
+
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+        var workspace = WorkspaceConfigurationStore.Load(directory.Path);
+
+        Assert.Null(PropDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree").AnchorComponent);
+    }
+
+    /// <summary>
+    /// Someone authored that name on purpose. Drawing the wrong part, or none,
+    /// is worse than a load that says which name went missing - which is also
+    /// what makes a rename in PolyTools a visible event rather than a silent
+    /// change of what a bridge sets at its corners.
+    /// </summary>
+    [Theory]
+    [InlineData("mast", "which its PolyTools geometry does not contain")]
+    [InlineData("body", "which its PolyTools geometry contains 2 times")]
+    public void AnAnchorComponentThatDoesNotNameExactlyOnePartIsRefused(
+        string anchorComponent,
+        string expectedMessage)
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "parts03", treeComponents: NamedParts);
+        WriteConfig(directory.Path, "parts03", 1m, 10m, 40m, $$"""
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "anchor_component": "{{anchorComponent}}" }
+        """);
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+        var workspace = WorkspaceConfigurationStore.Load(directory.Path);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            PropDisplayCatalogLoader.Load(catalog, workspace));
+
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TerrainMayNotNameAnAnchorComponent()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "parts04");
+        WriteConfig(directory.Path, "parts04", 1m, 10m, 40m, """
+            { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells", "anchor_component": "post" }
+        """);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            WorkspaceConfigurationStore.Load(directory.Path));
+
+        Assert.Contains(
+            "must not declare an anchor_component",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A body at 0..4 m, a post at 1..2 m inside it, and a cap under the post
+    /// reaching to 3 m. Two Components share the name "body" so an ambiguous
+    /// reference has something to be ambiguous about.
+    /// </summary>
+    private const string NamedParts = """
+        {
+          "component_id": "body",
+          "name": "body",
+          "parent_component_id": null,
+          "local_transform": {
+            "position": [0.0, 0.0],
+            "rotation_radians": 0.0,
+            "scale": [1.0, 1.0]
+          },
+          "mesh": {
+            "vertices": [[0.0, 0.0], [4.0, 4.0]],
+            "indices": [0, 1, 1]
+          },
+          "contour_stroke_mesh": null
+        },
+        {
+          "component_id": "body_two",
+          "name": "body",
+          "parent_component_id": null,
+          "local_transform": {
+            "position": [0.0, 0.0],
+            "rotation_radians": 0.0,
+            "scale": [1.0, 1.0]
+          },
+          "mesh": {
+            "vertices": [[0.0, 0.0], [1.0, 1.0]],
+            "indices": [0, 1, 1]
+          },
+          "contour_stroke_mesh": null
+        },
+        {
+          "component_id": "post",
+          "name": "post",
+          "parent_component_id": "body",
+          "local_transform": {
+            "position": [0.0, 0.0],
+            "rotation_radians": 0.0,
+            "scale": [1.0, 1.0]
+          },
+          "mesh": {
+            "vertices": [[1.0, 1.0], [2.0, 2.0]],
+            "indices": [0, 1, 1]
+          },
+          "contour_stroke_mesh": null
+        },
+        {
+          "component_id": "post_cap",
+          "name": "post_cap",
+          "parent_component_id": "post",
+          "local_transform": {
+            "position": [0.0, 0.0],
+            "rotation_radians": 0.0,
+            "scale": [1.0, 1.0]
+          },
+          "mesh": {
+            "vertices": [[1.5, 2.0], [2.0, 3.0]],
+            "indices": [0, 1, 1]
+          },
+          "contour_stroke_mesh": null
+        }
+        """;
+
     private static void WriteConfig(
         string directory,
         string workspaceKey,

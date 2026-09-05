@@ -9,9 +9,20 @@ public sealed record AssetBoundsMeters(
     decimal MaximumX,
     decimal MaximumY);
 
+/// <summary>
+/// One named Component of a PolyTools Asset with the bounds it and its
+/// descendants occupy in the Asset's own space. It is geometry and nothing
+/// else: which Component means something to SceneMaker is a Workspace
+/// decision, so the import offers every name and picks none.
+/// </summary>
+public sealed record PolyToolsComponentBounds(
+    string Name,
+    AssetBoundsMeters BoundsMeters);
+
 public sealed record PolyToolsCatalogAsset(
     string AssetKey,
-    AssetBoundsMeters BoundsMeters);
+    AssetBoundsMeters BoundsMeters,
+    IReadOnlyList<PolyToolsComponentBounds> Components);
 
 public sealed class PolyToolsCatalog
 {
@@ -139,11 +150,13 @@ public static class PolyToolsCatalogImporter
             SortedDictionary<string, PolyToolsCatalogAsset> assets = new(StringComparer.Ordinal);
             foreach (var entry in roots)
             {
+                var manifest = manifests[entry.AssetKey];
                 var bounds = BoundsForAsset(
-                    manifests[entry.AssetKey], manifests, new HashSet<string>(StringComparer.Ordinal));
+                    manifest, manifests, new HashSet<string>(StringComparer.Ordinal));
                 assets.Add(entry.AssetKey, new PolyToolsCatalogAsset(
                     entry.AssetKey,
-                    bounds));
+                    bounds,
+                    ComponentBounds(manifest, manifests)));
             }
             if (requestedAssetKeys is null && assets.Count == 0)
             {
@@ -217,6 +230,11 @@ public static class PolyToolsCatalogImporter
             var componentObject = RequireObject(element, $"PolyTools manifest '{entry.AssetKey}' Component");
             var componentId = RequireString(
                 componentObject, "component_id", $"PolyTools manifest '{entry.AssetKey}' Component");
+
+            // A Component name is how a Workspace addresses one part of an
+            // Asset. It is optional here because an unnamed Component is
+            // simply one nothing can point at, not a broken manifest.
+            var componentName = OptionalString(componentObject, "name");
             var parentId = OptionalString(componentObject, "parent_component_id");
             var localTransform = RequireTransform(
                 componentObject, "local_transform", $"PolyTools Component '{componentId}'");
@@ -242,6 +260,7 @@ public static class PolyToolsCatalogImporter
             var hasClosedRegionMesh = HasObject(componentObject, "closed_region_mesh");
             if (!components.TryAdd(componentId, new RuntimeComponent(
                     componentId,
+                    componentName,
                     parentId,
                     localTransform,
                     sourceAssetKey,
@@ -417,6 +436,78 @@ public static class PolyToolsCatalogImporter
             checked((decimal)bounds.Value.MinimumY),
             checked((decimal)bounds.Value.MaximumX),
             checked((decimal)bounds.Value.MaximumY));
+    }
+
+    /// <summary>
+    /// The bounds every named Component occupies in the Asset's own space,
+    /// each including its transitive children, because one part of a model is
+    /// what it and everything hanging under it covers. An unnamed Component
+    /// contributes to its parent and is not offered on its own: a name is how
+    /// a Workspace addresses a part, and there is nothing to address without
+    /// one. The result is ordered by name so the same manifest always yields
+    /// the same list.
+    /// </summary>
+    private static IReadOnlyList<PolyToolsComponentBounds> ComponentBounds(
+        RuntimeManifest manifest,
+        IReadOnlyDictionary<string, RuntimeManifest> manifests)
+    {
+        var assetRoot = Transform.Translation(-manifest.AssetPivot.X, -manifest.AssetPivot.Y);
+        Dictionary<string, List<Point>> points = new(StringComparer.Ordinal);
+        Dictionary<string, List<RuntimeComponent>> children = new(StringComparer.Ordinal);
+        foreach (var component in manifest.Components.Values)
+        {
+            var world = assetRoot.Compose(ComponentWorldTransform(
+                component,
+                manifest.Components,
+                new HashSet<string>(StringComparer.Ordinal)));
+            List<Point> own = [.. component.VisibleVertices.Select(world.Apply)];
+            if (component.SourceAssetKey is not null
+                && manifests.TryGetValue(component.SourceAssetKey, out var referenced))
+            {
+                var referencedBounds = BoundsForAsset(
+                    referenced, manifests, new HashSet<string>(StringComparer.Ordinal));
+                own.AddRange(Corners(referencedBounds).Select(world.Apply));
+            }
+            points.Add(component.ComponentId, own);
+            if (component.ParentComponentId is not { } parent) continue;
+            if (!children.TryGetValue(parent, out var siblings))
+            {
+                siblings = [];
+                children.Add(parent, siblings);
+            }
+            siblings.Add(component);
+        }
+
+        List<PolyToolsComponentBounds> named = [];
+        foreach (var component in manifest.Components.Values)
+        {
+            if (string.IsNullOrWhiteSpace(component.Name)) continue;
+            Bounds? bounds = null;
+            Stack<RuntimeComponent> pending = new();
+            pending.Push(component);
+            HashSet<string> seen = new(StringComparer.Ordinal);
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+
+                // The parent chain is already known to be acyclic, but the
+                // guard costs nothing and keeps this loop safe on its own.
+                if (!seen.Add(current.ComponentId)) continue;
+                foreach (var point in points[current.ComponentId])
+                    bounds = Bounds.Include(bounds, point);
+                if (!children.TryGetValue(current.ComponentId, out var descendants)) continue;
+                foreach (var child in descendants) pending.Push(child);
+            }
+            if (bounds is null) continue;
+            named.Add(new PolyToolsComponentBounds(
+                component.Name,
+                new AssetBoundsMeters(
+                    checked((decimal)bounds.Value.MinimumX),
+                    checked((decimal)bounds.Value.MinimumY),
+                    checked((decimal)bounds.Value.MaximumX),
+                    checked((decimal)bounds.Value.MaximumY))));
+        }
+        return [.. named.OrderBy(static entry => entry.Name, StringComparer.Ordinal)];
     }
 
     private static Transform ComponentWorldTransform(
@@ -629,6 +720,7 @@ public static class PolyToolsCatalogImporter
 
     private sealed record RuntimeComponent(
         string ComponentId,
+        string? Name,
         string? ParentComponentId,
         Transform LocalTransform,
         string? SourceAssetKey,

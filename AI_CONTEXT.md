@@ -10,6 +10,17 @@ kind. A surface is an open lower_snake_case token such as `land` or `water`,
 held per Asset rather than per cell so that one Terrain Asset cannot contradict
 itself. Terrain and curve Assets need no PolyTools package merely to exist.
 
+A configured Placement may also name one part of that geometry. Workspace
+config 9 adds `anchor_component` to a Placement: the name of the PolyTools
+Component the Asset offers on its own - the post a bridge sets at its corners
+rather than the whole bridge. The import stays geometry and nothing else, so it
+reports every named Component with the bounds it and its children occupy in the
+Asset's space, and the Workspace picks one. A name that matches nothing, or
+more than one part, refuses the load: a rename in PolyTools is then a visible
+event instead of a bridge quietly setting the wrong part. This is also why the
+name lives in `config.json` and not in code - which Component means something
+is authoring identity, and SceneMaker owns that.
+
 Each configured Placement may consume a synchronized PolyTools geometry copy
 below `imports/polytools/`. The matching root Manifest and the transitive Asset
 References its visible shape needs are the whole import: unrelated packages are

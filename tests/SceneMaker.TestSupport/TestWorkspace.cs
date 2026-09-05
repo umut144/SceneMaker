@@ -109,7 +109,7 @@ public sealed class TestWorkspace : IDisposable
             $$"""
             {
               "format": "scene_maker_workspace",
-              "version": 8,
+              "version": 9,
               "workspace_key": "{{worldKey}}",
               "grid": {
                 "terrain_cell_meters": 1.0,
@@ -123,7 +123,7 @@ public sealed class TestWorkspace : IDisposable
                 { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF" },
                 { "asset_key": "river", "display_name": "Water", "role": "terrain", "color": "#3C7DD9", "surface": "water", "authoring": "curve" },
                 { "asset_key": "sand", "display_name": "Sand", "role": "terrain", "color": "#E5C07B", "surface": "sand", "authoring": "cells" },
-                { "asset_key": "stone", "display_name": "Stone", "role": "placement", "color": "#808080" }{{lava}}
+                { "asset_key": "stone", "display_name": "Stone", "role": "placement", "color": "#808080", "anchor_component": "post" }{{lava}}
               ]
             }
             """);
@@ -191,13 +191,41 @@ public sealed class TestWorkspace : IDisposable
         WriteManifest(importDirectory, "portal", "props");
         WriteManifest(importDirectory, "river", "terrain");
         WriteManifest(importDirectory, "sand", "terrain");
-        WriteManifest(importDirectory, "stone", "props");
+
+        // Stone carries a named part inside its own bounds, so a Workspace can
+        // point an anchor_component at it without changing the Asset's
+        // footprint - the case a bridge's post is.
+        WriteManifest(importDirectory, "stone", "props", withNamedPart: true);
     }
 
-    private static void WriteManifest(string importDirectory, string assetKey, string assetType)
+    private static void WriteManifest(
+        string importDirectory,
+        string assetKey,
+        string assetType,
+        bool withNamedPart = false)
     {
         var directory = Path.Combine(importDirectory, "PolyToolsRuntimeExports", assetKey);
         Directory.CreateDirectory(directory);
+        var part = withNamedPart
+            ? """
+            ,
+                {
+                  "component_id": "post",
+                  "name": "post",
+                  "parent_component_id": "body",
+                  "local_transform": {
+                    "position": [0.0, 0.0],
+                    "rotation_radians": 0.0,
+                    "scale": [1.0, 1.0]
+                  },
+                  "mesh": {
+                    "vertices": [[0.25, 0.5], [0.75, 1.0]],
+                    "indices": [0, 1, 1]
+                  },
+                  "contour_stroke_mesh": null
+                }
+            """
+            : string.Empty;
         File.WriteAllText(
             Path.Combine(directory, "manifest.json"),
             $$"""
@@ -210,6 +238,7 @@ public sealed class TestWorkspace : IDisposable
               "components": [
                 {
                   "component_id": "body",
+                  "name": "body",
                   "parent_component_id": null,
                   "local_transform": {
                     "position": [0.0, 0.0],
@@ -221,7 +250,7 @@ public sealed class TestWorkspace : IDisposable
                     "indices": [0, 1, 1]
                   },
                   "contour_stroke_mesh": null
-                }
+                }{{part}}
               ],
               "regions": []
             }
