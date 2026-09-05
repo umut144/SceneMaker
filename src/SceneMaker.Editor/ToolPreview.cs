@@ -15,9 +15,17 @@ public enum PropPreviewKind
     Blocked,
 }
 
+/// <summary>
+/// What the Placement tool would author under the pointer. It carries both
+/// boxes because they answer different questions: <see cref="Bounds"/> is what
+/// would be drawn, <see cref="Collision"/> is what would be occupied and thus
+/// what <see cref="Kind"/> was decided by. Showing only the first would leave
+/// a refusal looking arbitrary.
+/// </summary>
 public sealed record PropPreview(
     AuthoringPoint Anchor,
     PropBoundsAuthoringPixels Bounds,
+    PropBoundsAuthoringPixels Collision,
     PropPreviewKind Kind,
     string? Explanation);
 
@@ -194,9 +202,11 @@ public static class ToolPreviewBuilder
         foreach (var anchor in anchors)
         {
             PropBoundsAuthoringPixels bounds;
+            PropBoundsAuthoringPixels collision;
             try
             {
                 bounds = PropEditing.BoundsFor(asset, anchor.X, anchor.Y);
+                collision = PropEditing.CollisionBoundsFor(asset, anchor.X, anchor.Y);
             }
             catch (OverflowException)
             {
@@ -213,6 +223,7 @@ public static class ToolPreviewBuilder
             previews.Add(new PropPreview(
                 anchor,
                 bounds,
+                collision,
                 validation.IsValid ? PropPreviewKind.Ready : PropPreviewKind.Blocked,
                 validation.Reason));
         }

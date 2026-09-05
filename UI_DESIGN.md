@@ -404,6 +404,19 @@ bei einer Auswahl ersetzt Gelb diese Kennzeichnung. Der Rahmen bleibt auch in
 anderen Bereichen deutlich sichtbar: zwei Pixel mit gedimmter Deckkraft,
 drei Pixel im Placement-Bereich und vier Pixel für die gelbe Auswahl.
 
+### Was ein Placement belegt
+
+Ein Placement wird mit zwei Rahmen gezeichnet. Der durchgezogene ist sein
+sichtbarer Footprint; der gestrichelte darin ist das, was es belegt, abgeleitet
+aus den Collision-Regionen seines PolyTools-Modells. Nur der gestrichelte
+entscheidet, ob ein weiteres Placement daneben passt.
+
+Der gestrichelte Rahmen erscheint an der Vorschau unter dem Zeiger und an
+gesetzten Placements, solange der Bereich `Placements` der aktive ist. Er zeigt
+genau die Box, gegen die geprüft wird - eine zweite Auslegung derselben Frage
+würde eine Ablehnung unerklärlich machen. Die Striche sind bildschirmgroß, damit
+die Box beim Herauszoomen eine Box bleibt.
+
 ### Placements und Untergrund
 
 Ein Placement braucht kein Terrain unter sich. Seine Höhe ist absolut, also

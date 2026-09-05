@@ -252,7 +252,17 @@ public sealed class TestWorkspace : IDisposable
                   "contour_stroke_mesh": null
                 }{{part}}
               ],
-              "regions": []
+              "regions": [
+                {
+                  "region_id": "collision_0001",
+                  "name": "collision_region",
+                  "role": "collision",
+                  "geometry_source": "authored",
+                  "source_component_id": "body",
+                  "vertices": [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
+                  "indices": [0, 1, 2]
+                }
+              ]
             }
             """);
     }

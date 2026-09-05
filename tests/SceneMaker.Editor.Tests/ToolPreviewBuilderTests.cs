@@ -104,7 +104,7 @@ public sealed class ToolPreviewBuilderTests
     }
 
     [Fact]
-    public void APropOverlappingAnExistingOneIsBlocked()
+    public void APropCollidingWithAnExistingOneIsBlocked()
     {
         using var workspace = TestWorkspace.Create();
         var scene = PropEditing.Place(
@@ -113,7 +113,13 @@ public sealed class ToolPreviewBuilderTests
         var preview = Assert.Single(Props(workspace, scene, EditorTool.Pencil, new AuthoringPoint(64, 64)));
 
         Assert.Equal(PropPreviewKind.Blocked, preview.Kind);
-        Assert.Contains("overlaps", preview.Explanation ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("collides with", preview.Explanation ?? string.Empty, StringComparison.Ordinal);
+
+        // The preview carries the box the refusal was decided by, so the
+        // Canvas can show it rather than leaving the reason invisible.
+        Assert.Equal(
+            PropEditing.CollisionBoundsFor(workspace.Props.Resolve("stone"), 64, 64),
+            preview.Collision);
     }
 
     [Fact]

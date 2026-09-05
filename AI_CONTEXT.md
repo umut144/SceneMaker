@@ -27,6 +27,13 @@ References its visible shape needs are the whole import: unrelated packages are
 neither copied nor loaded, and a Workspace with no Placements needs no PolyTools
 import at all. SceneMaker derives the footprint and pivot/anchor from that
 transformed geometry and rounds the bounds outward to whole authoring pixels.
+It derives a second box the same way: the bounds of every Region the model
+authored with the collision role, together. What a Placement is drawn as and
+what it occupies are different questions, and only the second decides whether
+another Placement fits beside it - so two trees may overlap with their crowns
+and not with their trunks. A model may author more than one such Region, and
+a Placement that authors none is refused rather than falling back to its
+footprint.
 The catalog's name and `asset_type` are validated only as source structure; they
 never become authoring identity or classification. SceneMaker never discovers
 packages by scanning directories and never reads a sibling PolyTools project at

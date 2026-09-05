@@ -1618,6 +1618,18 @@ public sealed partial class SceneCanvas : Control
                 selected ? SelectionColor : outline,
                 filled: false,
                 width: selected ? 4f : highlighted ? 3f : 2f);
+            if (highlighted)
+            {
+                DrawCollisionOutline(
+                    PropEditing.CollisionBoundsFor(
+                        asset,
+                        prop.PositionAuthoringPx.X,
+                        prop.PositionAuthoringPx.Y),
+                    pan,
+                    zoom,
+                    sceneHeightAuthoringPixels,
+                    selected ? SelectionColor : outline);
+            }
             DrawAnchor(
                 prop.PositionAuthoringPx.X,
                 prop.PositionAuthoringPx.Y,
@@ -1756,6 +1768,35 @@ public sealed partial class SceneCanvas : Control
         DrawString(font, baseline, label, HorizontalAlignment.Left, -1f, fontSize, textColor);
     }
 
+    /// <summary>
+    /// The box a Placement occupies, dashed inside the solid outline of what it
+    /// is drawn as. It is exactly the box the placement rule reads, never a
+    /// second interpretation of it: what lights up has to be what decides,
+    /// or an author cannot tell why something was refused.
+    /// </summary>
+    private void DrawCollisionOutline(
+        PropBoundsAuthoringPixels collision,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        Color color)
+    {
+        var rectangle = CanvasRectangle(collision, pan, zoom, sceneHeightAuthoringPixels);
+        var topLeft = rectangle.Position;
+        var topRight = topLeft + new Vector2(rectangle.Size.X, 0f);
+        var bottomRight = topLeft + rectangle.Size;
+        var bottomLeft = topLeft + new Vector2(0f, rectangle.Size.Y);
+
+        // Dashes are screen-sized rather than scene-sized, so a collision box
+        // stays readable as a box at every zoom instead of turning into one
+        // long dash when zoomed out.
+        const float dashLength = 6f;
+        DrawDashedLine(topLeft, topRight, color, 1.5f, dashLength);
+        DrawDashedLine(topRight, bottomRight, color, 1.5f, dashLength);
+        DrawDashedLine(bottomRight, bottomLeft, color, 1.5f, dashLength);
+        DrawDashedLine(bottomLeft, topLeft, color, 1.5f, dashLength);
+    }
+
     private void DrawPropToolPreview(
         Vector2 pan,
         float zoom,
@@ -1773,6 +1814,12 @@ public sealed partial class SceneCanvas : Control
                 : InvalidPreviewColor;
             DrawRect(rectangle, new Color(color.R, color.G, color.B, 0.22f));
             DrawRect(rectangle, color, filled: false, width: 2f);
+            DrawCollisionOutline(
+                candidate.Collision,
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels,
+                color);
             DrawAnchor(
                 candidate.Anchor.X,
                 candidate.Anchor.Y,

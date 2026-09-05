@@ -181,8 +181,18 @@ Placement blocks a post. The draft is `Ready` only when the deck and all four
 posts can be placed, checked by the same call the commit makes — the promise
 the hill draft already makes.
 
-That rule needs the collision regions rather than the visible footprints, which
-is a change to every Placement and therefore its own slice, `PLACE-01`.
+That rule reads the collision regions rather than the visible footprints, which
+was a change to every Placement and landed as its own slice. What a Placement
+is drawn as and what it occupies are now two boxes: the first has to lie inside
+the Scene, the second has to be free. Two trees may therefore overlap with
+their crowns and not with their trunks, which the world is full of and the old
+rule refused.
+
+A Placement whose model authored no collision Region at all is refused on load
+rather than falling back to its footprint. The fallback was considered: it is
+the current behaviour and breaks nothing, but it is exactly the hidden default
+this Workspace forbids, and the wrong one - a model whose collision nobody has
+drawn yet would quietly claim every pixel it is drawn with.
 
 ### The area is Structures
 

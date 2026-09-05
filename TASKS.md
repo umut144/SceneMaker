@@ -14,7 +14,6 @@ every fix has to stay inside.
 |---|---|---|---|
 | `PATH-05` | Export contract | Raise world01's reader to export 11: the new `operation`/`clearance_above_meters` on every route segment and the `route_surface_cut_raster` beside the Scene. Lives in `BevyProjects/world01`, not here. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Ready** |
 | `PATH-02` | Paths | Make the red authoring wire pickable and emphasize a selected Path; manual acceptance of an additive-to-tunnel-to-additive Path through a hill. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Ready** |
-| `PLACE-01` | Placements | Decide whether a Placement may be set by the union of its PolyTools collision regions rather than its visible footprint, and highlight that union dashed inside the footprint. [Notes](DESIGN_NOTES.md#occupied-means-the-same-thing-whoever-asks) | **Ready** |
 | `BRIDGE-02` | Structures | A `Structures` area with `Draw Bridge`: a straight horizontal deck authored as its own record, four derived corner posts from the anchor Asset's named Component, and Scene Templates refusing to carry one. [Notes](DESIGN_NOTES.md#bridges-a-straight-span-that-sets-its-own-posts) | **Ready** |
 
 ## Optional Later — Paths and sections

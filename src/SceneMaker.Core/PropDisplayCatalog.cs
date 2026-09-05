@@ -15,6 +15,19 @@ public sealed record PropAnchorComponent(
     int WidthAuthoringPixels,
     int HeightAuthoringPixels);
 
+/// <summary>
+/// What a Placement occupies where it stands, as a box measured from its own
+/// anchor. It comes from the collision Regions the PolyTools model authored,
+/// not from what the model looks like: a lamp post is a pole to walk into and
+/// a crown of light to see, and only the first decides whether something else
+/// fits beside it.
+/// </summary>
+public sealed record PropCollisionBox(
+    int OffsetXAuthoringPixels,
+    int OffsetYAuthoringPixels,
+    int WidthAuthoringPixels,
+    int HeightAuthoringPixels);
+
 public sealed record PropDisplayAsset(
     string AssetKey,
     string Name,
@@ -27,6 +40,7 @@ public sealed record PropDisplayAsset(
     int FootprintHeightAuthoringPixels,
     int AnchorXAuthoringPixels,
     int AnchorYAuthoringPixels,
+    PropCollisionBox Collision,
     PropAnchorComponent? AnchorComponent = null);
 
 public sealed class PropDisplayCatalog
@@ -76,6 +90,7 @@ public static class PropDisplayCatalogLoader
         var bounds = catalogAsset.BoundsMeters;
         var anchorComponent = ResolveAnchorComponent(
             profile, catalogAsset, authoringPixelsPerMeter);
+        var collision = ResolveCollision(profile, catalogAsset, authoringPixelsPerMeter);
         var left = checked((int)decimal.Floor(bounds.MinimumX * authoringPixelsPerMeter));
         var bottom = checked((int)decimal.Floor(bounds.MinimumY * authoringPixelsPerMeter));
         var right = checked((int)decimal.Ceiling(bounds.MaximumX * authoringPixelsPerMeter));
@@ -102,7 +117,43 @@ public static class PropDisplayCatalogLoader
             height,
             anchorX,
             anchorY,
+            collision,
             anchorComponent);
+    }
+
+    /// <summary>
+    /// A Placement must say what it occupies. Falling back to its visible
+    /// footprint would be a hidden default of exactly the kind this Workspace
+    /// forbids, and it would be the wrong one: a model whose collision the
+    /// author has not drawn yet would quietly claim all the space it is drawn
+    /// with. Refusing names the Asset, and adding the Region in PolyTools is
+    /// the fix.
+    /// </summary>
+    private static PropCollisionBox ResolveCollision(
+        WorkspaceAssetProfile profile,
+        PolyToolsCatalogAsset catalogAsset,
+        decimal authoringPixelsPerMeter)
+    {
+        if (catalogAsset.CollisionBoundsMeters is not { } bounds)
+        {
+            throw new SceneMakerDocumentException(
+                $"Placement Asset '{profile.AssetKey}' has no PolyTools Region with the collision role, so nothing says what it occupies.");
+        }
+
+        // Rounded outward like the footprint: a Placement never occupies less
+        // than the geometry it was authored with.
+        var left = checked((int)decimal.Floor(bounds.MinimumX * authoringPixelsPerMeter));
+        var bottom = checked((int)decimal.Floor(bounds.MinimumY * authoringPixelsPerMeter));
+        var right = checked((int)decimal.Ceiling(bounds.MaximumX * authoringPixelsPerMeter));
+        var top = checked((int)decimal.Ceiling(bounds.MaximumY * authoringPixelsPerMeter));
+        var width = checked(right - left);
+        var height = checked(top - bottom);
+        if (width <= 0 || height <= 0)
+        {
+            throw new SceneMakerDocumentException(
+                $"Placement Asset '{profile.AssetKey}' has an empty collision footprint.");
+        }
+        return new PropCollisionBox(left, bottom, width, height);
     }
 
     /// <summary>

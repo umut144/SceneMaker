@@ -147,7 +147,7 @@ public sealed class PropEditingTests
     }
 
     [Fact]
-    public void AFootprintMeetingAnotherPropIsStillRefused()
+    public void APlacementMeetingWhatAnotherOccupiesIsStillRefused()
     {
         using var workspace = TestWorkspace.Create();
         var scene = PropEditing.Place(
@@ -157,7 +157,7 @@ public sealed class PropEditingTests
             scene, workspace.Props, 64, 64, "stone");
 
         Assert.False(validation.IsValid);
-        Assert.Contains("overlaps 'stone_0001'", validation.Reason!, StringComparison.Ordinal);
+        Assert.Contains("collides with 'stone_0001'", validation.Reason!, StringComparison.Ordinal);
         Assert.Throws<SceneMakerDocumentException>(() =>
             PropEditing.Place(scene, workspace.Props, 64, 64, "stone"));
     }

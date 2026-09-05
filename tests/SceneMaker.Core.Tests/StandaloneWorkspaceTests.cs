@@ -146,7 +146,7 @@ public sealed class StandaloneWorkspaceTests
               },
               "contour_stroke_mesh": null
             }
-        """, treePivot: "[4.0, 3.0]");
+        """, treePivot: "[4.0, 3.0]", treeCollisionComponentId: "child");
         WriteConfig(directory.Path, "game01", 1m, 10m, 40m, """
             { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
         """);
@@ -424,7 +424,7 @@ public sealed class StandaloneWorkspaceTests
               "mesh": null,
               "contour_stroke_mesh": null
             }
-        """);
+        """, treeCollisionComponentId: "grass_reference");
 
         var catalog = PolyToolsCatalogImporter.Load(directory.Path, ["tree"]);
         var tree = Assert.Single(catalog.Assets);
@@ -605,6 +605,141 @@ public sealed class StandaloneWorkspaceTests
     /// Terrain cell, the coarsest water grid the metrics allow, because most of
     /// these tests are about Terrain and Props and only need water to be valid.
     /// </summary>
+
+    /// <summary>
+    /// What a Placement is drawn as and what it occupies are two different
+    /// boxes, and only the second decides whether something fits beside it.
+    /// The model says which, by authoring collision Regions - more than one
+    /// where it needs them, as an Ankh does - and their union is the answer.
+    /// </summary>
+    [Fact]
+    public void APlacementOccupiesItsCollisionRegionsRatherThanItsFootprint()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(
+            directory.Path,
+            "collide01",
+            regions: """
+                [
+                  {
+                    "region_id": "collision_0001",
+                    "name": "trunk",
+                    "role": "collision",
+                    "geometry_source": "authored",
+                    "source_component_id": "body",
+                    "vertices": [[-0.2, 0.0], [0.2, 0.0], [0.2, 0.5]],
+                    "indices": [0, 1, 2]
+                  },
+                  {
+                    "region_id": "collision_0002",
+                    "name": "buttress",
+                    "role": "collision",
+                    "geometry_source": "authored",
+                    "source_component_id": "body",
+                    "vertices": [[-0.4, 0.0], [0.1, 0.0], [0.1, 0.2]],
+                    "indices": [0, 1, 2]
+                  },
+                  {
+                    "region_id": "hurt_0001",
+                    "name": "hurt_region",
+                    "role": "hurt",
+                    "geometry_source": "authored",
+                    "source_component_id": "body",
+                    "vertices": [[-9.0, 0.0], [9.0, 0.0], [9.0, 9.0]],
+                    "indices": [0, 1, 2]
+                  }
+                ]
+                """);
+        WriteConfig(directory.Path, "collide01", 1m, 10m, 40m, """
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+        """);
+
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+        var workspace = WorkspaceConfigurationStore.Load(directory.Path);
+        var tree = PropDisplayCatalogLoader.Load(catalog, workspace).Resolve("tree");
+
+        // The crown still reaches from -1.01 to 1.02 m; the trunk does not.
+        Assert.Equal(22, tree.FootprintWidthAuthoringPixels);
+
+        // The union of both collision Regions, -0.4..0.2 by 0..0.5 m, rounded
+        // outward. The hurt Region is not a collision Region and stays out of
+        // it, however far it reaches.
+        Assert.Equal(-4, tree.Collision.OffsetXAuthoringPixels);
+        Assert.Equal(0, tree.Collision.OffsetYAuthoringPixels);
+        Assert.Equal(6, tree.Collision.WidthAuthoringPixels);
+        Assert.Equal(5, tree.Collision.HeightAuthoringPixels);
+    }
+
+    /// <summary>
+    /// Two trees may stand close enough that their crowns overlap. Their
+    /// trunks may not share a place. Before this rule the visible footprint
+    /// decided both, which refused an arrangement the world is full of.
+    /// </summary>
+    [Fact]
+    public void OverlappingFootprintsAreAllowedWhileOverlappingCollisionIsNot()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(
+            directory.Path,
+            "collide02",
+            regions: """
+                [
+                  {
+                    "region_id": "collision_0001",
+                    "name": "trunk",
+                    "role": "collision",
+                    "geometry_source": "authored",
+                    "source_component_id": "body",
+                    "vertices": [[-0.1, 0.0], [0.1, 0.0], [0.1, 0.2]],
+                    "indices": [0, 1, 2]
+                  }
+                ]
+                """);
+        WriteConfig(directory.Path, "collide02", 1m, 10m, 40m, """
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+        """);
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+        var workspace = WorkspaceConfigurationStore.Load(directory.Path);
+        var props = PropDisplayCatalogLoader.Load(catalog, workspace);
+        var scene = PropEditing.Place(
+            SceneDocument.CreateInstance("collide", 20, 20), props, 100, 100, "tree");
+
+        // Five authoring pixels apart: the crowns overlap by far, the trunks
+        // clear each other by one pixel.
+        var beside = PropEditing.ValidateCandidate(scene, props, 105, 100, "tree");
+        var onTop = PropEditing.ValidateCandidate(scene, props, 101, 100, "tree");
+
+        Assert.True(beside.IsValid);
+        Assert.False(onTop.IsValid);
+        Assert.Contains("collides with", onTop.Reason!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Falling back to the visible footprint would be a hidden default, and
+    /// the wrong one: a model whose collision nobody has drawn yet would
+    /// quietly claim every pixel it is drawn with. Naming the Asset and
+    /// stopping is the honest answer, and adding the Region in PolyTools is
+    /// the fix.
+    /// </summary>
+    [Fact]
+    public void APlacementWithoutACollisionRegionIsRefused()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "collide03", regions: "[]");
+        WriteConfig(directory.Path, "collide03", 1m, 10m, 40m, """
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+        """);
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+        var workspace = WorkspaceConfigurationStore.Load(directory.Path);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            PropDisplayCatalogLoader.Load(catalog, workspace));
+
+        Assert.Contains(
+            "has no PolyTools Region with the collision role",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// A bridge sets posts, not whole bridges. The Workspace therefore names
@@ -810,7 +945,8 @@ public sealed class StandaloneWorkspaceTests
         string? treeComponents = null,
         string treePivot = "[0.0, 0.0]",
         int manifestSchema = PolyToolsCatalogImporter.ManifestSchemaVersion,
-        string regions = "[]")
+        string? regions = null,
+        string treeCollisionComponentId = "body")
     {
         var importDirectory = Path.Combine(
             workspaceDirectory,
@@ -858,7 +994,8 @@ public sealed class StandaloneWorkspaceTests
             "props",
             manifestSchema,
             "[0.0, 0.0]",
-            BasicComponent("[[-0.5, 0.0], [0.5, 2.0]]"));
+            BasicComponent("[[-0.5, 0.0], [0.5, 2.0]]"),
+            CollisionRegion("body", "[[-0.5, 0.0], [0.5, 0.0], [0.5, 2.0]]"));
         WriteManifest(
             importDirectory,
             "tree",
@@ -866,8 +1003,28 @@ public sealed class StandaloneWorkspaceTests
             manifestSchema,
             treePivot,
             treeComponents ?? BasicComponent("[[-1.01, 0.01], [1.02, 2.03]]"),
-            regions);
+
+            // A Placement must say what it occupies, so the default covers the
+            // whole visible mesh: a fixture that has not thought about
+            // collision then behaves exactly as it did before the rule.
+            regions ?? CollisionRegion(
+                treeCollisionComponentId,
+                "[[-1.01, 0.01], [1.02, 0.01], [1.02, 2.03]]"));
     }
+
+    private static string CollisionRegion(string sourceComponentId, string vertices) => $$"""
+        [
+          {
+            "region_id": "collision_0001",
+            "name": "collision_region",
+            "role": "collision",
+            "geometry_source": "authored",
+            "source_component_id": "{{sourceComponentId}}",
+            "vertices": {{vertices}},
+            "indices": [0, 1, 2]
+          }
+        ]
+        """;
 
     private static string BasicComponent(string vertices) => $$"""
         {

@@ -22,7 +22,8 @@ public sealed record PolyToolsComponentBounds(
 public sealed record PolyToolsCatalogAsset(
     string AssetKey,
     AssetBoundsMeters BoundsMeters,
-    IReadOnlyList<PolyToolsComponentBounds> Components);
+    IReadOnlyList<PolyToolsComponentBounds> Components,
+    AssetBoundsMeters? CollisionBoundsMeters);
 
 public sealed class PolyToolsCatalog
 {
@@ -156,7 +157,8 @@ public static class PolyToolsCatalogImporter
                 assets.Add(entry.AssetKey, new PolyToolsCatalogAsset(
                     entry.AssetKey,
                     bounds,
-                    ComponentBounds(manifest, manifests)));
+                    ComponentBounds(manifest, manifests),
+                    CollisionBounds(manifest)));
             }
             if (requestedAssetKeys is null && assets.Count == 0)
             {
@@ -249,7 +251,15 @@ public static class PolyToolsCatalogImporter
             }
 
             var visibleVertices = new List<Point>();
+            var regionVertices = new List<Point>();
             AddMeshVertices(componentObject, "mesh", visibleVertices, componentId, requireOutline: false);
+            AddMeshVertices(
+                componentObject, "closed_region_mesh", regionVertices, componentId, requireOutline: false);
+            if (regionVertices.Count == 0)
+            {
+                AddMeshVertices(
+                    componentObject, "mesh", regionVertices, componentId, requireOutline: false);
+            }
             AddMeshVertices(
                 componentObject,
                 "contour_stroke_mesh",
@@ -265,6 +275,7 @@ public static class PolyToolsCatalogImporter
                     localTransform,
                     sourceAssetKey,
                     visibleVertices,
+                    regionVertices,
                     isAssetReference,
                     hasMesh,
                     hasClosedRegionMesh)))
@@ -431,6 +442,47 @@ public static class PolyToolsCatalogImporter
 
         if (bounds is null)
             throw new SceneMakerDocumentException($"PolyTools asset '{manifest.AssetKey}' has no visible geometry.");
+        return new AssetBoundsMeters(
+            checked((decimal)bounds.Value.MinimumX),
+            checked((decimal)bounds.Value.MinimumY),
+            checked((decimal)bounds.Value.MaximumX),
+            checked((decimal)bounds.Value.MaximumY));
+    }
+
+    /// <summary>
+    /// What an Asset occupies for the purpose of standing somewhere: the
+    /// bounds of every Region it authored with the collision role, together,
+    /// in the Asset's own space. A model says for itself what it collides
+    /// with, and it may say it more than once - an Ankh carries two - so the
+    /// answer is their union rather than any single one of them.
+    ///
+    /// <para>Null when the Asset authored no collision Region at all. Whether
+    /// that is allowed is not a question about geometry, so it is answered
+    /// where roles are known rather than here.</para>
+    /// </summary>
+    private static AssetBoundsMeters? CollisionBounds(RuntimeManifest manifest)
+    {
+        var assetRoot = Transform.Translation(-manifest.AssetPivot.X, -manifest.AssetPivot.Y);
+        Bounds? bounds = null;
+        foreach (var region in manifest.Regions)
+        {
+            if (!StringComparer.Ordinal.Equals(region.Role, RuntimeRegion.CollisionRole)) continue;
+            var source = manifest.Components[region.SourceComponentId];
+            var world = assetRoot.Compose(ComponentWorldTransform(
+                source,
+                manifest.Components,
+                new HashSet<string>(StringComparer.Ordinal)));
+
+            // An authored Region brings its own outline in the source
+            // Component's space; a Component-bound one stands for that
+            // Component's own closed geometry.
+            var points = region is AuthoredRuntimeRegion authored
+                ? authored.Vertices
+                : source.RegionVertices;
+            foreach (var point in points)
+                bounds = Bounds.Include(bounds, world.Apply(point));
+        }
+        if (bounds is null) return null;
         return new AssetBoundsMeters(
             checked((decimal)bounds.Value.MinimumX),
             checked((decimal)bounds.Value.MinimumY),
@@ -725,6 +777,14 @@ public static class PolyToolsCatalogImporter
         Transform LocalTransform,
         string? SourceAssetKey,
         IReadOnlyList<Point> VisibleVertices,
+
+        /// <summary>
+        /// The geometry a Region bound to this Component stands for: its
+        /// closed region mesh where it has one, its ordinary mesh otherwise.
+        /// Separate from the visible vertices because a stroke outline is
+        /// something to look at, not something to collide with.
+        /// </summary>
+        IReadOnlyList<Point> RegionVertices,
         bool IsAssetReference,
         bool HasMesh,
         bool HasClosedRegionMesh);
@@ -733,7 +793,10 @@ public static class PolyToolsCatalogImporter
         string RegionId,
         string Name,
         string Role,
-        string SourceComponentId);
+        string SourceComponentId)
+    {
+        public const string CollisionRole = "collision";
+    }
 
     private sealed record AuthoredRuntimeRegion(
         string RegionId,

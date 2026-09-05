@@ -91,17 +91,21 @@ public static class PropEditing
         if (!IsInsideScene(scene, candidate, propAssets.Metrics))
             return new PropValidationResult(false, "Placement footprint lies outside the Scene bounds.");
 
+        // Whether two Placements fit is asked of what they occupy, not of
+        // what they are drawn as. A tree's crown may reach over a lamp; its
+        // trunk may not stand in the same place.
+        var candidateCollision = CollisionBoundsFor(asset, anchorX, anchorY);
         foreach (var existing in scene.Props)
         {
             var existingAsset = propAssets.Resolve(existing.AssetKey);
-            var existingBounds = BoundsFor(
+            var existingCollision = CollisionBoundsFor(
                 existingAsset,
                 existing.PositionAuthoringPx.X,
                 existing.PositionAuthoringPx.Y);
-            if (candidate.Overlaps(existingBounds))
+            if (candidateCollision.Overlaps(existingCollision))
                 return new PropValidationResult(
                     false,
-                    $"Placement footprint overlaps '{existing.InstanceId}'.");
+                    $"Placement collides with '{existing.InstanceId}'.");
         }
         return PropValidationResult.Valid;
     }
@@ -191,6 +195,10 @@ public static class PropEditing
         PropDisplayCatalog propAssets)
     {
         DocumentValidation.ValidateGrid(scene, propAssets.Metrics);
+        // The two questions differ and are asked of different boxes: what is
+        // drawn has to be inside the Scene, and what is occupied has to be
+        // free. Asking both of the footprint would refuse documents that
+        // placing them was allowed to produce.
         List<PropBoundsAuthoringPixels> accepted = [];
         foreach (var prop in scene.Props)
         {
@@ -202,13 +210,18 @@ public static class PropEditing
             if (!IsInsideScene(scene, bounds, propAssets.Metrics))
                 throw new SceneMakerDocumentException(
                     "Placement footprint lies outside the Scene bounds.");
-            if (accepted.Any(bounds.Overlaps))
+            var collision = CollisionBoundsFor(
+                asset,
+                prop.PositionAuthoringPx.X,
+                prop.PositionAuthoringPx.Y);
+            if (accepted.Any(collision.Overlaps))
                 throw new SceneMakerDocumentException(
-                    $"Placement '{prop.InstanceId}' overlaps another Placement footprint.");
-            accepted.Add(bounds);
+                    $"Placement '{prop.InstanceId}' collides with another Placement.");
+            accepted.Add(collision);
         }
     }
 
+    /// <summary>What an Asset is drawn as, where it stands.</summary>
     public static PropBoundsAuthoringPixels BoundsFor(
         PropDisplayAsset asset,
         int anchorX,
@@ -217,6 +230,20 @@ public static class PropEditing
             checked(anchorY - asset.AnchorYAuthoringPixels),
             asset.FootprintWidthAuthoringPixels,
             asset.FootprintHeightAuthoringPixels);
+
+    /// <summary>
+    /// What an Asset occupies, where it stands. It sits inside the footprint
+    /// and is offset from the anchor in its own right, because a model's
+    /// collision need not be centred on what it is drawn as.
+    /// </summary>
+    public static PropBoundsAuthoringPixels CollisionBoundsFor(
+        PropDisplayAsset asset,
+        int anchorX,
+        int anchorY) => new(
+            checked(anchorX + asset.Collision.OffsetXAuthoringPixels),
+            checked(anchorY + asset.Collision.OffsetYAuthoringPixels),
+            asset.Collision.WidthAuthoringPixels,
+            asset.Collision.HeightAuthoringPixels);
 
     public static decimal PositionMeters(int authoringPixels, WorkspaceMetrics metrics) =>
         (decimal)authoringPixels / metrics.AuthoringPixelsPerMeter;
