@@ -118,9 +118,16 @@ failing steps' log lines. It needs `gh` and `jq`.
 
 - `AI_CONTEXT.md` contains domain and architecture context.
 - `UI_DESIGN.md` contains UI layout and interaction conventions.
-- `TASKS.md` lists known rough edges that were deliberately left alone, with
-  what each one costs. Check it before "fixing" something that looks odd, and
-  add to it rather than leaving a finding undocumented.
+- `TASKS.md` is the task tracker: one table row per open, deferred or
+  deliberately rejected outcome, with an ID, area, one-sentence outcome and
+  status. Check it before "fixing" something that looks odd, and add a row
+  rather than leaving a finding undocumented. Its tracker rules are at the end
+  of the file.
+- `DESIGN_NOTES.md` holds the reasoning behind those rows: what a rough edge
+  costs to leave alone, what shape a fix has to take, and which alternatives
+  were considered and rejected, plus the settled decisions that are closed.
+  Every task row links into it, and the prose lives there rather than in the
+  tracker.
 
 ## Version control
 
