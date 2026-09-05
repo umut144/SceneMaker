@@ -56,6 +56,7 @@ public static class RouteSurfaceRaster
         foreach (var route in scene.RouteSurfaces)
         {
             var bake = RouteSurfaceBake.Build(metrics, route);
+            Dictionary<int, PortalPlane> portalPlanes = [];
             for (var index = 0; index < bake.TriangleIndices.Count; index += 3)
             {
                 AddTriangleCells(
@@ -97,7 +98,7 @@ public static class RouteSurfaceRaster
                         bake.Vertices[bake.TriangleIndices[triangleOffset]],
                         bake.Vertices[bake.TriangleIndices[triangleOffset + 1]],
                         bake.Vertices[bake.TriangleIndices[triangleOffset + 2]],
-                        PortalClipsFor(bake, triangle));
+                        PortalClipsFor(bake, triangle, portalPlanes));
                 }
             }
         }
@@ -173,7 +174,7 @@ public static class RouteSurfaceRaster
                 {
                     continue;
                 }
-                yield return new TriangleSample(x, y, elevation);
+                yield return new TriangleSample(x, y, centreX, centreY, elevation);
             }
         }
     }
@@ -192,9 +193,7 @@ public static class RouteSurfaceRaster
     {
         foreach (var sample in TriangleSamples(scene, metrics, first, second, third))
         {
-            if (!portalClips.Contains(
-                    sample.X * metrics.WaterCellMeters + metrics.WaterCellMeters / 2m,
-                    sample.Y * metrics.WaterCellMeters + metrics.WaterCellMeters / 2m))
+            if (!portalClips.Contains(sample.XMeters, sample.YMeters))
             {
                 continue;
             }
@@ -210,22 +209,28 @@ public static class RouteSurfaceRaster
 
     private static PortalClips PortalClipsFor(
         BakedRouteSurface bake,
-        RouteSurfaceBakeTriangle triangle)
+        RouteSurfaceBakeTriangle triangle,
+        Dictionary<int, PortalPlane> portalPlanes)
     {
         return new PortalClips(
             triangle.StartPortalSampleIndex is { } start
-                ? PortalClipFor(bake, start, keepAfter: true)
+                ? new PortalClip(
+                    PortalPlaneFor(bake, start, portalPlanes),
+                    KeepAfter: true)
                 : null,
             triangle.EndPortalSampleIndex is { } end
-                ? PortalClipFor(bake, end, keepAfter: false)
+                ? new PortalClip(
+                    PortalPlaneFor(bake, end, portalPlanes),
+                    KeepAfter: false)
                 : null);
     }
 
-    private static PortalClip PortalClipFor(
+    private static PortalPlane PortalPlaneFor(
         BakedRouteSurface bake,
         int sampleIndex,
-        bool keepAfter)
+        Dictionary<int, PortalPlane> portalPlanes)
     {
+        if (portalPlanes.TryGetValue(sampleIndex, out var prepared)) return prepared;
         if (sampleIndex <= 0 || sampleIndex + 1 >= bake.CenterlineSamples.Count)
         {
             throw new SceneMakerDocumentException(
@@ -257,12 +262,14 @@ public static class RouteSurfaceRaster
             tangentX = (double)outgoingX / outgoingLength;
             tangentY = (double)outgoingY / outgoingLength;
         }
-        return new PortalClip(
+        var plane = new PortalPlane(
             portal.XMeters,
             portal.YMeters,
             (decimal)tangentX,
             (decimal)tangentY,
-            keepAfter);
+            portal.WidthMeters / 2m);
+        portalPlanes.Add(sampleIndex, plane);
+        return plane;
     }
 
     private static int CellAtOrAfter(
@@ -322,17 +329,25 @@ public static class RouteSurfaceRaster
     private static decimal Cross(decimal ax, decimal ay, decimal bx, decimal by) =>
         ax * by - ay * bx;
 
-    private readonly record struct PortalClip(
+    private readonly record struct PortalPlane(
         decimal XMeters,
         decimal YMeters,
         decimal TangentX,
         decimal TangentY,
-        bool KeepAfter)
+        decimal RadiusMeters);
+
+    private readonly record struct PortalClip(PortalPlane Plane, bool KeepAfter)
     {
         public bool Contains(decimal xMeters, decimal yMeters)
         {
-            var side = (xMeters - XMeters) * TangentX
-                + (yMeters - YMeters) * TangentY;
+            var offsetX = xMeters - Plane.XMeters;
+            var offsetY = yMeters - Plane.YMeters;
+            if (offsetX * offsetX + offsetY * offsetY
+                > Plane.RadiusMeters * Plane.RadiusMeters)
+            {
+                return true;
+            }
+            var side = offsetX * Plane.TangentX + offsetY * Plane.TangentY;
             return KeepAfter ? side >= 0m : side <= 0m;
         }
     }
@@ -344,5 +359,10 @@ public static class RouteSurfaceRaster
             && (End is not { } end || end.Contains(xMeters, yMeters));
     }
 
-    private readonly record struct TriangleSample(int X, int Y, decimal ElevationMeters);
+    private readonly record struct TriangleSample(
+        int X,
+        int Y,
+        decimal XMeters,
+        decimal YMeters,
+        decimal ElevationMeters);
 }

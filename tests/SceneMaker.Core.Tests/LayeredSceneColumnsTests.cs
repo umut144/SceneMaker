@@ -577,6 +577,146 @@ public sealed class LayeredSceneColumnsTests
     }
 
     [Fact]
+    public void ACurvedTunnelKeepsThePortalRuleOnEveryFlattenedPrimitive()
+    {
+        using var workspace = TestWorkspace.Create();
+        var portal = RoutePoint(64, 64, 2m, 2m) with
+        {
+            Mode = RoutePointMode.Aligned,
+            HandleOutAuthoringPx = new AuthoringPixelOffset { X = 32, Y = 0 },
+        };
+        var returnPoint = RoutePoint(32, 64, 2m, 2m) with
+        {
+            Mode = RoutePointMode.Aligned,
+            HandleInAuthoringPx = new AuthoringPixelOffset { X = 0, Y = 32 },
+        };
+        var route = new RouteSurfaceDocument
+        {
+            RouteSurfaceId = "route_0001",
+            AssetKey = "grass",
+            Points =
+            [
+                RoutePoint(0, 64, 2m, 2m),
+                portal,
+                returnPoint,
+            ],
+            Segments =
+            [
+                Segment("route_0001", 1, RouteSegmentOperation.Additive),
+                Segment("route_0001", 2, RouteSegmentOperation.Subtractive, 3m),
+            ],
+        };
+        var scene = Hill(TestScenes.Instance(workspace), workspace, 10m, 128) with
+        {
+            RouteSurfaces = [route],
+        };
+        var bake = RouteSurfaceBake.Build(workspace.Metrics, route);
+
+        var column = LayeredSceneColumns.Prepare(scene, workspace.Metrics).AtWaterCell(3, 4);
+
+        Assert.True(
+            bake.Segments[1].EndSampleIndex - bake.Segments[1].StartSampleIndex > 1);
+        Assert.Single(column.TerrainSolids);
+        Assert.Equal(10m, column.TerrainSolids[0].TopMeters);
+        Assert.Contains(column.Surfaces, static surface => surface.SourceId == "route_0001");
+    }
+
+    [Fact]
+    public void ACellCentreExactlyOnThePortalPlaneIsOpenedByTheTunnel()
+    {
+        using var workspace = TestWorkspace.Create();
+        var route = new RouteSurfaceDocument
+        {
+            RouteSurfaceId = "route_0001",
+            AssetKey = "grass",
+            Points =
+            [
+                RoutePoint(0, 8, 2m, 0.5m),
+                RoutePoint(24, 8, 2m, 0.5m),
+                RoutePoint(64, 8, 2m, 0.5m),
+            ],
+            Segments =
+            [
+                Segment("route_0001", 1, RouteSegmentOperation.Additive),
+                Segment("route_0001", 2, RouteSegmentOperation.Subtractive, 3m),
+            ],
+        };
+        var scene = Hill(TestScenes.Instance(workspace), workspace, 10m, 64) with
+        {
+            RouteSurfaces = [route],
+        };
+
+        var column = LayeredSceneColumns.Prepare(scene, workspace.Metrics).AtWaterCell(1, 0);
+
+        Assert.Equal(2, column.TerrainSolids.Count);
+        Assert.Equal([(decimal?)null, 2m, 5m, 10m], column.TerrainSolids
+            .SelectMany(static span => new[] { span.BottomMeters, span.TopMeters }));
+    }
+
+    [Fact]
+    public void AShortTunnelBetweenAdditiveSegmentsHonoursBothPortalPlanes()
+    {
+        using var workspace = TestWorkspace.Create();
+        var route = new RouteSurfaceDocument
+        {
+            RouteSurfaceId = "route_0001",
+            AssetKey = "grass",
+            Points =
+            [
+                RoutePoint(0, 8, 2m, 0.5m),
+                RoutePoint(16, 8, 2m, 0.5m),
+                RoutePoint(32, 8, 2m, 0.5m),
+                RoutePoint(64, 8, 2m, 0.5m),
+            ],
+            Segments =
+            [
+                Segment("route_0001", 1, RouteSegmentOperation.Additive),
+                Segment("route_0001", 2, RouteSegmentOperation.Subtractive, 3m),
+                Segment("route_0001", 3, RouteSegmentOperation.Additive),
+            ],
+        };
+        var scene = Hill(TestScenes.Instance(workspace), workspace, 10m, 64) with
+        {
+            RouteSurfaces = [route],
+        };
+        var columns = LayeredSceneColumns.Prepare(scene, workspace.Metrics);
+
+        Assert.Single(columns.AtWaterCell(0, 0).TerrainSolids);
+        Assert.Equal(2, columns.AtWaterCell(1, 0).TerrainSolids.Count);
+        Assert.Single(columns.AtWaterCell(2, 0).TerrainSolids);
+    }
+
+    [Fact]
+    public void AHairpinPortalUsesTheOutgoingDirectionDeterministically()
+    {
+        using var workspace = TestWorkspace.Create();
+        var route = new RouteSurfaceDocument
+        {
+            RouteSurfaceId = "route_0001",
+            AssetKey = "grass",
+            Points =
+            [
+                RoutePoint(0, 8, 2m, 0.5m),
+                RoutePoint(32, 8, 2m, 0.5m),
+                RoutePoint(0, 8, 2m, 0.5m),
+            ],
+            Segments =
+            [
+                Segment("route_0001", 1, RouteSegmentOperation.Additive),
+                Segment("route_0001", 2, RouteSegmentOperation.Subtractive, 3m),
+            ],
+        };
+        var scene = Hill(TestScenes.Instance(workspace), workspace, 10m, 64) with
+        {
+            RouteSurfaces = [route],
+        };
+        var columns = LayeredSceneColumns.Prepare(scene, workspace.Metrics);
+
+        Assert.Equal(2, columns.AtWaterCell(1, 0).TerrainSolids.Count);
+        Assert.Single(columns.AtWaterCell(2, 0).TerrainSolids);
+    }
+
+    [Fact]
     public void ACutEndingAtTheTerrainTopLeavesNoZeroHeightRoof()
     {
         using var workspace = TestWorkspace.Create();

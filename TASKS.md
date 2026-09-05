@@ -233,12 +233,17 @@ Its Canvas projection is limited to the contents resolved by
 `LayeredSceneColumns`: Terrain after Hill folding, River cuts and fills, and
 Path surfaces. `RouteSurfaceRaster` samples the same baked triangles used by
 Canvas and export at water-cell centres, preserving continuous height, stacked
-surfaces and Terrain occlusion. Subtractive intervals now contribute cuts from
-only their own baked quads and their half of a shared portal join. A single
-bisecting plane through the authored transition divides that join, so an
-additive neighbour is not excavated and two subtractive neighbours may keep
-different clearances on their respective sides. These cuts affect Terrain
-alone and retain every Path floor. Placements stay hidden rather than
+surfaces and Terrain occlusion. Subtractive intervals contribute cuts from
+their own baked primitives. The existing round-join footprint at an authored
+transition is the exact portal neighbourhood: a disc with radius
+`width_meters / 2`. Within that disc, a single bisecting plane applies to every
+Bezier primitive and gives each segment only its own side. Outside it, a curve
+that returns behind the plane is real Path geometry rather than portal
+overreach. A cell centre exactly on the plane belongs to both sides, so a
+subtractive neighbour opens it and cannot leave a Terrain plug. Two
+subtractive neighbours may keep different clearances on their respective
+sides. These cuts affect Terrain alone and retain every Path floor. Placements
+stay hidden rather than
 painted over a clipped roof with a false draw-order answer until they acquire
 an actual layered-surface or occlusion rule.
 

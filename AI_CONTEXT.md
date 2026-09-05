@@ -349,11 +349,14 @@ lookup quantizes an arbitrary authoring position to the Workspace water grid
 because that is the finest authored volumetric raster. The authoring-position
 entry keeps that query engine-neutral while continuous Path cuts use the same
 baked triangles as the visible Path at water-cell centres. At an authored
-operation transition, the round join remains one visible surface but a shared
-bisecting plane gives each segment only its own half for excavation. The
-authored point is therefore the exact portal: an additive neighbour is not cut,
-while two subtractive neighbours can apply different clearances on their
-respective sides.
+operation transition, the existing round-join disc with radius
+`width_meters / 2` is the exact portal neighbourhood. Within it, every Bezier
+primitive is classified by one shared bisecting plane; outside it, a curve
+that returns behind the plane remains real Path geometry. The plane itself is
+closed on both sides, so a subtractive neighbour opens an exactly centred cell
+instead of leaving a Terrain plug. An additive neighbour is not cut, while two
+subtractive neighbours can apply different clearances on their respective
+sides.
 
 The Canvas now exposes that answer as a third, transient presentation beside
 the ordinary Asset view and the blue height map. `CanvasViewState` owns the

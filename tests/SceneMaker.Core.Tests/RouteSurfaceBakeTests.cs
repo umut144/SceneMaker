@@ -24,6 +24,8 @@ public sealed class RouteSurfaceBakeTests
         var portalJoinOffset = flattenedSegmentCount * 6
             + (portalSample - 1) * RouteSurfaceBake.RoundJoinSides * 3;
         var afterPortalJoin = portalJoinOffset + RouteSurfaceBake.RoundJoinSides * 3;
+        var firstOffsets = first.Select(static triangle => triangle.TriangleOffset).ToHashSet();
+        var secondOffsets = second.Select(static triangle => triangle.TriangleOffset).ToHashSet();
 
         Assert.True(bake.Segments[0].EndSampleIndex - bake.Segments[0].StartSampleIndex > 1);
         Assert.Equal(expectedTriangleIndexCount, bake.TriangleIndices.Count);
@@ -38,24 +40,25 @@ public sealed class RouteSurfaceBakeTests
             Assert.InRange(triangle.TriangleOffset, 0, bake.TriangleIndices.Count - 3);
         });
         Assert.Equal(
-            RouteSurfaceBake.RoundJoinSides + 2,
+            first.Count,
             first.Count(triangle =>
                 triangle.EndPortalSampleIndex == portalSample
                 && triangle.StartPortalSampleIndex is null));
         Assert.Equal(
-            RouteSurfaceBake.RoundJoinSides + 2,
+            second.Count,
             second.Count(triangle =>
                 triangle.StartPortalSampleIndex == portalSample
                 && triangle.EndPortalSampleIndex is null));
         Assert.Equal(
-            first.Where(triangle =>
-                    triangle.TriangleOffset >= portalJoinOffset
-                    && triangle.TriangleOffset < afterPortalJoin)
-                .Select(static triangle => triangle.TriangleOffset),
-            second.Where(triangle =>
-                    triangle.TriangleOffset >= portalJoinOffset
-                    && triangle.TriangleOffset < afterPortalJoin)
-                .Select(static triangle => triangle.TriangleOffset));
+            Enumerable.Range(0, bake.TriangleIndices.Count / 3).Select(static index => index * 3),
+            firstOffsets.Union(secondOffsets).Order());
+        Assert.Equal(
+            Enumerable.Range(0, RouteSurfaceBake.RoundJoinSides)
+                .Select(index => portalJoinOffset + index * 3),
+            firstOffsets.Intersect(secondOffsets).Order());
+        Assert.DoesNotContain(
+            firstOffsets.Intersect(secondOffsets),
+            offset => offset < portalJoinOffset || offset >= afterPortalJoin);
     }
 
     [Fact]

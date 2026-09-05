@@ -52,11 +52,10 @@ public sealed record BakedRouteSurface
 }
 
 /// <summary>
-/// One baked triangle used by an authored segment. Round-join triangles at an
-/// authored boundary are shared by both neighbours, but each neighbour owns
-/// only its side of the portal plane when the triangle is used for a cut. The
-/// same plane also clips the adjacent quad, so a corner cannot protrude through
-/// an operation boundary merely because its two tangents differ.
+/// One baked triangle used by an authored segment. Every triangle remembers
+/// the segment's portal samples so raster cuts can apply the boundary to any
+/// Bezier primitive that returns through a portal footprint. Round-join
+/// triangles at an authored boundary remain shared by both neighbours.
 /// </summary>
 internal readonly record struct RouteSurfaceBakeTriangle(
     int TriangleOffset,
@@ -150,8 +149,9 @@ public static class RouteSurfaceBake
     /// <summary>
     /// Baked triangles belonging to one authored interval. The bake writes
     /// every flattened-segment quad first and then every interior round join.
-    /// A join on an authored boundary belongs to both adjacent intervals; its
-    /// portal half keeps the two operations from crossing that boundary.
+    /// A join on an authored boundary belongs to both adjacent intervals. Every
+    /// returned triangle also carries the interval's portal sample indices;
+    /// raster semantics decide whether one of its samples is inside a portal.
     /// </summary>
     internal static IEnumerable<RouteSurfaceBakeTriangle> TrianglesForSegment(
         BakedRouteSurface bake,
@@ -175,17 +175,15 @@ public static class RouteSurfaceBake
                 $"Path '{bake.RouteSurfaceId}' has an unexpected baked triangle layout.");
         }
 
+        int? startPortal = segment.StartSampleIndex > 0
+            ? segment.StartSampleIndex
+            : null;
+        int? endPortal = segment.EndSampleIndex < flattenedSegmentCount
+            ? segment.EndSampleIndex
+            : null;
         for (var sample = segment.StartSampleIndex; sample < segment.EndSampleIndex; sample++)
         {
             var quadOffset = sample * 6;
-            int? startPortal = sample == segment.StartSampleIndex
-                && segment.StartSampleIndex > 0
-                    ? segment.StartSampleIndex
-                    : null;
-            int? endPortal = sample + 1 == segment.EndSampleIndex
-                && segment.EndSampleIndex < flattenedSegmentCount
-                    ? segment.EndSampleIndex
-                    : null;
             yield return new RouteSurfaceBakeTriangle(
                 quadOffset,
                 startPortal,
@@ -203,8 +201,6 @@ public static class RouteSurfaceBake
         {
             var joinOffset = joinsOffset
                 + (sample - 1) * RoundJoinSides * 3;
-            int? startPortal = sample == segment.StartSampleIndex ? sample : null;
-            int? endPortal = sample == segment.EndSampleIndex ? sample : null;
             for (var side = 0; side < RoundJoinSides; side++)
             {
                 yield return new RouteSurfaceBakeTriangle(
