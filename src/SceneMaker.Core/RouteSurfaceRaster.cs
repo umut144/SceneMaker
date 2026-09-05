@@ -11,8 +11,13 @@ public readonly record struct RouteSurfaceRasterCell(
     string AssetKey,
     string RouteSurfaceId);
 
-/// <summary>One Terrain cut sampled from a subtractive authored Path segment.</summary>
-internal readonly record struct RouteSurfaceRasterCut(
+/// <summary>
+/// One Terrain cut sampled from a subtractive authored Path segment. It is
+/// the derived half of an excavated interval, in the same source/derived split
+/// the water raster already makes: the authored operation and clearance stay
+/// in the Scene, and these cells are what a runtime subtracts.
+/// </summary>
+public readonly record struct RouteSurfaceRasterCut(
     int X,
     int Y,
     decimal BottomMeters,
@@ -40,7 +45,7 @@ public static class RouteSurfaceRaster
     /// triangles used by <see cref="Cells"/>. Their Path surface remains a
     /// separate cell; this answer is only the Terrain volume above it.
     /// </summary>
-    internal static IReadOnlyList<RouteSurfaceRasterCut> Cuts(
+    public static IReadOnlyList<RouteSurfaceRasterCut> Cuts(
         SceneDocument scene,
         WorkspaceMetrics metrics) => Prepare(scene, metrics).Cuts;
 

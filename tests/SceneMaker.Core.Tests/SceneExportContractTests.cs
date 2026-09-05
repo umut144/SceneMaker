@@ -22,11 +22,12 @@ public sealed class SceneExportContractTests
         Assert.Equal(
             [
                 "format", "version", "workspace_key", "grid", "asset_profiles",
-                "water_raster", "route_surface_bakes", "scene",
+                "water_raster", "route_surface_bakes", "route_surface_cut_raster",
+                "scene",
             ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(10, root.GetProperty("version").GetInt32());
+        Assert.Equal(11, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             [
@@ -51,7 +52,7 @@ public sealed class SceneExportContractTests
             ],
             Keys(scene));
         Assert.Equal("srt.scene_maker_scene", scene.GetProperty("schema").GetString());
-        Assert.Equal(11, scene.GetProperty("version").GetInt32());
+        Assert.Equal(12, scene.GetProperty("version").GetInt32());
         Assert.Equal("instance", scene.GetProperty("scene_kind").GetString());
         Assert.Equal(
             "scene_local_bottom_left_y_up",
@@ -152,6 +153,7 @@ public sealed class SceneExportContractTests
 
         Assert.Empty(root.GetProperty("water_raster").EnumerateArray());
         Assert.Empty(root.GetProperty("route_surface_bakes").EnumerateArray());
+        Assert.Empty(root.GetProperty("route_surface_cut_raster").EnumerateArray());
         Assert.Empty(root.GetProperty("scene").GetProperty("water_bodies").EnumerateArray());
         Assert.Empty(root.GetProperty("scene").GetProperty("route_surfaces").EnumerateArray());
     }
@@ -171,7 +173,9 @@ public sealed class SceneExportContractTests
             Keys(route)));
         Assert.All(routes, route => Assert.All(
             route.GetProperty("segments").EnumerateArray(),
-            segment => Assert.Equal(["segment_id", "grade_percent"], Keys(segment))));
+            segment => Assert.Equal(
+                ["segment_id", "grade_percent", "operation", "clearance_above_meters"],
+                Keys(segment))));
         Assert.Equal([0, 25, 50], routes.Select(route => route
             .GetProperty("segments")[0].GetProperty("grade_percent").GetInt32()));
         Assert.Equal(
@@ -201,14 +205,108 @@ public sealed class SceneExportContractTests
             Keys(bake.GetProperty("centerline_samples")[0]));
         Assert.Equal(
             [
-                "segment_id", "grade_percent", "start_point_index", "end_point_index",
+                "segment_id", "grade_percent", "operation", "clearance_above_meters",
+                "start_point_index", "end_point_index",
                 "start_sample_index", "end_sample_index",
             ],
             Keys(bake.GetProperty("segments")[0]));
+        Assert.All(bakes, baked => Assert.All(
+            baked.GetProperty("segments").EnumerateArray(),
+            segment =>
+            {
+                Assert.Equal("additive", segment.GetProperty("operation").GetString());
+                Assert.Equal(
+                    JsonValueKind.Null,
+                    segment.GetProperty("clearance_above_meters").ValueKind);
+            }));
         Assert.Contains(
             bake.GetProperty("centerline_samples").EnumerateArray(),
             sample => sample.GetProperty("authored_point_index").GetInt32() == 1);
         Assert.Equal(25, bake.GetProperty("segments")[0].GetProperty("grade_percent").GetInt32());
+    }
+
+    /// <summary>
+    /// Export 10 refused a subtractive interval outright rather than writing
+    /// it through the additive shape. Export 11 carries the authored meaning
+    /// and the cells it removes, so the excavation can neither be lost nor
+    /// silently turned into a materialized surface.
+    /// </summary>
+    [Fact]
+    public void ASubtractivePathShipsItsExcavationInsteadOfBeingRefused()
+    {
+        using var workspace = TestWorkspace.Create();
+        var root = Export(workspace, WithTunnelPath);
+        var segment = root.GetProperty("scene").GetProperty("route_surfaces")[0]
+            .GetProperty("segments")[0];
+
+        Assert.Equal("subtractive", segment.GetProperty("operation").GetString());
+        Assert.Equal(2.0m, segment.GetProperty("clearance_above_meters").GetDecimal());
+
+        var cuts = root.GetProperty("route_surface_cut_raster").EnumerateArray().ToList();
+        var cut = Assert.Single(cuts);
+        Assert.Equal(["route_surface_id", "cells"], Keys(cut));
+        Assert.Equal("route_0001", cut.GetProperty("route_surface_id").GetString());
+        var cells = cut.GetProperty("cells").EnumerateArray().ToList();
+        Assert.NotEmpty(cells);
+        Assert.Equal(
+            ["x", "y", "segment_id", "floor_meters", "cut_top_meters"],
+            Keys(cells[0]));
+        Assert.All(cells, cell =>
+        {
+            Assert.Equal(
+                "route_0001.segment_0001",
+                cell.GetProperty("segment_id").GetString());
+            Assert.Equal(1.0m, cell.GetProperty("floor_meters").GetDecimal());
+            Assert.Equal(3.0m, cell.GetProperty("cut_top_meters").GetDecimal());
+        });
+
+        // The bake repeats the authored meaning so a consumer reading only the
+        // runtime half can tell the two kinds of interval apart.
+        var baked = root.GetProperty("route_surface_bakes")[0].GetProperty("segments")[0];
+        Assert.Equal("subtractive", baked.GetProperty("operation").GetString());
+        Assert.Equal(2.0m, baked.GetProperty("clearance_above_meters").GetDecimal());
+    }
+
+    /// <summary>
+    /// An excavation the author drew outside the Scene removes nothing. That is
+    /// an ordinary state of an unfinished map, so it warns rather than refusing
+    /// - but it must not pass in silence, which is the one thing an omitted
+    /// excavation would look like from the outside.
+    /// </summary>
+    [Fact]
+    public void AnExcavationThatRemovesNothingWarnsInsteadOfPassingSilently()
+    {
+        using var workspace = TestWorkspace.Create();
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        var document = WithTunnelPath(TestScenes.Instance(workspace), workspace);
+        var offMap = document with
+        {
+            RouteSurfaces =
+            [
+                document.RouteSurfaces[0] with
+                {
+                    Points =
+                    [
+                        .. document.RouteSurfaces[0].Points.Select(static point => point with
+                        {
+                            PositionAuthoringPx = new AuthoringPixelPosition
+                            {
+                                X = point.PositionAuthoringPx.X,
+                                Y = -4096,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+
+        var warnings = SceneExport.Warnings(offMap, session.Configuration.Metrics);
+
+        Assert.Contains(
+            warnings,
+            warning => warning.Contains(
+                "route_0001.segment_0001", StringComparison.Ordinal)
+                && warning.Contains("removes no Terrain", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -289,6 +387,29 @@ public sealed class SceneExportContractTests
                 "grass");
         }
         return scene;
+    }
+
+    /// <summary>
+    /// One level Path authored as a tunnel: a subtractive interval asking for
+    /// two metres of headroom over a floor at one metre.
+    /// </summary>
+    private static SceneDocument WithTunnelPath(SceneDocument scene, TestWorkspace workspace)
+    {
+        var draft = new[]
+        {
+            new GradedRouteDraftPoint(
+                32, 32, RoutePointMode.Linear, 2m, RouteGradePreset.Level),
+            new GradedRouteDraftPoint(
+                160, 32, RoutePointMode.Linear, 2m, RouteGradePreset.Level),
+        };
+        var points = RouteSurfaceEditing.ResolveGradedCurve(workspace.Metrics, 1m, draft);
+        return RouteSurfaceEditing.Place(
+            scene,
+            workspace.Terrain,
+            workspace.Metrics,
+            points,
+            [RouteSegmentAuthoring.Subtractive(RouteGradePreset.Level, 2.0m)],
+            "grass");
     }
 
     /// <summary>Exports a Scene carrying one Terrain cell kind and one Prop.</summary>

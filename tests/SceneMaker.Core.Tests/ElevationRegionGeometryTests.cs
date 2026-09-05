@@ -622,7 +622,7 @@ public sealed class ElevationRegionGeometryTests
         using var parsed = JsonDocument.Parse(json);
         var exportedScene = parsed.RootElement.GetProperty("scene");
 
-        Assert.Equal(11, exportedScene.GetProperty("version").GetInt32());
+        Assert.Equal(12, exportedScene.GetProperty("version").GetInt32());
         Assert.False(exportedScene.TryGetProperty("elevation_regions", out _));
         var cells = exportedScene.GetProperty("terrain_cells").EnumerateArray().ToList();
         Assert.Equal(36, cells.Count);

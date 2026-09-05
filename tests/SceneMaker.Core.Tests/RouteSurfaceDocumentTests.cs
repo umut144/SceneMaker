@@ -312,7 +312,7 @@ public sealed class RouteSurfaceDocumentTests
     }
 
     [Fact]
-    public void ExportTenCarriesAuthoredRoutesAndTheirBakeWithoutAWarning()
+    public void ExportElevenCarriesAuthoredRoutesAndTheirBakeWithoutAWarning()
     {
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
@@ -329,8 +329,14 @@ public sealed class RouteSurfaceDocumentTests
         Assert.Single(parsed.RootElement.GetProperty("route_surface_bakes").EnumerateArray());
     }
 
+    /// <summary>
+    /// Export 10 refused an excavating Path outright, because it had no way to
+    /// say what one means. Export 11 says it twice - the authored operation and
+    /// clearance, and the cells the excavation removes - so the meaning can be
+    /// neither lost nor mistaken for a materialized surface.
+    /// </summary>
     [Fact]
-    public void ExportTenRefusesASubtractiveSegmentInsteadOfSilentlyLosingIt()
+    public void ExportElevenCarriesASubtractiveSegmentInsteadOfRefusingIt()
     {
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
@@ -341,13 +347,21 @@ public sealed class RouteSurfaceDocumentTests
             ClearanceAboveMeters = 1m,
         };
 
-        var exception = Assert.Throws<SceneMakerDocumentException>(() => SceneExport.Write(
+        var result = SceneExport.Write(
             session,
             new LoadedScene(
                 Path.Combine(session.Workspace.ScenesDirectoryPath, "base.scene.json"),
-                document)));
+                document));
 
-        Assert.Contains("export schema 10", exception.Message, StringComparison.Ordinal);
+        Assert.Empty(result.Warnings);
+        using var parsed = JsonDocument.Parse(File.ReadAllText(result.Path));
+        var segment = parsed.RootElement.GetProperty("scene")
+            .GetProperty("route_surfaces")[0].GetProperty("segments")[0];
+        Assert.Equal("subtractive", segment.GetProperty("operation").GetString());
+        Assert.Equal(1m, segment.GetProperty("clearance_above_meters").GetDecimal());
+        var cut = Assert.Single(
+            parsed.RootElement.GetProperty("route_surface_cut_raster").EnumerateArray());
+        Assert.NotEmpty(cut.GetProperty("cells").EnumerateArray());
     }
 
     private static SceneDocument WithRoute(

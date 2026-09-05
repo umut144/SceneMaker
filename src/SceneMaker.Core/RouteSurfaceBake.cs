@@ -24,11 +24,18 @@ public readonly record struct RouteSurfaceCenterlineSample(
     decimal StationMeters,
     int? AuthoredPointIndex);
 
-/// <summary>How one authored segment maps onto the baked centerline.</summary>
+/// <summary>
+/// How one authored segment maps onto the baked centerline. It repeats the
+/// authored operation and clearance so a consumer reading only the bake can
+/// tell an excavated interval from a materialized one without joining back to
+/// the authored Scene.
+/// </summary>
 public sealed record RouteSurfaceBakeSegment
 {
     public required string SegmentId { get; init; }
     public required int GradePercent { get; init; }
+    public required RouteSegmentOperation Operation { get; init; }
+    public decimal? ClearanceAboveMeters { get; init; }
     public required int StartPointIndex { get; init; }
     public required int EndPointIndex { get; init; }
     public required int StartSampleIndex { get; init; }
@@ -126,6 +133,8 @@ public static class RouteSurfaceBake
             {
                 SegmentId = segment.SegmentId,
                 GradePercent = segment.GradePercent,
+                Operation = segment.Operation,
+                ClearanceAboveMeters = segment.ClearanceAboveMeters,
                 StartPointIndex = index,
                 EndPointIndex = index + 1,
                 StartSampleIndex = SampleIndex(centerline, centerline.AnchorStations[index]),

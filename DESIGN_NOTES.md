@@ -178,8 +178,9 @@ author-facing `Draw Path` tool now authors a free open Bezier curve with an
 automatic or manual starting height, per-segment grade and width per point,
 previews the continuous band in the Canvas and erases the whole route. The
 Landscape navigation and context controls are present, and the height view
-colours its interpolated surface. Export schema 10 carries both the authored
-Path and the runtime bake used by the Canvas. Traversal profiles still belong
+colours its interpolated surface. Export schema 11 carries the authored Path,
+the runtime bake used by the Canvas, and the cells a subtractive interval
+removes. Traversal profiles still belong
 to the consuming simulation before a tool or generator can judge whether an
 Actor can use a route. Selection/point reshaping and the overlapping-station
 semantics needed by helixes remain separate later slices — see the section
@@ -266,10 +267,13 @@ exit. Persist the semantic operation per segment rather than infer it from
 whether Terrain currently happens to overlap the Path.
 
 Scene schema 16 now persists that per-segment operation and clearance, and the
-Draw Path context applies both to the next point pair. Export schema 10 refuses
-subtractive segments rather than discarding their meaning. The actual column
-cut and retained floor are implemented; red authoring wire and advanced export
-remain separate slices.
+Draw Path context applies both to the next point pair. Export schema 11 carries
+both, plus a `route_surface_cut_raster` of the cells each subtractive interval
+removes. Deriving those cells here rather than in a consumer is deliberate: the
+portal rule at an operation transition would otherwise be reimplemented against
+the raw triangles and could disagree with what the author inspected in the
+Section view. The column cut and the retained floor are implemented; the red
+authoring wire remains a separate slice.
 
 Every subtractive segment carries a positive `clearance_above_meters`. At each
 station its floor is the existing interpolated Path elevation and its Terrain

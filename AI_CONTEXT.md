@@ -139,7 +139,8 @@ quantum, but their horizontal positions do not snap to either raster. Equal
 neighbour positions are valid when their Bezier handles create real arc length,
 which a generated loop may need. Templates may persist routes, while a runtime
 whose composition cannot translate them must reject them explicitly. Export
-schema 10 carries both authored routes and their runtime bake. `Draw Path` is
+schema 11 carries authored routes, their runtime bake and the cells their
+subtractive intervals remove. `Draw Path` is
 exposed beside River and Hill under Landscape;
 its context bar carries Surface, point mode, width and the shared absolute
 Height. The canvas draws the continuous material-coloured band and its
@@ -147,10 +148,12 @@ centerline, while the height view colours that band from its interpolated
 surface elevation rather than rasterizing it into steps. The eraser removes
 the whole authored route under the pointer.
 
-Subtractive authoring deliberately leads its runtime contract: export schema
-10 rejects such a segment instead of silently serializing it as an additive
-Path. The shared layered columns already subtract its baked corridor from
-Terrain and retain the Path floor; the matching export version follows next.
+Export schema 11 now carries that meaning instead of refusing it. Every
+exported segment states its operation and, when it excavates, its clearance,
+and a `route_surface_cut_raster` delivers the cells the excavation removes -
+derived by the same raster the Section view reads, so the portal rule at an
+operation transition stays in one place rather than being reimplemented by a
+consumer. An excavation lying outside the Scene warns rather than refusing.
 
 A flattened loop comes back as a ring whose first point is not repeated at the
 end, with the way home carried in its own `TotalLength` rather than in the last
@@ -220,7 +223,7 @@ rule stays at two and `ElevationRegionGeometry.RequireContour` decides whether t
 flattened ring is usable. That the canvas tool asks for three placed points is
 a tool decision about drawing, not a rule about geometry.
 
-Elevation-region contours are editor source and do not enter export schema 10. Export
+Elevation-region contours are editor source and do not enter export schema 11. Export
 folds them into the ordinary Terrain cells promised to the runtime. This also
 keeps hills in the cuttable Terrain solid: a river cut can make a channel
 or tunnel through one, whereas modelling a hill as a fill would incorrectly
@@ -419,7 +422,7 @@ own clearance test. The editor therefore validates representable geometry and
 the Workspace height quantum for the start only. Its five grades are authoring
 choices, not Actor capabilities: SceneMaker derives their geometry but does not
 reject a valid Path because a particular Actor could not climb it. Export
-schema 10 exports route surfaces without assigning traversal policy.
+schema 11 exports route surfaces without assigning traversal policy.
 
 A Prop needs no Terrain under it. Its `elevation_meters` is absolute, like every
 other authored height, so where it stands is already fully said and the ground

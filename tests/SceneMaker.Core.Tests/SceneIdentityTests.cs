@@ -77,17 +77,24 @@ public sealed class SceneIdentityTests
         var session = WorkspaceSession.Load(workspace.RootPath);
         _ = SceneStore.CreateInstance(session.Workspace, "a", 4, 4);
         var second = SceneStore.CreateInstance(session.Workspace, "b", 4, 4);
-        var subtractive = RouteSurfaceEditing.Place(
-            second.Document,
-            session.TerrainAssets,
-            session.Configuration.Metrics,
+
+        // A curve-authored Asset painted as a cell. The document shape is
+        // valid, so it saves; only the export, which knows the catalog, can
+        // refuse it - which is the point of validating every Scene first.
+        var invalid = second.Document with
+        {
+            TerrainCells =
             [
-                RouteSurfaceEditing.Point(32, 32, RoutePointMode.Linear, 1m),
-                RouteSurfaceEditing.Point(96, 32, RoutePointMode.Linear, 1m),
+                new TerrainCellDocument
+                {
+                    X = 0,
+                    Y = 0,
+                    AssetKey = "river",
+                    ElevationMeters = 1m,
+                },
             ],
-            [RouteSegmentAuthoring.Subtractive(RouteGradePreset.Level, 1m)],
-            "grass");
-        SceneStore.Save(session.Workspace, second with { Document = subtractive });
+        };
+        SceneStore.Save(session.Workspace, second with { Document = invalid });
         var exportDirectory = Path.Combine(workspace.RootPath, SceneExport.DirectoryName);
         Directory.CreateDirectory(exportDirectory);
         var firstExport = Path.Combine(exportDirectory, "a" + SceneExport.FileSuffix);
@@ -96,7 +103,8 @@ public sealed class SceneIdentityTests
         var exception = Assert.Throws<SceneMakerDocumentException>(
             () => SceneExport.WriteWorkspace(session));
 
-        Assert.Contains("subtractive", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "authored as a curve", exception.Message, StringComparison.Ordinal);
         Assert.Equal("previous export", File.ReadAllText(firstExport));
         Assert.False(File.Exists(Path.Combine(exportDirectory, "b" + SceneExport.FileSuffix)));
     }

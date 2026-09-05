@@ -13,14 +13,15 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 10;
+    public const int Version = 11;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
-    // ElevationRegion contours remain folded into Terrain. Embedded scene 11
-    // adds authored route surfaces, while export 10 adds their matching runtime
-    // bake beside the Scene in the same source/derived split as water.
-    private const int EmbeddedSceneVersion = 11;
+    // ElevationRegion contours remain folded into Terrain. Embedded scene 12
+    // carries the authored per-segment operation and clearance a Path was
+    // already allowed to hold, while export 11 adds the cells those subtractive
+    // intervals remove - the same source/derived split water already makes.
+    private const int EmbeddedSceneVersion = 12;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -71,6 +72,8 @@ public static class SceneExport
             RouteSurfaceBakes = scene.Document.RouteSurfaces
                 .Select(route => RouteSurfaceBake.Build(configuration.Metrics, route))
                 .ToList(),
+            RouteSurfaceCutRaster = ExportRouteSurfaceCutRaster(
+                scene.Document, configuration.Metrics),
             Scene = ExportScene(scene.Document, configuration.Metrics),
         };
         var directory = Path.Combine(workspace.DirectoryPath, DirectoryName);
@@ -139,6 +142,30 @@ public static class SceneExport
             static cell => new TerrainCellCoordinate(cell.X, cell.Y),
             static cell => cell.ElevationMeters);
         List<string> warnings = [];
+
+        // An excavation that lands nowhere inside the Scene is not an error -
+        // a Path drawn past the edge is an ordinary state of an unfinished map
+        // - but it is exactly the case where the export would otherwise say
+        // nothing at all about an interval the author deliberately marked.
+        var subtractive = scene.RouteSurfaces
+            .SelectMany(static route => route.Segments)
+            .Where(static segment =>
+                segment.Operation == RouteSegmentOperation.Subtractive)
+            .ToList();
+        if (subtractive.Count > 0)
+        {
+            var excavated = RouteSurfaceRaster
+                .Cuts(scene, metrics)
+                .Select(static cut => cut.SegmentId)
+                .ToHashSet(StringComparer.Ordinal);
+            foreach (var segment in subtractive.Where(
+                segment => !excavated.Contains(segment.SegmentId)))
+            {
+                warnings.Add(
+                    $"Path segment '{segment.SegmentId}' is subtractive but removes no Terrain inside the Scene.");
+            }
+        }
+
         foreach (var body in scene.WaterBodies)
         {
             var cells = WaterGeometry.Corridor(scene, metrics, body);
@@ -214,6 +241,42 @@ public static class SceneExport
             .ToList();
 
     /// <summary>
+    /// The derived half of an excavating Path: which cells each subtractive
+    /// interval takes out of the Terrain, and between which two heights. The
+    /// cells come from the same raster the Section view reads, so what an
+    /// author inspects and what a consumer subtracts cannot drift apart.
+    /// </summary>
+    private static List<ExportRouteSurfaceCutDocument> ExportRouteSurfaceCutRaster(
+        SceneDocument scene,
+        WorkspaceMetrics metrics)
+    {
+        var excavating = scene.RouteSurfaces
+            .Where(static route => route.Segments.Any(static segment =>
+                segment.Operation == RouteSegmentOperation.Subtractive))
+            .ToList();
+        if (excavating.Count == 0) return [];
+        var cuts = RouteSurfaceRaster.Cuts(scene, metrics);
+        return excavating
+            .Select(route => new ExportRouteSurfaceCutDocument
+            {
+                RouteSurfaceId = route.RouteSurfaceId,
+                Cells = cuts
+                    .Where(cut => StringComparer.Ordinal.Equals(
+                        cut.RouteSurfaceId, route.RouteSurfaceId))
+                    .Select(static cut => new ExportRouteSurfaceCutCellDocument
+                    {
+                        X = cut.X,
+                        Y = cut.Y,
+                        SegmentId = cut.SegmentId,
+                        FloorMeters = cut.BottomMeters,
+                        CutTopMeters = cut.TopMeters,
+                    })
+                    .ToList(),
+            })
+            .ToList();
+    }
+
+    /// <summary>
     /// The runtime Scene is a derived snapshot, not the authoring document.
     /// ElevationRegion contours are folded into Terrain and deliberately omitted, so
     /// adding an editor source does not change the export shape or its reader.
@@ -242,6 +305,8 @@ public static class SceneExport
                     {
                         SegmentId = segment.SegmentId,
                         GradePercent = segment.GradePercent,
+                        Operation = segment.Operation,
+                        ClearanceAboveMeters = segment.ClearanceAboveMeters,
                     }).ToList(),
             }).ToList(),
         TemplateDefinition = scene.TemplateDefinition,
@@ -292,16 +357,6 @@ public static class SceneExport
         PropEditing.ValidateAssetReferences(scene, propAssets);
         RouteSurfaceEditing.ValidateAssetReferences(scene, terrainAssets);
         WaterEditing.ValidateAssetReferences(scene, terrainAssets);
-        var unsupported = scene.RouteSurfaces
-            .SelectMany(static route => route.Segments)
-            .FirstOrDefault(static segment =>
-                segment.Operation == RouteSegmentOperation.Subtractive);
-        if (unsupported is not null)
-        {
-            throw new SceneMakerDocumentException(
-                $"Path segment '{unsupported.SegmentId}' is subtractive, which export "
-                + $"schema {Version} does not support yet.");
-        }
     }
 
     private sealed record ExportDocument
@@ -323,6 +378,13 @@ public static class SceneExport
         /// uses. Empty for a Scene without Paths.
         /// </summary>
         public required List<BakedRouteSurface> RouteSurfaceBakes { get; init; }
+
+        /// <summary>
+        /// The Terrain each subtractive Path interval removes, as cells. One
+        /// entry per Path that carries at least one such interval; a Path that
+        /// only materializes surface is absent rather than present and empty.
+        /// </summary>
+        public required List<ExportRouteSurfaceCutDocument> RouteSurfaceCutRaster { get; init; }
 
         public required ExportSceneDocument Scene { get; init; }
     }
@@ -365,6 +427,48 @@ public static class SceneExport
     {
         public required string SegmentId { get; init; }
         public required int GradePercent { get; init; }
+
+        /// <summary>
+        /// Whether this interval materializes its surface or excavates the
+        /// Terrain above it. It is the authored meaning rather than something
+        /// recovered from whether Terrain happens to overlap the Path today.
+        /// </summary>
+        public required RouteSegmentOperation Operation { get; init; }
+
+        /// <summary>
+        /// The headroom a subtractive interval asks for above its own floor,
+        /// in metres. Null for an additive interval, which removes nothing.
+        /// </summary>
+        public decimal? ClearanceAboveMeters { get; init; }
+    }
+
+    /// <summary>
+    /// The excavation of one Path, as cells on the water grid - the finest
+    /// authored volumetric raster. It sits beside the Scene for the same reason
+    /// the water raster does: the Scene block is what the author wrote, and
+    /// this is what SceneMaker worked out from it. Deriving it here rather than
+    /// leaving it to a consumer keeps the portal rule at an operation
+    /// transition in one place.
+    /// </summary>
+    private sealed record ExportRouteSurfaceCutDocument
+    {
+        public required string RouteSurfaceId { get; init; }
+        public required List<ExportRouteSurfaceCutCellDocument> Cells { get; init; }
+    }
+
+    /// <summary>
+    /// One excavated cell: the interval that asked for it, the Path floor that
+    /// survives the cut, and the top of the Terrain volume removed above it.
+    /// Two numbers rather than a floor and a clearance, because the clearance
+    /// is authored per interval while the floor changes along the route.
+    /// </summary>
+    private sealed record ExportRouteSurfaceCutCellDocument
+    {
+        public required int X { get; init; }
+        public required int Y { get; init; }
+        public required string SegmentId { get; init; }
+        public required decimal FloorMeters { get; init; }
+        public required decimal CutTopMeters { get; init; }
     }
 
     private sealed record ExportGridDocument

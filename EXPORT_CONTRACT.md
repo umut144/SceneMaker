@@ -5,15 +5,18 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 10**, embedded **scene 11**. A reader must reject any
+Current schemas: **export 11**, embedded **scene 12**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
 
-Export 10 adds authored Paths to the embedded Scene and a matching
-`route_surface_bakes` array beside it. Embedded scene 11 is therefore the first
-runtime Scene shape that carries `route_surfaces`.
+Export 11 carries excavating Paths. Every route segment now states its
+`operation` and, when it excavates, the `clearance_above_meters` it asks for,
+and a new `route_surface_cut_raster` array delivers the cells that excavation
+removes from the Terrain. Export 10 refused such a Scene outright rather than
+writing it through the additive shape; it is the version that could not say
+what a tunnel means, not a version whose meaning changed.
 
-The authored Scene currently has its own schema 15. It is deliberately newer
+The authored Scene currently has its own schema 16. It is deliberately newer
 than the embedded Scene: elevation-region contours are editor source, folded
 into the ordinary `terrain_cells` below and omitted from export. Authored route
 surfaces remain independent continuous bands and are exported separately from
@@ -124,10 +127,25 @@ purpose.
         {
           "segment_id": "route_0001.segment_0001",
           "grade_percent": 25,
+          "operation": "additive",         // or "subtractive"
+          "clearance_above_meters": null,  // set only for a subtractive segment
           "start_point_index": 0,
           "end_point_index": 1,
           "start_sample_index": 0,
           "end_sample_index": 1
+        }
+      ]
+    }
+  ],
+  "route_surface_cut_raster": [        // derived from subtractive segments
+    {
+      "route_surface_id": "route_0002",
+      "cells": [                       // water cells, as water_raster uses
+        {
+          "x": 64, "y": 20,
+          "segment_id": "route_0002.segment_0001",
+          "floor_meters": 1.0,         // the Path surface, which survives
+          "cut_top_meters": 3.0        // Terrain is removed up to here
         }
       ]
     }
@@ -192,7 +210,12 @@ purpose.
           }
         ],
         "segments": [
-          { "segment_id": "route_0001.segment_0001", "grade_percent": 25 }
+          {
+            "segment_id": "route_0001.segment_0001",
+            "grade_percent": 25,
+            "operation": "additive",
+            "clearance_above_meters": null
+          }
         ]
       }
     ],
@@ -395,10 +418,44 @@ that integer and must not reconstruct it from rounded point heights and
 floating-point arc lengths. SceneMaker assigns no passability or speed meaning
 to those values.
 
-Authoring schema 16 can additionally mark a segment as subtractive and give it
-clearance above its floor. Export schema 10 has no representation for that
-meaning, so the exporter refuses such a Scene before writing anything. It must
-never serialize a subtractive segment through the additive schema-10 shape.
+**Excavating segments.** A segment's `operation` is `"additive"` or
+`"subtractive"`, and it is the authored meaning rather than something recovered
+from whether Terrain happens to overlap the Path today. An additive segment
+materializes its surface and removes nothing, so its `clearance_above_meters`
+is null. A subtractive segment carries a positive clearance and, at every
+station, removes `[floor, floor + clearance]` from the Terrain solid, where the
+floor is the interpolated Path elevation. The Path surface itself survives the
+cut, and the cut applies to Terrain alone: it never removes water, another
+Path, or any other fill.
+
+A reader must not infer that meaning from geometry, and it must not treat a
+subtractive segment as an additive one. Both halves of the export state it: the
+authored segment in `scene.route_surfaces` and its baked counterpart in
+`route_surface_bakes`.
+
+`route_surface_cut_raster` is the derived half of that excavation, and the
+easiest way to consume it. It holds one entry per Path that carries at least
+one subtractive segment - a purely additive Path is absent rather than present
+and empty - and lists the cells that Path removes, on the same water grid
+`water_raster` uses, because that is the finest authored volumetric raster.
+Each cell names the segment that asked for it, the `floor_meters` that survives
+and the `cut_top_meters` up to which Terrain is gone. Resolving a column is
+then the water rule with one more source of cuts.
+
+SceneMaker derives those cells rather than leaving them to a consumer because
+of what happens where two neighbouring segments disagree. At an authored
+operation transition the existing round-join disc of radius `width_meters / 2`
+is the portal neighbourhood, and inside it one bisecting plane gives each
+segment only its own side; the plane is closed on both sides, so a subtractive
+neighbour opens an exactly centred cell instead of leaving a Terrain plug, and
+two subtractive neighbours may apply different clearances on their respective
+sides. A consumer reimplementing that from the triangles alone would disagree
+with what the author inspected in the Section view. The cells are the answer,
+so it cannot.
+
+An empty `cells` array on a Path that does carry a subtractive segment is
+valid: the excavation lies outside the Scene, exactly as the water raster is
+clipped to it. The export warns in that case rather than refusing.
 
 `route_surface_bakes` is the derived runtime half. It is generated by the same
 Core operation used to draw persisted Paths in the Canvas: the shared Bezier
@@ -412,8 +469,8 @@ primitives. Centerline samples include every authored point/grade transition;
 `station_meters` is cumulative horizontal arc length.
 
 The authored and baked arrays have identical Path order and identity. Baked
-segment records repeat the stable ID and grade and map each authored point pair
-onto an inclusive centerline-sample range. Export refuses missing or duplicate
+segment records repeat the stable ID, grade, operation and clearance and map
+each authored point pair onto an inclusive centerline-sample range. Export refuses missing or duplicate
 IDs, unsupported grades, non-positive widths, non-finite values, invalid
 indices, and degenerate baked triangles. Output order never comes from a hash
 map.
