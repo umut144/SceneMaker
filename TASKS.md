@@ -14,6 +14,8 @@ every fix has to stay inside.
 |---|---|---|---|
 | `PATH-05` | Export contract | Raise world01's reader to export 11: the new `operation`/`clearance_above_meters` on every route segment and the `route_surface_cut_raster` beside the Scene. Lives in `BevyProjects/world01`, not here. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Ready** |
 | `PATH-02` | Paths | Make the red authoring wire pickable and emphasize a selected Path; manual acceptance of an additive-to-tunnel-to-additive Path through a hill. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Ready** |
+| `PLACE-01` | Placements | Decide whether a Placement may be set by the union of its PolyTools collision regions rather than its visible footprint, and highlight that union dashed inside the footprint. [Notes](DESIGN_NOTES.md#occupied-means-the-same-thing-whoever-asks) | **Ready** |
+| `BRIDGE-02` | Structures | A `Structures` area with `Draw Bridge`: a straight horizontal deck authored as its own record, four derived corner posts from the anchor Asset's named Component, and Scene Templates refusing to carry one. [Notes](DESIGN_NOTES.md#bridges-a-straight-span-that-sets-its-own-posts) | **Ready** |
 
 ## Optional Later — Paths and sections
 
@@ -45,7 +47,7 @@ repainting a cell.
 
 | ID | Area | Outcome | Status |
 |---|---|---|---|
-| `BRIDGE-01` | Export contract | Add `asset_profiles[].traversable_surface` so a Prop Asset can offer a walkable surface over water; do not bake a Prop's height into the Terrain cell below it. [Notes](DESIGN_NOTES.md#bridges-the-second-surface-at-one-place) | **Optional / Later** |
+| `BRIDGE-03` | Structures | Selection and reshaping of an existing bridge — both ends, width and height — as editing detail rather than re-authoring. [Notes](DESIGN_NOTES.md#not-in-the-first-slice) | **Optional / Later** |
 | `TPL-01` | Templates | Let a Scene Template carry water instead of refusing it; requires an export-contract answer for a Template's water landing on an Instance's. [Notes](DESIGN_NOTES.md#a-scene-template-cannot-carry-water) | **Optional / Later** |
 | `ID-01` | Documents | Widen the Instance ID pad so IDs keep reading in placement order past 9 999; a document migration, worth doing only if a Scene approaches that many Props of one asset. [Notes](DESIGN_NOTES.md#instance-ids-and-document-ordering) | **Optional / Later** |
 
@@ -65,6 +67,7 @@ reasoning is under [Settled decisions](DESIGN_NOTES.md#settled-decisions).
 | `ASSET-01` | Workspace config | Adding Assets through the application is not planned; an agent edits and validates the Workspace configuration instead. | **Deliberately not planned** |
 | `NAME-01` | Documents | The editor says Placements while internal `Prop*` types and the persisted `props` array stay unchanged; renaming is a migration with no runtime benefit. | **Deliberately left alone** |
 | `TRANS-01` | Documents | Transitions wait for their own simulation-owned target/region contract with a consumer and tests, rather than a second copy of `PropDocument`. | **Deliberately deferred** |
+| `BRIDGE-01` | Export contract | `asset_profiles[].traversable_surface` is not coming: a bridge deck is an independent Path-like surface, so no Prop needs to offer a walkable one. | **Superseded** |
 
 ## Tracker rules
 

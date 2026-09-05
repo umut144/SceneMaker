@@ -77,30 +77,131 @@ A separate grade tool may later distribute a start and end elevation across
 cells in quantum-sized increments. The height view itself should remain
 inspection rather than silently editing the Scene.
 
-## Bridges: the second surface at one place
+## Bridges: a straight span that sets its own posts
 
-`BRIDGE-01`
-
-Deferred by agreement with the world01 runtime, with the shape already settled,
-so it is written down rather than rediscovered.
+`BRIDGE-02`, `BRIDGE-03`
 
 A bridge over a river means one place carries two surfaces: `(water, 0.0)` for
-what swims and `(land, 1.1)` for what walks across. Nothing in the export
+what swims and `(land, 1.125)` for what walks across. Nothing in the export
 resolves that and nothing should — the Actor's domain picks the surface and the
 height difference decides the step, both in the simulation.
 
-What SceneMaker would add when it comes is two additive fields, no schema break
-beyond a version bump:
-
-- `asset_profiles[].traversable_surface` — the surface a Prop Asset offers to
-  something walking on it. Which Props are crossable is then Asset data, not a
-  rule the exporter has to know.
-- Prop heights already exist (`props[].elevation_meters`), so the deck height
-  needs nothing new.
-
-Do not resolve this by baking a Prop's height into the Terrain cell under it.
-That was considered and rejected: it destroys the fact that there is water below,
+Do not resolve it by baking a deck height into the Terrain cell under it. That
+was considered and rejected: it destroys the fact that there is water below,
 and a boat has to be able to pass under the bridge.
+
+### The deck is not a new kind of surface
+
+This entry used to answer the question with `asset_profiles[].traversable_surface`
+on a Prop Asset. That answer is superseded, and by nothing that was built for
+bridges: a Path is already an independently materialized surface with width and
+absolute height that a cut never removes, which is exactly what a deck is. A
+straight bridge is geometrically a Path with two linear points at one height.
+
+So the deck reuses `RouteSurfaceGeometry` and needs no new geometry at all.
+
+### But it is its own authored record
+
+A bridge is nonetheless not stored as a `route_surfaces` entry. A Path carries
+per-segment grade and an additive/subtractive operation; a bridge carries an
+anchor Asset and must have exactly two linear points. Sharing one record would
+force each kind to hold the other's fields and give the two mutually exclusive
+validation rules — the shape this project already rejected once, for water and
+routes, and for the same reason.
+
+The authored record is small, because everything derivable is derived:
+
+```jsonc
+{
+  "bridge_id": "bridge_0001",
+  "asset_key": "planks",             // Terrain role, the deck material
+  "anchor_asset_key": "bridge",      // Placement role, whose anchor_component is the post
+  "start_authoring_px": { "x": 1024, "y": 320 },
+  "end_authoring_px":   { "x": 1536, "y": 320 },
+  "width_meters": 4.0,
+  "elevation_meters": 1.125
+}
+```
+
+Length is not stored: two ends already fix it, and a second source of the same
+truth is one too many. It is a readout in the context bar, like a Path's grade
+report. The deck is horizontal — one height for the whole span — until a case
+needs otherwise.
+
+### The posts are derived, and that is what makes them owned
+
+The four corner posts are not documents. They are computed from the bridge, the
+way water cells are computed from a curve and folded hills from a contour.
+Everything the author expects of them then holds by construction rather than by
+bookkeeping: changing the width moves them, deleting the bridge deletes them,
+moving the whole bridge takes them along. There is no second thing to keep in
+step, no back-reference to validate, and no orphan a delete can leave behind.
+
+Storing them as ordinary Props was considered and rejected. It reads simpler
+until the first edit: a post the author can drag away from its own bridge is a
+bridge with three posts and nothing to notice it. Owning them through a
+`props[].owned_by_bridge_id` back-reference was the alternative, and it buys the
+same behaviour for the price of a cross-reference the document model has
+nowhere else.
+
+What it gives up is deliberate: a single post cannot be nudged. Nobody asked to.
+
+### Where a post comes from
+
+PolyTools exports the post as a Component of the `bridge` Asset, not as an
+Asset of its own. A Prop must never name a Component — `asset_key` is the whole
+of its identity, and a composition rename in PolyTools would then break authored
+maps. The Workspace names it instead, once, on the Asset: config 9's
+`anchor_component`, described above under authoring ownership. The bridge points
+at that Placement, and the part follows from the Asset rather than from the
+document.
+
+For the same reason the bridge takes its editor colour from the `bridge` Asset:
+one Asset, one identity, one colour.
+
+### No snapping, and no angle constraint either
+
+Path points are free in plan and hill anchors snap, and the difference is not
+taste: a contour is read through a raster that asks about cell centres, while a
+route is read as continuous geometry. A deck is the second kind, so it does not
+snap — and grid-aligned ends would buy the simulation nothing, because the deck
+travels as metre-space triangles either way.
+
+Angle snapping was offered and declined. Arbitrarily angled bridges are a
+deliberate property of the authored world, not an accident to be corrected.
+
+Note that `Snap` already means taking a height from the Terrain in the River
+context. A second `Snap` meaning a position would be a trap.
+
+### Occupied means the same thing whoever asks
+
+Derived posts take real space, so the Prop overlap rule reads the resolved
+Scene rather than the authored list: a post blocks a Placement exactly as a
+Placement blocks a post. The draft is `Ready` only when the deck and all four
+posts can be placed, checked by the same call the commit makes — the promise
+the hill draft already makes.
+
+That rule needs the collision regions rather than the visible footprints, which
+is a change to every Placement and therefore its own slice, `PLACE-01`.
+
+### The area is Structures
+
+`Landscape` authors terrain. A bridge is built, and it is the first of a family
+— fences, walls, stairs, ladders — that all describe a span with attachment
+points. It gets its own overview area rather than a fourth seat beside River,
+Path and Hill, because the navigation is deliberately stable and renaming it
+later costs more than naming it now.
+
+`Draw Bridge` offers `Surface`, `Anchor`, `Width`, `Height` and a `Length`
+readout. It deliberately does not offer grade, operation or clearance: a tool
+that greys out half its context bar is a second tool.
+
+### Not in the first slice
+
+A Scene Template cannot carry a bridge yet, for the reason it cannot carry
+water: composition moves Terrain cells and Props and nothing else, so it would
+be lost silently. Refuse it explicitly instead. Selecting and reshaping an
+existing bridge is editing detail and waits, like `PATH-03` does for Paths.
 
 ## A Scene Template cannot carry water
 
@@ -365,6 +466,14 @@ do.
 - **Transitions are not added yet.** They need their own simulation-owned
   target/region contract, not a second copy of `PropDocument`, and should
   arrive only when that contract has a consumer and tests.
+
+- **A Prop will not offer a walkable surface** (`BRIDGE-01`). The field
+  `asset_profiles[].traversable_surface` was the settled answer while a deck
+  could only be a Prop. An independently materialized route surface arrived for
+  unrelated reasons and answers it better: a deck is a surface, not a Prop with
+  a flag. The two facts that made the old entry worth keeping survive in the
+  bridge section above — one place carries two surfaces, and a deck height is
+  never baked into the Terrain cell below it.
 
 - One factory per Scene kind, so `CreateInstance` no longer accepts Template
   parameters it would silently drop (`9c017be`).
