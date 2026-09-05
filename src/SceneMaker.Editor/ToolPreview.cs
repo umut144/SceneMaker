@@ -148,6 +148,37 @@ public sealed record TerrainPreview(
 /// These are pure functions of the Scene and the pointer state; the canvas only
 /// turns the result into rectangles.
 /// </summary>
+/// <summary>
+/// The bridge being drawn. <c>Incomplete</c> means only one end is fixed and
+/// nothing has been asked yet; <c>Ready</c> is a promise, because the same call
+/// the commit makes has already succeeded against this Scene; <c>Blocked</c>
+/// carries the reason, which is usually a corner that cannot stand.
+/// </summary>
+public enum BridgeDraftKind
+{
+    Incomplete,
+    Ready,
+    Blocked,
+}
+
+/// <summary>
+/// What the second click would author. The deck band and the four posts are
+/// both derived here rather than in the Canvas, so what an author sees is what
+/// the placement rule read.
+/// </summary>
+public sealed record BridgeDraftPreview(
+    AuthoringPoint? Start,
+    AuthoringPoint? End,
+    IReadOnlyList<BridgeCorner> Corners,
+    IReadOnlyList<PropBoundsAuthoringPixels> Posts,
+    decimal LengthMeters,
+    BridgeDraftKind Kind,
+    string? Explanation)
+{
+    public static BridgeDraftPreview Empty { get; } = new(
+        null, null, [], [], 0m, BridgeDraftKind.Incomplete, null);
+}
+
 public static class ToolPreviewBuilder
 {
     /// <summary>
@@ -430,6 +461,94 @@ public static class ToolPreviewBuilder
     /// up. A body can therefore be picked and lower nothing, which is why the
     /// canvas draws its outline as well as the cells.</para>
     /// </summary>
+    /// <summary>
+    /// The bridge under the pointer, from the end already fixed. Everything it
+    /// reports comes from the same calls the commit makes: a Ready draft cannot
+    /// then be refused, and a Blocked one says which corner is in the way.
+    /// </summary>
+    public static BridgeDraftPreview BuildBridgeDraft(
+        SceneDocument scene,
+        TerrainDisplayCatalog terrainAssets,
+        PropDisplayCatalog propAssets,
+        EditorTool tool,
+        AuthoringPoint? start,
+        AuthoringPoint? pointer,
+        string? assetKey,
+        string? anchorAssetKey,
+        decimal widthMeters,
+        decimal elevationMeters)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(terrainAssets);
+        ArgumentNullException.ThrowIfNull(propAssets);
+        if (tool != EditorTool.DrawBridge) return BridgeDraftPreview.Empty;
+        if (start is not { } fixedEnd) return BridgeDraftPreview.Empty;
+        if (pointer is not { } end || assetKey is null || anchorAssetKey is null)
+        {
+            return BridgeDraftPreview.Empty with { Start = fixedEnd };
+        }
+
+        // Two ends in one place is not a refusal to show in red; it is a
+        // bridge the author has not finished asking for.
+        if (fixedEnd.X == end.X && fixedEnd.Y == end.Y)
+            return BridgeDraftPreview.Empty with { Start = fixedEnd, End = end };
+
+        var candidate = new BridgeDocument
+        {
+            BridgeId = "bridge_preview",
+            AssetKey = assetKey,
+            AnchorAssetKey = anchorAssetKey,
+            StartAuthoringPx = new AuthoringPixelPosition { X = fixedEnd.X, Y = fixedEnd.Y },
+            EndAuthoringPx = new AuthoringPixelPosition { X = end.X, Y = end.Y },
+            WidthMeters = widthMeters,
+            ElevationMeters = elevationMeters,
+        };
+        var validation = BridgeEditing.ValidateCandidate(
+            scene,
+            terrainAssets,
+            propAssets,
+            fixedEnd.X,
+            fixedEnd.Y,
+            end.X,
+            end.Y,
+            assetKey,
+            anchorAssetKey,
+            widthMeters,
+            elevationMeters);
+
+        IReadOnlyList<BridgeCorner> corners;
+        IReadOnlyList<PropBoundsAuthoringPixels> posts;
+        try
+        {
+            corners = BridgeGeometry.Corners(propAssets.Metrics, candidate);
+            posts = BridgeEditing.PostBounds(propAssets.Metrics, propAssets, candidate);
+        }
+        catch (SceneMakerDocumentException)
+        {
+            // Geometry that cannot be drawn is geometry that cannot be placed,
+            // and the validation above already carries the reason.
+            corners = [];
+            posts = [];
+        }
+
+        var pixelsPerMeter = (double)propAssets.Metrics.AuthoringPixelsPerMeter;
+        var deltaX = (end.X - fixedEnd.X) / pixelsPerMeter;
+        var deltaY = (end.Y - fixedEnd.Y) / pixelsPerMeter;
+        var length = Math.Round(
+            (decimal)Math.Sqrt(deltaX * deltaX + deltaY * deltaY),
+            3,
+            MidpointRounding.AwayFromZero);
+
+        return new BridgeDraftPreview(
+            fixedEnd,
+            end,
+            corners,
+            posts,
+            length,
+            validation.IsValid ? BridgeDraftKind.Ready : BridgeDraftKind.Blocked,
+            validation.Reason);
+    }
+
     public static ElevationRegionEraserPreview BuildElevationRegionEraser(
         SceneDocument scene,
         WorkspaceMetrics metrics,

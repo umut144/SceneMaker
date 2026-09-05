@@ -21,6 +21,7 @@ public sealed class ToolInteraction
     private AuthoringPoint? _pointerAuthoring;
     private TerrainCellCoordinate? _pointerCell;
     private AuthoringPoint? _propLineStart;
+    private AuthoringPoint? _bridgeStart;
     private AuthoringPoint? _propLineEnd;
     private TerrainCellCoordinate? _terrainLineStart;
     private TerrainCellCoordinate? _terrainLineEnd;
@@ -70,6 +71,13 @@ public sealed class ToolInteraction
 
     public IReadOnlyList<GradedRouteDraftPoint> PathDraft => _pathDraft;
     public GradedRouteDraftPoint? PathPendingPoint => _pathPending;
+
+    /// <summary>
+    /// The end a bridge was started from, or null when none is being drawn. A
+    /// bridge has exactly two ends, so one click fixes the first and the next
+    /// finishes it - there is no growing draft to keep.
+    /// </summary>
+    public AuthoringPoint? BridgeStart => _bridgeStart;
 
     /// <summary>The closed hill contour points placed so far.</summary>
     public IReadOnlyList<ElevationRegionDraftPoint> ElevationRegionDraft => _elevationRegionDraft;
@@ -161,6 +169,11 @@ public sealed class ToolInteraction
                 ? null
                 : $"The unfinished Path of {placed} point{Plural(placed)} was discarded.";
         }
+        if (Mode == EditorMode.Bridge && ActiveTool == EditorTool.DrawBridge
+            && _bridgeStart is not null)
+        {
+            return "The bridge start was discarded.";
+        }
         if (Mode == EditorMode.Props && ActiveTool == EditorTool.Line
             && (_propLineStart is not null || _propLineEnd is not null))
         {
@@ -205,6 +218,7 @@ public sealed class ToolInteraction
             _pathPending is not null || _pathDraft.Count > 0,
         EditorMode.ElevationRegion when ActiveTool == EditorTool.DrawElevationRegion =>
             _elevationRegionPending is not null || _elevationRegionDraft.Count > 0,
+        EditorMode.Bridge when ActiveTool == EditorTool.DrawBridge => _bridgeStart is not null,
         EditorMode.Props when ActiveTool == EditorTool.Line =>
             _propLineStart is not null || _propLineEnd is not null,
         _ => false,
@@ -290,6 +304,7 @@ public sealed class ToolInteraction
             EditorMode.Terrain => TerrainPressed(context, authoring, cell),
             EditorMode.River => RiverPressed(context, authoring, cell),
             EditorMode.Path => PathPressed(context, authoring, cell),
+            EditorMode.Bridge => BridgePressed(context, authoring),
             EditorMode.ElevationRegion => ElevationRegionPressed(context, authoring, cell),
             EditorMode.Props => PropPressed(context, authoring),
             EditorMode.Templates => TemplatePressed(context, authoring),
@@ -375,6 +390,14 @@ public sealed class ToolInteraction
             return key == ToolKey.Enter ? FinishRiver(context) : CancelRiverPoint();
         if (Mode == EditorMode.Path && ActiveTool == EditorTool.DrawPath)
             return key == ToolKey.Enter ? FinishPath(context) : CancelPathPoint();
+        if (Mode == EditorMode.Bridge && ActiveTool == EditorTool.DrawBridge)
+        {
+            // There is nothing for Enter to finish: the second click already
+            // does. Escape gives the fixed end back.
+            if (key == ToolKey.Enter || _bridgeStart is null) return ToolOutcome.Idle.Instance;
+            _bridgeStart = null;
+            return new ToolOutcome.Message("The bridge start was discarded.");
+        }
         if (Mode == EditorMode.ElevationRegion && ActiveTool == EditorTool.DrawElevationRegion)
             return key == ToolKey.Enter ? FinishElevationRegion(context) : CancelElevationRegionPoint();
         if (Mode == EditorMode.ElevationRegion && ActiveTool == EditorTool.SelectElevationRegion)
@@ -468,6 +491,107 @@ public sealed class ToolInteraction
         EditorTool.DrawPath => BeginPathPoint(context, authoring, cell),
         _ => ToolOutcome.Idle.Instance,
     };
+
+    private ToolOutcome BridgePressed(
+        ToolContext context,
+        AuthoringPoint authoring) => ActiveTool switch
+    {
+        EditorTool.DrawBridge when EraserEnabled => EraseBridge(context, authoring),
+        EditorTool.DrawBridge => BeginOrFinishBridge(context, authoring),
+        _ => ToolOutcome.Idle.Instance,
+    };
+
+    /// <summary>
+    /// The first click fixes an end, the second builds the bridge. A bridge is
+    /// two ends and nothing else, so there is no Enter to press and nothing
+    /// half-authored to leave behind.
+    /// </summary>
+    private ToolOutcome BeginOrFinishBridge(ToolContext context, AuthoringPoint point)
+    {
+        if (context.Scene.SceneKind != SceneKind.Instance)
+            return new ToolOutcome.Message("Bridge: a Scene Template cannot carry bridges.");
+        if (context.SelectedTerrainAssetKey is null)
+            return new ToolOutcome.Message("Bridge: choose a Surface first.");
+        if (State.BridgeAnchorAssetKey is not { } anchorAssetKey)
+        {
+            return new ToolOutcome.Message(
+                "Bridge: this Workspace has no Placement Asset offering a post.");
+        }
+        if (!IsInsideScene(context, point))
+            return new ToolOutcome.Message("Bridge: an end has to sit inside the Scene.");
+
+        if (_bridgeStart is not { } start)
+        {
+            _bridgeStart = point;
+            return new ToolOutcome.Message("Bridge: start set. Click the other end.");
+        }
+
+        var assetKey = context.SelectedTerrainAssetKey;
+        var width = State.BridgeWidthMeters;
+        var elevation = State.BridgeElevationMeters;
+        var validation = BridgeEditing.ValidateCandidate(
+            context.Scene,
+            context.TerrainAssets,
+            context.PropAssets,
+            start.X,
+            start.Y,
+            point.X,
+            point.Y,
+            assetKey,
+            anchorAssetKey,
+            width,
+            elevation);
+        if (!validation.IsValid)
+            return new ToolOutcome.Message($"Bridge: {validation.Reason}");
+
+        _bridgeStart = null;
+        return new ToolOutcome.Edit(
+            "Draw Bridge",
+            document => BridgeEditing.Place(
+                document,
+                context.TerrainAssets,
+                context.PropAssets,
+                start.X,
+                start.Y,
+                point.X,
+                point.Y,
+                assetKey,
+                anchorAssetKey,
+                width,
+                elevation),
+            Describe: (_, after) => FormattableString.Invariant(
+                $"Bridge '{after.Bridges[^1].BridgeId}' spans {BridgeLengthMeters(context, start, point):0.##} m and set four posts."));
+    }
+
+    private static double BridgeLengthMeters(
+        ToolContext context,
+        AuthoringPoint start,
+        AuthoringPoint end)
+    {
+        var pixelsPerMeter = (double)context.Metrics.AuthoringPixelsPerMeter;
+        var deltaX = (end.X - start.X) / pixelsPerMeter;
+        var deltaY = (end.Y - start.Y) / pixelsPerMeter;
+        return Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
+    }
+
+    /// <summary>
+    /// Erases the whole bridge under the pointer, posts included. There is no
+    /// way to erase a post on its own, because there is no post on its own.
+    /// </summary>
+    private static ToolOutcome EraseBridge(ToolContext context, AuthoringPoint point)
+    {
+        var bridge = BridgeEditing.FindAt(
+            context.Scene,
+            context.Metrics,
+            point.X,
+            point.Y);
+        if (bridge is null) return new ToolOutcome.Message("Bridge Eraser: no bridge here.");
+        var bridgeId = bridge.BridgeId;
+        return new ToolOutcome.Edit(
+            "Bridge Eraser",
+            document => BridgeEditing.Remove(document, bridgeId),
+            Describe: (_, _) => $"Removed bridge '{bridgeId}' and its posts.");
+    }
 
     private ToolOutcome ElevationRegionPressed(
         ToolContext context,
@@ -1653,6 +1777,7 @@ public sealed class ToolInteraction
         ClearRiverDraft();
         ClearPathDraft();
         ClearElevationRegionDraft();
+        _bridgeStart = null;
     }
 
     private void ClearRiverDraft()

@@ -19,6 +19,7 @@ public enum EditorMode
     River,
     Path,
     ElevationRegion,
+    Bridge,
     Props,
     Templates,
 }
@@ -33,6 +34,7 @@ public enum EditorTool
     DrawPath,
     DrawElevationRegion,
     SelectElevationRegion,
+    DrawBridge,
     AnchorPlace,
     AnchorMove,
 }
@@ -64,6 +66,7 @@ public static class EditorToolRegistry
         Define(EditorTool.DrawPath, "Draw Path", "line.svg", EditorMode.Path),
         Define(EditorTool.DrawElevationRegion, "Draw Hill", "mountain.svg", EditorMode.ElevationRegion),
         Define(EditorTool.SelectElevationRegion, "Select Hill", "select.svg", EditorMode.ElevationRegion),
+        Define(EditorTool.DrawBridge, "Draw Bridge", "line.svg", EditorMode.Bridge),
         Define(EditorTool.AnchorMove, "Move Anchor", "move.svg", EditorMode.Templates),
         Define(EditorTool.AnchorPlace, "Place Anchor", string.Empty,
             false, EditorMode.Templates),
@@ -86,6 +89,7 @@ public static class EditorToolRegistry
         EditorMode.River => EditorTool.DrawRiver,
         EditorMode.Path => EditorTool.DrawPath,
         EditorMode.ElevationRegion => EditorTool.DrawElevationRegion,
+        EditorMode.Bridge => EditorTool.DrawBridge,
         EditorMode.Props => EditorTool.Pencil,
         EditorMode.Templates => EditorTool.Selector,
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
@@ -117,6 +121,7 @@ public static class EditorToolRegistry
         EditorMode.River => "River",
         EditorMode.Path => "Path",
         EditorMode.ElevationRegion => "Hill",
+        EditorMode.Bridge => "Bridge",
         // The persisted model and the PolyTools adapter still call these Props,
         // but authors place map content here. Keep that implementation detail
         // out of the tool context while the document contract stays stable.
@@ -162,7 +167,11 @@ public static class TerrainAreaAssets
         TerrainDisplayCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        if (mode == EditorMode.Path) return catalog.Assets;
+
+        // A Path and a bridge deck are independent surfaces over the Terrain,
+        // so either may present any Terrain Asset regardless of how that Asset
+        // is normally authored - planks over a river are not a river.
+        if (mode is EditorMode.Path or EditorMode.Bridge) return catalog.Assets;
         if (EditorToolRegistry.TerrainAuthoringFor(mode) is not { } authoring) return [];
         return catalog.Assets.Where(asset => asset.Authoring == authoring).ToList();
     }
@@ -207,7 +216,7 @@ public static class TerrainAreaAssets
         TerrainDisplayCatalog catalog,
         string? remembered)
     {
-        if (mode != EditorMode.Path
+        if (mode is not (EditorMode.Path or EditorMode.Bridge)
             && EditorToolRegistry.TerrainAuthoringFor(mode) != TerrainAuthoring.Curve)
         {
             return null;
@@ -219,6 +228,37 @@ public static class TerrainAreaAssets
             offered,
             Choose(mode, catalog, remembered),
             Changeable: offered.Count > 1);
+    }
+}
+
+/// <summary>
+/// Which Placement Assets can stand at a bridge corner, and which one is
+/// chosen. Only an Asset that names a part qualifies: setting a Placement used
+/// whole at four corners would set four bridges rather than four posts.
+/// </summary>
+public static class BridgeAnchorAssets
+{
+    public static IReadOnlyList<PropDisplayAsset> Offered(PropDisplayCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        return catalog.Assets.Where(static asset => asset.AnchorComponent is not null).ToList();
+    }
+
+    /// <summary>
+    /// The one to show: the remembered choice while it still qualifies, and
+    /// otherwise the first offered. Null when the Workspace offers none, which
+    /// the field shows rather than papering over.
+    /// </summary>
+    public static string? Choose(PropDisplayCatalog catalog, string? remembered)
+    {
+        var offered = Offered(catalog);
+        if (remembered is not null
+            && offered.Any(asset => string.Equals(
+                asset.AssetKey, remembered, StringComparison.Ordinal)))
+        {
+            return remembered;
+        }
+        return offered.Count == 0 ? null : offered[0].AssetKey;
     }
 }
 
@@ -273,6 +313,31 @@ public sealed class EditorInteractionState
     /// widths a given world uses is that world's business.
     /// </summary>
     public decimal RiverWidthMeters { get; private set; } = DefaultRiverWidthMeters;
+
+    /// <summary>The full deck width of the next bridge, in metres.</summary>
+    public decimal BridgeWidthMeters { get; private set; } = BridgeEditing.DefaultWidthMeters;
+
+    /// <summary>
+    /// The deck height of the next bridge. Directly authored and therefore on
+    /// the Workspace quantum, like every height chosen rather than derived.
+    /// </summary>
+    public decimal BridgeElevationMeters { get; private set; } =
+        SceneDocument.GroundElevationMeters;
+
+    /// <summary>
+    /// The Placement Asset whose named part stands at the next bridge's
+    /// corners. Null until a Workspace offers one, which is a real state: a
+    /// Workspace with no Asset carrying an anchor_component cannot author a
+    /// bridge, and the field says so rather than inventing a post.
+    /// </summary>
+    public string? BridgeAnchorAssetKey { get; private set; }
+
+    public void SetBridgeWidth(decimal widthMeters) => BridgeWidthMeters = widthMeters;
+
+    public void SetBridgeElevation(decimal elevationMeters) =>
+        BridgeElevationMeters = elevationMeters;
+
+    public void SelectBridgeAnchorAsset(string? assetKey) => BridgeAnchorAssetKey = assetKey;
 
     /// <summary>The full width authored onto the next Path point.</summary>
     public decimal PathWidthMeters { get; private set; } = RouteSurfaceEditing.DefaultWidthMeters;
