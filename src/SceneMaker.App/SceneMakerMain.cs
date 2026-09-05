@@ -111,6 +111,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly HBoxContainer _overviewNavigationBar = new();
     private readonly HBoxContainer _contextNavigationBar = new();
     private readonly HBoxContainer _contextMenuBar = new();
+    private readonly HBoxContainer _viewOptionsBar = new();
     private readonly VBoxContainer _toolOptionsBar = new();
     private readonly Button _returnNavigationButton = new();
     private readonly Button _mapNavigationButton = new();
@@ -387,31 +388,31 @@ public sealed partial class SceneMakerMain : Control
         _sectionCutEdit.TooltipText =
             "Use one upper clipping plane or inspect a finite band starting at one elevation.";
         _sectionCutEdit.ItemSelected += SetSectionCut;
-        _contextMenuBar.AddChild(_sectionCutEdit);
+        _viewOptionsBar.AddChild(_sectionCutEdit);
         _sectionElevationLabel.Name = "SectionElevationLabel";
         _sectionElevationLabel.Text = "Start";
         _sectionElevationLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_sectionElevationLabel);
+        _viewOptionsBar.AddChild(_sectionElevationLabel);
         _sectionElevationEdit.Name = "SectionElevation";
         ConfigureElevationInput(_sectionElevationEdit);
         _sectionElevationEdit.TooltipText =
             "Remove geometry strictly above this elevation, then look down on what remains.";
         _sectionElevationEdit.ValueChanged += SetSectionElevation;
-        _contextMenuBar.AddChild(_sectionElevationEdit);
+        _viewOptionsBar.AddChild(_sectionElevationEdit);
         _sectionOffsetLabel.Name = "SectionOffsetLabel";
         _sectionOffsetLabel.Text = "Offset";
         _sectionOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_sectionOffsetLabel);
+        _viewOptionsBar.AddChild(_sectionOffsetLabel);
         _sectionOffsetEdit.Name = "SectionOffset";
         ConfigureSectionOffsetInput(_sectionOffsetEdit);
         _sectionOffsetEdit.TooltipText =
             "Positive height of the inspected band; its upper plane is Start + Offset.";
         _sectionOffsetEdit.ValueChanged += SetSectionOffset;
-        _contextMenuBar.AddChild(_sectionOffsetEdit);
+        _viewOptionsBar.AddChild(_sectionOffsetEdit);
         _waterHeatmapValueLabel.Name = "WaterHeatmapValueLabel";
         _waterHeatmapValueLabel.Text = "Water";
         _waterHeatmapValueLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_waterHeatmapValueLabel);
+        _viewOptionsBar.AddChild(_waterHeatmapValueLabel);
         _waterHeatmapValueEdit.Name = "WaterHeatmapValue";
         _waterHeatmapValueEdit.Text = "Surface";
         _waterHeatmapValueEdit.CustomMinimumSize = new Vector2(130f, 0f);
@@ -425,7 +426,7 @@ public sealed partial class SceneMakerMain : Control
         _waterHeatmapValueEdit.TooltipText =
             "Which boundary of every water span the Heatmap shows. Terrain and Placements "
             + "continue to show their own elevation.";
-        _contextMenuBar.AddChild(_waterHeatmapValueEdit);
+        _viewOptionsBar.AddChild(_waterHeatmapValueEdit);
         _propLineOffsetLabel.Name = "PropLineOffsetLabel";
         _propLineOffsetLabel.Text = "Placement Offset";
         _propLineOffsetLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -626,7 +627,28 @@ public sealed partial class SceneMakerMain : Control
         _canvas.StrokeEnded += EndEditStroke;
         _canvas.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _canvas.SizeFlagsVertical = SizeFlags.ExpandFill;
-        canvasRow.AddChild(_canvas);
+
+        var canvasAndViewOptions = new VBoxContainer
+        {
+            Name = "CanvasAndViewOptions",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        canvasRow.AddChild(canvasAndViewOptions);
+        canvasAndViewOptions.AddChild(_canvas);
+
+        // A second context bar, mirroring the one above the Canvas but living
+        // below it, and reaching only as wide as the Canvas itself: it sits
+        // between the left and right tool columns rather than spanning the
+        // full window. Section and Heatmap are view options, not Landscape
+        // tools, so their parameters no longer share the top bar with
+        // whichever Landscape tool happens to be active; the bar only takes
+        // up room while one of the two views is actually on.
+        _viewOptionsBar.Name = "ViewOptions";
+        _viewOptionsBar.CustomMinimumSize = new Vector2(0f, 38f);
+        _viewOptionsBar.AddThemeFontSizeOverride("font_size", 14);
+        _viewOptionsBar.AddThemeConstantOverride("separation", 8);
+        canvasAndViewOptions.AddChild(_viewOptionsBar);
 
         var toolOptionsPanel = new PanelContainer
         {
@@ -680,6 +702,7 @@ public sealed partial class SceneMakerMain : Control
         _sectionToggle.CustomMinimumSize = new Vector2(42f, 42f);
         _sectionToggle.Toggled += SetSectionEnabled;
         _toolOptionsBar.AddChild(_sectionToggle);
+
         UpdateToolContextLabel();
 
         var footer = new HBoxContainer { Name = "Footer" };
@@ -2267,8 +2290,8 @@ public sealed partial class SceneMakerMain : Control
             || elevationRegionDrawing || elevationRegionPointEditing;
         var sectionActive = _canvas.PresentationMode == CanvasPresentationMode.Section;
         var heatmapActive = _canvas.PresentationMode == CanvasPresentationMode.Heightmap;
-        _toolContextSeparator.Visible =
-            propLineActive || curveActive || sectionActive || heatmapActive;
+        _toolContextSeparator.Visible = propLineActive || curveActive;
+        _viewOptionsBar.Visible = sectionActive || heatmapActive;
         var sectionBetween = _canvas.SectionCutKind == SectionCutKind.Between;
         _sectionCutEdit.Visible = sectionActive;
         _sectionCutEdit.Selected = _sectionCutEdit.GetItemIndex(
@@ -2340,8 +2363,12 @@ public sealed partial class SceneMakerMain : Control
         // Height authors Terrain, Placements and Hills. River carries its own
         // profile and Path derives its points from Start plus Grade, so leaving
         // the general field in either area would offer a number that changes nothing.
+        // Section only changes what is drawn, not what can be authored (see
+        // SceneCanvas's DrawProps), so it stays out of this condition: Height
+        // keeps working - independently of the Section bar's own Start field -
+        // exactly as it did before Section had a bar of its own.
         var elevationRegionHeightEditing = selectedElevationRegion is not null;
-        var elevationActive = !sectionActive && !riverActive && !pathActive
+        var elevationActive = !riverActive && !pathActive
             && (!elevationRegionActive || elevationRegionDrawing || elevationRegionHeightEditing);
         _elevationLabel.Visible = elevationActive;
         _elevationEdit.Visible = elevationActive;
