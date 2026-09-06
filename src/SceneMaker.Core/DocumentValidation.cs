@@ -199,6 +199,22 @@ public static partial class DocumentValidation
                 bridge.EndAuthoringPx,
                 document.SizeCells,
                 metrics.AuthoringPixelsPerTerrainCell);
+
+            // How much span the gaps leave over is a question about metres, so
+            // it can only be asked here. Authoring already refuses it while the
+            // author turns the number; this is for the documents that arrive
+            // some other way. Without it a bridge whose gaps eat the whole span
+            // loads, draws nothing - the Canvas asks for the layout and is told
+            // "none" - and only fails much later, at export, where the reason
+            // is furthest from the scene that carries it.
+            if (BridgeGeometry.PlankDepthMeters(
+                    BridgeGeometry.LengthMeters(metrics, bridge),
+                    bridge.PlankCount,
+                    bridge.PlankGapMeters) <= 0m)
+            {
+                throw new SceneMakerDocumentException(
+                    $"Bridge '{bridge.BridgeId}' leaves no room for a plank between its gaps.");
+            }
         }
 
         foreach (var route in document.RouteSurfaces)

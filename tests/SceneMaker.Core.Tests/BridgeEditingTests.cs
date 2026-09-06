@@ -383,6 +383,32 @@ public sealed class BridgeEditingTests
     }
 
     /// <summary>
+    /// Authoring already refuses a deck the gaps eat whole, so this is about
+    /// the documents that arrive some other way - a hand-edited file, an older
+    /// export. Such a bridge used to load, draw nothing, and fail at export,
+    /// which is the furthest possible place from the number that is wrong.
+    /// </summary>
+    [Fact]
+    public void ABridgeWhoseGapsLeaveNoPlankIsRefusedOnLoad()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Place(workspace, Map(), 320, 320, 640, 320);
+        var edited = scene with
+        {
+            Bridges = [scene.Bridges[0] with { PlankGapMeters = 5m }],
+        };
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            DocumentValidation.ValidateGrid(edited, workspace.Metrics));
+
+        Assert.Contains("leaves no room for a plank", exception.Message, StringComparison.Ordinal);
+
+        // Without the Workspace there are no metres, so the span cannot be
+        // measured and this cannot be the check that catches it.
+        DocumentValidation.Validate(edited);
+    }
+
+    /// <summary>
     /// Composition moves Terrain cells and Props and nothing else, so a
     /// Template holding a bridge would lose it at every Anchor. Refusing to
     /// author one says so out loud instead.
