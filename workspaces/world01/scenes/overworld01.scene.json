@@ -60816,17 +60816,17 @@
       "plank_asset_key": "plank",
       "anchor_asset_key": "post",
       "start_authoring_px": {
-        "x": 1184,
-        "y": 1090
+        "x": 1190,
+        "y": 1089
       },
       "end_authoring_px": {
         "x": 1387,
         "y": 646
       },
-      "width_meters": 4.0,
+      "width_meters": 4.25,
       "elevation_meters": 1.0,
       "plank_count": 12,
-      "plank_gap_meters": 0.1
+      "plank_gap_meters": 0.21
     },
     {
       "bridge_id": "bridge_0002",

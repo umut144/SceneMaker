@@ -185,6 +185,24 @@ public sealed record BridgeDraftPreview(
         null, null, [], [], [], 0m, BridgeDraftKind.Incomplete, null);
 }
 
+/// <summary>
+/// The selected bridge as it currently stands, which during a drag is not
+/// where the document has it. It carries the candidate itself so the Canvas
+/// draws one thing and the commit takes the same thing.
+/// </summary>
+public sealed record BridgeSelectionPreview(
+    BridgeDocument? Bridge,
+    IReadOnlyList<BridgeCorner> Corners,
+    IReadOnlyList<PropBoundsAuthoringPixels> Posts,
+    IReadOnlyList<BridgePlank> Planks,
+    decimal LengthMeters,
+    BridgeDraftKind Kind,
+    string? Explanation)
+{
+    public static BridgeSelectionPreview Empty { get; } = new(
+        null, [], [], [], 0m, BridgeDraftKind.Incomplete, null);
+}
+
 public static class ToolPreviewBuilder
 {
     /// <summary>
@@ -554,6 +572,81 @@ public static class ToolPreviewBuilder
         return new BridgeDraftPreview(
             fixedEnd,
             end,
+            corners,
+            posts,
+            planks,
+            length,
+            validation.IsValid ? BridgeDraftKind.Ready : BridgeDraftKind.Blocked,
+            validation.Reason);
+    }
+
+    /// <summary>
+    /// The selected bridge, moved to where the drag currently has it. Nothing
+    /// is drawn without a selection, and a bridge that is merely selected is
+    /// always Ready - it is already in the document, so the question a draft
+    /// asks does not apply until something moves.
+    /// </summary>
+    public static BridgeSelectionPreview BuildBridgeSelection(
+        SceneDocument scene,
+        PropDisplayCatalog propAssets,
+        EditorTool tool,
+        string? selectedBridgeId,
+        (AuthoringPixelPosition Start, AuthoringPixelPosition End)? dragged)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(propAssets);
+        if (tool != EditorTool.SelectBridge) return BridgeSelectionPreview.Empty;
+        if (selectedBridgeId is null) return BridgeSelectionPreview.Empty;
+        var stored = scene.Bridges.FirstOrDefault(bridge =>
+            string.Equals(bridge.BridgeId, selectedBridgeId, StringComparison.Ordinal));
+        if (stored is null) return BridgeSelectionPreview.Empty;
+
+        var candidate = dragged is { } ends
+            ? stored with { StartAuthoringPx = ends.Start, EndAuthoringPx = ends.End }
+            : stored;
+
+        // Two ends in one place is a drag passing through, not a refusal: it is
+        // drawn as an unfinished move rather than in red.
+        if (candidate.StartAuthoringPx == candidate.EndAuthoringPx)
+            return BridgeSelectionPreview.Empty with { Bridge = candidate };
+
+        var validation = dragged is null
+            ? BridgeValidationResult.Valid
+            : BridgeEditing.ValidateReshape(
+                scene,
+                propAssets,
+                selectedBridgeId,
+                candidate.StartAuthoringPx.X,
+                candidate.StartAuthoringPx.Y,
+                candidate.EndAuthoringPx.X,
+                candidate.EndAuthoringPx.Y,
+                candidate.WidthMeters,
+                candidate.ElevationMeters,
+                candidate.PlankCount,
+                candidate.PlankGapMeters);
+
+        IReadOnlyList<BridgeCorner> corners;
+        IReadOnlyList<PropBoundsAuthoringPixels> posts;
+        IReadOnlyList<BridgePlank> planks;
+        decimal length;
+        try
+        {
+            corners = BridgeGeometry.Corners(propAssets.Metrics, candidate);
+            posts = BridgeEditing.PostBounds(propAssets.Metrics, propAssets, candidate);
+            var layout = BridgeGeometry.Planks(propAssets.Metrics, candidate);
+            planks = layout.Planks;
+            length = layout.LengthMeters;
+        }
+        catch (SceneMakerDocumentException)
+        {
+            corners = [];
+            posts = [];
+            planks = [];
+            length = 0m;
+        }
+
+        return new BridgeSelectionPreview(
+            candidate,
             corners,
             posts,
             planks,

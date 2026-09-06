@@ -274,6 +274,26 @@ public sealed partial class SceneCanvas : Control
         return outcome;
     }
 
+    /// <summary>
+    /// Applies the context bar's bridge numbers to the selected bridge, or
+    /// nothing when none is selected - in which case those numbers stay what
+    /// they were, the defaults for the next bridge.
+    /// </summary>
+    public ToolOutcome ReshapeSelectedBridge()
+    {
+        if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
+        var outcome = _interaction.ReshapeSelectedBridge(context);
+        QueueRedraw();
+        return outcome;
+    }
+
+    /// <summary>The bridge the Select tool currently holds, if any.</summary>
+    public BridgeDocument? SelectedBridge =>
+        _scene is not null && _interaction.SelectedBridgeId is { } bridgeId
+            ? _scene.Document.Bridges.FirstOrDefault(bridge =>
+                string.Equals(bridge.BridgeId, bridgeId, StringComparison.Ordinal))
+            : null;
+
     public ToolOutcome SetSelectedElevationRegionPointMode(ElevationRegionPointMode mode)
     {
         if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
@@ -632,6 +652,7 @@ public sealed partial class SceneCanvas : Control
                 break;
             case EditorMode.Bridge:
                 DrawBridgeToolPreview(document, pan, zoom, heightAuthoringPixels);
+                DrawBridgeSelection(pan, zoom, heightAuthoringPixels);
                 break;
             default:
                 break;
@@ -1091,6 +1112,102 @@ public sealed partial class SceneCanvas : Control
     }
 
     /// <summary>
+    /// The selected bridge, and the drag in progress if there is one. It is
+    /// drawn over the finished bridges rather than instead of them, so a drag
+    /// shows where the bridge would go beside where it still is - which is what
+    /// makes a refused move readable.
+    /// </summary>
+    private void DrawBridgeSelection(Vector2 pan, float zoom, int sceneHeightAuthoringPixels)
+    {
+        if (CurrentContext() is not { } context) return;
+        var preview = _interaction.BridgeSelection(context);
+        if (preview.Bridge is not { } bridge) return;
+
+        var dragging = _interaction.BridgeDrag is not null;
+        var color = preview.Kind switch
+        {
+            BridgeDraftKind.Blocked => InvalidPreviewColor,
+            _ when dragging => ValidPreviewColor,
+            _ => SelectionColor,
+        };
+
+        if (SpanUnit(bridge) is { } unit)
+        {
+            foreach (var plank in preview.Planks)
+            {
+                DrawColoredPolygon(
+                    PlankQuad(plank, unit.X, unit.Y, pan, zoom, sceneHeightAuthoringPixels),
+                    new Color(color.R, color.G, color.B, dragging ? 0.30f : 0.22f));
+            }
+        }
+        if (preview.Corners.Count == 4)
+        {
+            var deck = new[]
+            {
+                CornerScreen(preview.Corners[0], pan, zoom, sceneHeightAuthoringPixels),
+                CornerScreen(preview.Corners[2], pan, zoom, sceneHeightAuthoringPixels),
+                CornerScreen(preview.Corners[3], pan, zoom, sceneHeightAuthoringPixels),
+                CornerScreen(preview.Corners[1], pan, zoom, sceneHeightAuthoringPixels),
+                CornerScreen(preview.Corners[0], pan, zoom, sceneHeightAuthoringPixels),
+            };
+            DrawPolyline(deck, color, 3f);
+        }
+        foreach (var post in preview.Posts)
+        {
+            var rectangle = CanvasRectangle(post, pan, zoom, sceneHeightAuthoringPixels);
+            DrawRect(rectangle, new Color(color.R, color.G, color.B, 0.22f));
+            DrawRect(rectangle, color, filled: false, width: 2f);
+        }
+
+        // The two ends are what an author grabs, so they are drawn as something
+        // grabbable rather than left to be guessed from the deck outline.
+        DrawBridgeEndHandle(bridge.StartAuthoringPx, pan, zoom, sceneHeightAuthoringPixels, color);
+        DrawBridgeEndHandle(bridge.EndAuthoringPx, pan, zoom, sceneHeightAuthoringPixels, color);
+
+        const int LengthFontSize = 12;
+        var caption = preview.Planks.Count == 0
+            ? FormattableString.Invariant($"{preview.LengthMeters:0.##} m")
+            : FormattableString.Invariant(
+                $"{preview.LengthMeters:0.##} m - {preview.Planks.Count} x {preview.Planks[0].DepthMeters:0.###} m");
+        DrawString(
+            ThemeDB.FallbackFont,
+            ScreenOf(bridge.EndAuthoringPx, pan, zoom, sceneHeightAuthoringPixels)
+                + new Vector2(12f, -12f),
+            caption,
+            HorizontalAlignment.Left,
+            width: -1f,
+            fontSize: LengthFontSize,
+            modulate: color);
+    }
+
+    private void DrawBridgeEndHandle(
+        AuthoringPixelPosition position,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        Color color)
+    {
+        const float radius = 6f;
+        var center = ScreenOf(position, pan, zoom, sceneHeightAuthoringPixels);
+        DrawCircle(center, radius, new Color(color.R, color.G, color.B, 0.35f));
+        DrawArc(center, radius, 0f, Mathf.Tau, 24, color, 2f);
+    }
+
+    private static Vector2 ScreenOf(
+        AuthoringPixelPosition position,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels) => pan + new Vector2(
+            position.X * zoom,
+            (sceneHeightAuthoringPixels - position.Y) * zoom);
+
+    private static (double X, double Y)? SpanUnit(BridgeDocument bridge) => SpanUnit(
+        bridge.StartAuthoringPx.X,
+        bridge.StartAuthoringPx.Y,
+        bridge.EndAuthoringPx.X,
+        bridge.EndAuthoringPx.Y);
+
+    /// <summary>
     /// What the second click would author: the planks, the deck outline they
     /// fill, the four posts it would set, and how long it is. Yellow promises
     /// it would be taken, red carries the reason it would not. The planks are
@@ -1239,12 +1356,6 @@ public sealed partial class SceneCanvas : Control
             Corner(-1.0, 1.0),
         ];
     }
-
-    private static (double X, double Y)? SpanUnit(BridgeDocument bridge) => SpanUnit(
-        bridge.StartAuthoringPx.X,
-        bridge.StartAuthoringPx.Y,
-        bridge.EndAuthoringPx.X,
-        bridge.EndAuthoringPx.Y);
 
     /// <summary>
     /// Which way a span points, as a unit vector in authoring pixels - which

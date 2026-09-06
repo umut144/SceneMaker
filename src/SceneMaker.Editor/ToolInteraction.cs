@@ -40,6 +40,16 @@ public sealed class ToolInteraction
     private string? _draggedAnchorId;
     private AuthoringPoint? _draggedAnchorPosition;
 
+    // What a bridge drag is holding. An end drag moves one end, a body drag
+    // moves both by the same offset - which is the whole difference between
+    // reshaping a bridge and carrying it somewhere else.
+    private BridgeEnd? _draggedBridgeEnd;
+    private bool _draggingBridgeBody;
+    private AuthoringPoint? _bridgeDragPointerOrigin;
+    private AuthoringPixelPosition? _bridgeDragStartOrigin;
+    private AuthoringPixelPosition? _bridgeDragEndOrigin;
+    private AuthoringPoint? _bridgeDragPointer;
+
     /// <summary>Mode, tool and the options that combine with them.</summary>
     public EditorInteractionState State { get; } = new();
 
@@ -51,6 +61,39 @@ public sealed class ToolInteraction
     public string? SelectedTemplateAnchorId { get; private set; }
     public string? SelectedElevationRegionId { get; private set; }
     public int? SelectedElevationRegionPointIndex { get; private set; }
+    public string? SelectedBridgeId { get; private set; }
+
+    /// <summary>
+    /// Where the selected bridge's two ends currently sit while it is being
+    /// dragged, or null when nothing is being dragged. The Canvas asks for this
+    /// rather than reading the document, because during a drag the document
+    /// still holds where the bridge was.
+    /// </summary>
+    public (AuthoringPixelPosition Start, AuthoringPixelPosition End)? BridgeDrag
+    {
+        get
+        {
+            if (_bridgeDragStartOrigin is not { } start
+                || _bridgeDragEndOrigin is not { } end
+                || _bridgeDragPointerOrigin is not { } origin
+                || _bridgeDragPointer is not { } pointer)
+            {
+                return null;
+            }
+            var deltaX = pointer.X - origin.X;
+            var deltaY = pointer.Y - origin.Y;
+            if (_draggingBridgeBody)
+            {
+                return (Offset(start, deltaX, deltaY), Offset(end, deltaX, deltaY));
+            }
+            return _draggedBridgeEnd == BridgeEnd.Start
+                ? (Offset(start, deltaX, deltaY), end)
+                : (start, Offset(end, deltaX, deltaY));
+        }
+    }
+
+    private static AuthoringPixelPosition Offset(AuthoringPixelPosition position, int x, int y) =>
+        new() { X = position.X + x, Y = position.Y + y };
 
     public AuthoringPoint? PointerAuthoring => _pointerAuthoring;
     public TerrainCellCoordinate? PointerCell => _pointerCell;
@@ -192,6 +235,8 @@ public sealed class ToolInteraction
         SelectedTemplateAnchorId = null;
         SelectedElevationRegionId = null;
         SelectedElevationRegionPointIndex = null;
+        SelectedBridgeId = null;
+        ClearBridgeDrag();
     }
 
     public void PointerMoved(AuthoringPoint authoring, TerrainCellCoordinate cell)
@@ -345,6 +390,10 @@ public sealed class ToolInteraction
             case EditorMode.ElevationRegion when ActiveTool == EditorTool.SelectElevationRegion
                                           && _draggedElevationRegionPointIndex is not null:
                 return DragSelectedElevationRegionPoint(context, authoring);
+            case EditorMode.Bridge when ActiveTool == EditorTool.SelectBridge
+                                        && _bridgeDragPointerOrigin is not null:
+                _bridgeDragPointer = authoring;
+                return ToolOutcome.Idle.Instance;
             case EditorMode.Props when ActiveTool == EditorTool.Pencil && EraserEnabled:
                 return EraseProp(context, authoring, PropEraseStroke);
             case EditorMode.Templates when ActiveTool == EditorTool.AnchorMove
@@ -375,6 +424,8 @@ public sealed class ToolInteraction
         if (_draggedElevationRegionHandleSide is not null) return FinishElevationRegionHandleMove(context);
         if (_draggedElevationRegionPointIndex is not null) return FinishElevationRegionPointMove(context);
 
+        if (_bridgeDragPointerOrigin is not null) return FinishBridgeDrag(context);
+
         if (_draggedAnchorId is { } anchorId && _draggedAnchorPosition is { } position)
         {
             ClearAnchorDrag();
@@ -400,6 +451,14 @@ public sealed class ToolInteraction
         }
         if (Mode == EditorMode.ElevationRegion && ActiveTool == EditorTool.DrawElevationRegion)
             return key == ToolKey.Enter ? FinishElevationRegion(context) : CancelElevationRegionPoint();
+        if (Mode == EditorMode.Bridge && ActiveTool == EditorTool.SelectBridge)
+        {
+            if (key == ToolKey.Enter) return ToolOutcome.Idle.Instance;
+            if (SelectedBridgeId is null) return ToolOutcome.Idle.Instance;
+            SelectedBridgeId = null;
+            ClearBridgeDrag();
+            return new ToolOutcome.Message("Bridge selection cleared.");
+        }
         if (Mode == EditorMode.ElevationRegion && ActiveTool == EditorTool.SelectElevationRegion)
         {
             if (key == ToolKey.Enter) return ToolOutcome.Idle.Instance;
@@ -496,6 +555,7 @@ public sealed class ToolInteraction
         ToolContext context,
         AuthoringPoint authoring) => ActiveTool switch
     {
+        EditorTool.SelectBridge => SelectOrGrabBridge(context, authoring),
         EditorTool.DrawBridge when EraserEnabled => EraseBridge(context, authoring),
         EditorTool.DrawBridge => BeginOrFinishBridge(context, authoring),
         _ => ToolOutcome.Idle.Instance,
@@ -564,6 +624,201 @@ public sealed class ToolInteraction
                 plankGap),
             Describe: (_, after) => FormattableString.Invariant(
                 $"Bridge '{after.Bridges[^1].BridgeId}' spans {BridgeLengthMeters(context, start, point):0.##} m on {plankCount} planks and set four posts."));
+    }
+
+    /// <summary>
+    /// One press does all three: grabbing an end of the selected bridge,
+    /// grabbing its deck to carry the whole thing, or choosing a different
+    /// bridge. Ends are tested before decks so a corner stays reachable where
+    /// two bridges meet, and pressing empty ground clears the selection - the
+    /// same answer every other selection tool gives.
+    /// </summary>
+    private ToolOutcome SelectOrGrabBridge(ToolContext context, AuthoringPoint point)
+    {
+        if (SelectedBridgeId is { } selectedId
+            && BridgeEditing.FindEndAt(
+                    context.Scene,
+                    point.X,
+                    point.Y,
+                    context.PointerHitRadiusAuthoringPixels) is { } hit
+            && string.Equals(hit.Bridge.BridgeId, selectedId, StringComparison.Ordinal))
+        {
+            BeginBridgeDrag(hit.Bridge, point, end: hit.End);
+            return ToolOutcome.Idle.Instance;
+        }
+
+        var found = BridgeEditing.FindAt(context.Scene, context.Metrics, point.X, point.Y);
+        if (found is null)
+        {
+            if (SelectedBridgeId is null) return ToolOutcome.Idle.Instance;
+            SelectedBridgeId = null;
+            ClearBridgeDrag();
+            return new ToolOutcome.Message("Bridge selection cleared.");
+        }
+
+        var wasSelected = string.Equals(found.BridgeId, SelectedBridgeId, StringComparison.Ordinal);
+        SelectedBridgeId = found.BridgeId;
+        if (wasSelected)
+        {
+            BeginBridgeDrag(found, point, end: null);
+            return ToolOutcome.Idle.Instance;
+        }
+        return new ToolOutcome.Message(
+            FormattableString.Invariant(
+                $"Selected '{found.BridgeId}': {found.PlankCount} planks, {found.WidthMeters:0.##} m wide at {found.ElevationMeters:0.###} m."));
+    }
+
+    private void BeginBridgeDrag(BridgeDocument bridge, AuthoringPoint point, BridgeEnd? end)
+    {
+        _draggedBridgeEnd = end;
+        _draggingBridgeBody = end is null;
+        _bridgeDragPointerOrigin = point;
+        _bridgeDragPointer = point;
+        _bridgeDragStartOrigin = bridge.StartAuthoringPx;
+        _bridgeDragEndOrigin = bridge.EndAuthoringPx;
+    }
+
+    private void ClearBridgeDrag()
+    {
+        _draggedBridgeEnd = null;
+        _draggingBridgeBody = false;
+        _bridgeDragPointerOrigin = null;
+        _bridgeDragPointer = null;
+        _bridgeDragStartOrigin = null;
+        _bridgeDragEndOrigin = null;
+    }
+
+    /// <summary>
+    /// Commits what the drag was showing, or says why it cannot be taken. A
+    /// drag that moved nothing is not an edit and leaves no undo step behind.
+    /// </summary>
+    private ToolOutcome FinishBridgeDrag(ToolContext context)
+    {
+        var moved = BridgeDrag;
+        var bridgeId = SelectedBridgeId;
+        var wholeBridge = _draggingBridgeBody;
+        ClearBridgeDrag();
+        if (bridgeId is null || moved is not { } ends) return ToolOutcome.Idle.Instance;
+
+        var stored = context.Scene.Bridges.FirstOrDefault(bridge =>
+            string.Equals(bridge.BridgeId, bridgeId, StringComparison.Ordinal));
+        if (stored is null)
+        {
+            SelectedBridgeId = null;
+            return new ToolOutcome.Message("The selected bridge no longer exists.");
+        }
+        if (stored.StartAuthoringPx == ends.Start && stored.EndAuthoringPx == ends.End)
+            return ToolOutcome.Idle.Instance;
+
+        var validation = BridgeEditing.ValidateReshape(
+            context.Scene,
+            context.PropAssets,
+            bridgeId,
+            ends.Start.X,
+            ends.Start.Y,
+            ends.End.X,
+            ends.End.Y,
+            stored.WidthMeters,
+            stored.ElevationMeters,
+            stored.PlankCount,
+            stored.PlankGapMeters);
+        if (!validation.IsValid)
+            return new ToolOutcome.Message($"Bridge: {validation.Reason}");
+
+        var name = wholeBridge ? "Move Bridge" : "Move Bridge End";
+        return new ToolOutcome.Edit(
+            name,
+            document => BridgeEditing.Reshape(
+                document,
+                context.PropAssets,
+                bridgeId,
+                ends.Start.X,
+                ends.Start.Y,
+                ends.End.X,
+                ends.End.Y,
+                stored.WidthMeters,
+                stored.ElevationMeters,
+                stored.PlankCount,
+                stored.PlankGapMeters),
+            Describe: (_, after) => FormattableString.Invariant(
+                $"{name}: '{bridgeId}' now spans {BridgeGeometry.LengthMeters(context.Metrics, BridgeEditing.Require(after, bridgeId)):0.##} m."));
+    }
+
+    /// <summary>
+    /// Applies the context bar's numbers to the selected bridge. The fields are
+    /// defaults for the next bridge while nothing is selected and edits of that
+    /// one while something is, which is why changing a width puts the bridge
+    /// back through the same validation a fresh one goes through.
+    /// </summary>
+    public ToolOutcome ReshapeSelectedBridge(ToolContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (Mode != EditorMode.Bridge || ActiveTool != EditorTool.SelectBridge
+            || SelectedBridgeId is not { } bridgeId)
+        {
+            return ToolOutcome.Idle.Instance;
+        }
+        var stored = context.Scene.Bridges.FirstOrDefault(bridge =>
+            string.Equals(bridge.BridgeId, bridgeId, StringComparison.Ordinal));
+        if (stored is null)
+        {
+            SelectedBridgeId = null;
+            return ToolOutcome.Idle.Instance;
+        }
+
+        var width = State.BridgeWidthMeters;
+        var elevation = State.BridgeElevationMeters;
+        var plankCount = State.BridgePlankCount;
+        var plankGap = State.BridgePlankGapMeters;
+        if (stored.WidthMeters == width && stored.ElevationMeters == elevation
+            && stored.PlankCount == plankCount && stored.PlankGapMeters == plankGap)
+        {
+            return ToolOutcome.Idle.Instance;
+        }
+
+        var validation = BridgeEditing.ValidateReshape(
+            context.Scene,
+            context.PropAssets,
+            bridgeId,
+            stored.StartAuthoringPx.X,
+            stored.StartAuthoringPx.Y,
+            stored.EndAuthoringPx.X,
+            stored.EndAuthoringPx.Y,
+            width,
+            elevation,
+            plankCount,
+            plankGap);
+        if (!validation.IsValid)
+            return new ToolOutcome.Message($"Bridge: {validation.Reason}");
+
+        return new ToolOutcome.Edit(
+            "Reshape Bridge",
+            document => BridgeEditing.Reshape(
+                document,
+                context.PropAssets,
+                bridgeId,
+                stored.StartAuthoringPx.X,
+                stored.StartAuthoringPx.Y,
+                stored.EndAuthoringPx.X,
+                stored.EndAuthoringPx.Y,
+                width,
+                elevation,
+                plankCount,
+                plankGap),
+            Describe: (_, _) => FormattableString.Invariant(
+                $"Bridge '{bridgeId}': {plankCount} planks, {width:0.##} m wide at {elevation:0.###} m."));
+    }
+
+    /// <summary>What the Canvas draws for the selected bridge, dragged or not.</summary>
+    public BridgeSelectionPreview BridgeSelection(ToolContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return ToolPreviewBuilder.BuildBridgeSelection(
+            context.Scene,
+            context.PropAssets,
+            ActiveTool,
+            SelectedBridgeId,
+            BridgeDrag);
     }
 
     private static double BridgeLengthMeters(
@@ -1780,6 +2035,7 @@ public sealed class ToolInteraction
         ClearRiverDraft();
         ClearPathDraft();
         ClearElevationRegionDraft();
+        ClearBridgeDrag();
         _bridgeStart = null;
     }
 

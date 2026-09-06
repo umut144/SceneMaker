@@ -136,6 +136,10 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     private EditorMode _landscapeArea = EditorMode.River;
     private EditorMode _structuresArea = EditorMode.Bridge;
+
+    // Set while the bridge fields are being filled from a selection, so that
+    // showing a bridge's numbers cannot be mistaken for editing them.
+    private bool _loadingBridgeNumbers;
     private readonly Label _mapDimensionsLabel = new();
     private readonly SpinBox _mapExtensionCellsEdit = new();
     private readonly Label _mapExtensionMetricsLabel = new();
@@ -2217,21 +2221,73 @@ public sealed partial class SceneMakerMain : Control
         input.Value = (double)BridgeEditing.DefaultPlankGapMeters;
     }
 
-    private void SetBridgeWidth(double value) =>
+    private void SetBridgeWidth(double value)
+    {
         _interaction.State.SetBridgeWidth(DecimalOf(value));
+        ApplyBridgeNumbers();
+    }
 
-    private void SetBridgePlankCount(double value) =>
-        _interaction.State.SetBridgePlankCount((int)Math.Round(value, MidpointRounding.AwayFromZero));
+    /// <summary>
+    /// The bridge numbers are defaults for the next bridge while nothing is
+    /// selected, and edits of that one while something is. Nothing distinguishes
+    /// the two cases in the bar itself: the same field means the same thing,
+    /// and what it acts on is whatever is in front of the author.
+    /// </summary>
+    private void ApplyBridgeNumbers()
+    {
+        if (_loadingBridgeNumbers) return;
+        HandleToolOutcome(_canvas.ReshapeSelectedBridge());
+    }
 
-    private void SetBridgePlankGap(double value) =>
+    /// <summary>
+    /// Fills the bridge fields from the selected bridge. Without this the first
+    /// turn of any field would write the defaults over the bridge the author
+    /// had just picked - the fields have to be showing it before they can edit
+    /// it.
+    /// </summary>
+    private void ShowSelectedBridgeNumbers()
+    {
+        if (_canvas.SelectedBridge is not { } bridge) return;
+        _loadingBridgeNumbers = true;
+        try
+        {
+            _bridgeWidthEdit.Value = (double)bridge.WidthMeters;
+            _bridgeElevationEdit.Value = (double)bridge.ElevationMeters;
+            _bridgePlankCountEdit.Value = bridge.PlankCount;
+            _bridgePlankGapEdit.Value = (double)bridge.PlankGapMeters;
+        }
+        finally
+        {
+            _loadingBridgeNumbers = false;
+        }
+        _interaction.State.SetBridgeWidth(bridge.WidthMeters);
+        _interaction.State.SetBridgeElevation(bridge.ElevationMeters);
+        _interaction.State.SetBridgePlankCount(bridge.PlankCount);
+        _interaction.State.SetBridgePlankGap(bridge.PlankGapMeters);
+    }
+
+    private void SetBridgePlankCount(double value)
+    {
+        _interaction.State.SetBridgePlankCount(
+            (int)Math.Round(value, MidpointRounding.AwayFromZero));
+        ApplyBridgeNumbers();
+    }
+
+    private void SetBridgePlankGap(double value)
+    {
         _interaction.State.SetBridgePlankGap(DecimalOf(value));
+        ApplyBridgeNumbers();
+    }
 
     /// <summary>
     /// A directly authored height, so it snaps to the Workspace quantum the
     /// moment it is typed rather than being refused when the bridge is placed.
     /// </summary>
-    private void SetBridgeElevation(double value) =>
+    private void SetBridgeElevation(double value)
+    {
         _interaction.State.SetBridgeElevation(ElevationOf(_bridgeElevationEdit, value));
+        ApplyBridgeNumbers();
+    }
 
     private static void ConfigurePathWidthInput(SpinBox input)
     {
@@ -2665,6 +2721,7 @@ public sealed partial class SceneMakerMain : Control
                 ExecuteSceneCommand(edit);
                 break;
         }
+        if (_interaction.ActiveTool == EditorTool.SelectBridge) ShowSelectedBridgeNumbers();
         UpdateToolContextLabel();
     }
 

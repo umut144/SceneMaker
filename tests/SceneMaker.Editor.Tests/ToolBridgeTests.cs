@@ -227,6 +227,154 @@ public sealed class ToolBridgeTests
         Assert.Equal("stone", session.BridgeKit!.AnchorAssetKey);
     }
 
+    // --- Select Bridge -----------------------------------------------------
+
+    [Fact]
+    public void ClickingADeckSelectsItAndClickingAwayClearsIt()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WithBridge(workspace);
+        var interaction = SelectBridge(workspace);
+
+        var selected = Assert.IsType<ToolOutcome.Message>(
+            interaction.PointerPressed(Context(workspace, scene), Point(480, 320), Cell(15, 10)));
+
+        Assert.Contains("Selected 'bridge_0001'", selected.Text, StringComparison.Ordinal);
+        Assert.Equal("bridge_0001", interaction.SelectedBridgeId);
+
+        var cleared = Assert.IsType<ToolOutcome.Message>(
+            interaction.PointerPressed(Context(workspace, scene), Point(64, 900), Cell(2, 28)));
+
+        Assert.Contains("selection cleared", cleared.Text, StringComparison.Ordinal);
+        Assert.Null(interaction.SelectedBridgeId);
+    }
+
+    /// <summary>
+    /// Pressing the deck of an already selected bridge carries the whole thing:
+    /// both ends move by the same offset, so the bridge arrives the same bridge.
+    /// </summary>
+    [Fact]
+    public void DraggingTheDeckMovesTheWholeBridge()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WithBridge(workspace);
+        var interaction = SelectBridge(workspace);
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(480, 320), Cell(15, 10));
+        interaction.PointerPressed(context, Point(480, 320), Cell(15, 10));
+        interaction.PointerDragged(context, Point(480, 352), Cell(15, 11));
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerReleased(context));
+        var moved = Assert.Single(edit.Apply(scene).Bridges);
+
+        Assert.Equal(352, moved.StartAuthoringPx.Y);
+        Assert.Equal(352, moved.EndAuthoringPx.Y);
+        Assert.Equal(320, moved.StartAuthoringPx.X);
+        Assert.Equal(640, moved.EndAuthoringPx.X);
+    }
+
+    /// <summary>Grabbing one end moves that end and leaves the other where it was.</summary>
+    [Fact]
+    public void DraggingAnEndMovesOnlyThatEnd()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WithBridge(workspace);
+        var interaction = SelectBridge(workspace);
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(480, 320), Cell(15, 10));
+        interaction.PointerPressed(context, Point(640, 320), Cell(20, 10));
+        interaction.PointerDragged(context, Point(640, 416), Cell(20, 13));
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerReleased(context));
+        var moved = Assert.Single(edit.Apply(scene).Bridges);
+
+        Assert.Equal(320, moved.StartAuthoringPx.X);
+        Assert.Equal(320, moved.StartAuthoringPx.Y);
+        Assert.Equal(640, moved.EndAuthoringPx.X);
+        Assert.Equal(416, moved.EndAuthoringPx.Y);
+    }
+
+    /// <summary>A drag that ends where it began is not an edit and leaves no undo step.</summary>
+    [Fact]
+    public void ADragThatMovesNothingIsNotAnEdit()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WithBridge(workspace);
+        var interaction = SelectBridge(workspace);
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(480, 320), Cell(15, 10));
+        interaction.PointerPressed(context, Point(480, 320), Cell(15, 10));
+
+        Assert.IsType<ToolOutcome.Idle>(interaction.PointerReleased(context));
+    }
+
+    [Fact]
+    public void EscapeClearsTheBridgeSelection()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WithBridge(workspace);
+        var interaction = SelectBridge(workspace);
+        interaction.PointerPressed(Context(workspace, scene), Point(480, 320), Cell(15, 10));
+
+        var outcome = Assert.IsType<ToolOutcome.Message>(
+            interaction.KeyPressed(Context(workspace, scene), ToolKey.Escape));
+
+        Assert.Contains("selection cleared", outcome.Text, StringComparison.Ordinal);
+        Assert.Null(interaction.SelectedBridgeId);
+    }
+
+    /// <summary>
+    /// The context bar's numbers edit the selected bridge. Without a selection
+    /// the same numbers stay what they were - defaults for the next bridge.
+    /// </summary>
+    [Fact]
+    public void TheNumbersEditTheSelectedBridgeAndOtherwiseNothing()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WithBridge(workspace);
+        var interaction = SelectBridge(workspace);
+        var context = Context(workspace, scene);
+
+        interaction.State.SetBridgePlankCount(6);
+        Assert.IsType<ToolOutcome.Idle>(interaction.ReshapeSelectedBridge(context));
+
+        interaction.PointerPressed(context, Point(480, 320), Cell(15, 10));
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.ReshapeSelectedBridge(context));
+        var reshaped = Assert.Single(edit.Apply(scene).Bridges);
+
+        Assert.Equal(6, reshaped.PlankCount);
+        Assert.Equal(320, reshaped.StartAuthoringPx.X);
+    }
+
+    /// <summary>
+    /// The selection is drawn from the same call the commit makes, so a drag
+    /// that reads Ready cannot then be refused.
+    /// </summary>
+    [Fact]
+    public void TheSelectionPreviewCarriesThePlanksAndThePosts()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WithBridge(workspace);
+        var interaction = SelectBridge(workspace);
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(480, 320), Cell(15, 10));
+
+        var preview = interaction.BridgeSelection(context);
+
+        Assert.Equal(BridgeDraftKind.Ready, preview.Kind);
+        Assert.Equal("bridge_0001", preview.Bridge!.BridgeId);
+        Assert.Equal(4, preview.Posts.Count);
+        Assert.Equal(BridgeEditing.DefaultPlankCount, preview.Planks.Count);
+        Assert.Equal(10m, preview.LengthMeters);
+    }
+
+    private static ToolInteraction SelectBridge(TestWorkspace workspace)
+    {
+        var interaction = Bridge(workspace);
+        interaction.SelectTool(EditorTool.SelectBridge);
+        return interaction;
+    }
+
     private static BridgeDraftPreview Preview(
         TestWorkspace workspace,
         SceneDocument scene,

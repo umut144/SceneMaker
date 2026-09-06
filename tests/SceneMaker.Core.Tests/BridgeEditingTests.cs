@@ -274,6 +274,115 @@ public sealed class BridgeEditingTests
     }
 
     /// <summary>
+    /// Reshaping keeps the bridge it was: the same id, the same two Assets,
+    /// and posts that follow because they were never stored.
+    /// </summary>
+    [Fact]
+    public void ReshapingMovesTheEndsAndKeepsTheBridge()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Place(workspace, Map(), 320, 320, 640, 320);
+        var before = scene.Bridges[0];
+
+        var after = Assert.Single(BridgeEditing.Reshape(
+            scene,
+            workspace.Props,
+            before.BridgeId,
+            320,
+            352,
+            640,
+            352,
+            before.WidthMeters,
+            before.ElevationMeters,
+            before.PlankCount,
+            before.PlankGapMeters).Bridges);
+
+        Assert.Equal(before.BridgeId, after.BridgeId);
+        Assert.Equal(before.PlankAssetKey, after.PlankAssetKey);
+        Assert.Equal(before.AnchorAssetKey, after.AnchorAssetKey);
+        Assert.Equal(352, after.StartAuthoringPx.Y);
+        Assert.Equal(13m, BridgeGeometry.Corners(workspace.Metrics, after)[0].YMeters);
+    }
+
+    /// <summary>
+    /// A bridge must not be blocked by the posts it is about to give up.
+    /// Without that, nudging an end by one pixel would be refused by the
+    /// bridge's own shadow - the posts it sets today, at the place it is
+    /// leaving.
+    /// </summary>
+    [Fact]
+    public void ABridgeIsNotBlockedByItsOwnPosts()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Place(workspace, Map(), 320, 320, 640, 320);
+        var bridge = scene.Bridges[0];
+
+        var validation = BridgeEditing.ValidateReshape(
+            scene,
+            workspace.Props,
+            bridge.BridgeId,
+            321,
+            320,
+            641,
+            320,
+            bridge.WidthMeters,
+            bridge.ElevationMeters,
+            bridge.PlankCount,
+            bridge.PlankGapMeters);
+
+        Assert.True(validation.IsValid, validation.Reason);
+    }
+
+    /// <summary>
+    /// Another bridge's posts still block, so reshaping is refused for exactly
+    /// the reason placing is.
+    /// </summary>
+    [Fact]
+    public void ReshapingOntoAnotherBridgesPostIsRefused()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Place(workspace, Map(), 320, 320, 640, 320);
+        scene = Place(workspace, scene, 320, 640, 640, 640);
+        var moving = scene.Bridges[0];
+        var blocking = scene.Bridges[1];
+
+        var validation = BridgeEditing.ValidateReshape(
+            scene,
+            workspace.Props,
+            moving.BridgeId,
+            blocking.StartAuthoringPx.X,
+            blocking.StartAuthoringPx.Y,
+            blocking.EndAuthoringPx.X,
+            blocking.EndAuthoringPx.Y,
+            moving.WidthMeters,
+            moving.ElevationMeters,
+            moving.PlankCount,
+            moving.PlankGapMeters);
+
+        Assert.False(validation.IsValid);
+        Assert.Contains("collides", validation.Reason!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The two ends are what an author grabs, so each has to be findable on its
+    /// own - and only within reach, or clicking the deck would grab an end.
+    /// </summary>
+    [Fact]
+    public void AnEndIsFoundOnlyWithinItsGrabRadius()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Place(workspace, Map(), 320, 320, 640, 320);
+
+        var atEnd = BridgeEditing.FindEndAt(scene, 638, 320, 8.0);
+        var midDeck = BridgeEditing.FindEndAt(scene, 480, 320, 8.0);
+
+        Assert.NotNull(atEnd);
+        Assert.Equal(BridgeEnd.End, atEnd!.Value.End);
+        Assert.Equal(scene.Bridges[0].BridgeId, atEnd!.Value.Bridge.BridgeId);
+        Assert.Null(midDeck);
+    }
+
+    /// <summary>
     /// Composition moves Terrain cells and Props and nothing else, so a
     /// Template holding a bridge would lose it at every Anchor. Refusing to
     /// author one says so out loud instead.

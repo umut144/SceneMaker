@@ -17619,140 +17619,140 @@
     {
       "bridge_id": "bridge_0001",
       "plank_asset_key": "plank",
-      "length_meters": 15.256434,
-      "heading_degrees": 294.570221,
+      "length_meters": 15.150869,
+      "heading_degrees": 293.974488,
       "plank_count": 12,
-      "plank_gap_meters": 0.1,
-      "plank_depth_meters": 1.179703,
+      "plank_gap_meters": 0.21,
+      "plank_depth_meters": 1.070072,
       "planks": [
         {
           "plank_id": "bridge_0001.plank_0000",
           "asset_key": "plank",
-          "x_meters": 37.245265,
-          "y_meters": 33.526058,
+          "x_meters": 37.404901,
+          "y_meters": 33.542373,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         },
         {
           "plank_id": "bridge_0001.plank_0001",
           "asset_key": "plank",
-          "x_meters": 37.777376,
-          "y_meters": 32.362229,
+          "x_meters": 37.925033,
+          "y_meters": 32.372738,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         },
         {
           "plank_id": "bridge_0001.plank_0002",
           "asset_key": "plank",
-          "x_meters": 38.309487,
-          "y_meters": 31.198400,
+          "x_meters": 38.445164,
+          "y_meters": 31.203102,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         },
         {
           "plank_id": "bridge_0001.plank_0003",
           "asset_key": "plank",
-          "x_meters": 38.841598,
-          "y_meters": 30.034571,
+          "x_meters": 38.965295,
+          "y_meters": 30.033466,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         },
         {
           "plank_id": "bridge_0001.plank_0004",
           "asset_key": "plank",
-          "x_meters": 39.373709,
-          "y_meters": 28.870743,
+          "x_meters": 39.485427,
+          "y_meters": 28.863831,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         },
         {
           "plank_id": "bridge_0001.plank_0005",
           "asset_key": "plank",
-          "x_meters": 39.905820,
-          "y_meters": 27.706914,
+          "x_meters": 40.005558,
+          "y_meters": 27.694195,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         },
         {
           "plank_id": "bridge_0001.plank_0006",
           "asset_key": "plank",
-          "x_meters": 40.437931,
-          "y_meters": 26.543085,
+          "x_meters": 40.525690,
+          "y_meters": 26.524559,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         },
         {
           "plank_id": "bridge_0001.plank_0007",
           "asset_key": "plank",
-          "x_meters": 40.970042,
-          "y_meters": 25.379256,
+          "x_meters": 41.045821,
+          "y_meters": 25.354924,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         },
         {
           "plank_id": "bridge_0001.plank_0008",
           "asset_key": "plank",
-          "x_meters": 41.502153,
-          "y_meters": 24.215427,
+          "x_meters": 41.565953,
+          "y_meters": 24.185288,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         },
         {
           "plank_id": "bridge_0001.plank_0009",
           "asset_key": "plank",
-          "x_meters": 42.034264,
-          "y_meters": 23.051598,
+          "x_meters": 42.086084,
+          "y_meters": 23.015652,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         },
         {
           "plank_id": "bridge_0001.plank_0010",
           "asset_key": "plank",
-          "x_meters": 42.566375,
-          "y_meters": 21.887769,
+          "x_meters": 42.606215,
+          "y_meters": 21.846017,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         },
         {
           "plank_id": "bridge_0001.plank_0011",
           "asset_key": "plank",
-          "x_meters": 43.098486,
-          "y_meters": 20.723940,
+          "x_meters": 43.126347,
+          "y_meters": 20.676381,
           "elevation_meters": 1.0,
-          "depth_meters": 1.179703,
-          "width_meters": 4.0
+          "depth_meters": 1.070072,
+          "width_meters": 4.25
         }
       ],
       "vertices": [
         {
-          "x_meters": 38.818905,
-          "y_meters": 34.894116,
+          "x_meters": 39.129169,
+          "y_meters": 34.894701,
           "elevation_meters": 1
         },
         {
-          "x_meters": 45.162655,
-          "y_meters": 21.019116,
+          "x_meters": 45.285419,
+          "y_meters": 21.050951,
           "elevation_meters": 1
         },
         {
-          "x_meters": 41.524845,
-          "y_meters": 19.355884,
+          "x_meters": 41.402081,
+          "y_meters": 19.324049,
           "elevation_meters": 1
         },
         {
-          "x_meters": 35.181095,
-          "y_meters": 33.230884,
+          "x_meters": 35.245831,
+          "y_meters": 33.167799,
           "elevation_meters": 1
         }
       ],
@@ -17787,32 +17787,32 @@
           "post_id": "bridge_0001.post_start_left",
           "corner": "start_left",
           "asset_key": "post",
-          "x_meters": 38.818905,
-          "y_meters": 34.894116,
+          "x_meters": 39.129169,
+          "y_meters": 34.894701,
           "elevation_meters": 1.0
         },
         {
           "post_id": "bridge_0001.post_start_right",
           "corner": "start_right",
           "asset_key": "post",
-          "x_meters": 35.181095,
-          "y_meters": 33.230884,
+          "x_meters": 35.245831,
+          "y_meters": 33.167799,
           "elevation_meters": 1.0
         },
         {
           "post_id": "bridge_0001.post_end_left",
           "corner": "end_left",
           "asset_key": "post",
-          "x_meters": 45.162655,
-          "y_meters": 21.019116,
+          "x_meters": 45.285419,
+          "y_meters": 21.050951,
           "elevation_meters": 1.0
         },
         {
           "post_id": "bridge_0001.post_end_right",
           "corner": "end_right",
           "asset_key": "post",
-          "x_meters": 41.524845,
-          "y_meters": 19.355884,
+          "x_meters": 41.402081,
+          "y_meters": 19.324049,
           "elevation_meters": 1.0
         }
       ]
@@ -78622,17 +78622,17 @@
         "plank_asset_key": "plank",
         "anchor_asset_key": "post",
         "start_authoring_px": {
-          "x": 1184,
-          "y": 1090
+          "x": 1190,
+          "y": 1089
         },
         "end_authoring_px": {
           "x": 1387,
           "y": 646
         },
-        "width_meters": 4.0,
+        "width_meters": 4.25,
         "elevation_meters": 1.0,
         "plank_count": 12,
-        "plank_gap_meters": 0.1
+        "plank_gap_meters": 0.21
       },
       {
         "bridge_id": "bridge_0002",
