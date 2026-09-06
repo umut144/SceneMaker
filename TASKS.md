@@ -44,7 +44,8 @@ repainting a cell.
 
 | ID | Area | Outcome | Status |
 |---|---|---|---|
-| `BRIDGE-03` | Structures | Selection and reshaping of an existing bridge — both ends, width and height — as editing detail rather than re-authoring. [Notes](DESIGN_NOTES.md#not-in-the-first-slice) | **Optional / Later** |
+| `BRIDGE-04` | Structures | Let a Scene Template carry a bridge instead of refusing it: composition moves Terrain cells and Props and nothing else today, so a Template's bridge would be lost at every Anchor. Needs the composition rule for an independent band and its posts, and an export-contract answer for a Template's bridge landing on an Instance. [Notes](DESIGN_NOTES.md#not-in-the-first-slice) | **Optional / Later** |
+| `BRIDGE-05` | Structures | Show the author what each end of a selected bridge stands over — the same `ground_at_start` / `ground_at_end` the export ships — so a bridge into the river is visible while it is being drawn, not first in the consumer's error log. [Notes](DESIGN_NOTES.md#what-is-built) | **Optional / Later** |
 | `TPL-01` | Templates | Let a Scene Template carry water instead of refusing it; requires an export-contract answer for a Template's water landing on an Instance's. [Notes](DESIGN_NOTES.md#a-scene-template-cannot-carry-water) | **Optional / Later** |
 | `ID-01` | Documents | Widen the Instance ID pad so IDs keep reading in placement order past 9 999; a document migration, worth doing only if a Scene approaches that many Props of one asset. [Notes](DESIGN_NOTES.md#instance-ids-and-document-ordering) | **Optional / Later** |
 

@@ -49,6 +49,21 @@ public sealed class LayeredSceneColumn
     public IReadOnlyList<LayeredColumnSpan> Surfaces { get; }
 
     /// <summary>
+    /// The same column with everything one source contributed taken out. It
+    /// exists for the question "what lies under this deck's end": asked of the
+    /// full column, the answer is the deck, and the ground beneath it is the
+    /// thing wanted. Terrain has no source and is never removed.
+    /// </summary>
+    public LayeredSceneColumn Without(string sourceId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
+        return new LayeredSceneColumn(
+            TerrainSolids,
+            [.. Fills.Where(span => !StringComparer.Ordinal.Equals(span.SourceId, sourceId))],
+            [.. Surfaces.Where(span => !StringComparer.Ordinal.Equals(span.SourceId, sourceId))]);
+    }
+
+    /// <summary>
     /// Returns the highest boundary visible from above after removing
     /// everything above <paramref name="clipElevationMeters"/>. A null clip is
     /// the ordinary, unlimited top-down view.

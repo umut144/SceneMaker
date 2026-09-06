@@ -27,7 +27,7 @@ public sealed class SceneExportContractTests
             ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(14, root.GetProperty("version").GetInt32());
+        Assert.Equal(15, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             [
@@ -130,7 +130,8 @@ public sealed class SceneExportContractTests
             [
                 "bridge_id", "plank_asset_key", "length_meters", "heading_degrees",
                 "plank_count", "plank_gap_meters", "plank_depth_meters", "planks",
-                "vertices", "triangle_indices", "boundary_edges", "posts",
+                "vertices", "triangle_indices", "boundary_edges", "centerline_samples",
+                "ground_at_start", "ground_at_end", "posts",
             ],
             Keys(bake));
 
@@ -146,6 +147,69 @@ public sealed class SceneExportContractTests
         Assert.Equal(
             ["post_id", "corner", "asset_key", "x_meters", "y_meters", "elevation_meters"],
             Keys(post));
+    }
+
+    /// <summary>
+    /// A deck is a way, and ways have a centerline in this contract already, so
+    /// a bridge carries one in the same shape at the same place: from start to
+    /// end, station 0 to the length, from the flattener that draws a Path's -
+    /// which for a straight span is its two ends and nothing between. The
+    /// planks are what it looks like, not where one may stand, so their count
+    /// has no say in it.
+    ///
+    /// <para>Beneath each end the export says what the Section view would show
+    /// the author there with the deck lifted off: here grass at the start and
+    /// the river at the end. Whether that is within a step is the Actor's
+    /// question, and the map does not answer it.</para>
+    /// </summary>
+    [Fact]
+    public void ABridgeCarriesAPathsCenterlineAndSaysWhatLiesUnderEachEnd()
+    {
+        using var workspace = TestWorkspace.Create();
+        var root = Export(
+            workspace,
+            (scene, ws) => BridgeEditing.Place(
+                WithRiver(scene, ws),
+                ws.Props,
+                128, 128, 128, 32,
+                "portal", "stone",
+                2m, 3m,
+                BridgeEditing.DefaultPlankCount,
+                BridgeEditing.DefaultPlankGapMeters));
+        var bake = Assert.Single(root.GetProperty("bridge_bakes").EnumerateArray());
+
+        var samples = bake.GetProperty("centerline_samples").EnumerateArray().ToList();
+        Assert.Equal(2, samples.Count);
+        Assert.Equal(
+            ["x_meters", "y_meters", "elevation_meters", "width_meters", "station_meters", "authored_point_index"],
+            Keys(samples[0]));
+        Assert.Equal(4m, samples[0].GetProperty("x_meters").GetDecimal());
+        Assert.Equal(4m, samples[0].GetProperty("y_meters").GetDecimal());
+        Assert.Equal(0m, samples[0].GetProperty("station_meters").GetDecimal());
+        Assert.Equal(0, samples[0].GetProperty("authored_point_index").GetInt32());
+        Assert.Equal(1m, samples[1].GetProperty("y_meters").GetDecimal());
+        Assert.Equal(3m, samples[1].GetProperty("station_meters").GetDecimal());
+        Assert.Equal(1, samples[1].GetProperty("authored_point_index").GetInt32());
+        Assert.All(samples, sample =>
+        {
+            Assert.Equal(3m, sample.GetProperty("elevation_meters").GetDecimal());
+            Assert.Equal(2m, sample.GetProperty("width_meters").GetDecimal());
+        });
+        Assert.Equal(
+            bake.GetProperty("length_meters").GetDecimal(),
+            samples[1].GetProperty("station_meters").GetDecimal());
+
+        // The contract Scene's grass lies at the ground default of one metre.
+        var start = bake.GetProperty("ground_at_start");
+        Assert.Equal(["elevation_meters", "asset_key", "source_id"], Keys(start));
+        Assert.Equal(SceneDocument.GroundElevationMeters, start.GetProperty("elevation_meters").GetDecimal());
+        Assert.Equal("grass", start.GetProperty("asset_key").GetString());
+        Assert.Equal(JsonValueKind.Null, start.GetProperty("source_id").ValueKind);
+
+        var end = bake.GetProperty("ground_at_end");
+        Assert.Equal(2m, end.GetProperty("elevation_meters").GetDecimal());
+        Assert.Equal("river", end.GetProperty("asset_key").GetString());
+        Assert.StartsWith("river_", end.GetProperty("source_id").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

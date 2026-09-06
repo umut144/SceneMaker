@@ -294,7 +294,9 @@ that greys out half its context bar is a second tool.
 Scene schema 19 persists the record above. `BridgeGeometry` derives the four
 corners, lays out the planks, and hands the deck quad to `RouteSurfaceGeometry`
 as the two-point chain it is, so a bridge has no idea of a band of its own.
-Export 14 ships the planks beside that quad and the four posts. `BridgeEditing` places,
+Export 14 ships the planks beside that quad and the four posts; export 15 adds
+the deck's `centerline_samples` - the bake had them all along - and what lies
+under each end, see below. `BridgeEditing` places,
 removes and finds one, and answers the draft and the commit with the same call:
 representable numbers, a height on the quantum, two different ends, every
 corner inside the Scene, and all four posts free - of Placements and of the
@@ -304,6 +306,25 @@ whole rather than placed with three posts.
 The occupancy rule is symmetric in both directions now: `PropEditing` reads
 bridge posts too, so a Placement cannot be set into a post that a bridge would
 have refused to set into the Placement.
+
+**A deck is walked by a Path's rule, and the map says what its ends stand
+over.** world01 asked for both, and both were already in the house. The bake
+of a deck is a route bake, so its `centerline_samples` were computed and then
+dropped; export 15 ships them. They come from the shared flattener and not from
+`plank_count`, on world01's own argument, which is also ours: a plank is what a
+deck looks like, and if the count decided where a character may stand, a purely
+visual edit would move the simulation. A straight span flattens to its two
+ends, which is the honest number of samples for a line.
+
+What lies under an end is answered by `LayeredSceneColumns`, the same rule the
+Section view shows the author, with the deck itself lifted out of the column
+(`LayeredSceneColumn.Without`). SceneMaker ships the answer -
+`ground_at_start` / `ground_at_end`: elevation, Asset, source - and does not
+judge it. Whether the ground is within a step of the deck is a property of an
+Actor, and the settled rule that keeps an Actor's collision radius out of a
+corridor's width keeps its step height out of a bridge's end. What SceneMaker
+can still do, later, is show the author the same two answers while the bridge
+is being drawn (`BRIDGE-05`), so a bridge into the river is seen here first.
 
 Export 11 refuses a Scene holding a bridge rather than dropping it, the same
 way export 10 refused an excavating Path. It costs nothing while no tool can

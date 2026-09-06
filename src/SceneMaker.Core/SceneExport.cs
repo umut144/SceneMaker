@@ -13,7 +13,7 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 14;
+    public const int Version = 15;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -30,6 +30,12 @@ public static class SceneExport
     // The Asset a bridge names is plank_asset_key, not deck_asset_key: a deck
     // is the row, and the Asset is the one part it repeats. Export 13 called
     // it after the whole and was never read by a consumer.
+    //
+    // Export 15 gives a bridge deck the centerline a Path already has - the
+    // bake had it all along and 14 dropped it - and says what lies under each
+    // end of the deck, so a consumer can hang its navigation on the same line
+    // it hangs a Path on and tell a bridge that reaches ground from one that
+    // ends over the river. The embedded Scene is unchanged.
     private const int EmbeddedSceneVersion = 15;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -260,8 +266,13 @@ public static class SceneExport
     private static List<ExportBridgeBakeDocument> ExportBridgeBakes(
         SceneDocument scene,
         WorkspaceMetrics metrics,
-        PropDisplayCatalog propAssets) =>
-        scene.Bridges
+        PropDisplayCatalog propAssets)
+    {
+        // Prepared once for every bridge: the same folded Terrain, water and
+        // bands the Section view resolves, so what an author saw under a
+        // deck's end is what the consumer is told is there.
+        var columns = scene.Bridges.Count == 0 ? null : LayeredSceneColumns.Prepare(scene, metrics);
+        return scene.Bridges
             .Select(bridge =>
             {
                 var bake = RouteSurfaceBake.Build(metrics, BridgeGeometry.DeckRoute(bridge));
@@ -291,6 +302,9 @@ public static class SceneExport
                     Vertices = bake.Vertices,
                     TriangleIndices = bake.TriangleIndices,
                     BoundaryEdges = bake.BoundaryEdges,
+                    CenterlineSamples = bake.CenterlineSamples,
+                    GroundAtStart = GroundUnder(columns!, bridge, bridge.StartAuthoringPx),
+                    GroundAtEnd = GroundUnder(columns!, bridge, bridge.EndAuthoringPx),
                     Posts = BridgeGeometry.Corners(metrics, bridge)
                         .Select(corner => new ExportBridgePostDocument
                         {
@@ -305,6 +319,32 @@ public static class SceneExport
                 };
             })
             .ToList();
+    }
+
+    /// <summary>
+    /// What a top-down look at one end of the deck finds once the deck itself
+    /// is taken out of the way: Terrain, water, a Path, or another bridge's
+    /// deck - or nothing, where no Terrain was painted and nothing else lies
+    /// there. Terrain owns no id, so its source is null.
+    /// </summary>
+    private static ExportBridgeGroundDocument? GroundUnder(
+        LayeredSceneColumns columns,
+        BridgeDocument bridge,
+        AuthoringPixelPosition end)
+    {
+        var visible = columns
+            .AtAuthoringPosition(end.X, end.Y)
+            .Without(bridge.BridgeId)
+            .VisibleAt();
+        return visible is null
+            ? null
+            : new ExportBridgeGroundDocument
+            {
+                ElevationMeters = visible.ElevationMeters,
+                AssetKey = visible.AssetKey,
+                SourceId = visible.SourceId,
+            };
+    }
 
     /// <summary>
     /// The stable tail of a post's ID. It uses the dot the way a route segment
@@ -597,7 +637,43 @@ public static class SceneExport
 
         public required IReadOnlyList<int> TriangleIndices { get; init; }
         public required IReadOnlyList<RouteSurfaceBoundaryEdge> BoundaryEdges { get; init; }
+
+        /// <summary>
+        /// The deck's centerline, in the shape a route bake's has, from the
+        /// start end to the end end with the station running 0 to the length.
+        /// It is the same line the same flattener draws for a Path, so a
+        /// consumer walking a Path and a consumer walking a deck follow one
+        /// rule. A straight span flattens to its two ends and nothing between;
+        /// the planks are what it looks like, not where one may stand, and
+        /// their count has no say here.
+        /// </summary>
+        public required IReadOnlyList<RouteSurfaceCenterlineSample> CenterlineSamples { get; init; }
+
+        /// <summary>
+        /// What lies under each end of the deck, or null where nothing does.
+        /// Read from the same columns the Section view shows the author, with
+        /// this deck itself taken out of the column. Whether that ground is
+        /// within a step of the deck is the Actor's question, not the map's,
+        /// so the map says what is there and leaves the comparison to whoever
+        /// knows the Actor.
+        /// </summary>
+        public required ExportBridgeGroundDocument? GroundAtStart { get; init; }
+
+        public required ExportBridgeGroundDocument? GroundAtEnd { get; init; }
         public required List<ExportBridgePostDocument> Posts { get; init; }
+    }
+
+    /// <summary>
+    /// The top-down visible surface at one point: how high it is, which Asset
+    /// it presents, and which authored thing put it there - null for Terrain,
+    /// which nothing individually owns. A consumer reads walkability off the
+    /// Asset's profile, as it does for every other surface.
+    /// </summary>
+    private sealed record ExportBridgeGroundDocument
+    {
+        public required decimal ElevationMeters { get; init; }
+        public required string AssetKey { get; init; }
+        public required string? SourceId { get; init; }
     }
 
     /// <summary>

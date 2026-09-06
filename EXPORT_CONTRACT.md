@@ -5,9 +5,17 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 14**, embedded **scene 15**. A reader must reject any
+Current schemas: **export 15**, embedded **scene 15**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
+
+Export 15 gives a bridge deck the two things a consumer needs to walk it rather
+than merely stand on it. `bridge_bakes` now carries `centerline_samples` in the
+shape and at the place `route_surface_bakes` has them, so a deck is walked by
+the rule a Path is walked by; and `ground_at_start` / `ground_at_end` say what
+lies under each end of the deck, so a bridge that reaches the bank can be told
+from one that ends over the river. The embedded Scene is unchanged: both are
+derived, and nothing an author writes changed.
 
 Export 14 rebuilds the bridge deck. A deck is no longer a material laid over
 the span: it is a row of planks, and a plank is a Placement Asset. The authored
@@ -208,6 +216,34 @@ purpose.
       "boundary_edges": [
         { "start_vertex_index": 0, "end_vertex_index": 1 }
       ],
+      "centerline_samples": [          // same shape as a route bake's
+        {
+          "x_meters": 10.0,            // the start end
+          "y_meters": 10.0,
+          "elevation_meters": 1.125,
+          "width_meters": 4.0,
+          "station_meters": 0.0,
+          "authored_point_index": 0
+        },
+        {
+          "x_meters": 20.0,            // the end end; station = length_meters
+          "y_meters": 10.0,
+          "elevation_meters": 1.125,
+          "width_meters": 4.0,
+          "station_meters": 10.0,
+          "authored_point_index": 1
+        }
+      ],
+      "ground_at_start": {             // what lies under the start end
+        "elevation_meters": 1.0,
+        "asset_key": "grass",
+        "source_id": null              // Terrain owns no id
+      },
+      "ground_at_end": {               // or null where nothing lies there
+        "elevation_meters": 0.5,
+        "asset_key": "river",
+        "source_id": "river_0001"
+      },
       "posts": [
         {
           "post_id": "bridge_0001.post_start_left",
@@ -674,6 +710,48 @@ about bridges alone. In `route_surface_bakes` the
 same field lists **each primitive's** edge loop - one per flattened segment
 quad and one per round join - so a Path's union outline is not the
 concatenation of them, and inner edges are in there too.
+
+**A deck has the centerline a Path has.** `centerline_samples` is the same
+record in the same place as in `route_surface_bakes`, produced by the same
+flattener from `start_authoring_px` to `end_authoring_px`, with
+`station_meters` running from `0` at the start end to `length_meters` at the
+end end. Its density is that flattener's rule and nothing else: a Bezier is
+subdivided until it is straight within tolerance, and a straight span is
+already straight, so a deck flattens to exactly its two ends with nothing
+between. There will never be fewer than those two. `plank_count` has no say in
+it and never will - the planks are what a deck looks like, not where one may
+stand, and a consumer that hangs its graph on the centerline is not moved when
+an author makes twelve planks fourteen. Interpolate between samples the way you
+would on a Path; on a bridge every interpolated value is constant.
+
+**Level, and one width, by definition.** A bridge is a straight level span:
+`elevation_meters` is one number, every corner and every sample sits at it, and
+there is no grade. `width_meters` is one number too, and every sample carries
+it. Read either from one sample or from the record and check the rest against
+it if you like; they cannot differ. Should a bridge ever learn to slope or to
+widen, that is a new export version, and a reader pinned to this one will
+refuse it rather than misread it - which is the point of the pin.
+
+**Under each end, what is there - not whether it is reachable.** `ground_at_start`
+and `ground_at_end` say what a top-down look at that end of the deck finds once
+the deck itself is lifted away: the highest of the painted Terrain, water, a
+Path surface or another bridge's deck at that X/Y, resolved by the same column
+rule the Section view shows the author, at the water-cell resolution that rule
+uses. Each carries the surface's `elevation_meters`, the `asset_key` it
+presents - read walkability off `asset_profiles` exactly as for any surface -
+and the `source_id` of the authored thing that put it there, null for Terrain.
+The whole field is `null` where nothing lies there at all: no Terrain painted,
+no water, no band.
+
+SceneMaker does **not** guarantee that an end meets walkable ground within a
+step, and will not: a step is a property of an Actor, and the same rule that
+keeps a corridor's width out of SceneMaker's judgement (a consumer applies
+collision radius and traversal profile) keeps a step height out of it. An
+author who wants a bridge to be walked onto puts its end over the bank; the
+export says whether they did. Comparing that ground to the deck against an
+Actor's step, and treating a bridge into nothing as the error it is, belongs to
+the consumer, and now has a source to point at when someone asks why a
+character stands where it stands.
 
 **A bridge cuts nothing.** It adds a surface at its own elevation over the
 Terrain it crosses; the Terrain below is untouched and stays walkable, water

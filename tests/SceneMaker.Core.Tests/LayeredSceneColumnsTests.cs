@@ -463,6 +463,47 @@ public sealed class LayeredSceneColumnsTests
         Assert.Equal("river", beside.AssetKey);
     }
 
+    /// <summary>
+    /// Asked what lies under a deck, the full column answers "the deck". Taking
+    /// one source out is what lets the export say what the deck's end stands
+    /// over - the river here, and nothing at all where no Terrain was painted.
+    /// </summary>
+    [Fact]
+    public void AColumnWithoutOneSourceShowsWhatThatSourceCovered()
+    {
+        using var workspace = TestWorkspace.Create();
+        var river = new WaterBodyDocument
+        {
+            WaterBodyId = "river_0001",
+            WaterKind = WaterKind.River,
+            AssetKey = "river",
+            Points =
+            [
+                WaterEditing.Point(0, 96, WaterPointMode.Linear, 2m, 0.5m, 5m, 1m),
+                WaterEditing.Point(384, 96, WaterPointMode.Linear, 2m, 0.5m, 5m, 1m),
+            ],
+        };
+        var scene = BridgeEditing.Place(
+            River(TestScenes.EmptyInstance(sizeCells: 12), river),
+            workspace.Props,
+            192, 32, 192, 352,
+            "portal", "stone",
+            BridgeEditing.DefaultWidthMeters,
+            4m,
+            BridgeEditing.DefaultPlankCount,
+            BridgeEditing.DefaultPlankGapMeters);
+        var bridge = Assert.Single(scene.Bridges);
+        var columns = LayeredSceneColumns.Prepare(scene, workspace.Metrics);
+
+        var overTheRiver = columns.AtWaterCell(12, 5).Without(bridge.BridgeId).VisibleAt();
+        Assert.NotNull(overTheRiver);
+        Assert.Equal("river", overTheRiver.AssetKey);
+        Assert.Equal("river_0001", overTheRiver.SourceId);
+
+        Assert.Null(columns.AtWaterCell(12, 15).Without(bridge.BridgeId).VisibleAt());
+        Assert.NotNull(columns.AtWaterCell(12, 15).VisibleAt());
+    }
+
     [Fact]
     public void APathSurfaceWinsATieWithTerrainAndRoutesUseOrdinalIdsToBreakTheirTie()
     {
