@@ -58,7 +58,14 @@ public static class RouteSurfaceRaster
 
         HashSet<RouteSurfaceRasterCell> cells = [];
         HashSet<RouteSurfaceRasterCut> cuts = [];
-        foreach (var route in scene.RouteSurfaces)
+        // A deck is a level two-point Path in everything but its record, and
+        // the export bakes it through this same route. Rasterizing it here too
+        // is what lets the Section view clip a bridge the way it clips a Path -
+        // gone above the plane, the river visible beneath - from the triangles
+        // the consumer will build, rather than from a second reading of the
+        // span. A deck is additive, so it contributes surface cells and no cuts.
+        var bands = scene.RouteSurfaces.Concat(scene.Bridges.Select(BridgeGeometry.DeckRoute));
+        foreach (var route in bands)
         {
             var bake = RouteSurfaceBake.Build(metrics, route);
             Dictionary<int, PortalPlane> portalPlanes = [];

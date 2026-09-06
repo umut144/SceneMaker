@@ -313,8 +313,19 @@ author one, and it is the one thing that cannot lose a bridge silently.
 
 A Scene Template cannot carry a bridge yet, for the reason it cannot carry
 water: composition moves Terrain cells and Props and nothing else, so it would
-be lost silently. Refuse it explicitly instead. Selecting and reshaping an
-existing bridge is editing detail and waits, like `PATH-03` does for Paths.
+be lost silently. Refuse it explicitly instead.
+
+Selecting and reshaping an existing bridge waited, like `PATH-03` did for
+Paths, and is built now: `Select Bridge` picks a deck or an end, drags either
+end or the whole span, and lets `Planks`, `Gap`, `Width` and `Height` act on
+the selection through the same validation the first click uses.
+
+The Section view sees a deck the way it sees a Path, because that is what a
+deck is geometrically: `RouteSurfaceRaster` samples `BridgeGeometry.DeckRoute`
+beside the authored Paths, from the same triangles the export bakes, so a plane
+above the deck shows the planks' colour and a plane below it shows the river.
+The posts are Placements and stay hidden there like every Placement, by the
+rule in the Section section rather than by an omission.
 
 ## A Scene Template cannot carry water
 
@@ -445,8 +456,8 @@ inclusive band `[Start, Start + Offset]`; moving Start moves the whole band.
 Both values are transient and follow the Workspace elevation quantum.
 
 Its Canvas projection is limited to the contents resolved by
-`LayeredSceneColumns`: Terrain after Hill folding, River cuts and fills, and
-Path surfaces. `RouteSurfaceRaster` samples the same baked triangles used by
+`LayeredSceneColumns`: Terrain after Hill folding, River cuts and fills, Path
+surfaces, and bridge decks as the level two-point Paths they are. `RouteSurfaceRaster` samples the same baked triangles used by
 Canvas and export at water-cell centres, preserving continuous height, stacked
 surfaces and Terrain occlusion. Subtractive intervals contribute cuts from
 their own baked primitives. The existing round-join footprint at an authored
@@ -469,8 +480,9 @@ below the plane; overlapping cuts are merged independently of body order and
 fills survive them. Every span is closed: clipping exactly at a fill bed shows
 the fill over the floor, while clipping exactly at a cut top retains the roof
 boundary as a section face, because only geometry strictly above the plane was
-removed. This shared rule is the foundation for later tunnel, bridge and
-LookDev views; the Godot Canvas must only project its answer.
+removed. This shared rule is the foundation for the tunnel and bridge views,
+which now rest on it, and for a later LookDev view; the Godot Canvas must only
+project its answer.
 
 A Path tunnel is not a new body kind. It is a run of **subtractive Path
 segments** inside the same independently materialized Path that already

@@ -92,6 +92,7 @@ public sealed partial class SceneCanvas : Control
     private TerrainDisplayCatalog? _terrainAssets;
     private BridgeKitResolution? _bridgeKit;
     private PropDisplayCatalog? _propAssets;
+    private IReadOnlyDictionary<string, Color> _propColors = new Dictionary<string, Color>();
     private ToolInteraction _interaction = new();
     private bool _pointerOverCanvas;
     private WaterHeatmapValue _waterHeatmapValue;
@@ -343,6 +344,10 @@ public sealed partial class SceneCanvas : Control
     {
         ArgumentNullException.ThrowIfNull(catalog);
         _propAssets = catalog;
+        var colors = new Dictionary<string, Color>();
+        foreach (var asset in catalog.Assets)
+            colors.Add(asset.AssetKey, Color.FromHtml(asset.Color));
+        _propColors = colors;
         QueueRedraw();
     }
 
@@ -617,7 +622,9 @@ public sealed partial class SceneCanvas : Control
         // Placements are not column-resolved yet. Hiding them in Section is
         // more truthful than painting them over a clipped roof with invented
         // occlusion. Their active tool preview remains below, so the view does
-        // not disable authoring.
+        // not disable authoring. A bridge's posts are Placements and follow the
+        // same rule; its deck does not need one, because the column already
+        // carries it as the surface it is.
         if (PresentationMode != CanvasPresentationMode.Section)
         {
             DrawProps(
@@ -820,6 +827,7 @@ public sealed partial class SceneCanvas : Control
                      .Concat(document.RouteSurfaces.SelectMany(
                          static route => route.Points.Select(
                              static point => point.ElevationMeters)))
+                     .Concat(document.Bridges.Select(static bridge => bridge.ElevationMeters))
                      .Concat(WaterOverlays(document).SelectMany(
                          overlay => overlay.Cells.Select(cell =>
                             PresentationMode == CanvasPresentationMode.Heightmap
@@ -926,8 +934,13 @@ public sealed partial class SceneCanvas : Control
                         SectionElevationMeters,
                         SectionElevationMeters + SectionOffsetMeters)
                     : column.VisibleAt(SectionElevationMeters);
+                // A surface is coloured by whichever catalog enables its Asset.
+                // Terrain, water and Paths name Terrain; a bridge deck names the
+                // plank it is a row of, which is a Placement. The keys are one
+                // namespace, so the first catalog that knows the key is right.
                 if (surface is null
-                    || !_terrainColors.TryGetValue(surface.AssetKey, out var color))
+                    || !(_terrainColors.TryGetValue(surface.AssetKey, out var color)
+                        || _propColors.TryGetValue(surface.AssetKey, out color)))
                 {
                     continue;
                 }

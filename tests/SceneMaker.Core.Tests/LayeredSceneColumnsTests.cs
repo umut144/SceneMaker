@@ -408,6 +408,61 @@ public sealed class LayeredSceneColumnsTests
         Assert.Null(column.VisibleBetween(2.5m, 3m));
     }
 
+    /// <summary>
+    /// A deck is a level two-point Path in everything but its record, so the
+    /// Section clips it like one: gone above the plane, the river visible
+    /// beneath, and the same triangles the export bakes. Before this the
+    /// Section view simply had no bridges in it.
+    /// </summary>
+    [Fact]
+    public void ABridgeDeckIsASurfaceTheSectionClipsLikeAPath()
+    {
+        using var workspace = TestWorkspace.Create();
+        // A river running east along y = 3 m, and a bridge crossing it north
+        // to south at x = 6 m, four metres wide and four metres up.
+        var river = new WaterBodyDocument
+        {
+            WaterBodyId = "river_0001",
+            WaterKind = WaterKind.River,
+            AssetKey = "river",
+            Points =
+            [
+                WaterEditing.Point(0, 96, WaterPointMode.Linear, 2m, 0.5m, 5m, 1m),
+                WaterEditing.Point(384, 96, WaterPointMode.Linear, 2m, 0.5m, 5m, 1m),
+            ],
+        };
+        var scene = BridgeEditing.Place(
+            River(TestScenes.EmptyInstance(sizeCells: 12), river),
+            workspace.Props,
+            192, 32, 192, 352,
+            "portal", "stone",
+            BridgeEditing.DefaultWidthMeters,
+            4m,
+            BridgeEditing.DefaultPlankCount,
+            BridgeEditing.DefaultPlankGapMeters);
+        var bridge = Assert.Single(scene.Bridges);
+        var columns = LayeredSceneColumns.Prepare(scene, workspace.Metrics);
+
+        var underTheDeck = columns.AtWaterCell(12, 5);
+        var deck = underTheDeck.VisibleAt();
+        Assert.NotNull(deck);
+        Assert.Equal(4m, deck.ElevationMeters);
+        Assert.Equal(LayeredColumnSpanKind.IndependentSurface, deck.Kind);
+        Assert.Equal("portal", deck.AssetKey);
+        Assert.Equal(bridge.BridgeId, deck.SourceId);
+
+        // Clip below the deck and the river it crosses is what remains.
+        var beneath = underTheDeck.VisibleAt(3m);
+        Assert.NotNull(beneath);
+        Assert.Equal(2m, beneath.ElevationMeters);
+        Assert.Equal(LayeredColumnSpanKind.IndependentFill, beneath.Kind);
+
+        // Beside the deck the river was never covered.
+        var beside = columns.AtWaterCell(2, 5).VisibleAt();
+        Assert.NotNull(beside);
+        Assert.Equal("river", beside.AssetKey);
+    }
+
     [Fact]
     public void APathSurfaceWinsATieWithTerrainAndRoutesUseOrdinalIdsToBreakTheirTie()
     {
