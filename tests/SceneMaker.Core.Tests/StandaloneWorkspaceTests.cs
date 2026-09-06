@@ -906,29 +906,36 @@ public sealed class StandaloneWorkspaceTests
         Directory.CreateDirectory(importDirectory);
         File.WriteAllText(Path.Combine(importDirectory, "catalog.json"), $$"""
         {
-          "schema_version": 2,
+          "schema_version": {{PolyToolsCatalogImporter.CatalogSchemaVersion}},
           "world_key": "{{worldKey}}",
           "world_name": "Test World",
+          "retired_assets": [],
           "assets": [
             {
               "asset_key": "grass",
+              "asset_id": "asset_grass",
               "display_name": "Grass",
               "asset_type": "terrain",
               "asset_category": "single",
+              "previous_keys": [],
               "runtime_package": "PolyToolsRuntimeExports/grass/manifest.json"
             },
             {
               "asset_key": "portal",
+              "asset_id": "asset_portal",
               "display_name": "Portal",
               "asset_type": "props",
               "asset_category": "single",
+              "previous_keys": [],
               "runtime_package": "PolyToolsRuntimeExports/portal/manifest.json"
             },
             {
               "asset_key": "tree",
+              "asset_id": "asset_tree",
               "display_name": "Tree",
               "asset_type": "props",
               "asset_category": "{{treeCategory}}",
+              "previous_keys": [],
               "runtime_package": "PolyToolsRuntimeExports/tree/manifest.json"
             }
           ]
@@ -1015,6 +1022,7 @@ public sealed class StandaloneWorkspaceTests
         {
           "schema_version": {{schema}},
           "asset_key": "{{assetKey}}",
+          "asset_id": "asset_{{assetKey}}",
           "display_name": "{{assetKey}}",
           "asset_type": "{{assetType}}",
           "asset_category": "{{category}}",

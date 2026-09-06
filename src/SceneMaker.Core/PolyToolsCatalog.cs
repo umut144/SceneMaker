@@ -28,6 +28,7 @@ public enum PolyToolsAssetCategory
 
 public sealed record PolyToolsCatalogAsset(
     string AssetKey,
+    string AssetId,
     PolyToolsAssetCategory Category,
     AssetBoundsMeters BoundsMeters,
     AssetBoundsMeters? CollisionBoundsMeters);
@@ -65,8 +66,8 @@ public static class PolyToolsCatalogImporter
     public const string ImportDirectoryName = "imports";
     public const string PolyToolsDirectoryName = "polytools";
     public const string CatalogFileName = "catalog.json";
-    public const int CatalogSchemaVersion = 2;
-    public const int ManifestSchemaVersion = 20;
+    public const int CatalogSchemaVersion = 3;
+    public const int ManifestSchemaVersion = 21;
 
     /// <summary>
     /// Imports every legacy authoring Asset. Tests for the PolyTools boundary
@@ -192,6 +193,10 @@ public static class PolyToolsCatalogImporter
                 DocumentValidation.ValidateStableId("PolyTools asset_key", key);
                 _ = RequireString(entryObject, "display_name", $"PolyTools asset '{key}'");
                 var assetType = RequireString(entryObject, "asset_type", $"PolyTools asset '{key}'");
+                // Stable across every rename, and never parsed: "asset_N" is the
+                // shape today and not a promise. SceneMaker reads it as an
+                // opaque token, which is the only way it can keep that promise.
+                var assetId = RequireString(entryObject, "asset_id", $"PolyTools asset '{key}'");
                 var category = RequireCategory(entryObject, $"PolyTools asset '{key}'");
                 var runtimePackage = RequireString(
                     entryObject, "runtime_package", $"PolyTools asset '{key}'");
@@ -203,7 +208,7 @@ public static class PolyToolsCatalogImporter
                 }
                 if (!catalogEntries.TryAdd(
                         key,
-                        new CatalogEntry(key, assetType, category, runtimePackage)))
+                        new CatalogEntry(key, assetId, assetType, category, runtimePackage)))
                 {
                     throw new SceneMakerDocumentException(
                         $"PolyTools catalog contains duplicate asset_key '{key}'.");
@@ -245,6 +250,7 @@ public static class PolyToolsCatalogImporter
                     manifest, manifests, new HashSet<string>(StringComparer.Ordinal));
                 assets.Add(entry.AssetKey, new PolyToolsCatalogAsset(
                     entry.AssetKey,
+                    entry.AssetId,
                     entry.Category,
                     bounds,
                     CollisionBounds(manifest)));
@@ -302,9 +308,11 @@ public static class PolyToolsCatalogImporter
         var root = RequireObject(json.RootElement, $"PolyTools manifest '{entry.AssetKey}'");
         RequireManifestSchema(root, $"PolyTools manifest '{entry.AssetKey}'");
         var assetKey = RequireString(root, "asset_key", $"PolyTools manifest '{entry.AssetKey}'");
+        var assetId = RequireString(root, "asset_id", $"PolyTools manifest '{entry.AssetKey}'");
         var assetType = RequireString(root, "asset_type", $"PolyTools manifest '{entry.AssetKey}'");
         var category = RequireCategory(root, $"PolyTools manifest '{entry.AssetKey}'");
         if (!string.Equals(assetKey, entry.AssetKey, StringComparison.Ordinal)
+            || !string.Equals(assetId, entry.AssetId, StringComparison.Ordinal)
             || !string.Equals(assetType, entry.AssetType, StringComparison.Ordinal)
             || category != entry.Category)
         {
@@ -810,6 +818,7 @@ public static class PolyToolsCatalogImporter
 
     private sealed record CatalogEntry(
         string AssetKey,
+        string AssetId,
         string AssetType,
         PolyToolsAssetCategory Category,
         string RuntimePackage);

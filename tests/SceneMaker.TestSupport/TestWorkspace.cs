@@ -137,6 +137,7 @@ public sealed class TestWorkspace : IDisposable
                 + "      \"asset_key\": \"lava\",\n"
                 + "      \"display_name\": \"Lava\",\n"
                 + "      \"asset_type\": \"terrain\",\n"
+                + "      \"asset_id\": \"asset_lava\",\n"
                 + "      \"asset_category\": \"single\",\n"
                 + "      \"runtime_package\": \"PolyToolsRuntimeExports/lava/manifest.json\"\n"
                 + "    }"
@@ -153,11 +154,13 @@ public sealed class TestWorkspace : IDisposable
               "schema_version": {{PolyToolsCatalogImporter.CatalogSchemaVersion}},
               "world_key": "{{worldKey}}",
               "world_name": "Test World",
+              "retired_assets": [],
               "assets": [
                 {
                   "asset_key": "bridge",
                   "display_name": "Bridge",
                   "asset_type": "props",
+                  "asset_id": "asset_bridge",
                   "asset_category": "set",
                   "runtime_package": "PolyToolsRuntimeExports/bridge/manifest.json"
                 },
@@ -165,6 +168,7 @@ public sealed class TestWorkspace : IDisposable
                   "asset_key": "grass",
                   "display_name": "Grass",
                   "asset_type": "terrain",
+                  "asset_id": "asset_grass",
                   "asset_category": "single",
                   "runtime_package": "PolyToolsRuntimeExports/grass/manifest.json"
                 },
@@ -172,6 +176,7 @@ public sealed class TestWorkspace : IDisposable
                   "asset_key": "portal",
                   "display_name": "Portal",
                   "asset_type": "props",
+                  "asset_id": "asset_portal",
                   "asset_category": "single",
                   "runtime_package": "PolyToolsRuntimeExports/portal/manifest.json"
                 },
@@ -179,6 +184,7 @@ public sealed class TestWorkspace : IDisposable
                   "asset_key": "river",
                   "display_name": "River",
                   "asset_type": "terrain",
+                  "asset_id": "asset_river",
                   "asset_category": "single",
                   "runtime_package": "PolyToolsRuntimeExports/river/manifest.json"
                 },
@@ -186,6 +192,7 @@ public sealed class TestWorkspace : IDisposable
                   "asset_key": "sand",
                   "display_name": "Sand",
                   "asset_type": "terrain",
+                  "asset_id": "asset_sand",
                   "asset_category": "single",
                   "runtime_package": "PolyToolsRuntimeExports/sand/manifest.json"
                 },
@@ -193,6 +200,7 @@ public sealed class TestWorkspace : IDisposable
                   "asset_key": "stone",
                   "display_name": "Stone",
                   "asset_type": "props",
+                  "asset_id": "asset_stone",
                   "asset_category": "single",
                   "runtime_package": "PolyToolsRuntimeExports/stone/manifest.json"
                 }{{lava}}
@@ -229,6 +237,7 @@ public sealed class TestWorkspace : IDisposable
             {
               "schema_version": {{PolyToolsCatalogImporter.ManifestSchemaVersion}},
               "asset_key": "bridge",
+              "asset_id": "asset_bridge",
               "display_name": "Bridge",
               "asset_type": "props",
               "asset_category": "set",
@@ -316,6 +325,7 @@ public sealed class TestWorkspace : IDisposable
             {
               "schema_version": {{PolyToolsCatalogImporter.ManifestSchemaVersion}},
               "asset_key": "{{assetKey}}",
+              "asset_id": "asset_{{assetKey}}",
               "display_name": "{{assetKey}}",
               "asset_type": "{{assetType}}",
               "asset_category": "single",

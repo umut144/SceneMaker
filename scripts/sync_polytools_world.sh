@@ -8,7 +8,8 @@ source_catalog="$source_world_dir/catalog.json"
 config_path="$workspace_dir/config.json"
 import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
-current_manifest_schema=20
+current_manifest_schema=21
+current_catalog_schema=3
 current_config_version=12
 
 cleanup() {
@@ -44,8 +45,8 @@ if [[ ! -f "$config_path" ]]; then
   exit 1
 fi
 
-if ! jq -e '
-  .schema_version == 2
+if ! jq -e --argjson current_schema "$current_catalog_schema" '
+  .schema_version == $current_schema
   and (.world_key | type == "string" and length > 0)
   and (.world_name | type == "string")
   and (.assets | type == "array" and length > 0)
@@ -54,9 +55,16 @@ if ! jq -e '
     and (.display_name | type == "string" and length > 0)
     and (.asset_type | type == "string" and length > 0)
     and (.asset_category == "single" or .asset_category == "set" or .asset_category == "palette")
+    and (.asset_id | type == "string" and length > 0)
+    and (.previous_keys | type == "array" and all(.[]; type == "string" and length > 0))
     and (.runtime_package == ("PolyToolsRuntimeExports/" + .asset_key + "/manifest.json"))
   )
   and (([.assets[].asset_key] | unique | length) == ([.assets[].asset_key] | length))
+  # An id that names two Assets would be worse than a name that names none.
+  and (([.assets[].asset_id] | unique | length) == ([.assets[].asset_id] | length))
+  and (.retired_assets | type == "array" and all(.[];
+    (.asset_id | type == "string" and length > 0)
+    and (.last_asset_key | type == "string" and length > 0)))
 ' "$source_catalog" >/dev/null; then
   printf 'ERROR: invalid PolyTools world catalog: %s\n' "$source_catalog" >&2
   exit 1
@@ -164,6 +172,7 @@ validate_manifest() {
       . as $manifest
       | .schema_version == $current_schema
       and .asset_key == $key
+      and (.asset_id | type == "string" and length > 0)
       and .asset_type == $type
       and (.asset_pivot | type == "array" and length == 2
         and all(.[]; type == "number" and isfinite))
