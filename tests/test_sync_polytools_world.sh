@@ -198,7 +198,8 @@ jq -e '.assets == [
     "asset_key": "tree",
     "display_name": "Oak",
     "role": "placement",
-    "color": "#2E7D32"
+    "color": "#2E7D32",
+    "polytools_asset_id": "asset_tree"
   }
 ]' "$workspace/config.json" >/dev/null
 jq -e '[.assets[].asset_key] == ["tree", "leaf"]' \
@@ -232,7 +233,7 @@ if POLYTOOLS_WORLD_DIR="$source_world" \
 fi
 cp "$valid_config" "$workspace/config.json"
 
-jq '.assets[1].asset_key = "missing"' \
+jq '.assets[1].polytools_asset_id = "asset_missing"' \
   "$workspace/config.json" >"$test_root/missing-geometry.json"
 mv "$test_root/missing-geometry.json" "$workspace/config.json"
 if POLYTOOLS_WORLD_DIR="$source_world" \
