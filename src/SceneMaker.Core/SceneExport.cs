@@ -13,15 +13,20 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 12;
+    public const int Version = 13;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
-    // ElevationRegion contours remain folded into Terrain. Embedded scene 13
-    // carries authored bridges, while export 12 adds their derived half: the
-    // deck as the triangles a Path already ships, and the four corner posts
+    // ElevationRegion contours remain folded into Terrain. Embedded scene 14
+    // authors a bridge deck as a Placement repeated along the span - a count
+    // and a gap - and export 13 adds their derived half: the planks laid out,
+    // the deck quad the walking surface is, and the four corner posts, all
     // worked out here rather than by every consumer.
-    private const int EmbeddedSceneVersion = 13;
+    //
+    // Export 13 also widens `surface` on an asset_profile: it is no longer
+    // Terrain-only, because a deck is walked on and is wood while nothing
+    // underneath it can say so.
+    private const int EmbeddedSceneVersion = 14;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -256,10 +261,29 @@ public static class SceneExport
             .Select(bridge =>
             {
                 var bake = RouteSurfaceBake.Build(metrics, BridgeGeometry.DeckRoute(bridge));
+                var layout = BridgeGeometry.Planks(metrics, bridge);
                 return new ExportBridgeBakeDocument
                 {
                     BridgeId = bridge.BridgeId,
-                    AssetKey = bridge.AssetKey,
+                    DeckAssetKey = bridge.DeckAssetKey,
+                    LengthMeters = layout.LengthMeters,
+                    HeadingDegrees = layout.HeadingDegrees,
+                    PlankCount = bridge.PlankCount,
+                    PlankGapMeters = bridge.PlankGapMeters,
+                    PlankDepthMeters = layout.PlankDepthMeters,
+                    Planks = layout.Planks
+                        .Select(plank => new ExportBridgePlankDocument
+                        {
+                            PlankId = FormattableString.Invariant(
+                                $"{bridge.BridgeId}.plank_{plank.Index:0000}"),
+                            AssetKey = bridge.DeckAssetKey,
+                            XMeters = plank.CenterXMeters,
+                            YMeters = plank.CenterYMeters,
+                            ElevationMeters = bridge.ElevationMeters,
+                            DepthMeters = plank.DepthMeters,
+                            WidthMeters = plank.WidthMeters,
+                        })
+                        .ToList(),
                     Vertices = bake.Vertices,
                     TriangleIndices = bake.TriangleIndices,
                     BoundaryEdges = bake.BoundaryEdges,
@@ -411,11 +435,14 @@ public static class SceneExport
         RouteSurfaceEditing.ValidateAssetReferences(scene, terrainAssets);
         WaterEditing.ValidateAssetReferences(scene, terrainAssets);
 
-        // A bridge is only exportable while its anchor Asset is still enabled.
-        // Refusing here rather than writing a post with no model is the same
-        // promise the placement rule already makes.
+        // A bridge is only exportable while both of its Assets are still
+        // enabled. Refusing here rather than writing a post or a plank with no
+        // model is the same promise the placement rule already makes.
         foreach (var bridge in scene.Bridges)
+        {
             _ = propAssets.Resolve(bridge.AnchorAssetKey);
+            _ = propAssets.Resolve(bridge.DeckAssetKey);
+        }
     }
 
     private sealed record ExportDocument
@@ -517,22 +544,79 @@ public static class SceneExport
     /// transition in one place.
     /// </summary>
     /// <summary>
-    /// The runtime half of a bridge: its deck as the same triangles a Path
-    /// ships, and the four posts already worked out. A consumer places what it
-    /// is given rather than rebuilding the corner arithmetic - which is also
-    /// what keeps the two from ever disagreeing.
+    /// The runtime half of a bridge: the planks its deck is built from, the
+    /// quad they add up to, and the four posts, all already worked out. A
+    /// consumer places what it is given rather than redoing the arithmetic -
+    /// which is also what keeps the two from ever disagreeing.
+    ///
+    /// <para>The authored numbers travel beside the laid-out ones on purpose.
+    /// The planks are the authority for what to build; count and gap are there
+    /// so a consumer can say what it was asked for, not so it can lay the deck
+    /// out a second time.</para>
     /// </summary>
     private sealed record ExportBridgeBakeDocument
     {
         public required string BridgeId { get; init; }
 
-        /// <summary>The Terrain Asset whose surface the deck presents.</summary>
-        public required string AssetKey { get; init; }
+        /// <summary>The Placement Asset one plank of this deck is.</summary>
+        public required string DeckAssetKey { get; init; }
 
+        /// <summary>The span, end to end.</summary>
+        public required decimal LengthMeters { get; init; }
+
+        /// <summary>
+        /// Which way the span points, counter-clockwise from +X. Every plank
+        /// and every post shares it; a bridge is straight, so one angle
+        /// describes the whole thing.
+        /// </summary>
+        public required decimal HeadingDegrees { get; init; }
+
+        /// <summary>What was authored: how many planks, and the gap between.</summary>
+        public required int PlankCount { get; init; }
+
+        public required decimal PlankGapMeters { get; init; }
+
+        /// <summary>What that came out as along the span.</summary>
+        public required decimal PlankDepthMeters { get; init; }
+
+        public required List<ExportBridgePlankDocument> Planks { get; init; }
+
+        /// <summary>
+        /// The deck as one quad. It is the walking surface, and because a
+        /// bridge is exactly one quad its boundary_edges is that surface's
+        /// whole outline - unlike a route bake, which lists a loop per
+        /// primitive. The gaps between planks are not holes in it: what a
+        /// simulation walks on is the deck, and the planks are what it looks
+        /// like.
+        /// </summary>
         public required IReadOnlyList<RouteSurfaceBakeVertex> Vertices { get; init; }
+
         public required IReadOnlyList<int> TriangleIndices { get; init; }
         public required IReadOnlyList<RouteSurfaceBoundaryEdge> BoundaryEdges { get; init; }
         public required List<ExportBridgePostDocument> Posts { get; init; }
+    }
+
+    /// <summary>
+    /// One plank, as a box rather than a mesh: where its centre is, how deep
+    /// it runs along the span and how wide across it. A consumer stretches its
+    /// own plank model to those two numbers and turns it by the bridge's
+    /// heading. Derived, so it carries no instance ID from the Scene.
+    /// </summary>
+    private sealed record ExportBridgePlankDocument
+    {
+        public required string PlankId { get; init; }
+        public required string AssetKey { get; init; }
+        public required decimal XMeters { get; init; }
+        public required decimal YMeters { get; init; }
+
+        /// <summary>The deck height this plank's top sits at.</summary>
+        public required decimal ElevationMeters { get; init; }
+
+        /// <summary>Along the span.</summary>
+        public required decimal DepthMeters { get; init; }
+
+        /// <summary>Across it - always the full deck width.</summary>
+        public required decimal WidthMeters { get; init; }
     }
 
     /// <summary>
@@ -627,11 +711,14 @@ public static class SceneExport
         public required string AssetKey { get; init; }
 
         /// <summary>
-        /// The domain this Terrain presents to a simulation - "land", "water",
-        /// and whatever a consumer adds later. Null for everything that is not
-        /// Terrain. It sits here rather than on every cell so that one Asset
-        /// cannot contradict itself, and so a consumer joins it through the
-        /// asset_key it reads for the cell anyway.
+        /// The domain this Asset presents to a simulation - "land", "water",
+        /// "wood", and whatever a consumer adds later. Null when the Asset
+        /// makes no such claim, which is most Placements: a tree is stood
+        /// beside, not walked on. A Placement that is walked on says so here,
+        /// because a bridge deck has no Terrain underneath it to say it for
+        /// it. It sits on the Asset rather than on every cell or instance so
+        /// that one Asset cannot contradict itself, and so a consumer joins it
+        /// through the asset_key it reads anyway.
         /// </summary>
         public string? Surface { get; init; }
 

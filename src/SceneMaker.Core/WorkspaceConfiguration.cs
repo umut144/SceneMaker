@@ -98,7 +98,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 10;
+    public const int Version = 11;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -245,11 +245,6 @@ public static class WorkspaceConfigurationStore
         {
             throw new SceneMakerDocumentException(
                 $"Terrain Asset '{entry.AssetKey}' requires a surface.");
-        }
-        if (!isTerrain && entry.Surface is not null)
-        {
-            throw new SceneMakerDocumentException(
-                $"Placement Asset '{entry.AssetKey}' must not declare a surface.");
         }
         // Asked of the Asset instead of guessed from its surface, so that which
         // tools it offers - and whether it may be painted at all - is authored

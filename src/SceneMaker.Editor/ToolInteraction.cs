@@ -510,8 +510,11 @@ public sealed class ToolInteraction
     {
         if (context.Scene.SceneKind != SceneKind.Instance)
             return new ToolOutcome.Message("Bridge: a Scene Template cannot carry bridges.");
-        if (context.SelectedTerrainAssetKey is null)
-            return new ToolOutcome.Message("Bridge: choose a Surface first.");
+        if (State.BridgeDeckAssetKey is not { } deckAssetKey)
+        {
+            return new ToolOutcome.Message(
+                "Bridge: this Workspace has no Placement Asset to plank a deck with.");
+        }
         if (State.BridgeAnchorAssetKey is not { } anchorAssetKey)
         {
             return new ToolOutcome.Message(
@@ -526,21 +529,23 @@ public sealed class ToolInteraction
             return new ToolOutcome.Message("Bridge: start set. Click the other end.");
         }
 
-        var assetKey = context.SelectedTerrainAssetKey;
         var width = State.BridgeWidthMeters;
         var elevation = State.BridgeElevationMeters;
+        var plankCount = State.BridgePlankCount;
+        var plankGap = State.BridgePlankGapMeters;
         var validation = BridgeEditing.ValidateCandidate(
             context.Scene,
-            context.TerrainAssets,
             context.PropAssets,
             start.X,
             start.Y,
             point.X,
             point.Y,
-            assetKey,
+            deckAssetKey,
             anchorAssetKey,
             width,
-            elevation);
+            elevation,
+            plankCount,
+            plankGap);
         if (!validation.IsValid)
             return new ToolOutcome.Message($"Bridge: {validation.Reason}");
 
@@ -549,18 +554,19 @@ public sealed class ToolInteraction
             "Draw Bridge",
             document => BridgeEditing.Place(
                 document,
-                context.TerrainAssets,
                 context.PropAssets,
                 start.X,
                 start.Y,
                 point.X,
                 point.Y,
-                assetKey,
+                deckAssetKey,
                 anchorAssetKey,
                 width,
-                elevation),
+                elevation,
+                plankCount,
+                plankGap),
             Describe: (_, after) => FormattableString.Invariant(
-                $"Bridge '{after.Bridges[^1].BridgeId}' spans {BridgeLengthMeters(context, start, point):0.##} m and set four posts."));
+                $"Bridge '{after.Bridges[^1].BridgeId}' spans {BridgeLengthMeters(context, start, point):0.##} m on {plankCount} planks and set four posts."));
     }
 
     private static double BridgeLengthMeters(

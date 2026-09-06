@@ -10,9 +10,10 @@ public readonly record struct BridgeValidationResult(bool IsValid, string? Reaso
 
 /// <summary>
 /// Pure document operations for straight level spans. A bridge is authored as
-/// two ends, a width and one height; its deck is the same band a Path is, and
-/// its four posts are derived from those numbers rather than stored, so
-/// nothing can drift away from the bridge that produced it.
+/// two ends, a width, one height and how the deck is planked; the quad it is
+/// walked on is the same band a Path is, and its planks and its four posts are
+/// derived from those numbers rather than stored, so nothing can drift away
+/// from the bridge that produced it.
 /// </summary>
 public static class BridgeEditing
 {
@@ -23,34 +24,44 @@ public static class BridgeEditing
     /// </summary>
     public const decimal DefaultWidthMeters = 4.0m;
 
+    /// <summary>
+    /// A useful first plank count and gap. Twelve planks over a short span
+    /// read as a deck rather than as a fence, and a ten centimetre gap is
+    /// wide enough to see through and narrow enough to walk over.
+    /// </summary>
+    public const int DefaultPlankCount = 12;
+
+    public const decimal DefaultPlankGapMeters = 0.1m;
+
     public static SceneDocument Place(
         SceneDocument scene,
-        TerrainDisplayCatalog terrainAssets,
         PropDisplayCatalog propAssets,
         int startAnchorX,
         int startAnchorY,
         int endAnchorX,
         int endAnchorY,
-        string assetKey,
+        string deckAssetKey,
         string anchorAssetKey,
         decimal widthMeters,
-        decimal elevationMeters)
+        decimal elevationMeters,
+        int plankCount,
+        decimal plankGapMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(terrainAssets);
         ArgumentNullException.ThrowIfNull(propAssets);
         var candidate = Candidate(
-            scene,
             NextBridgeId(scene),
             startAnchorX,
             startAnchorY,
             endAnchorX,
             endAnchorY,
-            assetKey,
+            deckAssetKey,
             anchorAssetKey,
             widthMeters,
-            elevationMeters);
-        var validation = Validate(scene, terrainAssets, propAssets, candidate);
+            elevationMeters,
+            plankCount,
+            plankGapMeters);
+        var validation = Validate(scene, propAssets, candidate);
         if (!validation.IsValid)
             throw new SceneMakerDocumentException(validation.Reason!);
 
@@ -67,37 +78,37 @@ public static class BridgeEditing
     /// </summary>
     public static BridgeValidationResult ValidateCandidate(
         SceneDocument scene,
-        TerrainDisplayCatalog terrainAssets,
         PropDisplayCatalog propAssets,
         int startAnchorX,
         int startAnchorY,
         int endAnchorX,
         int endAnchorY,
-        string assetKey,
+        string deckAssetKey,
         string anchorAssetKey,
         decimal widthMeters,
-        decimal elevationMeters)
+        decimal elevationMeters,
+        int plankCount,
+        decimal plankGapMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(terrainAssets);
         ArgumentNullException.ThrowIfNull(propAssets);
         try
         {
             return Validate(
                 scene,
-                terrainAssets,
                 propAssets,
                 Candidate(
-                    scene,
                     NextBridgeId(scene),
                     startAnchorX,
                     startAnchorY,
                     endAnchorX,
                     endAnchorY,
-                    assetKey,
+                    deckAssetKey,
                     anchorAssetKey,
                     widthMeters,
-                    elevationMeters));
+                    elevationMeters,
+                    plankCount,
+                    plankGapMeters));
         }
         catch (OverflowException)
         {
@@ -152,11 +163,17 @@ public static class BridgeEditing
         ArgumentNullException.ThrowIfNull(propAssets);
         ArgumentNullException.ThrowIfNull(bridge);
         var post = propAssets.Resolve(bridge.AnchorAssetKey);
+
+        // A post Asset that carries no collision region occupies nothing, and
+        // four of them occupy nothing four times over. The bridge still sets
+        // its posts; they just take no space, which is the same answer a
+        // Placement of that Asset gives anywhere else on the map.
         return
         [
             .. BridgeGeometry.Corners(metrics, bridge)
                 .Select(corner => CornerAnchor(metrics, corner))
-                .Select(anchor => PropEditing.CollisionBoundsFor(post, anchor.X, anchor.Y)),
+                .Select(anchor => PropEditing.CollisionBoundsFor(post, anchor.X, anchor.Y))
+                .OfType<PropBoundsAuthoringPixels>(),
         ];
     }
 
@@ -178,24 +195,27 @@ public static class BridgeEditing
     }
 
     private static BridgeDocument Candidate(
-        SceneDocument scene,
         string bridgeId,
         int startAnchorX,
         int startAnchorY,
         int endAnchorX,
         int endAnchorY,
-        string assetKey,
+        string deckAssetKey,
         string anchorAssetKey,
         decimal widthMeters,
-        decimal elevationMeters) => new()
+        decimal elevationMeters,
+        int plankCount,
+        decimal plankGapMeters) => new()
     {
         BridgeId = bridgeId,
-        AssetKey = assetKey,
+        DeckAssetKey = deckAssetKey,
         AnchorAssetKey = anchorAssetKey,
         StartAuthoringPx = new AuthoringPixelPosition { X = startAnchorX, Y = startAnchorY },
         EndAuthoringPx = new AuthoringPixelPosition { X = endAnchorX, Y = endAnchorY },
         WidthMeters = widthMeters,
         ElevationMeters = elevationMeters,
+        PlankCount = plankCount,
+        PlankGapMeters = plankGapMeters,
     };
 
     /// <summary>
@@ -206,14 +226,17 @@ public static class BridgeEditing
     /// </summary>
     private static BridgeValidationResult Validate(
         SceneDocument scene,
-        TerrainDisplayCatalog terrainAssets,
         PropDisplayCatalog propAssets,
         BridgeDocument bridge)
     {
-        _ = terrainAssets.Resolve(bridge.AssetKey);
+        _ = propAssets.Resolve(bridge.DeckAssetKey);
         var metrics = propAssets.Metrics;
         if (bridge.WidthMeters <= 0m)
             return new BridgeValidationResult(false, "A bridge needs a positive width.");
+        if (bridge.PlankCount <= 0)
+            return new BridgeValidationResult(false, "A deck needs at least one plank.");
+        if (bridge.PlankGapMeters < 0m)
+            return new BridgeValidationResult(false, "A gap between planks cannot be negative.");
         if (!metrics.IsElevationAligned(bridge.ElevationMeters))
         {
             return new BridgeValidationResult(
@@ -225,6 +248,21 @@ public static class BridgeEditing
             return new BridgeValidationResult(false, "A bridge needs two different ends.");
 
         _ = propAssets.Resolve(bridge.AnchorAssetKey);
+
+        // Depth is what the gaps leave over, so too many of them - or too wide
+        // - is a deck of nothing. Said here rather than let the layout throw,
+        // because the draft has to be able to explain itself while the author
+        // is still turning the number.
+        var depth = BridgeGeometry.PlankDepthMeters(
+            BridgeGeometry.LengthMeters(metrics, bridge),
+            bridge.PlankCount,
+            bridge.PlankGapMeters);
+        if (depth <= 0m)
+        {
+            return new BridgeValidationResult(
+                false,
+                "The gaps leave no room for a plank; use fewer planks or a smaller gap.");
+        }
 
         var width = metrics.SceneWidthAuthoringPixels(scene);
         var height = metrics.SceneHeightAuthoringPixels(scene);
@@ -242,10 +280,13 @@ public static class BridgeEditing
         List<PropBoundsAuthoringPixels> occupied = [];
         foreach (var prop in scene.Props)
         {
-            occupied.Add(PropEditing.CollisionBoundsFor(
-                propAssets.Resolve(prop.AssetKey),
-                prop.PositionAuthoringPx.X,
-                prop.PositionAuthoringPx.Y));
+            if (PropEditing.CollisionBoundsFor(
+                    propAssets.Resolve(prop.AssetKey),
+                    prop.PositionAuthoringPx.X,
+                    prop.PositionAuthoringPx.Y) is { } bounds)
+            {
+                occupied.Add(bounds);
+            }
         }
         foreach (var existing in scene.Bridges)
             occupied.AddRange(PostBounds(metrics, propAssets, existing));

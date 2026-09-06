@@ -168,10 +168,10 @@ public static class TerrainAreaAssets
     {
         ArgumentNullException.ThrowIfNull(catalog);
 
-        // A Path and a bridge deck are independent surfaces over the Terrain,
-        // so either may present any Terrain Asset regardless of how that Asset
-        // is normally authored - planks over a river are not a river.
-        if (mode is EditorMode.Path or EditorMode.Bridge) return catalog.Assets;
+        // A Path is an independent surface over the Terrain, so it may present
+        // any Terrain Asset regardless of how that Asset is normally authored:
+        // a track over a river is not a river.
+        if (mode is EditorMode.Path) return catalog.Assets;
         if (EditorToolRegistry.TerrainAuthoringFor(mode) is not { } authoring) return [];
         return catalog.Assets.Where(asset => asset.Authoring == authoring).ToList();
     }
@@ -204,7 +204,8 @@ public static class TerrainAreaAssets
     /// property of the body being drawn, beside width and heights, which is why
     /// it belongs in that tool's context bar and not in a second navigation
     /// row. River filters by native curve authoring; an independent Path can
-    /// present any Terrain Asset.</para>
+    /// present any Terrain Asset. Structures shows no Terrain field at all: a
+    /// bridge deck is a row of planks, and a plank is a Placement.</para>
     ///
     /// <para>The field is a choice of <c>asset_key</c>. It never reads or writes
     /// the Asset's runtime <c>surface</c> token, and it does not assume water: a
@@ -216,7 +217,7 @@ public static class TerrainAreaAssets
         TerrainDisplayCatalog catalog,
         string? remembered)
     {
-        if (mode is not (EditorMode.Path or EditorMode.Bridge)
+        if (mode is not EditorMode.Path
             && EditorToolRegistry.TerrainAuthoringFor(mode) != TerrainAuthoring.Curve)
         {
             return null;
@@ -254,6 +255,36 @@ public static class BridgeAnchorAssets
     /// The one to show: the remembered choice while it still qualifies, and
     /// otherwise the first offered. Null when the Workspace offers none, which
     /// the field shows rather than papering over.
+    /// </summary>
+    public static string? Choose(PropDisplayCatalog catalog, string? remembered)
+    {
+        var offered = Offered(catalog);
+        if (remembered is not null
+            && offered.Any(asset => string.Equals(
+                asset.AssetKey, remembered, StringComparison.Ordinal)))
+        {
+            return remembered;
+        }
+        return offered.Count == 0 ? null : offered[0].AssetKey;
+    }
+}
+
+/// <summary>
+/// Which Placement Assets a bridge deck can be built out of, and which one is
+/// chosen. Every enabled Placement qualifies: what makes something a plank is
+/// that a bridge repeats it, not a property the Asset carries.
+/// </summary>
+public static class BridgeDeckAssets
+{
+    public static IReadOnlyList<PropDisplayAsset> Offered(PropDisplayCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        return catalog.Assets;
+    }
+
+    /// <summary>
+    /// The one to show: the remembered choice while it still qualifies, and
+    /// otherwise the first offered. Null when the Workspace offers none.
     /// </summary>
     public static string? Choose(PropDisplayCatalog catalog, string? remembered)
     {
@@ -338,12 +369,35 @@ public sealed class EditorInteractionState
     /// </summary>
     public string? BridgeAnchorAssetKey { get; private set; }
 
+    /// <summary>
+    /// The Placement Asset the next bridge's deck is planked with. Null until
+    /// a Workspace offers one, which the field shows rather than inventing a
+    /// plank to fill the gap.
+    /// </summary>
+    public string? BridgeDeckAssetKey { get; private set; }
+
+    /// <summary>
+    /// How many planks the next deck is laid with, and the gap between two of
+    /// them. Count is what an author names; the depth of a plank is what falls
+    /// out of it once the span is known.
+    /// </summary>
+    public int BridgePlankCount { get; private set; } = BridgeEditing.DefaultPlankCount;
+
+    public decimal BridgePlankGapMeters { get; private set; } =
+        BridgeEditing.DefaultPlankGapMeters;
+
     public void SetBridgeWidth(decimal widthMeters) => BridgeWidthMeters = widthMeters;
 
     public void SetBridgeElevation(decimal elevationMeters) =>
         BridgeElevationMeters = elevationMeters;
 
     public void SelectBridgeAnchorAsset(string? assetKey) => BridgeAnchorAssetKey = assetKey;
+
+    public void SelectBridgeDeckAsset(string? assetKey) => BridgeDeckAssetKey = assetKey;
+
+    public void SetBridgePlankCount(int plankCount) => BridgePlankCount = plankCount;
+
+    public void SetBridgePlankGap(decimal gapMeters) => BridgePlankGapMeters = gapMeters;
 
     /// <summary>The full width authored onto the next Path point.</summary>
     public decimal PathWidthMeters { get; private set; } = RouteSurfaceEditing.DefaultWidthMeters;

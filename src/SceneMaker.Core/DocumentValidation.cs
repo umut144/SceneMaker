@@ -326,12 +326,19 @@ public static partial class DocumentValidation
             previousBridgeId = bridge.BridgeId;
 
             var label = $"Bridge '{bridge.BridgeId}'";
-            if (string.IsNullOrWhiteSpace(bridge.AssetKey))
-                throw new SceneMakerDocumentException($"{label} requires an asset_key.");
+            if (string.IsNullOrWhiteSpace(bridge.DeckAssetKey))
+                throw new SceneMakerDocumentException($"{label} requires a deck_asset_key.");
             if (string.IsNullOrWhiteSpace(bridge.AnchorAssetKey))
                 throw new SceneMakerDocumentException($"{label} requires an anchor_asset_key.");
             if (bridge.WidthMeters <= 0m)
                 throw new SceneMakerDocumentException($"{label} requires a positive width_meters.");
+            if (bridge.PlankCount <= 0)
+                throw new SceneMakerDocumentException($"{label} requires a positive plank_count.");
+            if (bridge.PlankGapMeters < 0m)
+            {
+                throw new SceneMakerDocumentException(
+                    $"{label} requires a plank_gap_meters of zero or more.");
+            }
             if (bridge.StartAuthoringPx is null || bridge.EndAuthoringPx is null)
                 throw new SceneMakerDocumentException($"{label} requires both ends.");
 

@@ -109,7 +109,7 @@ public sealed class TestWorkspace : IDisposable
             $$"""
             {
               "format": "scene_maker_workspace",
-              "version": 10,
+              "version": 11,
               "workspace_key": "{{worldKey}}",
               "grid": {
                 "terrain_cell_meters": 1.0,

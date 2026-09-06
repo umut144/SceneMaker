@@ -1018,10 +1018,11 @@ public sealed partial class SceneCanvas : Control
     /// Terrain steps.
     /// </summary>
     /// <summary>
-    /// Finished bridges: the deck as the band it is, and a post drawn at each
-    /// of its four corners. The posts are derived here, exactly as the
-    /// placement rule derives them, so what an author sees is where a post
-    /// actually stands rather than a second guess at it.
+    /// Finished bridges: the deck as the row of planks it is built from, and a
+    /// post drawn at each of its four corners. Both are derived here, exactly
+    /// as the placement rule and the export derive them, so what an author
+    /// sees is where a plank and a post actually go rather than a second guess
+    /// at it. The gaps show, because the gaps are the thing being authored.
     /// </summary>
     private void DrawBridges(
         SceneDocument document,
@@ -1034,17 +1035,23 @@ public sealed partial class SceneCanvas : Control
         if (_propAssets is null) return;
         foreach (var bridge in document.Bridges)
         {
-            if (!_terrainColors.TryGetValue(bridge.AssetKey, out var deckColor)) continue;
-            var color = highlighted
+            if (SpanUnit(bridge) is not { } unit) continue;
+            if (BridgeGeometry.TryPlanks(_metrics!, bridge) is not { } layout) continue;
+
+            var deckAsset = _propAssets.Resolve(bridge.DeckAssetKey);
+            var deckColor = Color.FromHtml(deckAsset.Color);
+            var lit = range is not { } elevationRange
                 ? deckColor
-                : new Color(deckColor.R, deckColor.G, deckColor.B, 0.24f);
-            DrawBakedRouteBand(
-                RouteSurfaceBake.Build(_metrics!, BridgeGeometry.DeckRoute(bridge)),
-                color,
-                pan,
-                zoom,
-                sceneHeightAuthoringPixels,
-                range);
+                : PresentationMode == CanvasPresentationMode.Heightmap
+                    ? ElevationColor(bridge.ElevationMeters, elevationRange)
+                    : LitSurfaceColor(deckColor, bridge.ElevationMeters, elevationRange);
+            var color = highlighted ? lit : new Color(lit.R, lit.G, lit.B, 0.24f);
+            foreach (var plank in layout.Planks)
+            {
+                DrawColoredPolygon(
+                    PlankQuad(plank, unit.X, unit.Y, pan, zoom, sceneHeightAuthoringPixels),
+                    color);
+            }
 
             var postAsset = _propAssets.Resolve(bridge.AnchorAssetKey);
             var postColor = Color.FromHtml(postAsset.Color);
@@ -1075,9 +1082,11 @@ public sealed partial class SceneCanvas : Control
     }
 
     /// <summary>
-    /// What the second click would author: the deck outline, the four posts it
-    /// would set, and how long it is. Yellow promises it would be taken, red
-    /// carries the reason it would not.
+    /// What the second click would author: the planks, the deck outline they
+    /// fill, the four posts it would set, and how long it is. Yellow promises
+    /// it would be taken, red carries the reason it would not. The planks are
+    /// drawn here rather than only after the commit, because the count is a
+    /// number an author turns while looking at the draft.
     /// </summary>
     private void DrawBridgeToolPreview(
         SceneDocument document,
@@ -1085,18 +1094,19 @@ public sealed partial class SceneCanvas : Control
         float zoom,
         int sceneHeightAuthoringPixels)
     {
-        if (_propAssets is null || _terrainAssets is null) return;
+        if (_propAssets is null) return;
         var preview = ToolPreviewBuilder.BuildBridgeDraft(
             document,
-            _terrainAssets,
             _propAssets,
             ActiveTool,
             _interaction.BridgeStart,
             _interaction.PointerAuthoring,
-            SelectedTerrainAssetKey,
+            _interaction.State.BridgeDeckAssetKey,
             _interaction.State.BridgeAnchorAssetKey,
             _interaction.State.BridgeWidthMeters,
-            _interaction.State.BridgeElevationMeters);
+            _interaction.State.BridgeElevationMeters,
+            _interaction.State.BridgePlankCount,
+            _interaction.State.BridgePlankGapMeters);
         if (preview.Start is not { } start) return;
 
         var color = preview.Kind switch
@@ -1113,6 +1123,15 @@ public sealed partial class SceneCanvas : Control
             (sceneHeightAuthoringPixels - y) * zoom);
 
         DrawLine(Screen(start.X, start.Y), Screen(end.X, end.Y), color, 2f);
+        if (SpanUnit(start.X, start.Y, end.X, end.Y) is { } unit)
+        {
+            foreach (var plank in preview.Planks)
+            {
+                DrawColoredPolygon(
+                    PlankQuad(plank, unit.X, unit.Y, pan, zoom, sceneHeightAuthoringPixels),
+                    new Color(color.R, color.G, color.B, 0.30f));
+            }
+        }
         if (preview.Corners.Count == 4)
         {
             // The deck outline in corner order start-left, start-right,
@@ -1135,12 +1154,17 @@ public sealed partial class SceneCanvas : Control
         }
 
         // The length belongs where the author is looking, not in a field on the
-        // other side of the window.
+        // other side of the window - and so does what the planks came out at,
+        // which is the number the count is really being turned for.
         const int LengthFontSize = 12;
+        var caption = preview.Planks.Count == 0
+            ? FormattableString.Invariant($"{preview.LengthMeters:0.##} m")
+            : FormattableString.Invariant(
+                $"{preview.LengthMeters:0.##} m - {preview.Planks.Count} x {preview.Planks[0].DepthMeters:0.###} m");
         DrawString(
             ThemeDB.FallbackFont,
             Screen(end.X, end.Y) + new Vector2(12f, -12f),
-            FormattableString.Invariant($"{preview.LengthMeters:0.##} m"),
+            caption,
             HorizontalAlignment.Left,
             width: -1f,
             fontSize: LengthFontSize,
@@ -1151,12 +1175,81 @@ public sealed partial class SceneCanvas : Control
         BridgeCorner corner,
         Vector2 pan,
         float zoom,
+        int sceneHeightAuthoringPixels) => MeterScreen(
+            (double)corner.XMeters,
+            (double)corner.YMeters,
+            pan,
+            zoom,
+            sceneHeightAuthoringPixels);
+
+    private Vector2 MeterScreen(
+        double xMeters,
+        double yMeters,
+        Vector2 pan,
+        float zoom,
         int sceneHeightAuthoringPixels)
     {
         var pixelsPerMeter = (float)_metrics!.AuthoringPixelsPerMeter;
         return pan + new Vector2(
-            (float)corner.XMeters * pixelsPerMeter * zoom,
-            (sceneHeightAuthoringPixels - (float)corner.YMeters * pixelsPerMeter) * zoom);
+            (float)xMeters * pixelsPerMeter * zoom,
+            (sceneHeightAuthoringPixels - ((float)yMeters * pixelsPerMeter)) * zoom);
+    }
+
+    /// <summary>
+    /// One plank as the quad it covers. Depth runs along the span and width
+    /// across it, so a plank stays square to its bridge at whatever angle the
+    /// bridge was drawn at - and any angle is allowed on purpose.
+    /// </summary>
+    private Vector2[] PlankQuad(
+        BridgePlank plank,
+        double unitX,
+        double unitY,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        var alongX = unitX * (double)plank.DepthMeters / 2.0;
+        var alongY = unitY * (double)plank.DepthMeters / 2.0;
+        var acrossX = -unitY * (double)plank.WidthMeters / 2.0;
+        var acrossY = unitX * (double)plank.WidthMeters / 2.0;
+        var centerX = (double)plank.CenterXMeters;
+        var centerY = (double)plank.CenterYMeters;
+
+        Vector2 Corner(double along, double across) => MeterScreen(
+            centerX + (along * alongX) + (across * acrossX),
+            centerY + (along * alongY) + (across * acrossY),
+            pan,
+            zoom,
+            sceneHeightAuthoringPixels);
+
+        return
+        [
+            Corner(-1.0, -1.0),
+            Corner(1.0, -1.0),
+            Corner(1.0, 1.0),
+            Corner(-1.0, 1.0),
+        ];
+    }
+
+    private static (double X, double Y)? SpanUnit(BridgeDocument bridge) => SpanUnit(
+        bridge.StartAuthoringPx.X,
+        bridge.StartAuthoringPx.Y,
+        bridge.EndAuthoringPx.X,
+        bridge.EndAuthoringPx.Y);
+
+    /// <summary>
+    /// Which way a span points, as a unit vector in authoring pixels - which
+    /// is the same direction it points in metres, the two differing only by a
+    /// scale. None when the two ends are the same place, which has no
+    /// direction to give.
+    /// </summary>
+    private static (double X, double Y)? SpanUnit(int startX, int startY, int endX, int endY)
+    {
+        double deltaX = endX - startX;
+        double deltaY = endY - startY;
+        var length = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+        if (!double.IsFinite(length) || length <= 0.0) return null;
+        return (deltaX / length, deltaY / length);
     }
 
     private void DrawRouteSurfaces(
@@ -1927,13 +2020,17 @@ public sealed partial class SceneCanvas : Control
     /// or an author cannot tell why something was refused.
     /// </summary>
     private void DrawCollisionOutline(
-        PropBoundsAuthoringPixels collision,
+        PropBoundsAuthoringPixels? collision,
         Vector2 pan,
         float zoom,
         int sceneHeightAuthoringPixels,
         Color color)
     {
-        var rectangle = CanvasRectangle(collision, pan, zoom, sceneHeightAuthoringPixels);
+        // An Asset that occupies nothing has no box to outline. Drawing an
+        // empty one at the anchor would say it occupies a point, which is a
+        // different claim than the one the placement rule makes.
+        if (collision is not { } occupied) return;
+        var rectangle = CanvasRectangle(occupied, pan, zoom, sceneHeightAuthoringPixels);
         var topLeft = rectangle.Position;
         var topRight = topLeft + new Vector2(rectangle.Size.X, 0f);
         var bottomRight = topLeft + rectangle.Size;

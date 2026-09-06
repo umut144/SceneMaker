@@ -54,17 +54,22 @@ public sealed class TerrainSurfaceTests
         Assert.Contains("requires a surface", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Refusing this was tried and taken back. A Placement was read as a thing
+    /// standing on the world rather than part of it, so a surface on one
+    /// sounded like a category error - until a bridge deck arrived, which is
+    /// walked on and is wood, and has no Terrain to say so for it.
+    /// </summary>
     [Fact]
-    public void APropWithASurfaceIsRefused()
+    public void APlacementMayDeclareASurface()
     {
         using var workspace = TestWorkspace.Create();
 
-        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
-            workspace.Configuration.WithAssetProfiles(
-                [new WorkspaceAssetProfile(
-                    "stone", "Stone", WorkspaceAssetRole.Placement, "#808080", "land")]));
+        var narrowed = workspace.Configuration.WithAssetProfiles(
+            [new WorkspaceAssetProfile(
+                "stone", "Stone", WorkspaceAssetRole.Placement, "#808080", "wood")]);
 
-        Assert.Contains("must not declare a surface", exception.Message, StringComparison.Ordinal);
+        Assert.Equal("wood", narrowed.ResolveAssetProfile("stone").Surface);
     }
 
     [Theory]

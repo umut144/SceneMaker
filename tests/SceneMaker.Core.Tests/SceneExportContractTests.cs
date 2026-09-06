@@ -27,7 +27,7 @@ public sealed class SceneExportContractTests
             ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(12, root.GetProperty("version").GetInt32());
+        Assert.Equal(13, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             [
@@ -53,7 +53,7 @@ public sealed class SceneExportContractTests
             ],
             Keys(scene));
         Assert.Equal("srt.scene_maker_scene", scene.GetProperty("schema").GetString());
-        Assert.Equal(13, scene.GetProperty("version").GetInt32());
+        Assert.Equal(14, scene.GetProperty("version").GetInt32());
         Assert.Equal("instance", scene.GetProperty("scene_kind").GetString());
         Assert.Equal(
             "scene_local_bottom_left_y_up",
@@ -82,7 +82,9 @@ public sealed class SceneExportContractTests
         var stone = profiles.Single(profile => profile.GetProperty("asset_key").GetString() == "stone");
         Assert.Equal(["width", "height"], Keys(stone.GetProperty("footprint_meters")));
         Assert.Equal(["x", "y"], Keys(stone.GetProperty("anchor_meters")));
-        // A Prop has no surface: only Terrain presents one.
+        // This Placement presents no surface. Most do not - a stone is stood
+        // beside, not walked on - but the field is open to them now, because a
+        // bridge deck is walked on and has no Terrain under it to say so.
         Assert.Equal(JsonValueKind.Null, stone.GetProperty("surface").ValueKind);
 
         var grass = profiles.Single(profile => profile.GetProperty("asset_key").GetString() == "grass");
@@ -99,6 +101,51 @@ public sealed class SceneExportContractTests
             "water",
             profiles.Single(profile => profile.GetProperty("asset_key").GetString() == "river")
                 .GetProperty("surface").GetString());
+    }
+
+    /// <summary>
+    /// A bridge ships both halves: what was authored - a deck Asset, a count
+    /// and a gap - and what that laid out as. The planks are the authority for
+    /// what to build; the parameters are there so a consumer can say what it
+    /// was asked for, not so it can lay the deck out a second time.
+    /// </summary>
+    [Fact]
+    public void BridgesShipTheirPlanksTheirDeckQuadAndTheirFourPosts()
+    {
+        using var workspace = TestWorkspace.Create();
+        var root = Export(workspace, WithBridge);
+
+        var authored = Assert.Single(
+            root.GetProperty("scene").GetProperty("bridges").EnumerateArray());
+        Assert.Equal(
+            [
+                "bridge_id", "deck_asset_key", "anchor_asset_key", "start_authoring_px",
+                "end_authoring_px", "width_meters", "elevation_meters", "plank_count",
+                "plank_gap_meters",
+            ],
+            Keys(authored));
+
+        var bake = Assert.Single(root.GetProperty("bridge_bakes").EnumerateArray());
+        Assert.Equal(
+            [
+                "bridge_id", "deck_asset_key", "length_meters", "heading_degrees",
+                "plank_count", "plank_gap_meters", "plank_depth_meters", "planks",
+                "vertices", "triangle_indices", "boundary_edges", "posts",
+            ],
+            Keys(bake));
+
+        var plank = bake.GetProperty("planks").EnumerateArray().First();
+        Assert.Equal(
+            [
+                "plank_id", "asset_key", "x_meters", "y_meters", "elevation_meters",
+                "depth_meters", "width_meters",
+            ],
+            Keys(plank));
+
+        var post = bake.GetProperty("posts").EnumerateArray().First();
+        Assert.Equal(
+            ["post_id", "corner", "asset_key", "x_meters", "y_meters", "elevation_meters"],
+            Keys(post));
     }
 
     [Fact]
@@ -362,6 +409,25 @@ public sealed class SceneExportContractTests
                 WaterEditing.Point(160, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
             ],
             "river");
+
+    /// <summary>
+    /// A three-metre span across the small contract Scene, two metres wide and
+    /// clear of the Placement that Scene already carries.
+    /// </summary>
+    private static SceneDocument WithBridge(SceneDocument scene, TestWorkspace workspace) =>
+        BridgeEditing.Place(
+            scene,
+            workspace.Props,
+            64,
+            128,
+            160,
+            128,
+            "portal",
+            "stone",
+            2m,
+            1m,
+            BridgeEditing.DefaultPlankCount,
+            BridgeEditing.DefaultPlankGapMeters);
 
     private static SceneDocument WithThreePaths(SceneDocument scene, TestWorkspace workspace)
     {

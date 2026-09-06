@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 17;
+    public const int SceneVersion = 18;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -189,8 +189,12 @@ public sealed record BridgeDocument
 {
     public required string BridgeId { get; init; }
 
-    /// <summary>The Terrain Asset whose surface the deck presents.</summary>
-    public required string AssetKey { get; init; }
+    /// <summary>
+    /// The Placement Asset one plank of the deck is. A deck is not a material
+    /// laid over the span: it is a row of planks, so what the bridge names is
+    /// the thing that gets repeated, and how many times is authored below.
+    /// </summary>
+    public required string DeckAssetKey { get; init; }
 
     /// <summary>
     /// The Placement Asset whose named Component stands at each corner. The
@@ -213,6 +217,21 @@ public sealed record BridgeDocument
     /// climbing one, and a Path already authors that case.
     /// </summary>
     public required decimal ElevationMeters { get; init; }
+
+    /// <summary>
+    /// How many planks fill the span. Count is authored and depth is derived,
+    /// not the other way round: a plank is a repeated part, and a bridge with
+    /// a leftover sliver at one end is not a bridge anyone wants to author
+    /// around.
+    /// </summary>
+    public required int PlankCount { get; init; }
+
+    /// <summary>
+    /// The empty run between two neighbouring planks. Gaps sit between planks
+    /// and never at the ends, so a deck starts and finishes on wood however
+    /// wide they are.
+    /// </summary>
+    public required decimal PlankGapMeters { get; init; }
 }
 
 /// <summary>

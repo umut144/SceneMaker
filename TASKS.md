@@ -13,7 +13,6 @@ every fix has to stay inside.
 | ID | Area | Outcome | Status |
 |---|---|---|---|
 | `PATH-02` | Paths | Make the red authoring wire pickable and emphasize a selected Path; manual acceptance of an additive-to-tunnel-to-additive Path through a hill. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Ready** |
-| `BRIDGE-05` | Export contract | Decide where a bridge deck's material comes from: `grass` is a placeholder, a deck names a Terrain Asset, and whether a `planks` Asset needs PolyTools geometry is world01's call. [Notes](DESIGN_NOTES.md#bridges-a-straight-span-that-sets-its-own-posts) | **Ready** |
 
 ## Optional Later — Paths and sections
 
@@ -66,6 +65,7 @@ reasoning is under [Settled decisions](DESIGN_NOTES.md#settled-decisions).
 | `NAME-01` | Documents | The editor says Placements while internal `Prop*` types and the persisted `props` array stay unchanged; renaming is a migration with no runtime benefit. | **Deliberately left alone** |
 | `TRANS-01` | Documents | Transitions wait for their own simulation-owned target/region contract with a consumer and tests, rather than a second copy of `PropDocument`. | **Deliberately deferred** |
 | `BRIDGE-01` | Export contract | `asset_profiles[].traversable_surface` is not coming: a bridge deck is an independent Path-like surface, so no Prop needs to offer a walkable one. | **Superseded** |
+| `BRIDGE-05` | Export contract | A deck's material is settled: a deck is a row of planks, so it names a Placement Asset carrying `surface: "wood"` and no Terrain Asset is involved. | **Settled** |
 
 ## Tracker rules
 

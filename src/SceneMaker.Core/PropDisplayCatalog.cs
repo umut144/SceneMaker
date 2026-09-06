@@ -8,6 +8,10 @@ namespace SceneMaker.Core;
 /// not from what the model looks like: a lamp post is a pole to walk into and
 /// a crown of light to see, and only the first decides whether something else
 /// fits beside it.
+///
+/// <para>A model may author none, and then the Placement occupies nothing at
+/// all. That is a real answer rather than a gap: a bridge plank is walked on,
+/// not walked into, and what takes space there is the bridge.</para>
 /// </summary>
 public sealed record PropCollisionBox(
     int OffsetXAuthoringPixels,
@@ -27,7 +31,7 @@ public sealed record PropDisplayAsset(
     int FootprintHeightAuthoringPixels,
     int AnchorXAuthoringPixels,
     int AnchorYAuthoringPixels,
-    PropCollisionBox Collision);
+    PropCollisionBox? Collision);
 
 public sealed class PropDisplayCatalog
 {
@@ -105,23 +109,23 @@ public static class PropDisplayCatalogLoader
     }
 
     /// <summary>
-    /// A Placement must say what it occupies. Falling back to its visible
-    /// footprint would be a hidden default of exactly the kind this Workspace
-    /// forbids, and it would be the wrong one: a model whose collision the
-    /// author has not drawn yet would quietly claim all the space it is drawn
-    /// with. Refusing names the Asset, and adding the Region in PolyTools is
-    /// the fix.
+    /// What a Placement occupies, or null when its model authored no collision
+    /// Region at all.
+    ///
+    /// <para>Refusing such an Asset was tried and taken back. It sounded like
+    /// the strict reading - a model that has not said what it occupies should
+    /// say so - until the first real case arrived: a bridge plank occupies
+    /// nothing, because what takes space there is the bridge. Demanding a
+    /// Region would have meant inventing one in PolyTools to satisfy an import
+    /// rule. Occupying nothing is the answer, and it is said out loud rather
+    /// than defaulted to a footprint.</para>
     /// </summary>
-    private static PropCollisionBox ResolveCollision(
+    private static PropCollisionBox? ResolveCollision(
         WorkspaceAssetProfile profile,
         PolyToolsCatalogAsset catalogAsset,
         decimal authoringPixelsPerMeter)
     {
-        if (catalogAsset.CollisionBoundsMeters is not { } bounds)
-        {
-            throw new SceneMakerDocumentException(
-                $"Placement Asset '{profile.AssetKey}' has no PolyTools Region with the collision role, so nothing says what it occupies.");
-        }
+        if (catalogAsset.CollisionBoundsMeters is not { } bounds) return null;
         return Box(
             bounds,
             authoringPixelsPerMeter,

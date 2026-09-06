@@ -297,12 +297,12 @@ public sealed class StandaloneWorkspaceTests
             32m,
             192m,
             """{ "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" }""",
-            version: 9);
+            version: 10);
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             WorkspaceConfigurationStore.Load(directory.Path));
 
-        Assert.Contains("version 10", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("version 11", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -664,10 +664,10 @@ public sealed class StandaloneWorkspaceTests
         // The union of both collision Regions, -0.4..0.2 by 0..0.5 m, rounded
         // outward. The hurt Region is not a collision Region and stays out of
         // it, however far it reaches.
-        Assert.Equal(-4, tree.Collision.OffsetXAuthoringPixels);
-        Assert.Equal(0, tree.Collision.OffsetYAuthoringPixels);
-        Assert.Equal(6, tree.Collision.WidthAuthoringPixels);
-        Assert.Equal(5, tree.Collision.HeightAuthoringPixels);
+        Assert.Equal(-4, tree.Collision!.OffsetXAuthoringPixels);
+        Assert.Equal(0, tree.Collision!.OffsetYAuthoringPixels);
+        Assert.Equal(6, tree.Collision!.WidthAuthoringPixels);
+        Assert.Equal(5, tree.Collision!.HeightAuthoringPixels);
     }
 
     /// <summary>
@@ -715,14 +715,15 @@ public sealed class StandaloneWorkspaceTests
     }
 
     /// <summary>
-    /// Falling back to the visible footprint would be a hidden default, and
-    /// the wrong one: a model whose collision nobody has drawn yet would
-    /// quietly claim every pixel it is drawn with. Naming the Asset and
-    /// stopping is the honest answer, and adding the Region in PolyTools is
-    /// the fix.
+    /// Refusing such an Asset was tried and taken back. Falling back to the
+    /// visible footprint would still be wrong - a model whose collision nobody
+    /// has drawn would quietly claim every pixel it is drawn with - but the
+    /// third answer was missing: nothing. A bridge plank occupies nothing,
+    /// because what takes space there is the bridge, and an Asset that says so
+    /// is not an unfinished one.
     /// </summary>
     [Fact]
-    public void APlacementWithoutACollisionRegionIsRefused()
+    public void APlacementWithoutACollisionRegionOccupiesNothing()
     {
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "collide03", regions: "[]");
@@ -731,14 +732,16 @@ public sealed class StandaloneWorkspaceTests
         """);
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path);
+        var props = PropDisplayCatalogLoader.Load(catalog, workspace);
 
-        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
-            PropDisplayCatalogLoader.Load(catalog, workspace));
+        Assert.Null(props.Resolve("tree").Collision);
 
-        Assert.Contains(
-            "has no PolyTools Region with the collision role",
-            exception.Message,
-            StringComparison.Ordinal);
+        // And because it occupies nothing, nothing can be in its way - two of
+        // them in the same place is a legal arrangement, not a collision.
+        var scene = PropEditing.Place(
+            SceneDocument.CreateInstance("collide", 20, 20), props, 100, 100, "tree");
+
+        Assert.True(PropEditing.ValidateCandidate(scene, props, 100, 100, "tree").IsValid);
     }
 
     /// <summary>

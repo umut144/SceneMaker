@@ -21,11 +21,15 @@ public enum PropPreviewKind
 /// would be drawn, <see cref="Collision"/> is what would be occupied and thus
 /// what <see cref="Kind"/> was decided by. Showing only the first would leave
 /// a refusal looking arbitrary.
+///
+/// <para><see cref="Collision"/> is absent when the Asset occupies nothing.
+/// That is not a missing answer: it is the answer, and it is why such a
+/// Placement can never be refused for standing somewhere.</para>
 /// </summary>
 public sealed record PropPreview(
     AuthoringPoint Anchor,
     PropBoundsAuthoringPixels Bounds,
-    PropBoundsAuthoringPixels Collision,
+    PropBoundsAuthoringPixels? Collision,
     PropPreviewKind Kind,
     string? Explanation);
 
@@ -162,21 +166,23 @@ public enum BridgeDraftKind
 }
 
 /// <summary>
-/// What the second click would author. The deck band and the four posts are
-/// both derived here rather than in the Canvas, so what an author sees is what
-/// the placement rule read.
+/// What the second click would author. The deck's planks and the four posts
+/// are both derived here rather than in the Canvas, so what an author sees is
+/// what the placement rule read - including how the planks come out, which is
+/// the whole reason a count is worth turning while the draft is up.
 /// </summary>
 public sealed record BridgeDraftPreview(
     AuthoringPoint? Start,
     AuthoringPoint? End,
     IReadOnlyList<BridgeCorner> Corners,
     IReadOnlyList<PropBoundsAuthoringPixels> Posts,
+    IReadOnlyList<BridgePlank> Planks,
     decimal LengthMeters,
     BridgeDraftKind Kind,
     string? Explanation)
 {
     public static BridgeDraftPreview Empty { get; } = new(
-        null, null, [], [], 0m, BridgeDraftKind.Incomplete, null);
+        null, null, [], [], [], 0m, BridgeDraftKind.Incomplete, null);
 }
 
 public static class ToolPreviewBuilder
@@ -233,7 +239,7 @@ public static class ToolPreviewBuilder
         foreach (var anchor in anchors)
         {
             PropBoundsAuthoringPixels bounds;
-            PropBoundsAuthoringPixels collision;
+            PropBoundsAuthoringPixels? collision;
             try
             {
                 bounds = PropEditing.BoundsFor(asset, anchor.X, anchor.Y);
@@ -468,22 +474,22 @@ public static class ToolPreviewBuilder
     /// </summary>
     public static BridgeDraftPreview BuildBridgeDraft(
         SceneDocument scene,
-        TerrainDisplayCatalog terrainAssets,
         PropDisplayCatalog propAssets,
         EditorTool tool,
         AuthoringPoint? start,
         AuthoringPoint? pointer,
-        string? assetKey,
+        string? deckAssetKey,
         string? anchorAssetKey,
         decimal widthMeters,
-        decimal elevationMeters)
+        decimal elevationMeters,
+        int plankCount,
+        decimal plankGapMeters)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(terrainAssets);
         ArgumentNullException.ThrowIfNull(propAssets);
         if (tool != EditorTool.DrawBridge) return BridgeDraftPreview.Empty;
         if (start is not { } fixedEnd) return BridgeDraftPreview.Empty;
-        if (pointer is not { } end || assetKey is null || anchorAssetKey is null)
+        if (pointer is not { } end || deckAssetKey is null || anchorAssetKey is null)
         {
             return BridgeDraftPreview.Empty with { Start = fixedEnd };
         }
@@ -496,32 +502,37 @@ public static class ToolPreviewBuilder
         var candidate = new BridgeDocument
         {
             BridgeId = "bridge_preview",
-            AssetKey = assetKey,
+            DeckAssetKey = deckAssetKey,
             AnchorAssetKey = anchorAssetKey,
             StartAuthoringPx = new AuthoringPixelPosition { X = fixedEnd.X, Y = fixedEnd.Y },
             EndAuthoringPx = new AuthoringPixelPosition { X = end.X, Y = end.Y },
             WidthMeters = widthMeters,
             ElevationMeters = elevationMeters,
+            PlankCount = plankCount,
+            PlankGapMeters = plankGapMeters,
         };
         var validation = BridgeEditing.ValidateCandidate(
             scene,
-            terrainAssets,
             propAssets,
             fixedEnd.X,
             fixedEnd.Y,
             end.X,
             end.Y,
-            assetKey,
+            deckAssetKey,
             anchorAssetKey,
             widthMeters,
-            elevationMeters);
+            elevationMeters,
+            plankCount,
+            plankGapMeters);
 
         IReadOnlyList<BridgeCorner> corners;
         IReadOnlyList<PropBoundsAuthoringPixels> posts;
+        IReadOnlyList<BridgePlank> planks;
         try
         {
             corners = BridgeGeometry.Corners(propAssets.Metrics, candidate);
             posts = BridgeEditing.PostBounds(propAssets.Metrics, propAssets, candidate);
+            planks = BridgeGeometry.Planks(propAssets.Metrics, candidate).Planks;
         }
         catch (SceneMakerDocumentException)
         {
@@ -529,6 +540,7 @@ public static class ToolPreviewBuilder
             // and the validation above already carries the reason.
             corners = [];
             posts = [];
+            planks = [];
         }
 
         var pixelsPerMeter = (double)propAssets.Metrics.AuthoringPixelsPerMeter;
@@ -544,6 +556,7 @@ public static class ToolPreviewBuilder
             end,
             corners,
             posts,
+            planks,
             length,
             validation.IsValid ? BridgeDraftKind.Ready : BridgeDraftKind.Blocked,
             validation.Reason);

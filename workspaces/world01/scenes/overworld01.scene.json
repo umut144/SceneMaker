@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 17,
+  "version": 18,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60078,7 +60078,7 @@
   "elevation_regions": [
     {
       "elevation_region_id": "mountain_0001",
-      "elevation_meters": 10.000,
+      "elevation_meters": 10.0,
       "points": [
         {
           "position_authoring_px": {
@@ -60225,7 +60225,7 @@
     },
     {
       "elevation_region_id": "mountain_0003",
-      "elevation_meters": 2.250,
+      "elevation_meters": 2.25,
       "points": [
         {
           "position_authoring_px": {
@@ -60589,7 +60589,7 @@
             "x": 95,
             "y": -15
           },
-          "elevation_meters": 2.250,
+          "elevation_meters": 2.25,
           "width_meters": 2.0
         },
         {
@@ -60606,7 +60606,7 @@
             "x": 0,
             "y": 0
           },
-          "elevation_meters": 0.003570,
+          "elevation_meters": 0.00357,
           "width_meters": 2.0
         }
       ],
@@ -60813,7 +60813,7 @@
   "bridges": [
     {
       "bridge_id": "bridge_0001",
-      "asset_key": "grass",
+      "deck_asset_key": "deck",
       "anchor_asset_key": "rope_post",
       "start_authoring_px": {
         "x": 1184,
@@ -60824,11 +60824,13 @@
         "y": 646
       },
       "width_meters": 4.0,
-      "elevation_meters": 1.000
+      "elevation_meters": 1.0,
+      "plank_count": 12,
+      "plank_gap_meters": 0.1
     },
     {
       "bridge_id": "bridge_0002",
-      "asset_key": "grass",
+      "deck_asset_key": "deck",
       "anchor_asset_key": "rope_post",
       "start_authoring_px": {
         "x": 1437,
@@ -60839,11 +60841,13 @@
         "y": 852
       },
       "width_meters": 4.0,
-      "elevation_meters": 1.000
+      "elevation_meters": 1.0,
+      "plank_count": 12,
+      "plank_gap_meters": 0.1
     },
     {
       "bridge_id": "bridge_0003",
-      "asset_key": "grass",
+      "deck_asset_key": "deck",
       "anchor_asset_key": "rope_post",
       "start_authoring_px": {
         "x": 1724,
@@ -60854,7 +60858,9 @@
         "y": 463
       },
       "width_meters": 4.0,
-      "elevation_meters": 1.000
+      "elevation_meters": 1.0,
+      "plank_count": 12,
+      "plank_gap_meters": 0.1
     }
   ],
   "template_definition": null,

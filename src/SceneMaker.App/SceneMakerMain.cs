@@ -70,6 +70,12 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _riverWidthEdit = new();
     private readonly Label _pathWidthLabel = new();
     private readonly SpinBox _pathWidthEdit = new();
+    private readonly Label _bridgeDeckLabel = new();
+    private readonly OptionButton _bridgeDeckEdit = new();
+    private readonly Label _bridgePlankCountLabel = new();
+    private readonly SpinBox _bridgePlankCountEdit = new();
+    private readonly Label _bridgePlankGapLabel = new();
+    private readonly SpinBox _bridgePlankGapEdit = new();
     private readonly Label _bridgeAnchorLabel = new();
     private readonly OptionButton _bridgeAnchorEdit = new();
     private readonly Label _bridgeWidthLabel = new();
@@ -548,6 +554,37 @@ public sealed partial class SceneMakerMain : Control
             "Manual absolute height of the first point when Auto start is off.";
         _pathStartElevationEdit.ValueChanged += SetPathStartElevation;
         _contextMenuBar.AddChild(_pathStartElevationEdit);
+        _bridgeDeckLabel.Name = "BridgeDeckLabel";
+        _bridgeDeckLabel.Text = "Deck";
+        _bridgeDeckLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_bridgeDeckLabel);
+        _bridgeDeckEdit.Name = "BridgeDeck";
+        _bridgeDeckEdit.CustomMinimumSize = new Vector2(130f, 0f);
+        _bridgeDeckEdit.ItemSelected += SelectBridgeDeckItem;
+        _contextMenuBar.AddChild(_bridgeDeckEdit);
+        _bridgePlankCountLabel.Name = "BridgePlankCountLabel";
+        _bridgePlankCountLabel.Text = "Planks";
+        _bridgePlankCountLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_bridgePlankCountLabel);
+        _bridgePlankCountEdit.Name = "BridgePlankCount";
+        ConfigureBridgePlankCountInput(_bridgePlankCountEdit);
+        _bridgePlankCountEdit.TooltipText =
+            "How many planks fill the span. The count is what you author; how deep "
+            + "one plank comes out is what is left once the gaps are taken off, so a "
+            + "longer bridge gets thicker planks rather than more of them.";
+        _bridgePlankCountEdit.ValueChanged += SetBridgePlankCount;
+        _contextMenuBar.AddChild(_bridgePlankCountEdit);
+        _bridgePlankGapLabel.Name = "BridgePlankGapLabel";
+        _bridgePlankGapLabel.Text = "Gap";
+        _bridgePlankGapLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_bridgePlankGapLabel);
+        _bridgePlankGapEdit.Name = "BridgePlankGap";
+        ConfigureBridgePlankGapInput(_bridgePlankGapEdit);
+        _bridgePlankGapEdit.TooltipText =
+            "The empty run between two neighbouring planks. Gaps sit between planks "
+            + "and never at the ends, so a deck always starts and finishes on wood.";
+        _bridgePlankGapEdit.ValueChanged += SetBridgePlankGap;
+        _contextMenuBar.AddChild(_bridgePlankGapEdit);
         _bridgeAnchorLabel.Name = "BridgeAnchorLabel";
         _bridgeAnchorLabel.Text = "Anchor";
         _bridgeAnchorLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -841,6 +878,7 @@ public sealed partial class SceneMakerMain : Control
                 && string.Equals(assetKey, chosen, StringComparison.Ordinal);
         }
         ShowSurfaceField(mode, field);
+        ShowBridgeDeckField();
         ShowBridgeAnchorField();
     }
 
@@ -2119,8 +2157,90 @@ public sealed partial class SceneMakerMain : Control
         input.Value = (double)BridgeEditing.DefaultWidthMeters;
     }
 
+    private static void ConfigureBridgePlankCountInput(SpinBox input)
+    {
+        input.MinValue = 1.0;
+        input.MaxValue = 512.0;
+        input.Step = 1.0;
+        input.Rounded = true;
+        input.AllowGreater = false;
+        input.AllowLesser = false;
+        input.CustomMinimumSize = new Vector2(90f, 0f);
+        input.Value = BridgeEditing.DefaultPlankCount;
+    }
+
+    private static void ConfigureBridgePlankGapInput(SpinBox input)
+    {
+        // Zero is a real answer - a deck with no gaps is a closed deck - so the
+        // floor is zero rather than the smallest step.
+        input.MinValue = 0.0;
+        input.MaxValue = 16.0;
+        input.Step = 0.01;
+        input.AllowGreater = false;
+        input.AllowLesser = false;
+        input.Suffix = " m";
+        input.CustomMinimumSize = new Vector2(110f, 0f);
+        input.Value = (double)BridgeEditing.DefaultPlankGapMeters;
+    }
+
     private void SetBridgeWidth(double value) =>
         _interaction.State.SetBridgeWidth(DecimalOf(value));
+
+    private void SetBridgePlankCount(double value) =>
+        _interaction.State.SetBridgePlankCount((int)Math.Round(value, MidpointRounding.AwayFromZero));
+
+    private void SetBridgePlankGap(double value) =>
+        _interaction.State.SetBridgePlankGap(DecimalOf(value));
+
+    /// <summary>
+    /// The Deck control answers with an item index; the Asset travels as that
+    /// item's metadata, exactly as the Anchor control does.
+    /// </summary>
+    private void SelectBridgeDeckItem(long index)
+    {
+        if (index < 0 || index >= _bridgeDeckEdit.ItemCount) return;
+        if (_bridgeDeckEdit.GetItemMetadata((int)index).AsString() is { Length: > 0 } assetKey)
+            _interaction.State.SelectBridgeDeckAsset(assetKey);
+    }
+
+    /// <summary>
+    /// Fills the Deck control with the Placement Assets a deck can be planked
+    /// with, which is every one the Workspace enables: what makes something a
+    /// plank is that a bridge repeats it, not a property it carries.
+    /// </summary>
+    private void ShowBridgeDeckField()
+    {
+        _bridgeDeckEdit.Clear();
+        if (_controller.Session is not { } session)
+        {
+            _bridgeDeckEdit.Disabled = true;
+            return;
+        }
+
+        var offered = BridgeDeckAssets.Offered(session.PropAssets);
+        var chosen = BridgeDeckAssets.Choose(
+            session.PropAssets, _interaction.State.BridgeDeckAssetKey);
+        _interaction.State.SelectBridgeDeckAsset(chosen);
+        var selected = -1;
+        for (var index = 0; index < offered.Count; index++)
+        {
+            _bridgeDeckEdit.AddItem(offered[index].Name);
+            _bridgeDeckEdit.SetItemMetadata(_bridgeDeckEdit.ItemCount - 1, offered[index].AssetKey);
+            if (string.Equals(offered[index].AssetKey, chosen, StringComparison.Ordinal))
+                selected = index;
+        }
+        _bridgeDeckEdit.Selected = selected;
+        _bridgeDeckEdit.Disabled = offered.Count <= 1;
+        _bridgeDeckEdit.TooltipText = offered.Count switch
+        {
+            > 1 => "The Placement Asset one plank of the deck is. A deck is a row of "
+                + "these, not a material laid over the span.",
+            1 => "This Workspace offers only one Placement Asset, so there is nothing "
+                + "to choose between.",
+            _ => "This Workspace enables no Placement Asset, so no deck can be "
+                + "planked yet.",
+        };
+    }
 
     /// <summary>
     /// A directly authored height, so it snaps to the Workspace quantum the
@@ -2451,6 +2571,12 @@ public sealed partial class SceneMakerMain : Control
         _pathWidthLabel.Visible = pathActive;
         _pathWidthEdit.Visible = pathActive;
         var bridgeActive = _interaction.Mode == EditorMode.Bridge;
+        _bridgeDeckLabel.Visible = bridgeActive;
+        _bridgeDeckEdit.Visible = bridgeActive;
+        _bridgePlankCountLabel.Visible = bridgeActive;
+        _bridgePlankCountEdit.Visible = bridgeActive;
+        _bridgePlankGapLabel.Visible = bridgeActive;
+        _bridgePlankGapEdit.Visible = bridgeActive;
         _bridgeAnchorLabel.Visible = bridgeActive;
         _bridgeAnchorEdit.Visible = bridgeActive;
         _bridgeWidthLabel.Visible = bridgeActive;
@@ -2932,6 +3058,11 @@ public sealed partial class SceneMakerMain : Control
         _interaction.State.SetPathClearanceAbove(DecimalOf(_pathClearanceEdit.Value));
         ConfigureBridgeWidthInput(_bridgeWidthEdit);
         _interaction.State.SetBridgeWidth(DecimalOf(_bridgeWidthEdit.Value));
+        ConfigureBridgePlankCountInput(_bridgePlankCountEdit);
+        _interaction.State.SetBridgePlankCount(
+            (int)Math.Round(_bridgePlankCountEdit.Value, MidpointRounding.AwayFromZero));
+        ConfigureBridgePlankGapInput(_bridgePlankGapEdit);
+        _interaction.State.SetBridgePlankGap(DecimalOf(_bridgePlankGapEdit.Value));
         ConfigureElevationInputs(session.Metrics);
         _pathAutoStartToggle.ButtonPressed = true;
         _interaction.State.SetPathStartElevationOverride(null);

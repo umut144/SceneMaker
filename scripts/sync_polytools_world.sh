@@ -9,6 +9,7 @@ config_path="$workspace_dir/config.json"
 import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
 current_manifest_schema=19
+current_config_version=11
 
 cleanup() {
   local status=$?
@@ -62,9 +63,9 @@ if ! jq -e '
 fi
 
 world_key="$(jq -r '.world_key' "$source_catalog")"
-if ! jq -e --arg world "$world_key" '
+if ! jq -e --arg world "$world_key" --argjson version "$current_config_version" '
   .format == "scene_maker_workspace"
-  and .version == 10
+  and .version == $version
   and .workspace_key == $world
   and (.grid.terrain_cell_meters | type == "number" and . > 0)
   and (.grid.authoring_pixels_per_meter | type == "number" and . > 0)
@@ -81,11 +82,24 @@ if ! jq -e --arg world "$world_key" '
       (.surface | type == "string" and length > 0)
       and (.authoring == "cells" or .authoring == "curve")
     else
-      (has("surface") | not) and (has("authoring") | not)
+      # A Placement may present a surface and usually does not: a tree is
+      # stood beside, not walked on. A bridge deck is walked on and is wood,
+      # and has no Terrain underneath it to say so on its behalf. `authoring`
+      # stays Terrain-only - it says how cells or curves are painted, and a
+      # Placement is neither.
+      (.surface == null or (.surface | type == "string" and length > 0))
+      and (has("authoring") | not)
     end)
   and (([.assets[].asset_key] | unique | length) == ([.assets[].asset_key] | length))
 ' "$config_path" >/dev/null; then
-  printf 'ERROR: SceneMaker config must be a valid version 10 catalog for PolyTools world %s.\n' "$world_key" >&2
+  # Naming the version alone reads as a version mismatch even when the
+  # version is right, and that is the likelier case: this gate also refuses a
+  # bad grid and a bad Asset entry. Say which file and what was checked.
+  printf 'ERROR: %s is not a valid version %s SceneMaker workspace catalog for PolyTools world %s.\n' \
+    "$config_path" "$current_config_version" "$world_key" >&2
+  printf '%s\n' \
+    '       Checked: format, version, workspace_key, grid, and every Asset entry -' \
+    '       role, color, a surface and authoring on Terrain, and no authoring on a Placement.' >&2
   exit 1
 fi
 if ! jq -e --slurpfile catalog "$source_catalog" '

@@ -5,13 +5,24 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 12**, embedded **scene 13**. A reader must reject any
+Current schemas: **export 13**, embedded **scene 14**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
 
-Export 12 carries bridges: the authored record in `scene.bridges`, and a
-`bridge_bakes` array beside the Scene holding each deck's triangles and the
-four posts standing at its corners.
+Export 13 rebuilds the bridge deck. A deck is no longer a material laid over
+the span: it is a row of planks, and a plank is a Placement Asset. The authored
+record names that Asset in `deck_asset_key` and says how many planks fill the
+span and what gap sits between two of them; `bridge_bakes` ships the planks
+already laid out, beside the quad they add up to and the four corner posts.
+
+Export 13 also widens `surface` on an `asset_profiles` entry. It is no longer
+Terrain-only: a Placement that is walked on says so there, because a bridge
+deck is wood and has no Terrain underneath it to say so for it. Most Placements
+still carry `null`.
+
+Export 12 carried bridges for the first time: the authored record in
+`scene.bridges`, and a `bridge_bakes` array beside the Scene holding each
+deck's triangles and the four posts standing at its corners.
 
 Export 11 carried excavating Paths. Every route segment now states its
 `operation` and, when it excavates, the `clearance_above_meters` it asks for,
@@ -20,7 +31,7 @@ removes from the Terrain. Export 10 refused such a Scene outright rather than
 writing it through the additive shape; it is the version that could not say
 what a tunnel means, not a version whose meaning changed.
 
-The authored Scene currently has its own schema 16. It is deliberately newer
+The authored Scene currently has its own schema 18. It is deliberately newer
 than the embedded Scene: elevation-region contours are editor source, folded
 into the ordinary `terrain_cells` below and omitted from export. Authored route
 surfaces remain independent continuous bands and are exported separately from
@@ -72,15 +83,21 @@ purpose.
   "asset_profiles": [                  // every Asset the Workspace enables
     {
       "asset_key": "grass",
-      "surface": "land",               // Terrain only
+      "surface": "land",               // every Terrain Asset has one
       "footprint_meters": null,        // null for Terrain Assets
       "anchor_meters": null
     },
     {
       "asset_key": "ankh",
-      "surface": null,                 // null for everything that is not Terrain
+      "surface": null,                 // most Placements present none
       "footprint_meters": { "width": 1.0625, "height": 1.71875 },
       "anchor_meters":    { "x": 0.53125, "y": 0.3125 }
+    },
+    {
+      "asset_key": "deck",
+      "surface": "wood",               // a Placement that is walked on
+      "footprint_meters": { "width": 4.0, "height": 0.75 },
+      "anchor_meters":    { "x": 2.0, "y": 0.375 }
     }
   ],
   "water_raster": [                    // derived from scene.water_bodies
@@ -163,7 +180,23 @@ purpose.
   "bridge_bakes": [                    // derived from scene.bridges
     {
       "bridge_id": "bridge_0001",
-      "asset_key": "planks",           // the deck's Terrain Asset
+      "deck_asset_key": "deck",        // the Placement one plank is
+      "length_meters": 10.0,           // the span, end to end
+      "heading_degrees": 0.0,          // counter-clockwise from +X
+      "plank_count": 12,               // as authored
+      "plank_gap_meters": 0.1,         // as authored
+      "plank_depth_meters": 0.741667,  // what that came out as
+      "planks": [
+        {
+          "plank_id": "bridge_0001.plank_0000",
+          "asset_key": "deck",
+          "x_meters": 10.370833,       // the plank's centre
+          "y_meters": 10.0,
+          "elevation_meters": 1.125,
+          "depth_meters": 0.741667,    // along the span
+          "width_meters": 4.0          // across it, always the full deck
+        }
+      ],
       "vertices": [
         { "x_meters": 10.0, "y_meters": 12.0, "elevation_meters": 1.125 }
       ],
@@ -185,7 +218,7 @@ purpose.
   ],
   "scene": {
     "schema": "srt.scene_maker_scene",
-    "version": 11,
+    "version": 14,
     "scene_id": "overworld01",   // names the map, not the Workspace
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
@@ -255,12 +288,14 @@ purpose.
     "bridges": [
       {
         "bridge_id": "bridge_0001",
-        "asset_key": "planks",         // Terrain Asset, the deck surface
+        "deck_asset_key": "deck",      // Placement Asset, one plank of the deck
         "anchor_asset_key": "rope_post", // the Placement standing at each corner
         "start_authoring_px": { "x": 320, "y": 320 },
         "end_authoring_px":   { "x": 640, "y": 320 },
         "width_meters": 4.0,
-        "elevation_meters": 1.125      // the deck, level for the whole span
+        "elevation_meters": 1.125,     // the deck, level for the whole span
+        "plank_count": 12,
+        "plank_gap_meters": 0.1
       }
     ],
     "template_definition": null,       // set only when scene_kind is "template"
@@ -297,9 +332,15 @@ every Terrain cell, so it joins the surface through that key — one entry inste
 of one per cell, and a Terrain Asset that presents land in one place and water
 in another is structurally impossible.
 
-`surface` is present and non-null for every Terrain Asset and null for every
-other kind. A cell whose Asset has no surface cannot occur: only Terrain Assets
-may be painted as Terrain.
+`surface` is present and non-null for every Terrain Asset. A cell whose Asset
+has no surface cannot occur: only Terrain Assets may be painted as Terrain.
+
+A Placement may carry one too, and most do not - a tree is stood beside, not
+walked on. The case that needs it is a bridge deck: it is walked on, it is
+wood, and a bridge over a river has no Terrain underneath it that could say so
+on its behalf. Read a Placement's `surface` as what that Placement presents to
+walk on, and its absence as "nothing to say", never as "not walkable" - what an
+Actor can do with a surface is the simulation's question, here as everywhere.
 
 Passability is not in the export and is not SceneMaker's business. The Actor
 brings its domains, the cell brings its surface, and the simulation intersects
@@ -555,15 +596,44 @@ is possible, and both happen in the simulation.
 
 ## Bridges
 
-A bridge is a straight level span. Six authored numbers say all of it - the
-deck's Terrain Asset, the anchor Asset, two ends, a width and one height - and
-everything else follows from them, which is why nothing else is stored.
+A bridge is a straight level span. Eight authored numbers say all of it - the
+deck's Placement Asset, the anchor Asset, two ends, a width, one height, a
+plank count and a plank gap - and everything else follows from them, which is
+why nothing else is stored.
 
 Its deck is an independent surface exactly like a Path's: it never folds into a
 Terrain cell, a cut never removes it, and Terrain and a deck may occupy the same
 X/Y at different heights. `bridge_bakes` ships it as the same triangles a Path
 does, generated by the same code, so a runtime needs no second way to stand on
 something.
+
+**A deck is built, not painted.** It is a row of planks, and a plank is an
+ordinary Placement Asset repeated along the span. What makes something a plank
+is that a bridge repeats it, not a property the Asset carries, so any enabled
+Placement can be a deck.
+
+**Count is authored; depth is derived.** `plank_count` is what an author names
+and `plank_gap_meters` is the empty run between two neighbours; the depth of
+one plank is what is left once the gaps are taken off, so lengthening a bridge
+thickens its planks rather than adding one. Gaps sit *between* planks and never
+at the ends, so a deck always starts and finishes on wood:
+
+    plank_depth = (length - (plank_count - 1) * plank_gap) / plank_count
+
+That number is rounded to six decimal places once, in SceneMaker, and shipped
+as `plank_depth_meters`; a deck whose gaps leave nothing over is refused while
+it is being authored and can never reach an export.
+
+Each plank ships as a box rather than a mesh: a centre, a `depth_meters` along
+the span and a `width_meters` across it, which is always the full deck width.
+Turn a unit plank by `heading_degrees` and stretch it to those two numbers. A
+plank is derived, so like a post it carries no instance ID from the Scene.
+
+**The planks are the authority; the parameters are the record.** Build what
+`planks` gives you. `plank_count` and `plank_gap_meters` travel beside them so
+a consumer can say what it was asked for, not so it can lay the deck out a
+second time - laying it out twice is the one way to disagree with what the
+author saw.
 
 **The posts travel worked out.** Left and right mean a quarter turn
 counter-clockwise from the start end towards the end end - in this y-up space,
@@ -583,7 +653,8 @@ never contains one, so the two cannot collide.
 model reaches below or above that is the model's business.
 
 **The bake is the authority.** A consumer places what `bridge_bakes` gives it
-and derives nothing again from `start_authoring_px` and `width_meters`: those
+and derives nothing again from `start_authoring_px`, `width_meters` or the
+plank parameters: those
 are the authored source, kept so a later SceneMaker can reshape the bridge, and
 recomputing corners from them is the one way to disagree with what the author
 saw. The two do agree today - an end divided by `authoring_pixels_per_meter` is
@@ -593,7 +664,9 @@ exactly the midpoint of its two corner vertices, and their distance is exactly
 **A bridge deck is exactly one quad.** A bridge is straight and level, so its
 bake holds four vertices, two triangles and one edge loop; `boundary_edges` is
 therefore the outline of the walking surface and may be read as the edge one
-falls from. That is a promise about bridges alone. In `route_surface_bakes` the
+falls from. The gaps between planks are not holes in it: what a simulation
+walks on is the deck, and the planks are what it looks like. That is a promise
+about bridges alone. In `route_surface_bakes` the
 same field lists **each primitive's** edge loop - one per flattened segment
 quad and one per round join - so a Path's union outline is not the
 concatenation of them, and inner edges are in there too.
@@ -605,9 +678,10 @@ because there is nothing for it to know. Passing under a bridge is the point:
 one place carries two surfaces, and which one an Actor uses is the
 simulation's question.
 
-The deck presents the surface of its `asset_key`, read from `asset_profiles`
-exactly as a Terrain cell's is. A deck therefore names a Terrain Asset - the
-one kind of Asset that carries a `surface` - and never a Placement.
+The deck presents the surface of its `deck_asset_key`, read from
+`asset_profiles` exactly as a Terrain cell's is. That is why `surface` is no
+longer Terrain-only: the deck Asset is a Placement, and a bridge over a river
+has no Terrain underneath it that could carry `wood` on its behalf.
 
 A Scene Template carries no bridge, for the reason it carries no water:
 composition moves Terrain cells and Props and nothing else, so authoring one is

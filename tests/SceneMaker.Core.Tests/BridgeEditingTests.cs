@@ -82,16 +82,17 @@ public sealed class BridgeEditingTests
 
         var validation = BridgeEditing.ValidateCandidate(
             Map(),
-            workspace.Terrain,
             workspace.Props,
             320,
             320,
             640,
             320,
-            "grass",
+            "portal",
             "stone",
             BridgeEditing.DefaultWidthMeters,
-            1.1m);
+            1.1m,
+            BridgeEditing.DefaultPlankCount,
+            BridgeEditing.DefaultPlankGapMeters);
 
         Assert.False(validation.IsValid);
         Assert.Contains("elevation quantum", validation.Reason!, StringComparison.Ordinal);
@@ -111,12 +112,14 @@ public sealed class BridgeEditingTests
             new BridgeDocument
             {
                 BridgeId = "bridge_0001",
-                AssetKey = "grass",
+                DeckAssetKey = "portal",
                 AnchorAssetKey = "stone",
                 StartAuthoringPx = new AuthoringPixelPosition { X = 320, Y = 320 },
                 EndAuthoringPx = new AuthoringPixelPosition { X = 640, Y = 320 },
                 WidthMeters = BridgeEditing.DefaultWidthMeters,
                 ElevationMeters = 1m,
+                PlankCount = BridgeEditing.DefaultPlankCount,
+                PlankGapMeters = BridgeEditing.DefaultPlankGapMeters,
             })[0];
         var occupied = PropEditing.Place(
             Map(),
@@ -168,33 +171,89 @@ public sealed class BridgeEditingTests
 
         var validation = BridgeEditing.ValidateCandidate(
             Map(),
-            workspace.Terrain,
             workspace.Props,
             320,
             320,
             640,
             320,
-            "grass",
+            "portal",
             "portal",
             BridgeEditing.DefaultWidthMeters,
-            1m);
+            1m,
+            BridgeEditing.DefaultPlankCount,
+            BridgeEditing.DefaultPlankGapMeters);
 
         Assert.True(validation.IsValid);
         var bridge = Assert.Single(BridgeEditing.Place(
             Map(),
-            workspace.Terrain,
             workspace.Props,
             320,
             320,
             640,
             320,
-            "grass",
+            "portal",
             "portal",
             BridgeEditing.DefaultWidthMeters,
-            1m).Bridges);
+            1m,
+            BridgeEditing.DefaultPlankCount,
+            BridgeEditing.DefaultPlankGapMeters).Bridges);
         Assert.Equal(
             PropEditing.CollisionBoundsFor(workspace.Props.Resolve("portal"), 320, 384),
             BridgeEditing.PostBounds(workspace.Metrics, workspace.Props, bridge)[0]);
+    }
+
+    /// <summary>
+    /// Count is authored and depth is derived, so the planks always fill the
+    /// span exactly: gaps sit between them and never at the ends, and a deck
+    /// starts and finishes on wood.
+    /// </summary>
+    [Fact]
+    public void PlanksFillTheSpanWithGapsOnlyBetweenThem()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Place(workspace, Map(), 320, 320, 640, 320);
+
+        var layout = BridgeGeometry.Planks(workspace.Metrics, scene.Bridges[0]);
+
+        Assert.Equal(10m, layout.LengthMeters);
+        Assert.Equal(12, layout.Planks.Count);
+        Assert.Equal(0.741667m, layout.PlankDepthMeters);
+
+        // Eleven gaps for twelve planks, and the first and last plank touch
+        // the two ends: 12 x 0.741667 + 11 x 0.1 is the span again.
+        var half = layout.PlankDepthMeters / 2m;
+        Assert.Equal(10m + half, layout.Planks[0].CenterXMeters, 4);
+        Assert.Equal(20m - half, layout.Planks[^1].CenterXMeters, 4);
+        Assert.All(layout.Planks, plank => Assert.Equal(10m, plank.CenterYMeters));
+        Assert.All(layout.Planks, plank => Assert.Equal(4m, plank.WidthMeters));
+    }
+
+    /// <summary>
+    /// Gaps take their room out of the planks, so enough of them leaves none.
+    /// The draft says so with the same call the commit makes, while the number
+    /// is still being turned.
+    /// </summary>
+    [Fact]
+    public void ADeckWhoseGapsLeaveNoRoomIsRefused()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var validation = BridgeEditing.ValidateCandidate(
+            Map(),
+            workspace.Props,
+            320,
+            320,
+            640,
+            320,
+            "portal",
+            "stone",
+            BridgeEditing.DefaultWidthMeters,
+            1m,
+            plankCount: 12,
+            plankGapMeters: 1m);
+
+        Assert.False(validation.IsValid);
+        Assert.Contains("no room for a plank", validation.Reason!, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -258,6 +317,21 @@ public sealed class BridgeEditingTests
 
         var bake = Assert.Single(parsed.RootElement.GetProperty("bridge_bakes").EnumerateArray());
         Assert.NotEmpty(bake.GetProperty("vertices").EnumerateArray());
+
+        // Both halves travel: what was authored, and what it laid out as.
+        Assert.Equal("portal", bake.GetProperty("deck_asset_key").GetString());
+        Assert.Equal(10m, bake.GetProperty("length_meters").GetDecimal());
+        Assert.Equal(0m, bake.GetProperty("heading_degrees").GetDecimal());
+        Assert.Equal(12, bake.GetProperty("plank_count").GetInt32());
+        Assert.Equal(0.1m, bake.GetProperty("plank_gap_meters").GetDecimal());
+        Assert.Equal(0.741667m, bake.GetProperty("plank_depth_meters").GetDecimal());
+
+        var planks = bake.GetProperty("planks").EnumerateArray().ToList();
+        Assert.Equal(12, planks.Count);
+        Assert.Equal("bridge_0001.plank_0000", planks[0].GetProperty("plank_id").GetString());
+        Assert.Equal("portal", planks[0].GetProperty("asset_key").GetString());
+        Assert.Equal(4m, planks[0].GetProperty("width_meters").GetDecimal());
+        Assert.Equal(1m, planks[0].GetProperty("elevation_meters").GetDecimal());
         var posts = bake.GetProperty("posts").EnumerateArray().ToList();
         Assert.Equal(4, posts.Count);
         Assert.Equal(
@@ -288,16 +362,17 @@ public sealed class BridgeEditingTests
         int endX,
         int endY) => BridgeEditing.Place(
             scene,
-            workspace.Terrain,
             workspace.Props,
             startX,
             startY,
             endX,
             endY,
-            "grass",
+            "portal",
             "stone",
             BridgeEditing.DefaultWidthMeters,
-            1m);
+            1m,
+            BridgeEditing.DefaultPlankCount,
+            BridgeEditing.DefaultPlankGapMeters);
 
     private static BridgeValidationResult Validate(
         TestWorkspace workspace,
@@ -307,14 +382,15 @@ public sealed class BridgeEditingTests
         int endX,
         int endY) => BridgeEditing.ValidateCandidate(
             scene,
-            workspace.Terrain,
             workspace.Props,
             startX,
             startY,
             endX,
             endY,
-            "grass",
+            "portal",
             "stone",
             BridgeEditing.DefaultWidthMeters,
-            1m);
+            1m,
+            BridgeEditing.DefaultPlankCount,
+            BridgeEditing.DefaultPlankGapMeters);
 }

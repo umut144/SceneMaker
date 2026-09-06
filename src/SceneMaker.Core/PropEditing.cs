@@ -94,14 +94,20 @@ public static class PropEditing
         // Whether two Placements fit is asked of what they occupy, not of
         // what they are drawn as. A tree's crown may reach over a lamp; its
         // trunk may not stand in the same place.
-        var candidateCollision = CollisionBoundsFor(asset, anchorX, anchorY);
+        // An Asset that occupies nothing cannot collide with anything, in
+        // either direction, so both ends of the question skip it.
+        if (CollisionBoundsFor(asset, anchorX, anchorY) is not { } candidateCollision)
+            return PropValidationResult.Valid;
         foreach (var existing in scene.Props)
         {
             var existingAsset = propAssets.Resolve(existing.AssetKey);
-            var existingCollision = CollisionBoundsFor(
-                existingAsset,
-                existing.PositionAuthoringPx.X,
-                existing.PositionAuthoringPx.Y);
+            if (CollisionBoundsFor(
+                    existingAsset,
+                    existing.PositionAuthoringPx.X,
+                    existing.PositionAuthoringPx.Y) is not { } existingCollision)
+            {
+                continue;
+            }
             if (candidateCollision.Overlaps(existingCollision))
                 return new PropValidationResult(
                     false,
@@ -228,10 +234,13 @@ public static class PropEditing
             if (!IsInsideScene(scene, bounds, propAssets.Metrics))
                 throw new SceneMakerDocumentException(
                     "Placement footprint lies outside the Scene bounds.");
-            var collision = CollisionBoundsFor(
-                asset,
-                prop.PositionAuthoringPx.X,
-                prop.PositionAuthoringPx.Y);
+            if (CollisionBoundsFor(
+                    asset,
+                    prop.PositionAuthoringPx.X,
+                    prop.PositionAuthoringPx.Y) is not { } collision)
+            {
+                continue;
+            }
             if (accepted.Any(collision.Overlaps))
                 throw new SceneMakerDocumentException(
                     $"Placement '{prop.InstanceId}' collides with something already in the Scene.");
@@ -250,18 +259,24 @@ public static class PropEditing
             asset.FootprintHeightAuthoringPixels);
 
     /// <summary>
-    /// What an Asset occupies, where it stands. It sits inside the footprint
-    /// and is offset from the anchor in its own right, because a model's
-    /// collision need not be centred on what it is drawn as.
+    /// What an Asset occupies, where it stands, or null when it occupies
+    /// nothing. It sits inside the footprint and is offset from the anchor in
+    /// its own right, because a model's collision need not be centred on what
+    /// it is drawn as.
     /// </summary>
-    public static PropBoundsAuthoringPixels CollisionBoundsFor(
+    public static PropBoundsAuthoringPixels? CollisionBoundsFor(
         PropDisplayAsset asset,
         int anchorX,
-        int anchorY) => new(
-            checked(anchorX + asset.Collision.OffsetXAuthoringPixels),
-            checked(anchorY + asset.Collision.OffsetYAuthoringPixels),
-            asset.Collision.WidthAuthoringPixels,
-            asset.Collision.HeightAuthoringPixels);
+        int anchorY)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        if (asset.Collision is not { } collision) return null;
+        return new PropBoundsAuthoringPixels(
+            checked(anchorX + collision.OffsetXAuthoringPixels),
+            checked(anchorY + collision.OffsetYAuthoringPixels),
+            collision.WidthAuthoringPixels,
+            collision.HeightAuthoringPixels);
+    }
 
     public static decimal PositionMeters(int authoringPixels, WorkspaceMetrics metrics) =>
         (decimal)authoringPixels / metrics.AuthoringPixelsPerMeter;

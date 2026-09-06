@@ -47,7 +47,7 @@ JSON
 cat >"$workspace/config.json" <<'JSON'
 {
   "format": "scene_maker_workspace",
-  "version": 10,
+  "version": 11,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,
@@ -197,6 +197,29 @@ published_checksum=$(cksum "$imported_manifest")
 
 valid_config="$test_root/valid-config.json"
 cp "$workspace/config.json" "$valid_config"
+
+# A Placement may present a surface. Most do not, but a bridge deck is walked
+# on and is wood, and has no Terrain underneath it to say so on its behalf.
+# `authoring` stays Terrain-only: it says how cells or curves are painted.
+jq '.assets[1].surface = "wood"' \
+  "$workspace/config.json" >"$test_root/placement-surface.json"
+mv "$test_root/placement-surface.json" "$workspace/config.json"
+POLYTOOLS_WORLD_DIR="$source_world" \
+SCENEMAKER_WORKSPACE_DIR="$workspace" \
+  "$project_directory/scripts/sync_polytools_world.sh"
+cp "$valid_config" "$workspace/config.json"
+
+jq '.assets[1].authoring = "cells"' \
+  "$workspace/config.json" >"$test_root/placement-authoring.json"
+mv "$test_root/placement-authoring.json" "$workspace/config.json"
+if POLYTOOLS_WORLD_DIR="$source_world" \
+  SCENEMAKER_WORKSPACE_DIR="$workspace" \
+  "$project_directory/scripts/sync_polytools_world.sh"; then
+  printf '%s\n' 'Expected a Placement declaring authoring to fail preflight.' >&2
+  exit 1
+fi
+cp "$valid_config" "$workspace/config.json"
+
 jq '.assets[1].asset_key = "missing"' \
   "$workspace/config.json" >"$test_root/missing-geometry.json"
 mv "$test_root/missing-geometry.json" "$workspace/config.json"

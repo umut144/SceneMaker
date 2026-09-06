@@ -100,6 +100,48 @@ straight bridge is geometrically a Path with two linear points at one height.
 
 So the deck reuses `RouteSurfaceGeometry` and needs no new geometry at all.
 
+### But the deck is built, not painted
+
+The quad above is what a simulation walks on. It is not what the deck *is*: a
+deck is a row of planks, which is why `plank` sits in PolyTools' `bridge` Set
+beside `rope_post`. Reading it as a single material was a mistake worth
+recording - the deck named a Terrain Asset for a while, and `grass` stood in
+for it.
+
+A plank is therefore an ordinary Placement Asset, named by `deck_asset_key`,
+and what makes it a plank is that a bridge repeats it. No property on the Asset
+says so, because nothing needs to ask.
+
+SceneMaker lays the row out rather than shipping the parameters and letting
+world01 do it. Laying it out twice is the one way for the Canvas and the
+runtime to disagree, and the author only ever saw one of the two. Both halves
+travel: the planks are the authority, the count and gap are the record of what
+was asked for.
+
+**Count is authored; depth is derived.** Width-with-offset was tried first and
+declined in favour of a count, because a count is what an author actually names
+and a deck that ends on a leftover sliver is not one anyone wants to author
+around. So the depth of a plank is what the gaps leave over,
+`(length - (count - 1) * gap) / count`, and lengthening a bridge thickens its
+planks rather than adding one. Gaps sit between planks and never at the ends,
+so a deck always starts and finishes on wood.
+
+### A deck is walked on, so it carries a surface
+
+A deck presents `wood`. Nothing underneath it can say so - a bridge over a
+river has water below - so the deck Asset says it itself, and `surface` stopped
+being Terrain-only.
+
+Refusing a surface on a Placement was the earlier rule, on the reading that a
+Placement is a thing standing *on* the world rather than part of it. The deck
+is the counter-example, and the rule went rather than the deck.
+
+The same slice took back a second rule: **a Placement with no collision Region
+is no longer refused.** It occupies nothing, which is the honest third answer
+next to "its footprint" and "an error". A plank occupies nothing because what
+takes space there is the bridge. Falling back to the footprint is still wrong,
+and still forbidden.
+
 ### But it is its own authored record
 
 A bridge is nonetheless not stored as a `route_surfaces` entry. A Path carries
@@ -114,16 +156,19 @@ The authored record is small, because everything derivable is derived:
 ```jsonc
 {
   "bridge_id": "bridge_0001",
-  "asset_key": "planks",             // Terrain role, the deck material
+  "deck_asset_key": "deck",          // Placement role, one plank of the deck
   "anchor_asset_key": "rope_post",   // Placement role, the post itself
   "start_authoring_px": { "x": 1024, "y": 320 },
   "end_authoring_px":   { "x": 1536, "y": 320 },
   "width_meters": 4.0,
-  "elevation_meters": 1.125
+  "elevation_meters": 1.125,
+  "plank_count": 12,
+  "plank_gap_meters": 0.1
 }
 ```
 
-Length is not stored: two ends already fix it, and a second source of the same
+Length is not stored, and neither is the depth of a plank: two ends fix the
+first and the count and gap fix the second, and a second source of the same
 truth is one too many. It is a readout in the context bar, like a Path's grade
 report. The deck is horizontal — one height for the whole span — until a case
 needs otherwise.
@@ -195,11 +240,12 @@ the Scene, the second has to be free. Two trees may therefore overlap with
 their crowns and not with their trunks, which the world is full of and the old
 rule refused.
 
-A Placement whose model authored no collision Region at all is refused on load
-rather than falling back to its footprint. The fallback was considered: it is
-the current behaviour and breaks nothing, but it is exactly the hidden default
-this Workspace forbids, and the wrong one - a model whose collision nobody has
-drawn yet would quietly claim every pixel it is drawn with.
+A Placement whose model authored no collision Region occupies nothing. The
+footprint fallback is still refused - it is exactly the hidden default this
+Workspace forbids, and the wrong one, since a model whose collision nobody has
+drawn would quietly claim every pixel it is drawn with. Refusing the Asset
+outright was tried and taken back when the first real case arrived: a plank
+takes no space of its own, because what takes space there is the bridge.
 
 ### The area is Structures
 
@@ -209,15 +255,18 @@ points. It gets its own overview area rather than a fourth seat beside River,
 Path and Hill, because the navigation is deliberately stable and renaming it
 later costs more than naming it now.
 
-`Draw Bridge` offers `Surface`, `Anchor`, `Width`, `Height` and a `Length`
-readout. It deliberately does not offer grade, operation or clearance: a tool
+`Draw Bridge` offers `Deck`, `Planks`, `Gap`, `Anchor`, `Width`, `Height` and a
+readout of the length and what the planks came out at. It shows no `Surface`
+field at all: a deck is planked with a Placement, so there is no Terrain Asset
+to choose. It deliberately does not offer grade, operation or clearance: a tool
 that greys out half its context bar is a second tool.
 
 ### What is built
 
-Scene schema 17 persists the record above. `BridgeGeometry` derives the four
-corners and hands the deck to `RouteSurfaceGeometry` as the two-point chain it
-is, so a bridge has no idea of a band of its own. `BridgeEditing` places,
+Scene schema 18 persists the record above. `BridgeGeometry` derives the four
+corners, lays out the planks, and hands the deck quad to `RouteSurfaceGeometry`
+as the two-point chain it is, so a bridge has no idea of a band of its own.
+Export 13 ships the planks beside that quad and the four posts. `BridgeEditing` places,
 removes and finds one, and answers the draft and the commit with the same call:
 representable numbers, a height on the quantum, two different ends, every
 corner inside the Scene, and all four posts free - of Placements and of the
