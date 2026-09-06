@@ -463,6 +463,13 @@ Kollisionsbox. Der Radierer nimmt die ganze Brücke samt Pfosten — einen Pfost
 allein gibt es nicht, weil er nicht im Dokument steht, sondern aus der Brücke
 folgt.
 
+Das Ankerasset selbst steht **nicht** in der Placements-Leiste. Ein Asset, das
+ein `anchor_component` benennt, wird über seinen Teil verwendet und nicht als
+Ganzes gesetzt: ein Brückenmodell ist für den Pfosten da, den es trägt, und von
+Hand hingestellt ergäbe es ein brückenförmiges Placement, von dem keine Brücke
+etwas weiß. Die beiden Listen sind damit komplementär — was man setzen kann,
+und was einen Teil hergibt.
+
 ### Placements und Untergrund
 
 Ein Placement braucht kein Terrain unter sich. Seine Höhe ist absolut, also

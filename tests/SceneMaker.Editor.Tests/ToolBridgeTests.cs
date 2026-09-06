@@ -212,6 +212,27 @@ public sealed class ToolBridgeTests
         Assert.Equal("stone", BridgeAnchorAssets.Choose(workspace.Props, null));
     }
 
+    /// <summary>
+    /// An Asset that is used through a part of itself is not offered as a
+    /// Placement to set. Setting the whole bridge model by hand would put a
+    /// bridge-shaped Placement on the map that no bridge knows about, and the
+    /// posts it is there for come from the bridge instead.
+    /// </summary>
+    [Fact]
+    public void AnAssetUsedThroughItsPartIsNotOfferedAsAPlacement()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var placements = PlacementAreaAssets.Offered(workspace.Props)
+            .Select(static asset => asset.AssetKey)
+            .ToList();
+
+        Assert.Equal(["portal"], placements);
+        Assert.DoesNotContain("stone", placements);
+        Assert.Contains("stone", BridgeAnchorAssets.Offered(workspace.Props)
+            .Select(static asset => asset.AssetKey));
+    }
+
     private static BridgeDraftPreview Preview(
         TestWorkspace workspace,
         SceneDocument scene,

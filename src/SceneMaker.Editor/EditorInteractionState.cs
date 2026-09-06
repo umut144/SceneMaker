@@ -245,6 +245,19 @@ public static class BridgeAnchorAssets
     }
 
     /// <summary>
+    /// Whether this Asset is used through a part of itself rather than as a
+    /// whole. Naming an anchor_component is what says so: a bridge model is
+    /// there for the post it carries, and setting the whole thing by hand
+    /// would put a bridge-shaped Placement on the map that no bridge knows
+    /// about.
+    /// </summary>
+    public static bool IsUsedThroughItsPart(PropDisplayAsset asset)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        return asset.AnchorComponent is not null;
+    }
+
+    /// <summary>
     /// The one to show: the remembered choice while it still qualifies, and
     /// otherwise the first offered. Null when the Workspace offers none, which
     /// the field shows rather than papering over.
@@ -259,6 +272,22 @@ public static class BridgeAnchorAssets
             return remembered;
         }
         return offered.Count == 0 ? null : offered[0].AssetKey;
+    }
+}
+
+/// <summary>
+/// Which Placements the Placements area offers to set. An Asset used through a
+/// part of itself is left out: it is on the map already, wherever the thing
+/// that uses it put it.
+/// </summary>
+public static class PlacementAreaAssets
+{
+    public static IReadOnlyList<PropDisplayAsset> Offered(PropDisplayCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        return catalog.Assets
+            .Where(static asset => !BridgeAnchorAssets.IsUsedThroughItsPart(asset))
+            .ToList();
     }
 }
 
