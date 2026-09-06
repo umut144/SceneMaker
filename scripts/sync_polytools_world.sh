@@ -8,7 +8,7 @@ source_catalog="$source_world_dir/catalog.json"
 config_path="$workspace_dir/config.json"
 import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
-current_manifest_schema=16
+current_manifest_schema=19
 
 cleanup() {
   local status=$?
@@ -44,7 +44,7 @@ if [[ ! -f "$config_path" ]]; then
 fi
 
 if ! jq -e '
-  .schema_version == 1
+  .schema_version == 2
   and (.world_key | type == "string" and length > 0)
   and (.world_name | type == "string")
   and (.assets | type == "array" and length > 0)
@@ -52,6 +52,7 @@ if ! jq -e '
     (.asset_key | type == "string" and length > 0)
     and (.display_name | type == "string" and length > 0)
     and (.asset_type | type == "string" and length > 0)
+    and (.asset_category == "single" or .asset_category == "set" or .asset_category == "palette")
     and (.runtime_package == ("PolyToolsRuntimeExports/" + .asset_key + "/manifest.json"))
   )
   and (([.assets[].asset_key] | unique | length) == ([.assets[].asset_key] | length))
@@ -63,7 +64,7 @@ fi
 world_key="$(jq -r '.world_key' "$source_catalog")"
 if ! jq -e --arg world "$world_key" '
   .format == "scene_maker_workspace"
-  and .version == 9
+  and .version == 10
   and .workspace_key == $world
   and (.grid.terrain_cell_meters | type == "number" and . > 0)
   and (.grid.authoring_pixels_per_meter | type == "number" and . > 0)
@@ -84,7 +85,7 @@ if ! jq -e --arg world "$world_key" '
     end)
   and (([.assets[].asset_key] | unique | length) == ([.assets[].asset_key] | length))
 ' "$config_path" >/dev/null; then
-  printf 'ERROR: SceneMaker config must be a valid version 9 catalog for PolyTools world %s.\n' "$world_key" >&2
+  printf 'ERROR: SceneMaker config must be a valid version 10 catalog for PolyTools world %s.\n' "$world_key" >&2
   exit 1
 fi
 if ! jq -e --slurpfile catalog "$source_catalog" '
@@ -96,6 +97,35 @@ if ! jq -e --slurpfile catalog "$source_catalog" '
 ' "$config_path" >/dev/null; then
   printf '%s\n' 'ERROR: every SceneMaker Placement needs matching PolyTools geometry.' >&2
   exit 1
+fi
+
+# A variant is reached by choosing it for a Palette, never by naming it in a
+# map. SceneMaker cannot check that itself: it requests only its configured
+# Placements, so a Palette Manifest never reaches it and Terrain Assets carry
+# no PolyTools package at all. Only here is the whole source catalog present,
+# and the variants lists are the authority.
+variant_keys="$(
+  jq -r '.assets[] | select(.asset_category == "palette") | .asset_key' "$source_catalog" \
+    | while IFS= read -r palette_key; do
+        [[ -z "$palette_key" ]] && continue
+        palette_manifest="$source_world_dir/PolyToolsRuntimeExports/$palette_key/manifest.json"
+        if [[ ! -f "$palette_manifest" ]]; then
+          printf 'ERROR: missing PolyTools Palette manifest: %s\n' "$palette_manifest" >&2
+          exit 1
+        fi
+        jq -r '.variants[]?' "$palette_manifest"
+      done
+)"
+if [[ -n "$variant_keys" ]]; then
+  while IFS= read -r variant_key; do
+    [[ -z "$variant_key" ]] && continue
+    if jq -e --arg key "$variant_key" \
+        'any(.assets[]; .asset_key == $key)' "$config_path" >/dev/null; then
+      printf 'ERROR: SceneMaker configures %s, which is a Palette variant; configure the Palette instead.\n' \
+        "$variant_key" >&2
+      exit 1
+    fi
+  done <<< "$variant_keys"
 fi
 
 mkdir -p "$import_parent"

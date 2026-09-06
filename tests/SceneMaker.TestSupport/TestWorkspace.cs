@@ -109,7 +109,7 @@ public sealed class TestWorkspace : IDisposable
             $$"""
             {
               "format": "scene_maker_workspace",
-              "version": 9,
+              "version": 10,
               "workspace_key": "{{worldKey}}",
               "grid": {
                 "terrain_cell_meters": 1.0,
@@ -123,7 +123,7 @@ public sealed class TestWorkspace : IDisposable
                 { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF" },
                 { "asset_key": "river", "display_name": "Water", "role": "terrain", "color": "#3C7DD9", "surface": "water", "authoring": "curve" },
                 { "asset_key": "sand", "display_name": "Sand", "role": "terrain", "color": "#E5C07B", "surface": "sand", "authoring": "cells" },
-                { "asset_key": "stone", "display_name": "Stone", "role": "placement", "color": "#808080", "anchor_component": "post" }{{lava}}
+                { "asset_key": "stone", "display_name": "Stone", "role": "placement", "color": "#808080" }{{lava}}
               ]
             }
             """);
@@ -136,6 +136,7 @@ public sealed class TestWorkspace : IDisposable
                 + "      \"asset_key\": \"lava\",\n"
                 + "      \"display_name\": \"Lava\",\n"
                 + "      \"asset_type\": \"terrain\",\n"
+                + "      \"asset_category\": \"single\",\n"
                 + "      \"runtime_package\": \"PolyToolsRuntimeExports/lava/manifest.json\"\n"
                 + "    }"
             : string.Empty;
@@ -148,7 +149,7 @@ public sealed class TestWorkspace : IDisposable
             Path.Combine(importDirectory, PolyToolsCatalogImporter.CatalogFileName),
             $$"""
             {
-              "schema_version": 1,
+              "schema_version": 2,
               "world_key": "{{worldKey}}",
               "world_name": "Test World",
               "assets": [
@@ -156,30 +157,35 @@ public sealed class TestWorkspace : IDisposable
                   "asset_key": "grass",
                   "display_name": "Grass",
                   "asset_type": "terrain",
+                  "asset_category": "single",
                   "runtime_package": "PolyToolsRuntimeExports/grass/manifest.json"
                 },
                 {
                   "asset_key": "portal",
                   "display_name": "Portal",
                   "asset_type": "props",
+                  "asset_category": "single",
                   "runtime_package": "PolyToolsRuntimeExports/portal/manifest.json"
                 },
                 {
                   "asset_key": "river",
                   "display_name": "River",
                   "asset_type": "terrain",
+                  "asset_category": "single",
                   "runtime_package": "PolyToolsRuntimeExports/river/manifest.json"
                 },
                 {
                   "asset_key": "sand",
                   "display_name": "Sand",
                   "asset_type": "terrain",
+                  "asset_category": "single",
                   "runtime_package": "PolyToolsRuntimeExports/sand/manifest.json"
                 },
                 {
                   "asset_key": "stone",
                   "display_name": "Stone",
                   "asset_type": "props",
+                  "asset_category": "single",
                   "runtime_package": "PolyToolsRuntimeExports/stone/manifest.json"
                 }{{lava}}
               ]
@@ -246,10 +252,11 @@ public sealed class TestWorkspace : IDisposable
             Path.Combine(directory, "manifest.json"),
             $$"""
             {
-              "schema_version": 16,
+              "schema_version": 19,
               "asset_key": "{{assetKey}}",
               "display_name": "{{assetKey}}",
               "asset_type": "{{assetType}}",
+              "asset_category": "single",
               "asset_pivot": [0.0, 0.0],
               "components": [
                 {

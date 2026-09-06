@@ -157,11 +157,12 @@ public sealed class BridgeEditingTests
     }
 
     /// <summary>
-    /// A Placement offered whole has no part to stand at a corner: setting
-    /// four of those would set four bridges rather than four posts.
+    /// A post is an Asset of its own, so any ordinary Placement can stand at a
+    /// corner. What it occupies there is its own collision box, which is why a
+    /// wider post refuses where a narrow one fits.
     /// </summary>
     [Fact]
-    public void AnAnchorAssetWithoutANamedPartCannotStandAtACorner()
+    public void AnyPlacementCanStandAtACornerAndAnswersWithItsOwnCollision()
     {
         using var workspace = TestWorkspace.Create();
 
@@ -178,8 +179,22 @@ public sealed class BridgeEditingTests
             BridgeEditing.DefaultWidthMeters,
             1m);
 
-        Assert.False(validation.IsValid);
-        Assert.Contains("names no anchor_component", validation.Reason!, StringComparison.Ordinal);
+        Assert.True(validation.IsValid);
+        var bridge = Assert.Single(BridgeEditing.Place(
+            Map(),
+            workspace.Terrain,
+            workspace.Props,
+            320,
+            320,
+            640,
+            320,
+            "grass",
+            "portal",
+            BridgeEditing.DefaultWidthMeters,
+            1m).Bridges);
+        Assert.Equal(
+            PropEditing.CollisionBoundsFor(workspace.Props.Resolve("portal"), 320, 384),
+            BridgeEditing.PostBounds(workspace.Metrics, workspace.Props, bridge)[0]);
     }
 
     /// <summary>
@@ -217,21 +232,49 @@ public sealed class BridgeEditingTests
         Assert.Contains("cannot own bridges", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The posts travel already worked out, so a consumer places what it is
+    /// given instead of agreeing with SceneMaker about where a corner is.
+    /// </summary>
     [Fact]
-    public void ExportRefusesABridgeRatherThanDroppingIt()
+    public void ExportCarriesTheDeckAndTheFourPostsItSets()
     {
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
         var scene = Place(
             workspace, TestScenes.Instance(workspace, sizeCells: 30), 320, 320, 640, 320);
 
-        var exception = Assert.Throws<SceneMakerDocumentException>(() => SceneExport.Write(
+        var written = SceneExport.Write(
             session,
             new LoadedScene(
                 Path.Combine(session.Workspace.ScenesDirectoryPath, "base.scene.json"),
-                scene)));
+                scene));
 
-        Assert.Contains("no representation for a bridge", exception.Message, StringComparison.Ordinal);
+        using var parsed = System.Text.Json.JsonDocument.Parse(File.ReadAllText(written.Path));
+        var authored = Assert.Single(parsed.RootElement
+            .GetProperty("scene").GetProperty("bridges").EnumerateArray());
+        Assert.Equal("bridge_0001", authored.GetProperty("bridge_id").GetString());
+        Assert.Equal("stone", authored.GetProperty("anchor_asset_key").GetString());
+
+        var bake = Assert.Single(parsed.RootElement.GetProperty("bridge_bakes").EnumerateArray());
+        Assert.NotEmpty(bake.GetProperty("vertices").EnumerateArray());
+        var posts = bake.GetProperty("posts").EnumerateArray().ToList();
+        Assert.Equal(4, posts.Count);
+        Assert.Equal(
+            [
+                "bridge_0001.post_start_left",
+                "bridge_0001.post_start_right",
+                "bridge_0001.post_end_left",
+                "bridge_0001.post_end_right",
+            ],
+            posts.Select(post => post.GetProperty("post_id").GetString()));
+
+        // An ordinary Placement Asset at a worked-out position.
+        Assert.Equal("stone", posts[0].GetProperty("asset_key").GetString());
+        Assert.Equal("start_left", posts[0].GetProperty("corner").GetString());
+        Assert.Equal(10m, posts[0].GetProperty("x_meters").GetDecimal());
+        Assert.Equal(12m, posts[0].GetProperty("y_meters").GetDecimal());
+        Assert.Equal(1m, posts[0].GetProperty("elevation_meters").GetDecimal());
     }
 
     /// <summary>A Scene wide enough to hold a ten-metre span with room around it.</summary>

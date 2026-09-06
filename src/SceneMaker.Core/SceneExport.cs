@@ -13,15 +13,15 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 11;
+    public const int Version = 12;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
-    // ElevationRegion contours remain folded into Terrain. Embedded scene 12
-    // carries the authored per-segment operation and clearance a Path was
-    // already allowed to hold, while export 11 adds the cells those subtractive
-    // intervals remove - the same source/derived split water already makes.
-    private const int EmbeddedSceneVersion = 12;
+    // ElevationRegion contours remain folded into Terrain. Embedded scene 13
+    // carries authored bridges, while export 12 adds their derived half: the
+    // deck as the triangles a Path already ships, and the four corner posts
+    // worked out here rather than by every consumer.
+    private const int EmbeddedSceneVersion = 13;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -74,6 +74,8 @@ public static class SceneExport
                 .ToList(),
             RouteSurfaceCutRaster = ExportRouteSurfaceCutRaster(
                 scene.Document, configuration.Metrics),
+            BridgeBakes = ExportBridgeBakes(
+                scene.Document, configuration.Metrics, propAssets),
             Scene = ExportScene(scene.Document, configuration.Metrics),
         };
         var directory = Path.Combine(workspace.DirectoryPath, DirectoryName);
@@ -241,6 +243,56 @@ public static class SceneExport
             .ToList();
 
     /// <summary>
+    /// The derived half of every bridge. The deck goes through the same bake a
+    /// Path does, because it is the same band; the posts are the corners this
+    /// Workspace's anchor Asset stands at, worked out here so no consumer has
+    /// to agree with SceneMaker about where a corner is.
+    /// </summary>
+    private static List<ExportBridgeBakeDocument> ExportBridgeBakes(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        PropDisplayCatalog propAssets) =>
+        scene.Bridges
+            .Select(bridge =>
+            {
+                var bake = RouteSurfaceBake.Build(metrics, BridgeGeometry.DeckRoute(bridge));
+                return new ExportBridgeBakeDocument
+                {
+                    BridgeId = bridge.BridgeId,
+                    AssetKey = bridge.AssetKey,
+                    Vertices = bake.Vertices,
+                    TriangleIndices = bake.TriangleIndices,
+                    BoundaryEdges = bake.BoundaryEdges,
+                    Posts = BridgeGeometry.Corners(metrics, bridge)
+                        .Select(corner => new ExportBridgePostDocument
+                        {
+                            PostId = $"{bridge.BridgeId}.post_{CornerSuffix(corner.Kind)}",
+                            Corner = corner.Kind,
+                            AssetKey = bridge.AnchorAssetKey,
+                            XMeters = corner.XMeters,
+                            YMeters = corner.YMeters,
+                            ElevationMeters = bridge.ElevationMeters,
+                        })
+                        .ToList(),
+                };
+            })
+            .ToList();
+
+    /// <summary>
+    /// The stable tail of a post's ID. It uses the dot the way a route segment
+    /// does, which is also what keeps it apart from an authored Placement ID:
+    /// those are always {asset_key}_{0000} and never contain one.
+    /// </summary>
+    private static string CornerSuffix(BridgeCornerKind kind) => kind switch
+    {
+        BridgeCornerKind.StartLeft => "start_left",
+        BridgeCornerKind.StartRight => "start_right",
+        BridgeCornerKind.EndLeft => "end_left",
+        BridgeCornerKind.EndRight => "end_right",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    /// <summary>
     /// The derived half of an excavating Path: which cells each subtractive
     /// interval takes out of the Terrain, and between which two heights. The
     /// cells come from the same raster the Section view reads, so what an
@@ -294,6 +346,7 @@ public static class SceneExport
         TerrainCells = [.. ElevationRegionGeometry.EffectiveTerrainCells(scene, metrics)],
         Props = scene.Props,
         WaterBodies = scene.WaterBodies,
+        Bridges = scene.Bridges,
         RouteSurfaces = scene.RouteSurfaces.Select(static route =>
             new ExportRouteSurfaceDocument
             {
@@ -358,16 +411,11 @@ public static class SceneExport
         RouteSurfaceEditing.ValidateAssetReferences(scene, terrainAssets);
         WaterEditing.ValidateAssetReferences(scene, terrainAssets);
 
-        // Authoring leads the runtime contract here as it did for excavating
-        // Paths: refusing outright is the one thing that cannot lose a bridge
-        // silently, and it costs nothing today because no Scene can hold one
-        // until the tool exists.
-        if (scene.Bridges.Count > 0)
-        {
-            throw new SceneMakerDocumentException(
-                $"Bridge '{scene.Bridges[0].BridgeId}' cannot be exported: export "
-                + $"schema {Version} has no representation for a bridge yet.");
-        }
+        // A bridge is only exportable while its anchor Asset is still enabled.
+        // Refusing here rather than writing a post with no model is the same
+        // promise the placement rule already makes.
+        foreach (var bridge in scene.Bridges)
+            _ = propAssets.Resolve(bridge.AnchorAssetKey);
     }
 
     private sealed record ExportDocument
@@ -397,6 +445,12 @@ public static class SceneExport
         /// </summary>
         public required List<ExportRouteSurfaceCutDocument> RouteSurfaceCutRaster { get; init; }
 
+        /// <summary>
+        /// Runtime-ready bridge geometry: the deck, and the posts standing at
+        /// its corners. Empty for a Scene without bridges.
+        /// </summary>
+        public required List<ExportBridgeBakeDocument> BridgeBakes { get; init; }
+
         public required ExportSceneDocument Scene { get; init; }
     }
 
@@ -417,6 +471,7 @@ public static class SceneExport
         public required List<PropDocument> Props { get; init; }
         public required List<WaterBodyDocument> WaterBodies { get; init; }
         public required List<ExportRouteSurfaceDocument> RouteSurfaces { get; init; }
+        public required List<BridgeDocument> Bridges { get; init; }
         public required TemplateDefinitionDocument? TemplateDefinition { get; init; }
         public required List<TemplateAnchorDocument> TemplateAnchors { get; init; }
         public required decimal DefaultElevationMeters { get; init; }
@@ -461,6 +516,49 @@ public static class SceneExport
     /// leaving it to a consumer keeps the portal rule at an operation
     /// transition in one place.
     /// </summary>
+    /// <summary>
+    /// The runtime half of a bridge: its deck as the same triangles a Path
+    /// ships, and the four posts already worked out. A consumer places what it
+    /// is given rather than rebuilding the corner arithmetic - which is also
+    /// what keeps the two from ever disagreeing.
+    /// </summary>
+    private sealed record ExportBridgeBakeDocument
+    {
+        public required string BridgeId { get; init; }
+
+        /// <summary>The Terrain Asset whose surface the deck presents.</summary>
+        public required string AssetKey { get; init; }
+
+        public required IReadOnlyList<RouteSurfaceBakeVertex> Vertices { get; init; }
+        public required IReadOnlyList<int> TriangleIndices { get; init; }
+        public required IReadOnlyList<RouteSurfaceBoundaryEdge> BoundaryEdges { get; init; }
+        public required List<ExportBridgePostDocument> Posts { get; init; }
+    }
+
+    /// <summary>
+    /// One corner post: an ordinary Placement Asset at a worked-out position.
+    /// It is derived rather than authored, so it carries no instance ID from
+    /// the Scene and cannot be edited on its own - the bridge is what decides
+    /// where it stands.
+    /// </summary>
+    private sealed record ExportBridgePostDocument
+    {
+        public required string PostId { get; init; }
+
+        /// <summary>Which corner, walking from the start end to the end end.</summary>
+        public required BridgeCornerKind Corner { get; init; }
+
+        public required string AssetKey { get; init; }
+        public required decimal XMeters { get; init; }
+        public required decimal YMeters { get; init; }
+
+        /// <summary>
+        /// The deck height this corner sits at. How far a post reaches below
+        /// or above it is the model's business, not the map's.
+        /// </summary>
+        public required decimal ElevationMeters { get; init; }
+    }
+
     private sealed record ExportRouteSurfaceCutDocument
     {
         public required string RouteSurfaceId { get; init; }

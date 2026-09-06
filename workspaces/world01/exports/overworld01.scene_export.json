@@ -22,6 +22,18 @@
       }
     },
     {
+      "asset_key": "bridge",
+      "surface": null,
+      "footprint_meters": {
+        "width": 1.0625,
+        "height": 1.40625
+      },
+      "anchor_meters": {
+        "x": 0.53125,
+        "y": 0.125
+      }
+    },
+    {
       "asset_key": "grass",
       "surface": "land",
       "footprint_meters": null,

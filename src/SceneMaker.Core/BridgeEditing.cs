@@ -151,40 +151,30 @@ public static class BridgeEditing
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(propAssets);
         ArgumentNullException.ThrowIfNull(bridge);
-        var post = RequirePost(propAssets, bridge);
+        var post = propAssets.Resolve(bridge.AnchorAssetKey);
         return
         [
-            .. BridgeGeometry.Corners(metrics, bridge).Select(corner =>
-            {
-                var anchorX = checked((int)Math.Round(
-                    corner.XMeters * metrics.AuthoringPixelsPerMeter,
-                    MidpointRounding.AwayFromZero));
-                var anchorY = checked((int)Math.Round(
-                    corner.YMeters * metrics.AuthoringPixelsPerMeter,
-                    MidpointRounding.AwayFromZero));
-                return new PropBoundsAuthoringPixels(
-                    checked(anchorX + post.Collision.OffsetXAuthoringPixels),
-                    checked(anchorY + post.Collision.OffsetYAuthoringPixels),
-                    post.Collision.WidthAuthoringPixels,
-                    post.Collision.HeightAuthoringPixels);
-            }),
+            .. BridgeGeometry.Corners(metrics, bridge)
+                .Select(corner => CornerAnchor(metrics, corner))
+                .Select(anchor => PropEditing.CollisionBoundsFor(post, anchor.X, anchor.Y)),
         ];
     }
 
     /// <summary>
-    /// The part the anchor Asset offers. A Placement used whole cannot stand
-    /// at a bridge corner: setting four of those would set four bridges.
+    /// Where a corner sits, as the authoring-pixel anchor a Placement is set
+    /// by. Rounded once, here, so the draft check and the export cannot land a
+    /// post on two different pixels.
     /// </summary>
-    public static PropAnchorComponent RequirePost(
-        PropDisplayCatalog propAssets,
-        BridgeDocument bridge)
+    public static (int X, int Y) CornerAnchor(WorkspaceMetrics metrics, BridgeCorner corner)
     {
-        ArgumentNullException.ThrowIfNull(propAssets);
-        ArgumentNullException.ThrowIfNull(bridge);
-        var asset = propAssets.Resolve(bridge.AnchorAssetKey);
-        return asset.AnchorComponent
-            ?? throw new SceneMakerDocumentException(
-                $"Placement Asset '{bridge.AnchorAssetKey}' names no anchor_component, so it offers no part to stand at a bridge corner.");
+        ArgumentNullException.ThrowIfNull(metrics);
+        return (
+            checked((int)Math.Round(
+                corner.XMeters * metrics.AuthoringPixelsPerMeter,
+                MidpointRounding.AwayFromZero)),
+            checked((int)Math.Round(
+                corner.YMeters * metrics.AuthoringPixelsPerMeter,
+                MidpointRounding.AwayFromZero)));
     }
 
     private static BridgeDocument Candidate(
@@ -234,13 +224,7 @@ public static class BridgeEditing
         if (bridge.StartAuthoringPx == bridge.EndAuthoringPx)
             return new BridgeValidationResult(false, "A bridge needs two different ends.");
 
-        var post = propAssets.Resolve(bridge.AnchorAssetKey).AnchorComponent;
-        if (post is null)
-        {
-            return new BridgeValidationResult(
-                false,
-                $"Placement Asset '{bridge.AnchorAssetKey}' names no anchor_component, so it offers no part to stand at a bridge corner.");
-        }
+        _ = propAssets.Resolve(bridge.AnchorAssetKey);
 
         var width = metrics.SceneWidthAuthoringPixels(scene);
         var height = metrics.SceneHeightAuthoringPixels(scene);

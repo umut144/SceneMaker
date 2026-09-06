@@ -238,23 +238,16 @@ public static class TerrainAreaAssets
 /// </summary>
 public static class BridgeAnchorAssets
 {
+    /// <summary>
+    /// Every Placement a bridge can stand on its corners - which is every one
+    /// the Workspace enables. A post is an Asset of its own; nothing asks an
+    /// Asset for a part of itself, and a composition that could not stand
+    /// somewhere never reaches the catalog.
+    /// </summary>
     public static IReadOnlyList<PropDisplayAsset> Offered(PropDisplayCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        return catalog.Assets.Where(static asset => asset.AnchorComponent is not null).ToList();
-    }
-
-    /// <summary>
-    /// Whether this Asset is used through a part of itself rather than as a
-    /// whole. Naming an anchor_component is what says so: a bridge model is
-    /// there for the post it carries, and setting the whole thing by hand
-    /// would put a bridge-shaped Placement on the map that no bridge knows
-    /// about.
-    /// </summary>
-    public static bool IsUsedThroughItsPart(PropDisplayAsset asset)
-    {
-        ArgumentNullException.ThrowIfNull(asset);
-        return asset.AnchorComponent is not null;
+        return catalog.Assets;
     }
 
     /// <summary>
@@ -272,22 +265,6 @@ public static class BridgeAnchorAssets
             return remembered;
         }
         return offered.Count == 0 ? null : offered[0].AssetKey;
-    }
-}
-
-/// <summary>
-/// Which Placements the Placements area offers to set. An Asset used through a
-/// part of itself is left out: it is on the map already, wherever the thing
-/// that uses it put it.
-/// </summary>
-public static class PlacementAreaAssets
-{
-    public static IReadOnlyList<PropDisplayAsset> Offered(PropDisplayCatalog catalog)
-    {
-        ArgumentNullException.ThrowIfNull(catalog);
-        return catalog.Assets
-            .Where(static asset => !BridgeAnchorAssets.IsUsedThroughItsPart(asset))
-            .ToList();
     }
 }
 

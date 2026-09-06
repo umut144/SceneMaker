@@ -436,9 +436,10 @@ Bridge-Kontext:  Surface [ Planks ▾ ] · Anchor [ Bridge ▾ ]
 
 `Surface` bietet wie beim Path jedes Terrain-Asset an: ein Deck ist eine
 unabhängige Oberfläche über dem Gelände, und Planken über einem Fluss sind kein
-Fluss. `Anchor` bietet nur Placements an, die ein `anchor_component` benennen —
-ein ganzes Placement viermal zu setzen wären vier Brücken statt vier Pfosten.
-Bietet der Workspace keines an, steht das Feld da und sagt es im Tooltip.
+Fluss. `Anchor` bietet jedes aktivierte Placement an — ein Pfosten ist ein
+eigenes Asset, und was nirgends stehen kann, kommt gar nicht erst in den
+Katalog. Bietet der Workspace keines an, steht das Feld da und sagt es im
+Tooltip.
 
 Es gibt keinen Point-Modus, keine Steigung und keine Operation. Eine Brücke ist
 gerade, waagerecht und hat zwei Enden; ein Werkzeug, das die halbe
@@ -462,13 +463,6 @@ einen Pfosten; im Bereich `Structures` zusätzlich dessen gestrichelte
 Kollisionsbox. Der Radierer nimmt die ganze Brücke samt Pfosten — einen Pfosten
 allein gibt es nicht, weil er nicht im Dokument steht, sondern aus der Brücke
 folgt.
-
-Das Ankerasset selbst steht **nicht** in der Placements-Leiste. Ein Asset, das
-ein `anchor_component` benennt, wird über seinen Teil verwendet und nicht als
-Ganzes gesetzt: ein Brückenmodell ist für den Pfosten da, den es trägt, und von
-Hand hingestellt ergäbe es ein brückenförmiges Placement, von dem keine Brücke
-etwas weiß. Die beiden Listen sind damit komplementär — was man setzen kann,
-und was einen Teil hergibt.
 
 ### Placements und Untergrund
 

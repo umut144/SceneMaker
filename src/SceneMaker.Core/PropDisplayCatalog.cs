@@ -3,26 +3,6 @@ using System.Collections.ObjectModel;
 namespace SceneMaker.Core;
 
 /// <summary>
-/// One part of a Placement that the Workspace named, as a box measured from
-/// the Placement's own anchor. A bridge sets its posts by it, and the Canvas
-/// draws it where that part sits inside the whole Asset. Offsets are signed
-/// because a part need not surround the anchor.
-/// </summary>
-public sealed record PropAnchorComponent(
-    string Name,
-    int OffsetXAuthoringPixels,
-    int OffsetYAuthoringPixels,
-    int WidthAuthoringPixels,
-    int HeightAuthoringPixels,
-
-    /// <summary>
-    /// What this part occupies on its own, from the collision Regions hanging
-    /// on it rather than from the whole Asset's. A bridge sets posts, and a
-    /// post has to answer for a post rather than for a bridge.
-    /// </summary>
-    PropCollisionBox Collision);
-
-/// <summary>
 /// What a Placement occupies where it stands, as a box measured from its own
 /// anchor. It comes from the collision Regions the PolyTools model authored,
 /// not from what the model looks like: a lamp post is a pole to walk into and
@@ -47,8 +27,7 @@ public sealed record PropDisplayAsset(
     int FootprintHeightAuthoringPixels,
     int AnchorXAuthoringPixels,
     int AnchorYAuthoringPixels,
-    PropCollisionBox Collision,
-    PropAnchorComponent? AnchorComponent = null);
+    PropCollisionBox Collision);
 
 public sealed class PropDisplayCatalog
 {
@@ -95,8 +74,6 @@ public static class PropDisplayCatalogLoader
         decimal authoringPixelsPerMeter)
     {
         var bounds = catalogAsset.BoundsMeters;
-        var anchorComponent = ResolveAnchorComponent(
-            profile, catalogAsset, authoringPixelsPerMeter);
         var collision = ResolveCollision(profile, catalogAsset, authoringPixelsPerMeter);
         var left = checked((int)decimal.Floor(bounds.MinimumX * authoringPixelsPerMeter));
         var bottom = checked((int)decimal.Floor(bounds.MinimumY * authoringPixelsPerMeter));
@@ -124,8 +101,7 @@ public static class PropDisplayCatalogLoader
             height,
             anchorX,
             anchorY,
-            collision,
-            anchorComponent);
+            collision);
     }
 
     /// <summary>
@@ -172,55 +148,4 @@ public static class PropDisplayCatalogLoader
         return new PropCollisionBox(left, bottom, width, height);
     }
 
-    /// <summary>
-    /// Resolves the Component the Workspace named on this Placement. A name
-    /// that matches nothing, or more than one part, is refused rather than
-    /// quietly ignored: something authored it deliberately, and drawing the
-    /// wrong part - or none - is worse than a load that says why.
-    /// </summary>
-    private static PropAnchorComponent? ResolveAnchorComponent(
-        WorkspaceAssetProfile profile,
-        PolyToolsCatalogAsset catalogAsset,
-        decimal authoringPixelsPerMeter)
-    {
-        if (profile.AnchorComponent is not { } name) return null;
-        var matches = catalogAsset.Components
-            .Where(component => StringComparer.Ordinal.Equals(component.Name, name))
-            .ToList();
-        if (matches.Count == 0)
-        {
-            throw new SceneMakerDocumentException(
-                $"Asset '{profile.AssetKey}' names anchor_component '{name}', which its PolyTools geometry does not contain.");
-        }
-        if (matches.Count > 1)
-        {
-            throw new SceneMakerDocumentException(
-                $"Asset '{profile.AssetKey}' names anchor_component '{name}', which its PolyTools geometry contains {matches.Count} times.");
-        }
-
-        // Rounded outward on the same grid as the visible footprint, so a part
-        // never reads as smaller than the geometry it stands for.
-        var box = Box(
-            matches[0].BoundsMeters,
-            authoringPixelsPerMeter,
-            $"Asset '{profile.AssetKey}' anchor_component '{name}'");
-
-        // A part that gets set somewhere has to say what it occupies there,
-        // for the same reason the whole Asset does.
-        if (matches[0].CollisionBoundsMeters is not { } collisionBounds)
-        {
-            throw new SceneMakerDocumentException(
-                $"Asset '{profile.AssetKey}' anchor_component '{name}' carries no collision Region, so nothing says what the part occupies.");
-        }
-        return new PropAnchorComponent(
-            name,
-            box.OffsetXAuthoringPixels,
-            box.OffsetYAuthoringPixels,
-            box.WidthAuthoringPixels,
-            box.HeightAuthoringPixels,
-            Box(
-                collisionBounds,
-                authoringPixelsPerMeter,
-                $"Asset '{profile.AssetKey}' anchor_component '{name}' collision"));
-    }
 }

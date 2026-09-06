@@ -10,27 +10,26 @@ public sealed record AssetBoundsMeters(
     decimal MaximumY);
 
 /// <summary>
-/// One named Component of a PolyTools Asset with the bounds it and its
-/// descendants occupy in the Asset's own space. It is geometry and nothing
-/// else: which Component means something to SceneMaker is a Workspace
-/// decision, so the import offers every name and picks none.
+/// How a PolyTools Asset is composed, as its Catalog states it. It is a
+/// separate question from what the Asset is: a Palette of grasses and a single
+/// grass are both terrain.
+///
+/// <para>SceneMaker reads it for one decision only - a Set publishes which
+/// Assets belong together rather than a thing with a footprint, so it has
+/// nothing to be placed by and must not be offered as an ordinary
+/// Placement.</para>
 /// </summary>
-public sealed record PolyToolsComponentBounds(
-    string Name,
-    AssetBoundsMeters BoundsMeters,
-
-    /// <summary>
-    /// What this part alone occupies: the collision Regions whose source is
-    /// this Component or one below it. An Asset's own collision answer covers
-    /// everything it is made of, which is the wrong answer for a part that
-    /// gets set somewhere by itself. Null when no Region hangs on this part.
-    /// </summary>
-    AssetBoundsMeters? CollisionBoundsMeters);
+public enum PolyToolsAssetCategory
+{
+    Single,
+    Set,
+    Palette,
+}
 
 public sealed record PolyToolsCatalogAsset(
     string AssetKey,
+    PolyToolsAssetCategory Category,
     AssetBoundsMeters BoundsMeters,
-    IReadOnlyList<PolyToolsComponentBounds> Components,
     AssetBoundsMeters? CollisionBoundsMeters);
 
 public sealed class PolyToolsCatalog
@@ -66,8 +65,8 @@ public static class PolyToolsCatalogImporter
     public const string ImportDirectoryName = "imports";
     public const string PolyToolsDirectoryName = "polytools";
     public const string CatalogFileName = "catalog.json";
-    public const int CatalogSchemaVersion = 1;
-    public const int ManifestSchemaVersion = 16;
+    public const int CatalogSchemaVersion = 2;
+    public const int ManifestSchemaVersion = 19;
 
     /// <summary>
     /// Imports every legacy authoring Asset. Tests for the PolyTools boundary
@@ -118,6 +117,7 @@ public static class PolyToolsCatalogImporter
                 DocumentValidation.ValidateStableId("PolyTools asset_key", key);
                 _ = RequireString(entryObject, "display_name", $"PolyTools asset '{key}'");
                 var assetType = RequireString(entryObject, "asset_type", $"PolyTools asset '{key}'");
+                var category = RequireCategory(entryObject, $"PolyTools asset '{key}'");
                 var runtimePackage = RequireString(
                     entryObject, "runtime_package", $"PolyTools asset '{key}'");
                 var expectedPackage = $"PolyToolsRuntimeExports/{key}/manifest.json";
@@ -128,7 +128,7 @@ public static class PolyToolsCatalogImporter
                 }
                 if (!catalogEntries.TryAdd(
                         key,
-                        new CatalogEntry(key, assetType, runtimePackage)))
+                        new CatalogEntry(key, assetType, category, runtimePackage)))
                 {
                     throw new SceneMakerDocumentException(
                         $"PolyTools catalog contains duplicate asset_key '{key}'.");
@@ -164,8 +164,8 @@ public static class PolyToolsCatalogImporter
                     manifest, manifests, new HashSet<string>(StringComparer.Ordinal));
                 assets.Add(entry.AssetKey, new PolyToolsCatalogAsset(
                     entry.AssetKey,
+                    entry.Category,
                     bounds,
-                    ComponentBounds(manifest, manifests),
                     CollisionBounds(manifest)));
             }
             if (requestedAssetKeys is null && assets.Count == 0)
@@ -222,11 +222,34 @@ public static class PolyToolsCatalogImporter
         RequireManifestSchema(root, $"PolyTools manifest '{entry.AssetKey}'");
         var assetKey = RequireString(root, "asset_key", $"PolyTools manifest '{entry.AssetKey}'");
         var assetType = RequireString(root, "asset_type", $"PolyTools manifest '{entry.AssetKey}'");
+        var category = RequireCategory(root, $"PolyTools manifest '{entry.AssetKey}'");
         if (!string.Equals(assetKey, entry.AssetKey, StringComparison.Ordinal)
-            || !string.Equals(assetType, entry.AssetType, StringComparison.Ordinal))
+            || !string.Equals(assetType, entry.AssetType, StringComparison.Ordinal)
+            || category != entry.Category)
         {
             throw new SceneMakerDocumentException(
                 $"PolyTools manifest '{entry.AssetKey}' does not match its catalog entry.");
+        }
+
+        // SceneMaker asks PolyTools for one thing: geometry it can put
+        // somewhere. Neither composition is that, and each fails differently
+        // if let through - a Palette on empty bounds, a Set on the meaningless
+        // box its centered members overlap into - so both are named here.
+        var carriesVariants = root.TryGetProperty("variants", out _);
+        if (category == PolyToolsAssetCategory.Palette)
+        {
+            throw new SceneMakerDocumentException(
+                $"PolyTools asset '{entry.AssetKey}' is a Palette, which publishes substitutable Keys rather than geometry; SceneMaker requests placeable Assets only.");
+        }
+        if (category == PolyToolsAssetCategory.Set)
+        {
+            throw new SceneMakerDocumentException(
+                $"PolyTools asset '{entry.AssetKey}' is a Set, which publishes which Assets belong together rather than a thing to place; configure its members instead.");
+        }
+        if (carriesVariants)
+        {
+            throw new SceneMakerDocumentException(
+                $"PolyTools manifest '{entry.AssetKey}' carries variants but is not a Palette.");
         }
 
         var assetPivot = RequirePoint(root, "asset_pivot", $"PolyTools manifest '{entry.AssetKey}'");
@@ -240,11 +263,6 @@ public static class PolyToolsCatalogImporter
             var componentObject = RequireObject(element, $"PolyTools manifest '{entry.AssetKey}' Component");
             var componentId = RequireString(
                 componentObject, "component_id", $"PolyTools manifest '{entry.AssetKey}' Component");
-
-            // A Component name is how a Workspace addresses one part of an
-            // Asset. It is optional here because an unnamed Component is
-            // simply one nothing can point at, not a broken manifest.
-            var componentName = OptionalString(componentObject, "name");
             var parentId = OptionalString(componentObject, "parent_component_id");
             var localTransform = RequireTransform(
                 componentObject, "local_transform", $"PolyTools Component '{componentId}'");
@@ -278,7 +296,6 @@ public static class PolyToolsCatalogImporter
             var hasClosedRegionMesh = HasObject(componentObject, "closed_region_mesh");
             if (!components.TryAdd(componentId, new RuntimeComponent(
                     componentId,
-                    componentName,
                     parentId,
                     localTransform,
                     sourceAssetKey,
@@ -468,20 +485,13 @@ public static class PolyToolsCatalogImporter
     /// that is allowed is not a question about geometry, so it is answered
     /// where roles are known rather than here.</para>
     /// </summary>
-    private static AssetBoundsMeters? CollisionBounds(
-        RuntimeManifest manifest,
-        IReadOnlySet<string>? limitToComponentIds = null)
+    private static AssetBoundsMeters? CollisionBounds(RuntimeManifest manifest)
     {
         var assetRoot = Transform.Translation(-manifest.AssetPivot.X, -manifest.AssetPivot.Y);
         Bounds? bounds = null;
         foreach (var region in manifest.Regions)
         {
             if (!StringComparer.Ordinal.Equals(region.Role, RuntimeRegion.CollisionRole)) continue;
-            if (limitToComponentIds is not null
-                && !limitToComponentIds.Contains(region.SourceComponentId))
-            {
-                continue;
-            }
             var source = manifest.Components[region.SourceComponentId];
             var world = assetRoot.Compose(ComponentWorldTransform(
                 source,
@@ -503,79 +513,6 @@ public static class PolyToolsCatalogImporter
             checked((decimal)bounds.Value.MinimumY),
             checked((decimal)bounds.Value.MaximumX),
             checked((decimal)bounds.Value.MaximumY));
-    }
-
-    /// <summary>
-    /// The bounds every named Component occupies in the Asset's own space,
-    /// each including its transitive children, because one part of a model is
-    /// what it and everything hanging under it covers. An unnamed Component
-    /// contributes to its parent and is not offered on its own: a name is how
-    /// a Workspace addresses a part, and there is nothing to address without
-    /// one. The result is ordered by name so the same manifest always yields
-    /// the same list.
-    /// </summary>
-    private static IReadOnlyList<PolyToolsComponentBounds> ComponentBounds(
-        RuntimeManifest manifest,
-        IReadOnlyDictionary<string, RuntimeManifest> manifests)
-    {
-        var assetRoot = Transform.Translation(-manifest.AssetPivot.X, -manifest.AssetPivot.Y);
-        Dictionary<string, List<Point>> points = new(StringComparer.Ordinal);
-        Dictionary<string, List<RuntimeComponent>> children = new(StringComparer.Ordinal);
-        foreach (var component in manifest.Components.Values)
-        {
-            var world = assetRoot.Compose(ComponentWorldTransform(
-                component,
-                manifest.Components,
-                new HashSet<string>(StringComparer.Ordinal)));
-            List<Point> own = [.. component.VisibleVertices.Select(world.Apply)];
-            if (component.SourceAssetKey is not null
-                && manifests.TryGetValue(component.SourceAssetKey, out var referenced))
-            {
-                var referencedBounds = BoundsForAsset(
-                    referenced, manifests, new HashSet<string>(StringComparer.Ordinal));
-                own.AddRange(Corners(referencedBounds).Select(world.Apply));
-            }
-            points.Add(component.ComponentId, own);
-            if (component.ParentComponentId is not { } parent) continue;
-            if (!children.TryGetValue(parent, out var siblings))
-            {
-                siblings = [];
-                children.Add(parent, siblings);
-            }
-            siblings.Add(component);
-        }
-
-        List<PolyToolsComponentBounds> named = [];
-        foreach (var component in manifest.Components.Values)
-        {
-            if (string.IsNullOrWhiteSpace(component.Name)) continue;
-            Bounds? bounds = null;
-            Stack<RuntimeComponent> pending = new();
-            pending.Push(component);
-            HashSet<string> seen = new(StringComparer.Ordinal);
-            while (pending.Count > 0)
-            {
-                var current = pending.Pop();
-
-                // The parent chain is already known to be acyclic, but the
-                // guard costs nothing and keeps this loop safe on its own.
-                if (!seen.Add(current.ComponentId)) continue;
-                foreach (var point in points[current.ComponentId])
-                    bounds = Bounds.Include(bounds, point);
-                if (!children.TryGetValue(current.ComponentId, out var descendants)) continue;
-                foreach (var child in descendants) pending.Push(child);
-            }
-            if (bounds is null) continue;
-            named.Add(new PolyToolsComponentBounds(
-                component.Name,
-                new AssetBoundsMeters(
-                    checked((decimal)bounds.Value.MinimumX),
-                    checked((decimal)bounds.Value.MinimumY),
-                    checked((decimal)bounds.Value.MaximumX),
-                    checked((decimal)bounds.Value.MaximumY)),
-                CollisionBounds(manifest, seen)));
-        }
-        return [.. named.OrderBy(static entry => entry.Name, StringComparer.Ordinal)];
     }
 
     private static Transform ComponentWorldTransform(
@@ -728,6 +665,21 @@ public static class PolyToolsCatalogImporter
         }
     }
 
+    /// <summary>
+    /// How the Asset is composed, as the Catalog and its Manifest both state
+    /// it. An unknown value is refused rather than treated as single: a
+    /// composition SceneMaker does not know is one it cannot place correctly.
+    /// </summary>
+    private static PolyToolsAssetCategory RequireCategory(JsonElement owner, string label) =>
+        RequireString(owner, "asset_category", label) switch
+        {
+            "single" => PolyToolsAssetCategory.Single,
+            "set" => PolyToolsAssetCategory.Set,
+            "palette" => PolyToolsAssetCategory.Palette,
+            var other => throw new SceneMakerDocumentException(
+                $"{label} has unsupported asset_category '{other}'."),
+        };
+
     private static void RequireManifestSchema(JsonElement owner, string label)
     {
         if (!owner.TryGetProperty("schema_version", out var value)
@@ -778,6 +730,7 @@ public static class PolyToolsCatalogImporter
     private sealed record CatalogEntry(
         string AssetKey,
         string AssetType,
+        PolyToolsAssetCategory Category,
         string RuntimePackage);
 
     private sealed record RuntimeManifest(
@@ -788,7 +741,6 @@ public static class PolyToolsCatalogImporter
 
     private sealed record RuntimeComponent(
         string ComponentId,
-        string? Name,
         string? ParentComponentId,
         Transform LocalTransform,
         string? SourceAssetKey,

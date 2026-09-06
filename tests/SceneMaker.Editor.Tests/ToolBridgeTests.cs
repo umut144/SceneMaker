@@ -196,11 +196,13 @@ public sealed class ToolBridgeTests
     }
 
     /// <summary>
-    /// Only a Placement naming a part can stand at a corner, so the field
-    /// offers those and nothing else.
+    /// A post is an Asset of its own, so every enabled Placement can stand at
+    /// a corner. A composition that could not stand anywhere - a Set, a
+    /// Palette - never reaches the catalog, so the field needs no rule of its
+    /// own beyond remembering what was chosen.
     /// </summary>
     [Fact]
-    public void OnlyAnAssetNamingAPartIsOfferedAsAnAnchor()
+    public void EveryEnabledPlacementIsOfferedAsAnAnchor()
     {
         using var workspace = TestWorkspace.Create();
 
@@ -208,29 +210,9 @@ public sealed class ToolBridgeTests
             .Select(static asset => asset.AssetKey)
             .ToList();
 
-        Assert.Equal(["stone"], offered);
-        Assert.Equal("stone", BridgeAnchorAssets.Choose(workspace.Props, null));
-    }
-
-    /// <summary>
-    /// An Asset that is used through a part of itself is not offered as a
-    /// Placement to set. Setting the whole bridge model by hand would put a
-    /// bridge-shaped Placement on the map that no bridge knows about, and the
-    /// posts it is there for come from the bridge instead.
-    /// </summary>
-    [Fact]
-    public void AnAssetUsedThroughItsPartIsNotOfferedAsAPlacement()
-    {
-        using var workspace = TestWorkspace.Create();
-
-        var placements = PlacementAreaAssets.Offered(workspace.Props)
-            .Select(static asset => asset.AssetKey)
-            .ToList();
-
-        Assert.Equal(["portal"], placements);
-        Assert.DoesNotContain("stone", placements);
-        Assert.Contains("stone", BridgeAnchorAssets.Offered(workspace.Props)
-            .Select(static asset => asset.AssetKey));
+        Assert.Equal(["portal", "stone"], offered);
+        Assert.Equal("portal", BridgeAnchorAssets.Choose(workspace.Props, null));
+        Assert.Equal("stone", BridgeAnchorAssets.Choose(workspace.Props, "stone"));
     }
 
     private static BridgeDraftPreview Preview(
@@ -271,8 +253,7 @@ public sealed class ToolBridgeTests
         interaction.SelectMode(EditorMode.Bridge);
         interaction.SelectTool(EditorTool.DrawBridge);
         interaction.State.SelectTerrainAsset("grass");
-        interaction.State.SelectBridgeAnchorAsset(
-            BridgeAnchorAssets.Choose(workspace.Props, null));
+        interaction.State.SelectBridgeAnchorAsset("stone");
         interaction.State.SetBridgeElevation(1m);
         return interaction;
     }

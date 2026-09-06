@@ -951,10 +951,7 @@ public sealed partial class SceneMakerMain : Control
     private void BuildPropAssetBar()
     {
         _propAssetBar.AddChild(new Label { Text = "Placements  ›" });
-        var offered = _controller.Session is { } propSession
-            ? PlacementAreaAssets.Offered(propSession.PropAssets)
-            : [];
-        foreach (var asset in offered)
+        foreach (var asset in _controller.Session?.PropAssets.Assets ?? [])
         {
             var button = new Button
             {

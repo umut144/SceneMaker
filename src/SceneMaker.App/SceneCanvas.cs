@@ -1047,20 +1047,15 @@ public sealed partial class SceneCanvas : Control
                 range);
 
             var postAsset = _propAssets.Resolve(bridge.AnchorAssetKey);
-            if (postAsset.AnchorComponent is not { } post) continue;
             var postColor = Color.FromHtml(postAsset.Color);
             var outline = highlighted
                 ? postColor
                 : new Color(postColor.R, postColor.G, postColor.B, 0.4f);
             foreach (var corner in BridgeGeometry.Corners(_metrics!, bridge))
             {
-                var anchor = CornerAnchor(corner);
+                var anchor = BridgeEditing.CornerAnchor(_metrics!, corner);
                 var rectangle = CanvasRectangle(
-                    new PropBoundsAuthoringPixels(
-                        anchor.X + post.OffsetXAuthoringPixels,
-                        anchor.Y + post.OffsetYAuthoringPixels,
-                        post.WidthAuthoringPixels,
-                        post.HeightAuthoringPixels),
+                    PropEditing.BoundsFor(postAsset, anchor.X, anchor.Y),
                     pan,
                     zoom,
                     sceneHeightAuthoringPixels);
@@ -1070,11 +1065,7 @@ public sealed partial class SceneCanvas : Control
                 DrawRect(rectangle, outline, filled: false, width: highlighted ? 3f : 2f);
                 if (!highlighted) continue;
                 DrawCollisionOutline(
-                    new PropBoundsAuthoringPixels(
-                        anchor.X + post.Collision.OffsetXAuthoringPixels,
-                        anchor.Y + post.Collision.OffsetYAuthoringPixels,
-                        post.Collision.WidthAuthoringPixels,
-                        post.Collision.HeightAuthoringPixels),
+                    PropEditing.CollisionBoundsFor(postAsset, anchor.X, anchor.Y),
                     pan,
                     zoom,
                     sceneHeightAuthoringPixels,
@@ -1155,14 +1146,6 @@ public sealed partial class SceneCanvas : Control
             fontSize: LengthFontSize,
             modulate: color);
     }
-
-    private AuthoringPoint CornerAnchor(BridgeCorner corner) => new(
-        (int)Math.Round(
-            corner.XMeters * _metrics!.AuthoringPixelsPerMeter,
-            MidpointRounding.AwayFromZero),
-        (int)Math.Round(
-            corner.YMeters * _metrics!.AuthoringPixelsPerMeter,
-            MidpointRounding.AwayFromZero));
 
     private Vector2 CornerScreen(
         BridgeCorner corner,

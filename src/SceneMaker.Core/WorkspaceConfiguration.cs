@@ -61,8 +61,7 @@ public sealed record WorkspaceAssetProfile(
     WorkspaceAssetRole Role,
     string Color,
     string? Surface = null,
-    TerrainAuthoring? Authoring = null,
-    string? AnchorComponent = null);
+    TerrainAuthoring? Authoring = null);
 
 public sealed class WorkspaceConfiguration
 {
@@ -99,7 +98,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 9;
+    public const int Version = 10;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -162,7 +161,6 @@ public static class WorkspaceConfigurationStore
                 Color = profile.Color,
                 Surface = profile.Surface,
                 Authoring = profile.Authoring,
-                AnchorComponent = profile.AnchorComponent,
             }).ToList(),
         };
         return Parse(document);
@@ -193,7 +191,6 @@ public static class WorkspaceConfigurationStore
                 Color = profile.Color,
                 Surface = profile.Surface,
                 Authoring = profile.Authoring,
-                AnchorComponent = profile.AnchorComponent,
             }).OrderBy(static entry => entry.AssetKey, StringComparer.Ordinal).ToList(),
         };
         var path = Path.Combine(Path.GetFullPath(workspaceDirectory), FileName);
@@ -267,17 +264,6 @@ public static class WorkspaceConfigurationStore
             throw new SceneMakerDocumentException(
                 $"Placement Asset '{entry.AssetKey}' must not declare an authoring.");
         }
-        if (isTerrain && entry.AnchorComponent is not null)
-        {
-            throw new SceneMakerDocumentException(
-                $"Terrain Asset '{entry.AssetKey}' must not declare an anchor_component; only a Placement has PolyTools Components.");
-        }
-        if (entry.AnchorComponent is { } anchorComponent
-            && string.IsNullOrWhiteSpace(anchorComponent))
-        {
-            throw new SceneMakerDocumentException(
-                $"Asset '{entry.AssetKey}' declares an empty anchor_component.");
-        }
         if (entry.Authoring is { } authoring && !Enum.IsDefined(authoring))
         {
             throw new SceneMakerDocumentException(
@@ -336,8 +322,7 @@ public static class WorkspaceConfigurationStore
                 entry.Role,
                 entry.Color,
                 entry.Surface,
-                entry.Authoring,
-                entry.AnchorComponent);
+                entry.Authoring);
             if (!profiles.TryAdd(entry.AssetKey, profile))
             {
                 throw new SceneMakerDocumentException(
@@ -373,14 +358,5 @@ public static class WorkspaceConfigurationStore
         public required string Color { get; init; }
         public string? Surface { get; init; }
         public TerrainAuthoring? Authoring { get; init; }
-
-        /// <summary>
-        /// The name of the PolyTools Component this Placement offers as its
-        /// own part - the post a bridge sets at its corners, say. Naming it
-        /// here rather than in code keeps it a Workspace decision: a rename in
-        /// PolyTools then fails loudly on load instead of drawing the wrong
-        /// part quietly. Null for a Placement used whole, and for Terrain.
-        /// </summary>
-        public string? AnchorComponent { get; init; }
     }
 }

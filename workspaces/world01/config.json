@@ -1,6 +1,6 @@
 {
   "format": "scene_maker_workspace",
-  "version": 9,
+  "version": 10,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,
@@ -17,13 +17,6 @@
       "color": "#B89033"
     },
     {
-      "asset_key": "bridge",
-      "display_name": "Bridge",
-      "role": "placement",
-      "color": "#A0714B",
-      "anchor_component": "rope_post"
-    },
-    {
       "asset_key": "grass",
       "display_name": "Grass",
       "role": "terrain",
@@ -38,6 +31,12 @@
       "color": "#3C7DD9",
       "surface": "water",
       "authoring": "curve"
+    },
+    {
+      "asset_key": "rope_post",
+      "display_name": "Rope Post",
+      "role": "placement",
+      "color": "#A0714B"
     },
     {
       "asset_key": "tree",

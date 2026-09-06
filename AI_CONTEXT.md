@@ -10,16 +10,22 @@ kind. A surface is an open lower_snake_case token such as `land` or `water`,
 held per Asset rather than per cell so that one Terrain Asset cannot contradict
 itself. Terrain and curve Assets need no PolyTools package merely to exist.
 
-A configured Placement may also name one part of that geometry. Workspace
-config 9 adds `anchor_component` to a Placement: the name of the PolyTools
-Component the Asset offers on its own - the post a bridge sets at its corners
-rather than the whole bridge. The import stays geometry and nothing else, so it
-reports every named Component with the bounds it and its children occupy in the
-Asset's space, and the Workspace picks one. A name that matches nothing, or
-more than one part, refuses the load: a rename in PolyTools is then a visible
-event instead of a bridge quietly setting the wrong part. This is also why the
-name lives in `config.json` and not in code - which Component means something
-is authoring identity, and SceneMaker owns that.
+PolyTools states how an Asset is composed, separately from what it is:
+`asset_category` is `single`, `set` or `palette`. SceneMaker asks for one thing
+only - geometry it can put somewhere - so it requests `single` Assets and
+refuses both compositions by name. A **Palette** publishes Keys that may
+substitute for one another and carries no geometry; which variant a
+presentation shows is nobody's agreement to reach, so a variant carries no
+Surface and is never named in a map. A **Set** publishes which Assets belong
+together, with its members centered on their own pivot; the box it would be
+placed by is their overlap and means nothing, so what places a Set's members is
+whatever knows where they go - for a bridge, the bridge.
+
+SceneMaker never sees a Palette: it requests only its configured Placements,
+and its Terrain Assets carry no PolyTools package at all. The assurance that no
+configured Asset is a Palette variant therefore cannot be given here. It lives
+in the sync gate, which has the whole source catalog and reads the `variants`
+lists that are its only authority.
 
 Each configured Placement may consume a synchronized PolyTools geometry copy
 below `imports/polytools/`. The matching root Manifest and the transitive Asset
@@ -476,11 +482,11 @@ record to fall out of step. Left and right mean a quarter turn counter-clockwise
 from start towards end, which in SceneMaker's y-up space is the northern side of
 an eastward span.
 
-The post is not a Prop and not an Asset of its own. PolyTools exports it as a
-Component of the bridge model, and a Prop must never name a Component -
-`asset_key` is the whole of its identity, so a composition rename in PolyTools
-would otherwise break authored maps. The Workspace names the part once, on the
-Asset, through `anchor_component`.
+The post is an ordinary Placement Asset. PolyTools publishes the bridge as a
+Set of `rope_post` and `plank`, so the post is a package of its own with its
+own collision Region, and the bridge simply names it. An earlier design had the
+Workspace name a Component inside a bridge model; that answered a question
+PolyTools has since removed, and it went with it.
 
 Ends do not snap, and neither does the angle. A deck is read as continuous
 geometry rather than through a raster, which is the same reason Path points are

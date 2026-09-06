@@ -7,6 +7,12 @@
       "runtime_package": "PolyToolsRuntimeExports/ankh/manifest.json"
     },
     {
+      "asset_key": "bridge",
+      "asset_type": "props",
+      "display_name": "Bridge",
+      "runtime_package": "PolyToolsRuntimeExports/bridge/manifest.json"
+    },
+    {
       "asset_key": "tree",
       "asset_type": "props",
       "display_name": "Tree",

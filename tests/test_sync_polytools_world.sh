@@ -15,7 +15,7 @@ mkdir -p \
 
 cat >"$source_world/catalog.json" <<'JSON'
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "world_key": "world01",
   "world_name": "Test World",
   "assets": [
@@ -23,18 +23,21 @@ cat >"$source_world/catalog.json" <<'JSON'
       "asset_key": "tree",
       "display_name": "Tree",
       "asset_type": "terrain",
+      "asset_category": "single",
       "runtime_package": "PolyToolsRuntimeExports/tree/manifest.json"
     },
     {
       "asset_key": "broken",
       "display_name": "Broken but unused",
       "asset_type": "character",
+      "asset_category": "single",
       "runtime_package": "PolyToolsRuntimeExports/broken/manifest.json"
     },
     {
       "asset_key": "leaf",
       "display_name": "Referenced leaf",
       "asset_type": "items",
+      "asset_category": "single",
       "runtime_package": "PolyToolsRuntimeExports/leaf/manifest.json"
     }
   ]
@@ -44,7 +47,7 @@ JSON
 cat >"$workspace/config.json" <<'JSON'
 {
   "format": "scene_maker_workspace",
-  "version": 9,
+  "version": 10,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,
@@ -75,10 +78,11 @@ JSON
 manifest="$source_world/PolyToolsRuntimeExports/tree/manifest.json"
 cat >"$manifest" <<'JSON'
 {
-  "schema_version": 16,
+  "schema_version": 19,
   "asset_key": "tree",
   "display_name": "Tree",
   "asset_type": "terrain",
+  "asset_category": "single",
   "asset_pivot": [0.0, 0.0],
   "components": [
     {
@@ -127,10 +131,11 @@ JSON
 
 cat >"$source_world/PolyToolsRuntimeExports/leaf/manifest.json" <<'JSON'
 {
-  "schema_version": 16,
+  "schema_version": 19,
   "asset_key": "leaf",
   "display_name": "Referenced leaf",
   "asset_type": "items",
+  "asset_category": "single",
   "asset_pivot": [0.0, 0.0],
   "components": [
     {
@@ -167,7 +172,7 @@ SCENEMAKER_WORKSPACE_DIR="$workspace" \
   "$project_directory/scripts/sync_polytools_world.sh"
 
 imported_manifest="$workspace/imports/polytools/PolyToolsRuntimeExports/tree/manifest.json"
-jq -e '.schema_version == 16 and (.regions | length == 2)' "$imported_manifest" >/dev/null
+jq -e '.schema_version == 19 and (.regions | length == 2)' "$imported_manifest" >/dev/null
 jq -e '.assets == [
   {
     "asset_key": "bog",
@@ -216,7 +221,7 @@ if POLYTOOLS_WORLD_DIR="$source_world" \
 fi
 test "$(cksum "$imported_manifest")" = "$published_checksum"
 
-jq '.schema_version = 15 | .regions[1] |= del(.vertices, .indices)' \
+jq '.schema_version = 18 | .regions[1] |= del(.vertices, .indices)' \
   "$manifest" >"$invalid_manifest"
 mv "$invalid_manifest" "$manifest"
 if POLYTOOLS_WORLD_DIR="$source_world" \

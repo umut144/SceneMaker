@@ -60810,7 +60810,53 @@
       ]
     }
   ],
-  "bridges": [],
+  "bridges": [
+    {
+      "bridge_id": "bridge_0001",
+      "asset_key": "grass",
+      "anchor_asset_key": "rope_post",
+      "start_authoring_px": {
+        "x": 1184,
+        "y": 1090
+      },
+      "end_authoring_px": {
+        "x": 1387,
+        "y": 646
+      },
+      "width_meters": 4.0,
+      "elevation_meters": 1.000
+    },
+    {
+      "bridge_id": "bridge_0002",
+      "asset_key": "grass",
+      "anchor_asset_key": "rope_post",
+      "start_authoring_px": {
+        "x": 1437,
+        "y": 1177
+      },
+      "end_authoring_px": {
+        "x": 1780,
+        "y": 852
+      },
+      "width_meters": 4.0,
+      "elevation_meters": 1.000
+    },
+    {
+      "bridge_id": "bridge_0003",
+      "asset_key": "grass",
+      "anchor_asset_key": "rope_post",
+      "start_authoring_px": {
+        "x": 1724,
+        "y": 640
+      },
+      "end_authoring_px": {
+        "x": 1393,
+        "y": 463
+      },
+      "width_meters": 4.0,
+      "elevation_meters": 1.000
+    }
+  ],
   "template_definition": null,
   "template_anchors": [
     {

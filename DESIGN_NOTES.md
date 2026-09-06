@@ -115,7 +115,7 @@ The authored record is small, because everything derivable is derived:
 {
   "bridge_id": "bridge_0001",
   "asset_key": "planks",             // Terrain role, the deck material
-  "anchor_asset_key": "bridge",      // Placement role, whose anchor_component is the post
+  "anchor_asset_key": "rope_post",   // Placement role, the post itself
   "start_authoring_px": { "x": 1024, "y": 320 },
   "end_authoring_px":   { "x": 1536, "y": 320 },
   "width_meters": 4.0,
@@ -148,16 +148,23 @@ What it gives up is deliberate: a single post cannot be nudged. Nobody asked to.
 
 ### Where a post comes from
 
-PolyTools exports the post as a Component of the `bridge` Asset, not as an
-Asset of its own. A Prop must never name a Component — `asset_key` is the whole
-of its identity, and a composition rename in PolyTools would then break authored
-maps. The Workspace names it instead, once, on the Asset: config 9's
-`anchor_component`, described above under authoring ownership. The bridge points
-at that Placement, and the part follows from the Asset rather than from the
-document.
+The post is an ordinary Placement Asset. PolyTools publishes `bridge` as a Set
+of `rope_post` and `plank`, so the post is a package of its own with its own
+collision Region, and the bridge names it like any other Placement.
 
-For the same reason the bridge takes its editor colour from the `bridge` Asset:
-one Asset, one identity, one colour.
+It was not always so, and the detour is worth keeping because the rule that
+came out of it stands: **a Prop must never name a Component of an Asset.**
+`asset_key` is the whole of a Placement's identity, so a composition rename in
+PolyTools would otherwise break authored maps. While the post was only a part
+of a bridge model, the Workspace named that part on the Asset instead — never
+on the Prop. When PolyTools made the members Assets of their own, the whole
+construction went away rather than being kept for symmetry.
+
+A Set is not offered at all: it publishes which Assets belong together, and
+its members lie centered on their own pivot, so the box it would be placed by
+is their overlap and means nothing. SceneMaker refuses one on request rather
+than filtering it out later — what cannot stand anywhere never enters the
+catalog.
 
 ### No snapping, and no angle constraint either
 

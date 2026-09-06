@@ -23,11 +23,11 @@ public sealed class SceneExportContractTests
             [
                 "format", "version", "workspace_key", "grid", "asset_profiles",
                 "water_raster", "route_surface_bakes", "route_surface_cut_raster",
-                "scene",
+                "bridge_bakes", "scene",
             ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(11, root.GetProperty("version").GetInt32());
+        Assert.Equal(12, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             [
@@ -48,11 +48,12 @@ public sealed class SceneExportContractTests
             [
                 "schema", "version", "scene_id", "scene_kind", "coordinate_space",
                 "size_cells", "terrain_cells", "props", "water_bodies", "route_surfaces",
-                "template_definition", "template_anchors", "default_elevation_meters",
+                "bridges", "template_definition", "template_anchors",
+                "default_elevation_meters",
             ],
             Keys(scene));
         Assert.Equal("srt.scene_maker_scene", scene.GetProperty("schema").GetString());
-        Assert.Equal(12, scene.GetProperty("version").GetInt32());
+        Assert.Equal(13, scene.GetProperty("version").GetInt32());
         Assert.Equal("instance", scene.GetProperty("scene_kind").GetString());
         Assert.Equal(
             "scene_local_bottom_left_y_up",
@@ -154,6 +155,8 @@ public sealed class SceneExportContractTests
         Assert.Empty(root.GetProperty("water_raster").EnumerateArray());
         Assert.Empty(root.GetProperty("route_surface_bakes").EnumerateArray());
         Assert.Empty(root.GetProperty("route_surface_cut_raster").EnumerateArray());
+        Assert.Empty(root.GetProperty("bridge_bakes").EnumerateArray());
+        Assert.Empty(root.GetProperty("scene").GetProperty("bridges").EnumerateArray());
         Assert.Empty(root.GetProperty("scene").GetProperty("water_bodies").EnumerateArray());
         Assert.Empty(root.GetProperty("scene").GetProperty("route_surfaces").EnumerateArray());
     }
