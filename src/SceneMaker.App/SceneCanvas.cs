@@ -567,6 +567,13 @@ public sealed partial class SceneCanvas : Control
                 heightAuthoringPixels,
                 elevationRange,
                 highlighted: Mode == EditorMode.Path);
+            DrawBridges(
+                document,
+                pan,
+                zoom,
+                heightAuthoringPixels,
+                elevationRange,
+                highlighted: Mode == EditorMode.Bridge);
         }
         DrawElevationRegionOutlines(
             document,
@@ -613,6 +620,9 @@ public sealed partial class SceneCanvas : Control
                 break;
             case EditorMode.ElevationRegion:
                 DrawElevationRegionToolPreview(document, pan, zoom, heightAuthoringPixels);
+                break;
+            case EditorMode.Bridge:
+                DrawBridgeToolPreview(document, pan, zoom, heightAuthoringPixels);
                 break;
             default:
                 break;
@@ -1007,6 +1017,165 @@ public sealed partial class SceneCanvas : Control
     /// cell raster here would falsely turn their inclined height profile into
     /// Terrain steps.
     /// </summary>
+    /// <summary>
+    /// Finished bridges: the deck as the band it is, and a post drawn at each
+    /// of its four corners. The posts are derived here, exactly as the
+    /// placement rule derives them, so what an author sees is where a post
+    /// actually stands rather than a second guess at it.
+    /// </summary>
+    private void DrawBridges(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels,
+        (decimal Low, decimal High)? range,
+        bool highlighted)
+    {
+        if (_propAssets is null) return;
+        foreach (var bridge in document.Bridges)
+        {
+            if (!_terrainColors.TryGetValue(bridge.AssetKey, out var deckColor)) continue;
+            var color = highlighted
+                ? deckColor
+                : new Color(deckColor.R, deckColor.G, deckColor.B, 0.24f);
+            DrawBakedRouteBand(
+                RouteSurfaceBake.Build(_metrics!, BridgeGeometry.DeckRoute(bridge)),
+                color,
+                pan,
+                zoom,
+                sceneHeightAuthoringPixels,
+                range);
+
+            var postAsset = _propAssets.Resolve(bridge.AnchorAssetKey);
+            if (postAsset.AnchorComponent is not { } post) continue;
+            var postColor = Color.FromHtml(postAsset.Color);
+            var outline = highlighted
+                ? postColor
+                : new Color(postColor.R, postColor.G, postColor.B, 0.4f);
+            foreach (var corner in BridgeGeometry.Corners(_metrics!, bridge))
+            {
+                var anchor = CornerAnchor(corner);
+                var rectangle = CanvasRectangle(
+                    new PropBoundsAuthoringPixels(
+                        anchor.X + post.OffsetXAuthoringPixels,
+                        anchor.Y + post.OffsetYAuthoringPixels,
+                        post.WidthAuthoringPixels,
+                        post.HeightAuthoringPixels),
+                    pan,
+                    zoom,
+                    sceneHeightAuthoringPixels);
+                DrawRect(
+                    rectangle,
+                    new Color(postColor.R, postColor.G, postColor.B, highlighted ? 0.38f : 0.12f));
+                DrawRect(rectangle, outline, filled: false, width: highlighted ? 3f : 2f);
+                if (!highlighted) continue;
+                DrawCollisionOutline(
+                    new PropBoundsAuthoringPixels(
+                        anchor.X + post.Collision.OffsetXAuthoringPixels,
+                        anchor.Y + post.Collision.OffsetYAuthoringPixels,
+                        post.Collision.WidthAuthoringPixels,
+                        post.Collision.HeightAuthoringPixels),
+                    pan,
+                    zoom,
+                    sceneHeightAuthoringPixels,
+                    outline);
+            }
+        }
+    }
+
+    /// <summary>
+    /// What the second click would author: the deck outline, the four posts it
+    /// would set, and how long it is. Yellow promises it would be taken, red
+    /// carries the reason it would not.
+    /// </summary>
+    private void DrawBridgeToolPreview(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        if (_propAssets is null || _terrainAssets is null) return;
+        var preview = ToolPreviewBuilder.BuildBridgeDraft(
+            document,
+            _terrainAssets,
+            _propAssets,
+            ActiveTool,
+            _interaction.BridgeStart,
+            _interaction.PointerAuthoring,
+            SelectedTerrainAssetKey,
+            _interaction.State.BridgeAnchorAssetKey,
+            _interaction.State.BridgeWidthMeters,
+            _interaction.State.BridgeElevationMeters);
+        if (preview.Start is not { } start) return;
+
+        var color = preview.Kind switch
+        {
+            BridgeDraftKind.Ready => ValidPreviewColor,
+            BridgeDraftKind.Blocked => InvalidPreviewColor,
+            _ => DraftPreviewColor,
+        };
+        DrawAnchor(start.X, start.Y, pan, zoom, sceneHeightAuthoringPixels, color);
+        if (preview.End is not { } end) return;
+
+        Vector2 Screen(int x, int y) => pan + new Vector2(
+            x * zoom,
+            (sceneHeightAuthoringPixels - y) * zoom);
+
+        DrawLine(Screen(start.X, start.Y), Screen(end.X, end.Y), color, 2f);
+        if (preview.Corners.Count == 4)
+        {
+            // The deck outline in corner order start-left, start-right,
+            // end-left, end-right, which walks the rectangle as 0-2-3-1.
+            var deck = new[]
+            {
+                CornerScreen(preview.Corners[0], pan, zoom, sceneHeightAuthoringPixels),
+                CornerScreen(preview.Corners[2], pan, zoom, sceneHeightAuthoringPixels),
+                CornerScreen(preview.Corners[3], pan, zoom, sceneHeightAuthoringPixels),
+                CornerScreen(preview.Corners[1], pan, zoom, sceneHeightAuthoringPixels),
+                CornerScreen(preview.Corners[0], pan, zoom, sceneHeightAuthoringPixels),
+            };
+            DrawPolyline(deck, color, 2f);
+        }
+        foreach (var post in preview.Posts)
+        {
+            var rectangle = CanvasRectangle(post, pan, zoom, sceneHeightAuthoringPixels);
+            DrawRect(rectangle, new Color(color.R, color.G, color.B, 0.22f));
+            DrawRect(rectangle, color, filled: false, width: 2f);
+        }
+
+        // The length belongs where the author is looking, not in a field on the
+        // other side of the window.
+        const int LengthFontSize = 12;
+        DrawString(
+            ThemeDB.FallbackFont,
+            Screen(end.X, end.Y) + new Vector2(12f, -12f),
+            FormattableString.Invariant($"{preview.LengthMeters:0.##} m"),
+            HorizontalAlignment.Left,
+            width: -1f,
+            fontSize: LengthFontSize,
+            modulate: color);
+    }
+
+    private AuthoringPoint CornerAnchor(BridgeCorner corner) => new(
+        (int)Math.Round(
+            corner.XMeters * _metrics!.AuthoringPixelsPerMeter,
+            MidpointRounding.AwayFromZero),
+        (int)Math.Round(
+            corner.YMeters * _metrics!.AuthoringPixelsPerMeter,
+            MidpointRounding.AwayFromZero));
+
+    private Vector2 CornerScreen(
+        BridgeCorner corner,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        var pixelsPerMeter = (float)_metrics!.AuthoringPixelsPerMeter;
+        return pan + new Vector2(
+            (float)corner.XMeters * pixelsPerMeter * zoom,
+            (sceneHeightAuthoringPixels - (float)corner.YMeters * pixelsPerMeter) * zoom);
+    }
+
     private void DrawRouteSurfaces(
         SceneDocument document,
         Vector2 pan,

@@ -70,6 +70,12 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _riverWidthEdit = new();
     private readonly Label _pathWidthLabel = new();
     private readonly SpinBox _pathWidthEdit = new();
+    private readonly Label _bridgeAnchorLabel = new();
+    private readonly OptionButton _bridgeAnchorEdit = new();
+    private readonly Label _bridgeWidthLabel = new();
+    private readonly SpinBox _bridgeWidthEdit = new();
+    private readonly Label _bridgeElevationLabel = new();
+    private readonly SpinBox _bridgeElevationEdit = new();
     private readonly Label _pathGradeLabel = new();
     private readonly OptionButton _pathGradeEdit = new();
     private readonly Label _pathOperationLabel = new();
@@ -251,6 +257,11 @@ public sealed partial class SceneMakerMain : Control
         _landscapeNavigationButton.CustomMinimumSize = new Vector2(130f, 0f);
         _landscapeNavigationButton.Pressed += SelectLandscapeContext;
         _overviewNavigationBar.AddChild(_landscapeNavigationButton);
+        AddPerspectiveButton(
+            _overviewNavigationBar,
+            "Structures",
+            available: true,
+            "Bridges: the things built onto a landscape rather than out of it.");
         AddPerspectiveButton(
             _overviewNavigationBar,
             "Placements",
@@ -537,6 +548,36 @@ public sealed partial class SceneMakerMain : Control
             "Manual absolute height of the first point when Auto start is off.";
         _pathStartElevationEdit.ValueChanged += SetPathStartElevation;
         _contextMenuBar.AddChild(_pathStartElevationEdit);
+        _bridgeAnchorLabel.Name = "BridgeAnchorLabel";
+        _bridgeAnchorLabel.Text = "Anchor";
+        _bridgeAnchorLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_bridgeAnchorLabel);
+        _bridgeAnchorEdit.Name = "BridgeAnchor";
+        _bridgeAnchorEdit.CustomMinimumSize = new Vector2(130f, 0f);
+        _bridgeAnchorEdit.ItemSelected += SelectBridgeAnchorItem;
+        _contextMenuBar.AddChild(_bridgeAnchorEdit);
+        _bridgeWidthLabel.Name = "BridgeWidthLabel";
+        _bridgeWidthLabel.Text = "Width";
+        _bridgeWidthLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_bridgeWidthLabel);
+        _bridgeWidthEdit.Name = "BridgeWidth";
+        ConfigureBridgeWidthInput(_bridgeWidthEdit);
+        _bridgeWidthEdit.TooltipText =
+            "The full deck width. The four posts sit at the corners it makes, "
+            + "so changing it moves them.";
+        _bridgeWidthEdit.ValueChanged += SetBridgeWidth;
+        _contextMenuBar.AddChild(_bridgeWidthEdit);
+        _bridgeElevationLabel.Name = "BridgeElevationLabel";
+        _bridgeElevationLabel.Text = "Height";
+        _bridgeElevationLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_bridgeElevationLabel);
+        _bridgeElevationEdit.Name = "BridgeElevation";
+        ConfigureElevationInput(_bridgeElevationEdit);
+        _bridgeElevationEdit.TooltipText =
+            "The deck surface, absolute and on the Workspace elevation quantum. "
+            + "A bridge is level, so it is one number for the whole span.";
+        _bridgeElevationEdit.ValueChanged += SetBridgeElevation;
+        _contextMenuBar.AddChild(_bridgeElevationEdit);
         _elevationLabel.Name = "ElevationLabel";
         _elevationLabel.Text = "Height";
         _elevationLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -800,6 +841,7 @@ public sealed partial class SceneMakerMain : Control
                 && string.Equals(assetKey, chosen, StringComparison.Ordinal);
         }
         ShowSurfaceField(mode, field);
+        ShowBridgeAnchorField();
     }
 
     /// <summary>
@@ -1427,6 +1469,7 @@ public sealed partial class SceneMakerMain : Control
         "River" => EditorMode.River,
         "Path" => EditorMode.Path,
         "Hill" => EditorMode.ElevationRegion,
+        "Structures" => EditorMode.Bridge,
         "Placements" => EditorMode.Props,
         "Scene Templates" => EditorMode.Templates,
         _ => throw new ArgumentOutOfRangeException(nameof(perspective)),
@@ -2064,6 +2107,80 @@ public sealed partial class SceneMakerMain : Control
         input.Value = (double)EditorInteractionState.DefaultRiverWidthMeters;
     }
 
+    private static void ConfigureBridgeWidthInput(SpinBox input)
+    {
+        input.MinValue = 0.125;
+        input.MaxValue = 1024.0;
+        input.Step = 0.125;
+        input.AllowGreater = false;
+        input.AllowLesser = false;
+        input.Suffix = " m";
+        input.CustomMinimumSize = new Vector2(110f, 0f);
+        input.Value = (double)BridgeEditing.DefaultWidthMeters;
+    }
+
+    private void SetBridgeWidth(double value) =>
+        _interaction.State.SetBridgeWidth(DecimalOf(value));
+
+    /// <summary>
+    /// A directly authored height, so it snaps to the Workspace quantum the
+    /// moment it is typed rather than being refused when the bridge is placed.
+    /// </summary>
+    private void SetBridgeElevation(double value) =>
+        _interaction.State.SetBridgeElevation(ElevationOf(_bridgeElevationEdit, value));
+
+    /// <summary>
+    /// The Anchor control answers with an item index; the Asset travels as that
+    /// item's metadata, like the Surface control, because a position changes
+    /// with what the Workspace happens to offer.
+    /// </summary>
+    private void SelectBridgeAnchorItem(long index)
+    {
+        if (index < 0 || index >= _bridgeAnchorEdit.ItemCount) return;
+        if (_bridgeAnchorEdit.GetItemMetadata((int)index).AsString() is { Length: > 0 } assetKey)
+            _interaction.State.SelectBridgeAnchorAsset(assetKey);
+    }
+
+    /// <summary>
+    /// Fills the Anchor control with the Placement Assets that offer a part to
+    /// stand at a corner. A Workspace may offer none - that is a real state and
+    /// the tooltip says so rather than the control inventing a post.
+    /// </summary>
+    private void ShowBridgeAnchorField()
+    {
+        _bridgeAnchorEdit.Clear();
+        if (_controller.Session is not { } session)
+        {
+            _bridgeAnchorEdit.Disabled = true;
+            return;
+        }
+
+        var offered = BridgeAnchorAssets.Offered(session.PropAssets);
+        var chosen = BridgeAnchorAssets.Choose(
+            session.PropAssets, _interaction.State.BridgeAnchorAssetKey);
+        _interaction.State.SelectBridgeAnchorAsset(chosen);
+        var selected = -1;
+        for (var index = 0; index < offered.Count; index++)
+        {
+            _bridgeAnchorEdit.AddItem(offered[index].Name);
+            _bridgeAnchorEdit.SetItemMetadata(_bridgeAnchorEdit.ItemCount - 1, offered[index].AssetKey);
+            if (string.Equals(offered[index].AssetKey, chosen, StringComparison.Ordinal))
+                selected = index;
+        }
+        _bridgeAnchorEdit.Selected = selected;
+        _bridgeAnchorEdit.Disabled = offered.Count <= 1;
+        _bridgeAnchorEdit.TooltipText = offered.Count switch
+        {
+            > 1 => "The Placement Asset whose named part stands at each corner. "
+                + "Only an Asset that names one can: setting a whole Placement at "
+                + "four corners would set four of it.",
+            1 => "This Workspace offers only one Asset with a part for a corner, "
+                + "so there is nothing to choose between.",
+            _ => "This Workspace enables no Placement Asset naming an "
+                + "anchor_component, so no bridge can be authored yet.",
+        };
+    }
+
     private static void ConfigurePathWidthInput(SpinBox input)
     {
         input.MinValue = 0.125;
@@ -2333,6 +2450,13 @@ public sealed partial class SceneMakerMain : Control
         _riverWidthEdit.Visible = riverActive;
         _pathWidthLabel.Visible = pathActive;
         _pathWidthEdit.Visible = pathActive;
+        var bridgeActive = _interaction.Mode == EditorMode.Bridge;
+        _bridgeAnchorLabel.Visible = bridgeActive;
+        _bridgeAnchorEdit.Visible = bridgeActive;
+        _bridgeWidthLabel.Visible = bridgeActive;
+        _bridgeWidthEdit.Visible = bridgeActive;
+        _bridgeElevationLabel.Visible = bridgeActive;
+        _bridgeElevationEdit.Visible = bridgeActive;
         _pathGradeLabel.Visible = pathActive;
         _pathGradeEdit.Visible = pathActive;
         _pathGradeEdit.Selected = _pathGradeEdit.GetItemIndex(
@@ -2806,6 +2930,8 @@ public sealed partial class SceneMakerMain : Control
         _interaction.State.SetPathWidth(DecimalOf(_pathWidthEdit.Value));
         ConfigurePathClearanceInput(_pathClearanceEdit);
         _interaction.State.SetPathClearanceAbove(DecimalOf(_pathClearanceEdit.Value));
+        ConfigureBridgeWidthInput(_bridgeWidthEdit);
+        _interaction.State.SetBridgeWidth(DecimalOf(_bridgeWidthEdit.Value));
         ConfigureElevationInputs(session.Metrics);
         _pathAutoStartToggle.ButtonPressed = true;
         _interaction.State.SetPathStartElevationOverride(null);
@@ -2822,12 +2948,15 @@ public sealed partial class SceneMakerMain : Control
         ConfigureElevationInput(_elevationEdit, metrics);
         ConfigureElevationInput(_waterElevationEdit, metrics);
         ConfigureElevationInput(_pathStartElevationEdit, metrics);
+        ConfigureElevationInput(_bridgeElevationEdit, metrics);
         ConfigureElevationInput(_sceneElevationEdit, metrics);
         ConfigureElevationInput(_sectionElevationEdit, metrics);
         ConfigureSectionOffsetInput(_sectionOffsetEdit, metrics);
 
         var authoringElevation = ElevationOf(_elevationEdit, _elevationEdit.Value);
         _canvas.ElevationMeters = authoringElevation;
+        _interaction.State.SetBridgeElevation(
+            ElevationOf(_bridgeElevationEdit, _bridgeElevationEdit.Value));
         _interaction.State.SetWaterElevation(
             ElevationOf(_waterElevationEdit, _waterElevationEdit.Value));
         _ = ElevationOf(_sceneElevationEdit, _sceneElevationEdit.Value);
@@ -2878,6 +3007,7 @@ public sealed partial class SceneMakerMain : Control
         _waterElevationEdit.Editable = editable;
         _pathStartElevationEdit.Editable = editable && !_pathAutoStartToggle.ButtonPressed;
         _pathClearanceEdit.Editable = editable;
+        _bridgeElevationEdit.Editable = editable;
         _sceneElevationEdit.Editable = editable;
         _sectionElevationEdit.Editable = editable;
         _sectionOffsetEdit.Editable = editable;

@@ -38,14 +38,15 @@ Canvas und damit gegenüber der linken `ToolBar`.
 Die Werkzeugauswahl besteht aus drei unabhängigen Dimensionen:
 
 - `EditorMode` bestimmt den **Bereich**: `Terrain`, `River`, `Path`, `Hill`,
-  `Placements` oder `Templates`.
+  `Bridge`, `Placements` oder `Templates`.
 - `EditorTool` bestimmt das primäre Werkzeug innerhalb dieses Bereichs.
 - Das gewählte Terrain-Asset bestimmt das **Material** und sonst nichts.
 
 Die Navigation ist zweistufig, wie bei den übrigen Bereichen auch:
 
 ```text
-Übersicht:  [ Terrain ] [ Landscape ] [ Placements ] [ Scene Templates ] [ Map ]
+Übersicht:  [ Terrain ] [ Landscape ] [ Structures ] [ Placements ]
+            [ Scene Templates ] [ Map ]
                               │
                               ▼
 Kontext:    [ ← ]  Landscape ›  ( River )  ( Path )  ( Hill )
@@ -80,6 +81,7 @@ Surface-Token — aber gefragt wird es jetzt von der Assetleiste:
 | `River` | `Draw River` | `authoring: "curve"`, als `Surface`-Feld |
 | `Path` | `Draw Path` | alle Terrain-Assets, als `Surface`-Feld |
 | `Hill` | `Draw Hill`, `Select Hill` | — |
+| `Bridge` | `Draw Bridge` | alle Terrain-Assets, als `Surface`-Feld |
 | `Placements` | `Selector`, `Pencil`, `Line` | — |
 | `Templates` | `Selector`, `Anchor Move` | — |
 
@@ -416,6 +418,50 @@ gesetzten Placements, solange der Bereich `Placements` der aktive ist. Er zeigt
 genau die Box, gegen die geprüft wird - eine zweite Auslegung derselben Frage
 würde eine Ablehnung unerklärlich machen. Die Striche sind bildschirmgroß, damit
 die Box beim Herauszoomen eine Box bleibt.
+
+### Structures:Draw Bridge
+
+`Structures` ist ein eigener Übersichtsbereich und führt direkt zu `Draw
+Bridge` — anders als `Landscape` ohne Zwischenleiste, weil er heute genau ein
+Werkzeug hat. Sobald Zäune, Mauern oder Treppen dazukommen, bekommt er dieselbe
+Kontextzeile, die Landscape schon hat.
+
+`Landscape` autoriert Gelände, `Structures` das, was darauf gebaut wird. Deshalb
+sitzt die Brücke nicht als vierter Platz neben River, Path und Hill.
+
+```text
+Bridge-Kontext:  Surface [ Planks ▾ ] · Anchor [ Bridge ▾ ]
+                 · Width […] · Height […]
+```
+
+`Surface` bietet wie beim Path jedes Terrain-Asset an: ein Deck ist eine
+unabhängige Oberfläche über dem Gelände, und Planken über einem Fluss sind kein
+Fluss. `Anchor` bietet nur Placements an, die ein `anchor_component` benennen —
+ein ganzes Placement viermal zu setzen wären vier Brücken statt vier Pfosten.
+Bietet der Workspace keines an, steht das Feld da und sagt es im Tooltip.
+
+Es gibt keinen Point-Modus, keine Steigung und keine Operation. Eine Brücke ist
+gerade, waagerecht und hat zwei Enden; ein Werkzeug, das die halbe
+Kontextleiste ausgraut, wäre ein zweites Werkzeug.
+
+**Gezeichnet wird mit zwei Klicks.** Der erste fixiert ein Ende, der zweite baut
+die Brücke — es gibt kein Enter, weil mit dem zweiten Klick nichts mehr offen
+ist. `Escape` gibt das fixierte Ende zurück. Zwischen den Klicks zeigt der
+Canvas den Deckumriss, die vier Pfostenkästen und die Länge in Metern am
+Zeiger: gelb heißt, der zweite Klick nimmt es, rot nennt den Grund. Zwei Enden
+am selben Ort sind neutral gezeichnet und nicht rot — das ist eine Brücke, nach
+der noch niemand fertig gefragt hat.
+
+Die Enden rasten nicht ein, weder am Raster noch auf einen Winkel. Ein Deck wird
+als kontinuierliche Geometrie gelesen, nicht über einen Raster — derselbe Grund,
+aus dem Path-Punkte frei sind und Hügelanker einrasten. Beliebig schräge Brücken
+sind gewollt.
+
+Eine fertige Brücke zeigt ihr Deckband in der Materialfarbe und an jeder Ecke
+einen Pfosten; im Bereich `Structures` zusätzlich dessen gestrichelte
+Kollisionsbox. Der Radierer nimmt die ganze Brücke samt Pfosten — einen Pfosten
+allein gibt es nicht, weil er nicht im Dokument steht, sondern aus der Brücke
+folgt.
 
 ### Placements und Untergrund
 
