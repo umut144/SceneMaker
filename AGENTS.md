@@ -13,10 +13,14 @@ Runtime Export and copy it into a Workspace-local import boundary.
   metrics. None of that authoring identity is inferred from PolyTools.
 - A Workspace-local `imports/polytools/` boundary may contribute visible bounds
   and pivots/anchors to SceneMaker Assets whose role is `placement`, joined by
-  `asset_key`. Its catalog and referenced Manifests are synchronized copies,
-  never live sibling reads. Only configured Placement roots and their
-  transitive geometry references belong there; Terrain Assets require no
-  PolyTools package, and a Workspace without Placements needs no import.
+  the `polytools_asset_id` the Asset names — the id PolyTools keeps stable, not
+  a key either project may rename. It is required on a Placement, which without
+  PolyTools geometry has no meaning, and optional on Terrain, which SceneMaker
+  may author without PolyTools ever hearing of it. The boundary's catalog and
+  referenced Manifests are synchronized copies, never live sibling reads. Only
+  configured Placement roots and their transitive geometry references belong
+  there; Terrain Assets require no PolyTools package, and a Workspace without
+  Placements needs no import.
 - Scenes and templates are workspace data. Their documents use `asset_key`s,
   never numeric IDs.
 - No hidden metric defaults, directory-discovered Assets, or game-specific
@@ -72,11 +76,11 @@ unrelated reasons.
 
 | Schema | Constant | Current |
 | --- | --- | --- |
-| Scene document | `SceneMakerSchemas.SceneVersion` | 17 |
-| Workspace config | `WorkspaceConfigurationStore.Version` | 10 |
-| Scene export | `SceneExport.Version` | 12 |
-| PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 2 |
-| PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 19 |
+| Scene document | `SceneMakerSchemas.SceneVersion` | 19 |
+| Workspace config | `WorkspaceConfigurationStore.Version` | 14 |
+| Scene export | `SceneExport.Version` | 14 |
+| PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 3 |
+| PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 21 |
 | Recent session | `RecentSessionStore.Version` | 4 |
 
 There is no migration code and none is planned. Every reader rejects a document
