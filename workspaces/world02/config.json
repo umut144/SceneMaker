@@ -1,6 +1,6 @@
 {
   "format": "scene_maker_workspace",
-  "version": 13,
+  "version": 14,
   "workspace_key": "world02",
   "grid": {
     "terrain_cell_meters": 1.0,

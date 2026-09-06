@@ -121,10 +121,10 @@ public sealed class TestWorkspace : IDisposable
               "bridge_set": "bridge",
               "assets": [
                 { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" },
-                { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF" },
+                { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF", "polytools_asset_id": "asset_portal" },
                 { "asset_key": "river", "display_name": "Water", "role": "terrain", "color": "#3C7DD9", "surface": "water", "authoring": "curve" },
                 { "asset_key": "sand", "display_name": "Sand", "role": "terrain", "color": "#E5C07B", "surface": "sand", "authoring": "cells" },
-                { "asset_key": "stone", "display_name": "Stone", "role": "placement", "color": "#808080" }{{lava}}
+                { "asset_key": "stone", "display_name": "Stone", "role": "placement", "color": "#808080", "polytools_asset_id": "asset_stone" }{{lava}}
               ]
             }
             """);
@@ -249,6 +249,7 @@ public sealed class TestWorkspace : IDisposable
                   "name": "plank",
                   "role": "{{BridgeKit.PlankRole}}",
                   "source_asset_key": "portal",
+                  "source_asset_id": "asset_portal",
                   "parent_component_id": null,
                   "local_transform": {
                     "position": [0.0, 0.0],
@@ -262,6 +263,7 @@ public sealed class TestWorkspace : IDisposable
                   "name": "post",
                   "role": "{{BridgeKit.AnchorRole}}",
                   "source_asset_key": "stone",
+                  "source_asset_id": "asset_stone",
                   "parent_component_id": null,
                   "local_transform": {
                     "position": [0.0, 0.0],

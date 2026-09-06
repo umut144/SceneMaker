@@ -111,7 +111,8 @@ public static class PolyToolsCatalogImporter
     }
 
     /// <summary>
-    /// The bridge kit a Set publishes: which Asset fills which role. Read
+    /// Which PolyTools Asset fills which role in a Set, by their stable ids.
+    /// Read
     /// through its own path rather than through <see cref="Load"/>, because a
     /// Set is not placeable geometry and that path refuses one on purpose -
     /// what is wanted here is the one thing a Set is for, its membership.
@@ -120,7 +121,9 @@ public static class PolyToolsCatalogImporter
     /// component is part of how that Asset is drawn, not a member of the Set,
     /// and PolyTools publishes no role for it.</para>
     /// </summary>
-    public static BridgeKit LoadBridgeKit(string workspaceDirectory, string setAssetKey)
+    public static IReadOnlyDictionary<string, string> LoadSetMemberAssetIds(
+        string workspaceDirectory,
+        string setAssetKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(setAssetKey);
@@ -148,7 +151,7 @@ public static class PolyToolsCatalogImporter
                     $"PolyTools asset '{setAssetKey}' is not a Set, so it publishes no membership.");
             }
 
-            Dictionary<string, string> assetKeysByRole = new(StringComparer.Ordinal);
+            Dictionary<string, string> assetIdsByRole = new(StringComparer.Ordinal);
             foreach (var element in RequireArray(root, "components", label).EnumerateArray())
             {
                 var component = RequireObject(element, $"{label} Component");
@@ -164,14 +167,17 @@ public static class PolyToolsCatalogImporter
                     continue;
                 }
                 var role = RequireString(component, "role", $"{label} member");
-                var source = RequireString(component, "source_asset_key", $"{label} member");
-                if (!assetKeysByRole.TryAdd(role, source))
+                // The id, not the key. The role says what a member is for and
+                // survives a rename; what it points at has to survive one too,
+                // or the anchor holds and the thing it anchors drifts.
+                var source = RequireString(component, "source_asset_id", $"{label} member");
+                if (!assetIdsByRole.TryAdd(role, source))
                 {
                     throw new SceneMakerDocumentException(
                         $"{label} fills the role '{role}' twice; a bridge kit needs one Asset per role.");
                 }
             }
-            return BridgeKit.From(setAssetKey, assetKeysByRole);
+            return assetIdsByRole;
         }
         catch (SceneMakerDocumentException)
         {

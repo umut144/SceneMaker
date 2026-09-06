@@ -110,7 +110,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 13;
+    public const int Version = 14;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -258,6 +258,25 @@ public static class WorkspaceConfigurationStore
                 $"Asset '{entry.AssetKey}' declares an unsupported SceneMaker role.");
         }
         var isTerrain = entry.Role == WorkspaceAssetRole.Terrain;
+
+        // A Placement is nothing without PolyTools geometry, so it can always
+        // name the Asset that carries it - and naming it by id rather than by
+        // key is what makes it unmistakable. PolyTools guarantees an id is
+        // never reused and that a key a deleted Asset last wore is not handed
+        // to another; the one thing they cannot promise is a key their catalog
+        // never had, which is exactly the case a Placement resolved by name
+        // would bind to silently. So the id is required here, and no Placement
+        // is resolved by name any more.
+        if (!isTerrain && string.IsNullOrWhiteSpace(entry.PolyToolsAssetId))
+        {
+            throw new SceneMakerDocumentException(
+                $"Placement Asset '{entry.AssetKey}' requires a polytools_asset_id.");
+        }
+        if (entry.PolyToolsAssetId is { } assetId && string.IsNullOrWhiteSpace(assetId))
+        {
+            throw new SceneMakerDocumentException(
+                $"Asset '{entry.AssetKey}' declares an empty polytools_asset_id.");
+        }
         if (isTerrain && entry.Surface is null)
         {
             throw new SceneMakerDocumentException(
@@ -384,11 +403,18 @@ public static class WorkspaceConfigurationStore
         public TerrainAuthoring? Authoring { get; init; }
 
         /// <summary>
-        /// Which PolyTools Asset this one is, as their stable id. Optional,
-        /// because SceneMaker may author Terrain PolyTools has never heard of -
-        /// and where it is absent the Asset is looked up by name, which is what
-        /// breaks when someone over there edits a label.
+        /// Which PolyTools Asset this one is, as their stable id. Required on a
+        /// Placement and optional on Terrain: a Placement has no meaning without
+        /// PolyTools geometry, so it can always name the Asset that carries it,
+        /// while SceneMaker may author Terrain PolyTools has never heard of.
+        ///
+        /// The wire name is pinned because it is the one field whose name the
+        /// naming policy gets wrong: it would split "PolyTools" into
+        /// "poly_tools", and PolyTools is one word everywhere else we write it.
+        /// Without the pin Save quietly renames the field and the next sync
+        /// preflight fails on a config nobody edited.
         /// </summary>
+        [JsonPropertyName("polytools_asset_id")]
         public string? PolyToolsAssetId { get; init; }
     }
 }

@@ -170,7 +170,8 @@ public sealed class EditorControllerWorkspaceTests
                     "grass", "Grass", WorkspaceAssetRole.Terrain,
                     "#99E550", "land", TerrainAuthoring.Cells),
                 new WorkspaceAssetProfile(
-                    "stone", "Stone", WorkspaceAssetRole.Placement, "#808080"),
+                    "stone", "Stone", WorkspaceAssetRole.Placement, "#808080",
+                    PolyToolsAssetId: "asset_stone"),
             ]);
 
         Assert.True(report.Succeeded);

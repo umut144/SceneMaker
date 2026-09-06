@@ -13,8 +13,8 @@ public sealed class StandaloneWorkspaceTests
         WritePolyToolsImport(directory.Path, "game01");
         WriteConfig(directory.Path, "game01", 0.5m, 32m, 192m, """
             { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" },
-            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" },
-            { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF" }
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree" },
+            { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF", "polytools_asset_id": "asset_portal" }
         """);
 
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
@@ -39,8 +39,8 @@ public sealed class StandaloneWorkspaceTests
         WritePolyToolsImport(directory.Path, "game01");
         WriteConfig(directory.Path, "game01", 0.5m, 32m, 192m, """
             { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" },
-            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" },
-            { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF" }
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree" },
+            { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF", "polytools_asset_id": "asset_portal" }
         """);
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path);
@@ -97,7 +97,7 @@ public sealed class StandaloneWorkspaceTests
         WritePolyToolsImport(directory.Path, "offset01");
         WriteConfig(directory.Path, "offset01", 1m, 32m, 192m, """
             { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" },
-            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree" }
         """);
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path);
@@ -148,7 +148,7 @@ public sealed class StandaloneWorkspaceTests
             }
         """, treePivot: "[4.0, 3.0]", treeCollisionComponentId: "child");
         WriteConfig(directory.Path, "game01", 1m, 10m, 40m, """
-            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree" }
         """);
 
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
@@ -202,7 +202,7 @@ public sealed class StandaloneWorkspaceTests
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "game02");
         WriteConfig(directory.Path, "game02", 0.25m, 20m, 100m, """
-            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree" }
         """);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path);
 
@@ -229,7 +229,8 @@ public sealed class StandaloneWorkspaceTests
                     "grass", "Grass", WorkspaceAssetRole.Terrain,
                     "#99E550", "land", TerrainAuthoring.Cells),
                 new WorkspaceAssetProfile(
-                    "portal", "Portal", WorkspaceAssetRole.Placement, "#8E6CFF"),
+                    "portal", "Portal", WorkspaceAssetRole.Placement, "#8E6CFF",
+                    PolyToolsAssetId: "asset_portal"),
             ]);
 
         WorkspaceConfigurationStore.Save(directory.Path, configuration);
@@ -242,7 +243,16 @@ public sealed class StandaloneWorkspaceTests
             WorkspaceAssetRole.Placement,
             restored.ResolveAssetProfile("portal").Role);
         Assert.Equal(0.125m, restored.Metrics.ElevationQuantumMeters);
+        Assert.Equal(
+            "asset_portal",
+            restored.ResolveAssetProfile("portal").PolyToolsAssetId);
         Assert.Contains("\"elevation_quantum_meters\": 0.125", json, StringComparison.Ordinal);
+        // PolyTools is one word on the wire. The naming policy would write
+        // "poly_tools_asset_id", which every other reader of this file - the
+        // fixtures, the checked-in Workspaces, the sync preflight - refuses.
+        Assert.Contains(
+            "\"polytools_asset_id\": \"asset_portal\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("poly_tools_asset_id", json, StringComparison.Ordinal);
         Assert.DoesNotContain("footprint", json, StringComparison.Ordinal);
         Assert.DoesNotContain("anchor", json, StringComparison.Ordinal);
         Assert.DoesNotContain("authoring_role", json, StringComparison.Ordinal);
@@ -361,7 +371,7 @@ public sealed class StandaloneWorkspaceTests
         WritePolyToolsImport(directory.Path, "game05");
         WriteConfig(directory.Path, "game05", 0.5m, 32m, 128m, """
             { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" },
-            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree" }
         """);
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var configuration = WorkspaceConfigurationStore.Load(directory.Path);
@@ -667,7 +677,7 @@ public sealed class StandaloneWorkspaceTests
                 ]
                 """);
         WriteConfig(directory.Path, "collide01", 1m, 10m, 40m, """
-            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree" }
         """);
 
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
@@ -712,7 +722,7 @@ public sealed class StandaloneWorkspaceTests
                 ]
                 """);
         WriteConfig(directory.Path, "collide02", 1m, 10m, 40m, """
-            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree" }
         """);
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path);
@@ -744,7 +754,7 @@ public sealed class StandaloneWorkspaceTests
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "collide03", regions: "[]");
         WriteConfig(directory.Path, "collide03", 1m, 10m, 40m, """
-            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree" }
         """);
         var catalog = PolyToolsCatalogImporter.Load(directory.Path);
         var workspace = WorkspaceConfigurationStore.Load(directory.Path);
@@ -772,7 +782,7 @@ public sealed class StandaloneWorkspaceTests
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "palette01", treeCategory: "palette");
         WriteConfig(directory.Path, "palette01", 1m, 10m, 40m, """
-            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree" }
         """);
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
@@ -821,7 +831,7 @@ public sealed class StandaloneWorkspaceTests
         using var directory = TemporaryDirectory.Create();
         WritePolyToolsImport(directory.Path, "set01", treeCategory: "set");
         WriteConfig(directory.Path, "set01", 1m, 10m, 40m, """
-            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32" }
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree" }
         """);
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>

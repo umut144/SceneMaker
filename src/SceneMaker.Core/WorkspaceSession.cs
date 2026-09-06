@@ -20,7 +20,7 @@ public sealed record WorkspaceSession(
     WorkspaceConfiguration Configuration,
     TerrainDisplayCatalog TerrainAssets,
     PropDisplayCatalog PropAssets,
-    BridgeKit? BridgeKit)
+    BridgeKitResolution BridgeKit)
 {
     public string WorkspaceKey => Workspace.WorkspaceKey;
     public string DirectoryPath => Workspace.DirectoryPath;
@@ -52,20 +52,63 @@ public sealed record WorkspaceSession(
                 $"Workspace '{configuration.WorkspaceKey}' requires PolyTools world "
                 + $"'{configuration.WorkspaceKey}', not '{catalog.WorldKey}'.");
         }
-        // The bridge kit is read once, here, from the Set the Workspace names.
-        // A Workspace that names none, or that enables no Placements at all and
-        // therefore has no import to read, simply has no kit - a state, not an
-        // omission, which the Bridge tool says out loud.
-        //
-        // Whether its two members are enabled is deliberately not checked here.
-        // Narrowing the enabled Assets is an ordinary edit, and a Workspace that
-        // refused to open afterwards would be one an author could edit shut. The
-        // refusal belongs where a bridge is actually authored or exported, and
-        // both already resolve the Assets they name.
-        var bridgeKit = configuration.BridgeSetAssetKey is { } bridgeSet && placementRequests.Length > 0
-            ? PolyToolsCatalogImporter.LoadBridgeKit(workspace.DirectoryPath, bridgeSet)
-            : null;
+        // The bridge kit is read once, here, from the Set the Workspace names,
+        // and never refuses the Workspace. Every way it can fail - no Set named,
+        // no import to read one from, a Set that is not a kit, a member this
+        // Workspace enables under no name - leaves the Workspace open and the
+        // reason recorded, because narrowing the enabled Assets is an ordinary
+        // edit and a Workspace that stopped opening after one would be a
+        // Workspace an author could edit shut. The refusal belongs where a
+        // bridge is authored or exported, and both already resolve what they
+        // name; the Bridge tool says the reason instead of a generic no.
+        var bridgeKit = ResolveBridgeKit(workspace, configuration, placementRequests.Length);
         return Derive(workspace, catalog, configuration, bridgeKit);
+    }
+
+    private static BridgeKitResolution ResolveBridgeKit(
+        LoadedWorkspace workspace,
+        WorkspaceConfiguration configuration,
+        int placementCount)
+    {
+        if (configuration.BridgeSetAssetKey is not { } bridgeSet)
+        {
+            return new BridgeKitResolution.Unavailable(
+                "This Workspace names no PolyTools Set to build bridges from.");
+        }
+        if (placementCount == 0)
+        {
+            return new BridgeKitResolution.Unavailable(
+                "This Workspace enables no Placement, so it has no PolyTools import "
+                + $"to read the Set '{bridgeSet}' from.");
+        }
+        // The Set names its members by PolyTools id; the Workspace says what it
+        // calls each id. Both directions are needed because the bridge record
+        // stores SceneMaker's name, and the export has to be readable without
+        // resolving a Set.
+        var workspaceKeysByAssetId = configuration.AssetProfiles
+            .Where(static profile => profile.PolyToolsAssetId is not null)
+            .ToDictionary(
+                static profile => profile.PolyToolsAssetId!,
+                static profile => profile.AssetKey,
+                StringComparer.Ordinal);
+        try
+        {
+            // Qualified: this record's own BridgeKit property shadows the type
+            // now that the two no longer share a name.
+            return SceneMaker.Core.BridgeKit.Resolve(
+                bridgeSet,
+                PolyToolsCatalogImporter.LoadSetMemberAssetIds(workspace.DirectoryPath, bridgeSet),
+                workspaceKeysByAssetId);
+        }
+        catch (SceneMakerDocumentException exception)
+        {
+            // Caught, not propagated, and only around the kit: the importer is
+            // right to refuse a manifest it cannot read, and this is the one
+            // caller for whom that is not worth an unopenable Workspace. Its
+            // message already says what PolyTools published wrongly, so it is
+            // passed through rather than restated.
+            return new BridgeKitResolution.Unavailable(exception.Message);
+        }
     }
 
     /// <summary>
@@ -80,7 +123,7 @@ public sealed record WorkspaceSession(
         LoadedWorkspace workspace,
         PolyToolsCatalog catalog,
         WorkspaceConfiguration configuration,
-        BridgeKit? bridgeKit) =>
+        BridgeKitResolution bridgeKit) =>
         new(
             workspace,
             catalog,

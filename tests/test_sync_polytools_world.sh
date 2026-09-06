@@ -54,7 +54,7 @@ JSON
 cat >"$workspace/config.json" <<'JSON'
 {
   "format": "scene_maker_workspace",
-  "version": 13,
+  "version": 14,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,
@@ -76,7 +76,8 @@ cat >"$workspace/config.json" <<'JSON'
       "asset_key": "tree",
       "display_name": "Oak",
       "role": "placement",
-      "color": "#2E7D32"
+      "color": "#2E7D32",
+      "polytools_asset_id": "asset_tree"
     }
   ]
 }

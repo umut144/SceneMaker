@@ -10,7 +10,7 @@ import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
 current_manifest_schema=21
 current_catalog_schema=3
-current_config_version=13
+current_config_version=14
 
 cleanup() {
   local status=$?
@@ -101,6 +101,10 @@ if ! jq -e --arg world "$world_key" --argjson version "$current_config_version" 
   and (([.assets[].asset_key] | unique | length) == ([.assets[].asset_key] | length))
   and (.bridge_set == null
     or (.bridge_set | type == "string" and test("^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")))
+  # Required on a Placement, optional on Terrain: a Placement is nothing
+  # without PolyTools geometry, so it can always name the Asset that carries it.
+  and all(.assets[]; .role != "placement"
+    or (.polytools_asset_id | type == "string" and length > 0))
   and all(.assets[]; .polytools_asset_id == null
     or (.polytools_asset_id | type == "string" and length > 0))
 ' "$config_path" >/dev/null; then
@@ -111,7 +115,8 @@ if ! jq -e --arg world "$world_key" --argjson version "$current_config_version" 
     "$config_path" "$current_config_version" "$world_key" >&2
   printf '%s\n' \
     '       Checked: format, version, workspace_key, grid, and every Asset entry -' \
-    '       role, color, a surface and authoring on Terrain, and no authoring on a Placement.' >&2
+    '       role, color, a surface and authoring on Terrain, no authoring on a Placement,' \
+    '       and a polytools_asset_id on every Placement.' >&2
   exit 1
 fi
 if ! jq -e --slurpfile catalog "$source_catalog" '
@@ -216,7 +221,8 @@ validate_manifest() {
         == ([.components[].component_id] | length))
       and (if .asset_category == "set" then
         all(.components[] | select(.kind == "asset_reference" and .parent_component_id == null);
-          .role | type == "string" and test("^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"))
+          (.role | type == "string" and test("^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"))
+          and (.source_asset_id | type == "string" and length > 0))
       else true end)
       and (.regions | type == "array")
       and (([.regions[].region_id] | unique | length)

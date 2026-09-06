@@ -67,7 +67,8 @@ public sealed class TerrainSurfaceTests
 
         var narrowed = workspace.Configuration.WithAssetProfiles(
             [new WorkspaceAssetProfile(
-                "stone", "Stone", WorkspaceAssetRole.Placement, "#808080", "wood")]);
+                "stone", "Stone", WorkspaceAssetRole.Placement, "#808080", "wood",
+                PolyToolsAssetId: "asset_stone")]);
 
         Assert.Equal("wood", narrowed.ResolveAssetProfile("stone").Surface);
     }
@@ -128,7 +129,8 @@ public sealed class TerrainSurfaceTests
             workspace.Configuration.WithAssetProfiles(
                 [new WorkspaceAssetProfile(
                     "stone", "Stone", WorkspaceAssetRole.Placement,
-                    "#808080", null, TerrainAuthoring.Cells)]));
+                    "#808080", null, TerrainAuthoring.Cells,
+                    PolyToolsAssetId: "asset_stone")]));
 
         Assert.Contains("must not declare an authoring", exception.Message, StringComparison.Ordinal);
     }

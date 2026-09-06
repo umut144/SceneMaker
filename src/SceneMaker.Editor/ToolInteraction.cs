@@ -570,10 +570,11 @@ public sealed class ToolInteraction
     {
         if (context.Scene.SceneKind != SceneKind.Instance)
             return new ToolOutcome.Message("Bridge: a Scene Template cannot carry bridges.");
-        if (context.BridgeKit is not { } kit)
+        if (context.BridgeKit is not BridgeKitResolution.Resolved(var kit))
         {
-            return new ToolOutcome.Message(
-                "Bridge: this Workspace names no PolyTools Set to build bridges from.");
+            return new ToolOutcome.Message(context.BridgeKit is BridgeKitResolution.Unavailable why
+                ? $"Bridge: {why.Reason}"
+                : "Bridge: this Workspace names no PolyTools Set to build bridges from.");
         }
         var plankAssetKey = kit.PlankAssetKey;
         var anchorAssetKey = kit.AnchorAssetKey;

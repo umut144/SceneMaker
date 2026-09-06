@@ -198,6 +198,31 @@ public sealed class ToolBridgeTests
         Assert.Contains("names no PolyTools Set", outcome.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// And when there is a reason, it says the reason. "No kit" and "you turned
+    /// the plank off" send an author to different places.
+    /// </summary>
+    [Fact]
+    public void WithoutAKitTheToolSaysWhichOneIsMissing()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Map(workspace);
+        var interaction = Bridge(workspace);
+
+        var outcome = Assert.IsType<ToolOutcome.Message>(
+            interaction.PointerPressed(
+                Context(workspace, scene) with
+                {
+                    BridgeKit = new BridgeKitResolution.Unavailable(
+                        "PolyTools Set 'bridge' fills the role 'plank' with asset "
+                        + "'asset_portal', which this Workspace enables under no name."),
+                },
+                Point(320, 320),
+                Cell(10, 10)));
+
+        Assert.Contains("the role 'plank'", outcome.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ASceneTemplateCannotCarryABridge()
     {
@@ -222,9 +247,9 @@ public sealed class ToolBridgeTests
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
 
-        Assert.NotNull(session.BridgeKit);
-        Assert.Equal("portal", session.BridgeKit!.PlankAssetKey);
-        Assert.Equal("stone", session.BridgeKit!.AnchorAssetKey);
+        var kit = Assert.IsType<BridgeKitResolution.Resolved>(session.BridgeKit).Kit;
+        Assert.Equal("portal", kit.PlankAssetKey);
+        Assert.Equal("stone", kit.AnchorAssetKey);
     }
 
     // --- Select Bridge -----------------------------------------------------
@@ -427,7 +452,7 @@ public sealed class ToolBridgeTests
         SelectedPropAssetKey: "stone",
         TemplateAnchorGroupNumber: 1,
         ElevationMeters: 1m,
-        BridgeKit: new BridgeKit("portal", "stone"));
+        BridgeKit: new BridgeKitResolution.Resolved(new BridgeKit("portal", "stone")));
 
     private static AuthoringPoint Point(int x, int y) => new(x, y);
 

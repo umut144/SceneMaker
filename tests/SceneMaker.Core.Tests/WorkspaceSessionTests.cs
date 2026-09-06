@@ -81,13 +81,60 @@ public sealed class WorkspaceSessionTests
         using var workspace = TestWorkspace.Create();
         var grassPlacement = workspace.Configuration.WithAssetProfiles(
             [new WorkspaceAssetProfile(
-                "grass", "Grass Token", WorkspaceAssetRole.Placement, "#99E550")]);
+                "grass", "Grass Token", WorkspaceAssetRole.Placement, "#99E550",
+                PolyToolsAssetId: "asset_grass")]);
         WorkspaceConfigurationStore.Save(workspace.RootPath, grassPlacement);
 
         var session = WorkspaceSession.Load(workspace.RootPath);
 
         Assert.Equal("Grass Token", session.PropAssets.Resolve("grass").Name);
         Assert.Equal(["grass"], session.Catalog.Assets.Select(asset => asset.AssetKey));
+    }
+
+    /// <summary>
+    /// Narrowing the enabled Assets is an ordinary edit. If it could take the
+    /// bridge kit's plank away and shut the Workspace with it, an author could
+    /// edit their world closed and have no way back in - so the kit goes away
+    /// and says why, and the Workspace still opens.
+    /// </summary>
+    [Fact]
+    public void NarrowingTheAssetsCostsTheKitRatherThanTheWorkspace()
+    {
+        using var workspace = TestWorkspace.Create();
+        var withoutThePlank = workspace.Configuration.WithAssetProfiles(
+            [new WorkspaceAssetProfile(
+                "grass", "Grass Token", WorkspaceAssetRole.Placement, "#99E550",
+                PolyToolsAssetId: "asset_grass")]);
+        WorkspaceConfigurationStore.Save(workspace.RootPath, withoutThePlank);
+
+        var session = WorkspaceSession.Load(workspace.RootPath);
+
+        var unavailable = Assert.IsType<BridgeKitResolution.Unavailable>(session.BridgeKit);
+        Assert.Contains("the role 'plank'", unavailable.Reason, StringComparison.Ordinal);
+        Assert.Contains("enables under no name", unavailable.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The same holds for what PolyTools publishes: a Set SceneMaker cannot read
+    /// as a kit is their problem to fix and no reason to keep the author out of
+    /// a world full of Terrain that has nothing to do with bridges.
+    /// </summary>
+    [Fact]
+    public void APolyToolsSetThatIsNoKitCostsTheKitRatherThanTheWorkspace()
+    {
+        using var workspace = TestWorkspace.Create();
+        File.Delete(Path.Combine(
+            workspace.RootPath,
+            PolyToolsCatalogImporter.ImportDirectoryName,
+            PolyToolsCatalogImporter.PolyToolsDirectoryName,
+            "PolyToolsRuntimeExports",
+            "bridge",
+            "manifest.json"));
+
+        var session = WorkspaceSession.Load(workspace.RootPath);
+
+        Assert.NotEmpty(session.PropAssets.Assets);
+        Assert.IsType<BridgeKitResolution.Unavailable>(session.BridgeKit);
     }
 
     [Fact]
@@ -161,7 +208,8 @@ public sealed class WorkspaceSessionTests
                     "grass", "Grass", WorkspaceAssetRole.Terrain,
                     "#99E550", "land", TerrainAuthoring.Cells),
                 new WorkspaceAssetProfile(
-                    "stone", "Stone", WorkspaceAssetRole.Placement, "#808080"),
+                    "stone", "Stone", WorkspaceAssetRole.Placement, "#808080",
+                    PolyToolsAssetId: "asset_stone"),
             ]);
 
         Assert.Equal(["grass"], narrowed.TerrainAssets.Assets.Select(asset => asset.AssetKey));
@@ -194,6 +242,7 @@ public sealed class WorkspaceSessionTests
 
         Assert.Throws<SceneMakerDocumentException>(() =>
             session.WithAssetProfiles([new WorkspaceAssetProfile(
-                "nowhere", "Nowhere", WorkspaceAssetRole.Placement, "#FFFFFF")]));
+                "nowhere", "Nowhere", WorkspaceAssetRole.Placement, "#FFFFFF",
+                PolyToolsAssetId: "asset_nowhere")]));
     }
 }

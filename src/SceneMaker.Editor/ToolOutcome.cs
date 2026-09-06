@@ -26,11 +26,11 @@ public sealed record ToolContext(
     double PointerHitRadiusAuthoringPixels = 8.0,
 
     /// <summary>
-    /// Which Assets a bridge is built from here, or null in a Workspace that
-    /// builds none. It is not a selection: the Set says it, so no tool asks and
-    /// no field offers it.
+    /// Which Assets a bridge is built from here, or the reason there are none.
+    /// It is not a selection: the Set says it, so no tool asks and no field
+    /// offers it. Null only where a caller never had a Workspace to ask.
     /// </summary>
-    BridgeKit? BridgeKit = null);
+    BridgeKitResolution? BridgeKit = null);
 
 /// <summary>
 /// The single answer a tool gives to an input event. Closed hierarchy: an input
