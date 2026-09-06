@@ -61,7 +61,8 @@ public sealed record WorkspaceAssetProfile(
     WorkspaceAssetRole Role,
     string Color,
     string? Surface = null,
-    TerrainAuthoring? Authoring = null);
+    TerrainAuthoring? Authoring = null,
+    string? PolyToolsAssetId = null);
 
 public sealed class WorkspaceConfiguration
 {
@@ -109,7 +110,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 12;
+    public const int Version = 13;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -174,6 +175,7 @@ public static class WorkspaceConfigurationStore
                 Color = profile.Color,
                 Surface = profile.Surface,
                 Authoring = profile.Authoring,
+                PolyToolsAssetId = profile.PolyToolsAssetId,
             }).ToList(),
         };
         return Parse(document);
@@ -205,6 +207,7 @@ public static class WorkspaceConfigurationStore
                 Color = profile.Color,
                 Surface = profile.Surface,
                 Authoring = profile.Authoring,
+                PolyToolsAssetId = profile.PolyToolsAssetId,
             }).OrderBy(static entry => entry.AssetKey, StringComparer.Ordinal).ToList(),
         };
         var path = Path.Combine(Path.GetFullPath(workspaceDirectory), FileName);
@@ -331,7 +334,8 @@ public static class WorkspaceConfigurationStore
                 entry.Role,
                 entry.Color,
                 entry.Surface,
-                entry.Authoring);
+                entry.Authoring,
+                entry.PolyToolsAssetId);
             if (!profiles.TryAdd(entry.AssetKey, profile))
             {
                 throw new SceneMakerDocumentException(
@@ -378,5 +382,13 @@ public static class WorkspaceConfigurationStore
         public required string Color { get; init; }
         public string? Surface { get; init; }
         public TerrainAuthoring? Authoring { get; init; }
+
+        /// <summary>
+        /// Which PolyTools Asset this one is, as their stable id. Optional,
+        /// because SceneMaker may author Terrain PolyTools has never heard of -
+        /// and where it is absent the Asset is looked up by name, which is what
+        /// breaks when someone over there edits a label.
+        /// </summary>
+        public string? PolyToolsAssetId { get; init; }
     }
 }

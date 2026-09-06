@@ -1,6 +1,6 @@
 {
   "format": "scene_maker_workspace",
-  "version": 12,
+  "version": 13,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,
@@ -15,7 +15,8 @@
       "asset_key": "ankh",
       "display_name": "Ankh",
       "role": "placement",
-      "color": "#B89033"
+      "color": "#B89033",
+      "polytools_asset_id": "asset_17"
     },
     {
       "asset_key": "grass",
@@ -23,20 +24,23 @@
       "role": "terrain",
       "color": "#99E550",
       "surface": "land",
-      "authoring": "cells"
+      "authoring": "cells",
+      "polytools_asset_id": "asset_18"
     },
     {
       "asset_key": "plank",
       "display_name": "Plank",
       "role": "placement",
       "color": "#8C6239",
-      "surface": "wood"
+      "surface": "wood",
+      "polytools_asset_id": "asset_28"
     },
     {
       "asset_key": "post",
       "display_name": "Post",
       "role": "placement",
-      "color": "#A0714B"
+      "color": "#A0714B",
+      "polytools_asset_id": "asset_27"
     },
     {
       "asset_key": "river",
@@ -44,13 +48,15 @@
       "role": "terrain",
       "color": "#3C7DD9",
       "surface": "water",
-      "authoring": "curve"
+      "authoring": "curve",
+      "polytools_asset_id": "asset_19"
     },
     {
       "asset_key": "tree",
       "display_name": "Tree",
       "role": "placement",
-      "color": "#808080"
+      "color": "#808080",
+      "polytools_asset_id": "asset_10"
     }
   ]
 }

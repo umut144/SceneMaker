@@ -10,7 +10,7 @@ import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
 current_manifest_schema=21
 current_catalog_schema=3
-current_config_version=12
+current_config_version=13
 
 cleanup() {
   local status=$?
@@ -101,6 +101,8 @@ if ! jq -e --arg world "$world_key" --argjson version "$current_config_version" 
   and (([.assets[].asset_key] | unique | length) == ([.assets[].asset_key] | length))
   and (.bridge_set == null
     or (.bridge_set | type == "string" and test("^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")))
+  and all(.assets[]; .polytools_asset_id == null
+    or (.polytools_asset_id | type == "string" and length > 0))
 ' "$config_path" >/dev/null; then
   # Naming the version alone reads as a version mismatch even when the
   # version is right, and that is the likelier case: this gate also refuses a
@@ -116,10 +118,35 @@ if ! jq -e --slurpfile catalog "$source_catalog" '
   . as $config
   | all($config.assets[];
       .role != "placement"
-      or (.asset_key as $key
-        | any($catalog[0].assets[]; .asset_key == $key)))
+      or (if .polytools_asset_id != null then
+        # An id names the same Asset through every rename; a key does not, which
+        # is why one is checked in preference to the other rather than beside it.
+        (.polytools_asset_id as $id | any($catalog[0].assets[]; .asset_id == $id))
+      else
+        (.asset_key as $key | any($catalog[0].assets[]; .asset_key == $key))
+      end))
 ' "$config_path" >/dev/null; then
   printf '%s\n' 'ERROR: every SceneMaker Placement needs matching PolyTools geometry.' >&2
+  jq -r --slurpfile catalog "$source_catalog" '
+    .assets[]
+    | select(.role == "placement")
+    | . as $asset
+    | if .polytools_asset_id != null then
+        select(any($catalog[0].assets[]; .asset_id == $asset.polytools_asset_id) | not)
+        | "       \(.asset_key): polytools_asset_id \(.polytools_asset_id) " +
+          (($catalog[0].retired_assets // [])
+            | map(select(.asset_id == $asset.polytools_asset_id))
+            | if length > 0 then "was deleted in PolyTools (last called \(.[0].last_asset_key))."
+              else "is not in the PolyTools catalog." end)
+      else
+        select(any($catalog[0].assets[]; .asset_key == $asset.asset_key) | not)
+        | "       \(.asset_key): no PolyTools Asset by that name" +
+          (($catalog[0].assets // [])
+            | map(select((.previous_keys // []) | index($asset.asset_key)))
+            | if length > 0 then "; PolyTools now calls it \(.[0].asset_key)."
+              else "." end)
+      end
+  ' "$config_path" >&2
   exit 1
 fi
 
@@ -237,7 +264,14 @@ contains_required_asset() {
 required_asset_keys=()
 while IFS= read -r asset_key; do
   [[ -z "$asset_key" ]] || required_asset_keys+=("$asset_key")
-done < <(jq -r '.assets[] | select(.role == "placement") | .asset_key' "$config_path")
+done < <(jq -r --slurpfile catalog "$source_catalog" '
+  .assets[]
+  | select(.role == "placement")
+  | if .polytools_asset_id != null then
+      (.polytools_asset_id as $id
+        | $catalog[0].assets[] | select(.asset_id == $id) | .asset_key)
+    else .asset_key end
+' "$config_path")
 
 # The bridge Set travels too. SceneMaker never places it - a Set has no box to
 # be placed by - but it is the only thing that says which Asset is the plank and

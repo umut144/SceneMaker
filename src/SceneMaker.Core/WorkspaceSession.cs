@@ -37,14 +37,15 @@ public sealed record WorkspaceSession(
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
         var workspace = WorkspaceStore.Load(workspaceDirectory);
         var configuration = WorkspaceConfigurationStore.Load(workspace.DirectoryPath);
-        var placementKeys = configuration.AssetProfiles
+        var placementRequests = configuration.AssetProfiles
             .Where(static profile => profile.Role == WorkspaceAssetRole.Placement)
-            .Select(static profile => profile.AssetKey)
+            .Select(static profile =>
+                new PolyToolsAssetRequest(profile.AssetKey, profile.PolyToolsAssetId))
             .ToArray();
-        var catalog = placementKeys.Length == 0
+        var catalog = placementRequests.Length == 0
             ? PolyToolsCatalog.Empty(configuration.WorkspaceKey)
-            : PolyToolsCatalogImporter.Load(workspace.DirectoryPath, placementKeys);
-        if (placementKeys.Length > 0
+            : PolyToolsCatalogImporter.Load(workspace.DirectoryPath, placementRequests);
+        if (placementRequests.Length > 0
             && !string.Equals(configuration.WorkspaceKey, catalog.WorldKey, StringComparison.Ordinal))
         {
             throw new SceneMakerDocumentException(
@@ -61,7 +62,7 @@ public sealed record WorkspaceSession(
         // refused to open afterwards would be one an author could edit shut. The
         // refusal belongs where a bridge is actually authored or exported, and
         // both already resolve the Assets they name.
-        var bridgeKit = configuration.BridgeSetAssetKey is { } bridgeSet && placementKeys.Length > 0
+        var bridgeKit = configuration.BridgeSetAssetKey is { } bridgeSet && placementRequests.Length > 0
             ? PolyToolsCatalogImporter.LoadBridgeKit(workspace.DirectoryPath, bridgeSet)
             : null;
         return Derive(workspace, catalog, configuration, bridgeKit);

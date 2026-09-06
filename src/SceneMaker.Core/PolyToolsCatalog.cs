@@ -26,6 +26,14 @@ public enum PolyToolsAssetCategory
     Palette,
 }
 
+/// <summary>
+/// One thing a Workspace asks PolyTools for: the name SceneMaker knows it by,
+/// and - when the Workspace has recorded one - the stable id PolyTools knows it
+/// by. With the id, a rename over there is invisible here; without it, the name
+/// has to match, which is the state every Workspace starts in.
+/// </summary>
+public sealed record PolyToolsAssetRequest(string AssetKey, string? AssetId);
+
 public sealed record PolyToolsCatalogAsset(
     string AssetKey,
     string AssetId,
@@ -75,7 +83,7 @@ public static class PolyToolsCatalogImporter
     /// overload below and asks only for configured Placement geometry.
     /// </summary>
     public static PolyToolsCatalog Load(string workspaceDirectory) =>
-        Load(workspaceDirectory, requestedAssetKeys: null);
+        Load(workspaceDirectory, requests: (IReadOnlyList<PolyToolsAssetRequest>?)null);
 
     public static PolyToolsCatalog Load(
         string workspaceDirectory,
@@ -84,7 +92,22 @@ public static class PolyToolsCatalogImporter
         ArgumentNullException.ThrowIfNull(requestedAssetKeys);
         return Load(
             workspaceDirectory,
-            requestedAssetKeys.ToHashSet(StringComparer.Ordinal));
+            requestedAssetKeys.Select(static key => new PolyToolsAssetRequest(key, null)));
+    }
+
+    /// <summary>
+    /// Imports exactly what the Workspace asked for, under the names the
+    /// Workspace uses. Where a request carries an id, that id decides which
+    /// PolyTools Asset answers it and the name is only a label; the returned
+    /// catalog is keyed by SceneMaker's name either way, so nothing downstream
+    /// learns that PolyTools renamed anything.
+    /// </summary>
+    public static PolyToolsCatalog Load(
+        string workspaceDirectory,
+        IEnumerable<PolyToolsAssetRequest> requests)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+        return Load(workspaceDirectory, requests.ToList());
     }
 
     /// <summary>
@@ -164,7 +187,7 @@ public static class PolyToolsCatalogImporter
 
     private static PolyToolsCatalog Load(
         string workspaceDirectory,
-        IReadOnlySet<string>? requestedAssetKeys)
+        IReadOnlyList<PolyToolsAssetRequest>? requests)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
         var importDirectory = Path.Combine(
@@ -215,8 +238,13 @@ public static class PolyToolsCatalogImporter
                 }
             }
 
-            var roots = requestedAssetKeys is null
-                ? catalogEntries.Values
+            // Each request pairs the name SceneMaker uses with the entry that
+            // answers it. Resolving by id where there is one is the whole point:
+            // it is what makes a rename over there invisible here.
+            List<(string SceneMakerKey, CatalogEntry Entry)> roots = [];
+            if (requests is null)
+            {
+                roots = catalogEntries.Values
                     .Where(static entry => entry.AssetType is "terrain" or "props")
                     // A composition is not something to put somewhere, and this
                     // overload means "everything authorable". A Set now reaches
@@ -224,38 +252,47 @@ public static class PolyToolsCatalogImporter
                     // skipping it here is what keeps that from looking like a
                     // Placement nobody can place.
                     .Where(static entry => entry.Category == PolyToolsAssetCategory.Single)
-                    .ToArray()
-                : catalogEntries.Values
-                    .Where(entry => requestedAssetKeys.Contains(entry.AssetKey))
-                    .ToArray();
-            if (requestedAssetKeys is not null && roots.Length != requestedAssetKeys.Count)
+                    .Select(static entry => (entry.AssetKey, entry))
+                    .ToList();
+            }
+            else
             {
-                var missing = requestedAssetKeys
-                    .Where(key => !catalogEntries.ContainsKey(key))
-                    .Order(StringComparer.Ordinal)
-                    .First();
-                throw new SceneMakerDocumentException(
-                    $"Placement asset_key '{missing}' has no synchronized PolyTools geometry.");
+                var byId = catalogEntries.Values.ToDictionary(
+                    static entry => entry.AssetId, StringComparer.Ordinal);
+                foreach (var request in requests)
+                {
+                    var entry = request.AssetId is { } assetId
+                        ? byId.GetValueOrDefault(assetId)
+                        : catalogEntries.GetValueOrDefault(request.AssetKey);
+                    if (entry is null)
+                    {
+                        throw new SceneMakerDocumentException(Unresolved(root, request));
+                    }
+                    roots.Add((request.AssetKey, entry));
+                }
             }
 
             Dictionary<string, RuntimeManifest> manifests = new(StringComparer.Ordinal);
-            foreach (var rootEntry in roots)
+            foreach (var (_, rootEntry) in roots)
                 LoadManifestClosure(importDirectory, rootEntry, catalogEntries, manifests);
 
             SortedDictionary<string, PolyToolsCatalogAsset> assets = new(StringComparer.Ordinal);
-            foreach (var entry in roots)
+            foreach (var (sceneMakerKey, entry) in roots)
             {
                 var manifest = manifests[entry.AssetKey];
                 var bounds = BoundsForAsset(
                     manifest, manifests, new HashSet<string>(StringComparer.Ordinal));
-                assets.Add(entry.AssetKey, new PolyToolsCatalogAsset(
-                    entry.AssetKey,
+                // Keyed by the Workspace's name, not PolyTools'. This is the one
+                // place the two identities meet, and everything past it speaks
+                // SceneMaker's vocabulary.
+                assets.Add(sceneMakerKey, new PolyToolsCatalogAsset(
+                    sceneMakerKey,
                     entry.AssetId,
                     entry.Category,
                     bounds,
                     CollisionBounds(manifest)));
             }
-            if (requestedAssetKeys is null && assets.Count == 0)
+            if (requests is null && assets.Count == 0)
             {
                 throw new SceneMakerDocumentException(
                     "PolyTools catalog contains no terrain or props available for authoring.");
@@ -272,6 +309,70 @@ public static class PolyToolsCatalogImporter
             throw new SceneMakerDocumentException(
                 $"Could not import synchronized PolyTools catalog: {exception.Message}", exception);
         }
+    }
+
+    /// <summary>
+    /// Why a request found nothing, in the most specific terms the catalog
+    /// allows. "Deleted over there" and "the sync is broken" used to arrive as
+    /// the same sentence; retired_assets tells them apart, and previous_keys
+    /// turns a stale name into the name it moved to instead of a dead end.
+    /// </summary>
+    private static string Unresolved(JsonElement catalogRoot, PolyToolsAssetRequest request)
+    {
+        if (request.AssetId is { } assetId)
+        {
+            if (catalogRoot.TryGetProperty("retired_assets", out var retired)
+                && retired.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var entry in retired.EnumerateArray())
+                {
+                    if (entry.ValueKind != JsonValueKind.Object
+                        || !entry.TryGetProperty("asset_id", out var id)
+                        || id.ValueKind != JsonValueKind.String
+                        || !string.Equals(id.GetString(), assetId, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+                    var last = entry.TryGetProperty("last_asset_key", out var lastKey)
+                        && lastKey.ValueKind == JsonValueKind.String
+                            ? lastKey.GetString()
+                            : "unknown";
+                    return $"Asset '{request.AssetKey}' names PolyTools asset '{assetId}', "
+                        + $"which PolyTools has deleted; it was last called '{last}'.";
+                }
+            }
+            return $"Asset '{request.AssetKey}' names PolyTools asset '{assetId}', "
+                + "which is not in the synchronized catalog.";
+        }
+
+        if (catalogRoot.TryGetProperty("assets", out var assets)
+            && assets.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var entry in assets.EnumerateArray())
+            {
+                if (!entry.TryGetProperty("previous_keys", out var previous)
+                    || previous.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+                foreach (var previousKey in previous.EnumerateArray())
+                {
+                    if (previousKey.ValueKind != JsonValueKind.String
+                        || !string.Equals(
+                            previousKey.GetString(), request.AssetKey, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+                    var moved = entry.TryGetProperty("asset_key", out var current)
+                        && current.ValueKind == JsonValueKind.String
+                            ? current.GetString()
+                            : "another key";
+                    return $"Placement asset_key '{request.AssetKey}' has no synchronized "
+                        + $"PolyTools geometry; PolyTools now calls it '{moved}'.";
+                }
+            }
+        }
+        return $"Placement asset_key '{request.AssetKey}' has no synchronized PolyTools geometry.";
     }
 
     private static void LoadManifestClosure(
