@@ -8,7 +8,7 @@ source_catalog="$source_world_dir/catalog.json"
 config_path="$workspace_dir/config.json"
 import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
-current_manifest_schema=19
+current_manifest_schema=20
 current_config_version=11
 
 cleanup() {

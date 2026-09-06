@@ -27,7 +27,7 @@ public sealed class SceneExportContractTests
             ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(13, root.GetProperty("version").GetInt32());
+        Assert.Equal(14, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             [
@@ -53,7 +53,7 @@ public sealed class SceneExportContractTests
             ],
             Keys(scene));
         Assert.Equal("srt.scene_maker_scene", scene.GetProperty("schema").GetString());
-        Assert.Equal(14, scene.GetProperty("version").GetInt32());
+        Assert.Equal(15, scene.GetProperty("version").GetInt32());
         Assert.Equal("instance", scene.GetProperty("scene_kind").GetString());
         Assert.Equal(
             "scene_local_bottom_left_y_up",
@@ -119,7 +119,7 @@ public sealed class SceneExportContractTests
             root.GetProperty("scene").GetProperty("bridges").EnumerateArray());
         Assert.Equal(
             [
-                "bridge_id", "deck_asset_key", "anchor_asset_key", "start_authoring_px",
+                "bridge_id", "plank_asset_key", "anchor_asset_key", "start_authoring_px",
                 "end_authoring_px", "width_meters", "elevation_meters", "plank_count",
                 "plank_gap_meters",
             ],
@@ -128,7 +128,7 @@ public sealed class SceneExportContractTests
         var bake = Assert.Single(root.GetProperty("bridge_bakes").EnumerateArray());
         Assert.Equal(
             [
-                "bridge_id", "deck_asset_key", "length_meters", "heading_degrees",
+                "bridge_id", "plank_asset_key", "length_meters", "heading_degrees",
                 "plank_count", "plank_gap_meters", "plank_depth_meters", "planks",
                 "vertices", "triangle_indices", "boundary_edges", "posts",
             ],

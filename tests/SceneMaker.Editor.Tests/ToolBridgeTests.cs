@@ -29,7 +29,7 @@ public sealed class ToolBridgeTests
         var bridge = Assert.Single(edit.Apply(scene).Bridges);
 
         Assert.Equal("bridge_0001", bridge.BridgeId);
-        Assert.Equal("portal", bridge.DeckAssetKey);
+        Assert.Equal("portal", bridge.PlankAssetKey);
         Assert.Equal("stone", bridge.AnchorAssetKey);
         Assert.Equal(320, bridge.StartAuthoringPx.X);
         Assert.Equal(640, bridge.EndAuthoringPx.X);
@@ -135,7 +135,7 @@ public sealed class ToolBridgeTests
             new BridgeDocument
             {
                 BridgeId = "bridge_preview",
-                DeckAssetKey = "portal",
+                PlankAssetKey = "portal",
                 AnchorAssetKey = "stone",
                 StartAuthoringPx = new AuthoringPixelPosition { X = 320, Y = 320 },
                 EndAuthoringPx = new AuthoringPixelPosition { X = 640, Y = 320 },
@@ -178,12 +178,12 @@ public sealed class ToolBridgeTests
     }
 
     [Fact]
-    public void WithoutADeckAssetTheToolSaysSoRatherThanInventingAPlank()
+    public void WithoutAPlankAssetTheToolSaysSoRatherThanInventingOne()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Map(workspace);
         var interaction = Bridge(workspace);
-        interaction.State.SelectBridgeDeckAsset(null);
+        interaction.State.SelectBridgePlankAsset(null);
 
         var outcome = Assert.IsType<ToolOutcome.Message>(
             interaction.PointerPressed(Context(workspace, scene), Point(320, 320), Cell(10, 10)));
@@ -247,17 +247,17 @@ public sealed class ToolBridgeTests
     /// Placement is offered.
     /// </summary>
     [Fact]
-    public void EveryEnabledPlacementIsOfferedAsADeck()
+    public void EveryEnabledPlacementIsOfferedAsAPlank()
     {
         using var workspace = TestWorkspace.Create();
 
-        var offered = BridgeDeckAssets.Offered(workspace.Props)
+        var offered = BridgePlankAssets.Offered(workspace.Props)
             .Select(static asset => asset.AssetKey)
             .ToList();
 
         Assert.Equal(["portal", "stone"], offered);
-        Assert.Equal("portal", BridgeDeckAssets.Choose(workspace.Props, null));
-        Assert.Equal("stone", BridgeDeckAssets.Choose(workspace.Props, "stone"));
+        Assert.Equal("portal", BridgePlankAssets.Choose(workspace.Props, null));
+        Assert.Equal("stone", BridgePlankAssets.Choose(workspace.Props, "stone"));
     }
 
     private static BridgeDraftPreview Preview(
@@ -299,7 +299,7 @@ public sealed class ToolBridgeTests
         var interaction = new ToolInteraction();
         interaction.SelectMode(EditorMode.Bridge);
         interaction.SelectTool(EditorTool.DrawBridge);
-        interaction.State.SelectBridgeDeckAsset("portal");
+        interaction.State.SelectBridgePlankAsset("portal");
         interaction.State.SelectBridgeAnchorAsset("stone");
         interaction.State.SetBridgeElevation(1m);
         return interaction;

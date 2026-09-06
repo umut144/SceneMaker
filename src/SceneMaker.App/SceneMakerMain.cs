@@ -70,8 +70,8 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _riverWidthEdit = new();
     private readonly Label _pathWidthLabel = new();
     private readonly SpinBox _pathWidthEdit = new();
-    private readonly Label _bridgeDeckLabel = new();
-    private readonly OptionButton _bridgeDeckEdit = new();
+    private readonly Label _bridgePlankAssetLabel = new();
+    private readonly OptionButton _bridgePlankAssetEdit = new();
     private readonly Label _bridgePlankCountLabel = new();
     private readonly SpinBox _bridgePlankCountEdit = new();
     private readonly Label _bridgePlankGapLabel = new();
@@ -554,14 +554,14 @@ public sealed partial class SceneMakerMain : Control
             "Manual absolute height of the first point when Auto start is off.";
         _pathStartElevationEdit.ValueChanged += SetPathStartElevation;
         _contextMenuBar.AddChild(_pathStartElevationEdit);
-        _bridgeDeckLabel.Name = "BridgeDeckLabel";
-        _bridgeDeckLabel.Text = "Deck";
-        _bridgeDeckLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_bridgeDeckLabel);
-        _bridgeDeckEdit.Name = "BridgeDeck";
-        _bridgeDeckEdit.CustomMinimumSize = new Vector2(130f, 0f);
-        _bridgeDeckEdit.ItemSelected += SelectBridgeDeckItem;
-        _contextMenuBar.AddChild(_bridgeDeckEdit);
+        _bridgePlankAssetLabel.Name = "BridgePlankAssetLabel";
+        _bridgePlankAssetLabel.Text = "Plank";
+        _bridgePlankAssetLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_bridgePlankAssetLabel);
+        _bridgePlankAssetEdit.Name = "BridgePlankAsset";
+        _bridgePlankAssetEdit.CustomMinimumSize = new Vector2(130f, 0f);
+        _bridgePlankAssetEdit.ItemSelected += SelectBridgePlankAssetItem;
+        _contextMenuBar.AddChild(_bridgePlankAssetEdit);
         _bridgePlankCountLabel.Name = "BridgePlankCountLabel";
         _bridgePlankCountLabel.Text = "Planks";
         _bridgePlankCountLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -878,7 +878,7 @@ public sealed partial class SceneMakerMain : Control
                 && string.Equals(assetKey, chosen, StringComparison.Ordinal);
         }
         ShowSurfaceField(mode, field);
-        ShowBridgeDeckField();
+        ShowBridgePlankAssetField();
         ShowBridgeAnchorField();
     }
 
@@ -2196,11 +2196,11 @@ public sealed partial class SceneMakerMain : Control
     /// The Deck control answers with an item index; the Asset travels as that
     /// item's metadata, exactly as the Anchor control does.
     /// </summary>
-    private void SelectBridgeDeckItem(long index)
+    private void SelectBridgePlankAssetItem(long index)
     {
-        if (index < 0 || index >= _bridgeDeckEdit.ItemCount) return;
-        if (_bridgeDeckEdit.GetItemMetadata((int)index).AsString() is { Length: > 0 } assetKey)
-            _interaction.State.SelectBridgeDeckAsset(assetKey);
+        if (index < 0 || index >= _bridgePlankAssetEdit.ItemCount) return;
+        if (_bridgePlankAssetEdit.GetItemMetadata((int)index).AsString() is { Length: > 0 } assetKey)
+            _interaction.State.SelectBridgePlankAsset(assetKey);
     }
 
     /// <summary>
@@ -2208,32 +2208,32 @@ public sealed partial class SceneMakerMain : Control
     /// with, which is every one the Workspace enables: what makes something a
     /// plank is that a bridge repeats it, not a property it carries.
     /// </summary>
-    private void ShowBridgeDeckField()
+    private void ShowBridgePlankAssetField()
     {
-        _bridgeDeckEdit.Clear();
+        _bridgePlankAssetEdit.Clear();
         if (_controller.Session is not { } session)
         {
-            _bridgeDeckEdit.Disabled = true;
+            _bridgePlankAssetEdit.Disabled = true;
             return;
         }
 
-        var offered = BridgeDeckAssets.Offered(session.PropAssets);
-        var chosen = BridgeDeckAssets.Choose(
-            session.PropAssets, _interaction.State.BridgeDeckAssetKey);
-        _interaction.State.SelectBridgeDeckAsset(chosen);
+        var offered = BridgePlankAssets.Offered(session.PropAssets);
+        var chosen = BridgePlankAssets.Choose(
+            session.PropAssets, _interaction.State.BridgePlankAssetKey);
+        _interaction.State.SelectBridgePlankAsset(chosen);
         var selected = -1;
         for (var index = 0; index < offered.Count; index++)
         {
-            _bridgeDeckEdit.AddItem(offered[index].Name);
-            _bridgeDeckEdit.SetItemMetadata(_bridgeDeckEdit.ItemCount - 1, offered[index].AssetKey);
+            _bridgePlankAssetEdit.AddItem(offered[index].Name);
+            _bridgePlankAssetEdit.SetItemMetadata(_bridgePlankAssetEdit.ItemCount - 1, offered[index].AssetKey);
             if (string.Equals(offered[index].AssetKey, chosen, StringComparison.Ordinal))
                 selected = index;
         }
-        _bridgeDeckEdit.Selected = selected;
-        _bridgeDeckEdit.Disabled = offered.Count <= 1;
-        _bridgeDeckEdit.TooltipText = offered.Count switch
+        _bridgePlankAssetEdit.Selected = selected;
+        _bridgePlankAssetEdit.Disabled = offered.Count <= 1;
+        _bridgePlankAssetEdit.TooltipText = offered.Count switch
         {
-            > 1 => "The Placement Asset one plank of the deck is. A deck is a row of "
+            > 1 => "The Placement Asset a deck is planked with. A deck is a row of "
                 + "these, not a material laid over the span.",
             1 => "This Workspace offers only one Placement Asset, so there is nothing "
                 + "to choose between.",
@@ -2571,8 +2571,8 @@ public sealed partial class SceneMakerMain : Control
         _pathWidthLabel.Visible = pathActive;
         _pathWidthEdit.Visible = pathActive;
         var bridgeActive = _interaction.Mode == EditorMode.Bridge;
-        _bridgeDeckLabel.Visible = bridgeActive;
-        _bridgeDeckEdit.Visible = bridgeActive;
+        _bridgePlankAssetLabel.Visible = bridgeActive;
+        _bridgePlankAssetEdit.Visible = bridgeActive;
         _bridgePlankCountLabel.Visible = bridgeActive;
         _bridgePlankCountEdit.Visible = bridgeActive;
         _bridgePlankGapLabel.Visible = bridgeActive;

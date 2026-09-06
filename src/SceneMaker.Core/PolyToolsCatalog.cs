@@ -66,7 +66,7 @@ public static class PolyToolsCatalogImporter
     public const string PolyToolsDirectoryName = "polytools";
     public const string CatalogFileName = "catalog.json";
     public const int CatalogSchemaVersion = 2;
-    public const int ManifestSchemaVersion = 19;
+    public const int ManifestSchemaVersion = 20;
 
     /// <summary>
     /// Imports every legacy authoring Asset. Tests for the PolyTools boundary

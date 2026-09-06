@@ -112,7 +112,7 @@ public sealed class BridgeEditingTests
             new BridgeDocument
             {
                 BridgeId = "bridge_0001",
-                DeckAssetKey = "portal",
+                PlankAssetKey = "portal",
                 AnchorAssetKey = "stone",
                 StartAuthoringPx = new AuthoringPixelPosition { X = 320, Y = 320 },
                 EndAuthoringPx = new AuthoringPixelPosition { X = 640, Y = 320 },
@@ -319,7 +319,7 @@ public sealed class BridgeEditingTests
         Assert.NotEmpty(bake.GetProperty("vertices").EnumerateArray());
 
         // Both halves travel: what was authored, and what it laid out as.
-        Assert.Equal("portal", bake.GetProperty("deck_asset_key").GetString());
+        Assert.Equal("portal", bake.GetProperty("plank_asset_key").GetString());
         Assert.Equal(10m, bake.GetProperty("length_meters").GetDecimal());
         Assert.Equal(0m, bake.GetProperty("heading_degrees").GetDecimal());
         Assert.Equal(12, bake.GetProperty("plank_count").GetInt32());

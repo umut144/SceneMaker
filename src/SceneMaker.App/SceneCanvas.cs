@@ -1038,7 +1038,7 @@ public sealed partial class SceneCanvas : Control
             if (SpanUnit(bridge) is not { } unit) continue;
             if (BridgeGeometry.TryPlanks(_metrics!, bridge) is not { } layout) continue;
 
-            var deckAsset = _propAssets.Resolve(bridge.DeckAssetKey);
+            var deckAsset = _propAssets.Resolve(bridge.PlankAssetKey);
             var deckColor = Color.FromHtml(deckAsset.Color);
             var lit = range is not { } elevationRange
                 ? deckColor
@@ -1101,7 +1101,7 @@ public sealed partial class SceneCanvas : Control
             ActiveTool,
             _interaction.BridgeStart,
             _interaction.PointerAuthoring,
-            _interaction.State.BridgeDeckAssetKey,
+            _interaction.State.BridgePlankAssetKey,
             _interaction.State.BridgeAnchorAssetKey,
             _interaction.State.BridgeWidthMeters,
             _interaction.State.BridgeElevationMeters,

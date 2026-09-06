@@ -108,9 +108,14 @@ beside `rope_post`. Reading it as a single material was a mistake worth
 recording - the deck named a Terrain Asset for a while, and `grass` stood in
 for it.
 
-A plank is therefore an ordinary Placement Asset, named by `deck_asset_key`,
+A plank is therefore an ordinary Placement Asset, named by `plank_asset_key`,
 and what makes it a plank is that a bridge repeats it. No property on the Asset
 says so, because nothing needs to ask.
+
+The field is named after the part rather than the whole, and briefly was not:
+it was `deck_asset_key` pointing at an Asset called `deck`, which read as though
+a bridge named its deck and got one. A deck is the row; the Asset is the plank
+the row repeats. PolyTools renamed the Asset to `plank` for the same reason.
 
 SceneMaker lays the row out rather than shipping the parameters and letting
 world01 do it. Laying it out twice is the one way for the Canvas and the
@@ -156,7 +161,7 @@ The authored record is small, because everything derivable is derived:
 ```jsonc
 {
   "bridge_id": "bridge_0001",
-  "deck_asset_key": "deck",          // Placement role, one plank of the deck
+  "plank_asset_key": "plank",        // Placement role, one plank of the deck
   "anchor_asset_key": "rope_post",   // Placement role, the post itself
   "start_authoring_px": { "x": 1024, "y": 320 },
   "end_authoring_px":   { "x": 1536, "y": 320 },
@@ -263,10 +268,10 @@ that greys out half its context bar is a second tool.
 
 ### What is built
 
-Scene schema 18 persists the record above. `BridgeGeometry` derives the four
+Scene schema 19 persists the record above. `BridgeGeometry` derives the four
 corners, lays out the planks, and hands the deck quad to `RouteSurfaceGeometry`
 as the two-point chain it is, so a bridge has no idea of a band of its own.
-Export 13 ships the planks beside that quad and the four posts. `BridgeEditing` places,
+Export 14 ships the planks beside that quad and the four posts. `BridgeEditing` places,
 removes and finds one, and answers the draft and the commit with the same call:
 representable numbers, a height on the quantum, two different ends, every
 corner inside the Scene, and all four posts free - of Placements and of the

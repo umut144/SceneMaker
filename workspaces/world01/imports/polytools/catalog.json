@@ -9,10 +9,10 @@
     },
     {
       "asset_category": "single",
-      "asset_key": "deck",
+      "asset_key": "plank",
       "asset_type": "props",
-      "display_name": "Deck",
-      "runtime_package": "PolyToolsRuntimeExports/deck/manifest.json"
+      "display_name": "Plank",
+      "runtime_package": "PolyToolsRuntimeExports/plank/manifest.json"
     },
     {
       "asset_category": "single",

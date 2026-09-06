@@ -78,7 +78,7 @@ JSON
 manifest="$source_world/PolyToolsRuntimeExports/tree/manifest.json"
 cat >"$manifest" <<'JSON'
 {
-  "schema_version": 19,
+  "schema_version": 20,
   "asset_key": "tree",
   "display_name": "Tree",
   "asset_type": "terrain",
@@ -131,7 +131,7 @@ JSON
 
 cat >"$source_world/PolyToolsRuntimeExports/leaf/manifest.json" <<'JSON'
 {
-  "schema_version": 19,
+  "schema_version": 20,
   "asset_key": "leaf",
   "display_name": "Referenced leaf",
   "asset_type": "items",
@@ -172,7 +172,7 @@ SCENEMAKER_WORKSPACE_DIR="$workspace" \
   "$project_directory/scripts/sync_polytools_world.sh"
 
 imported_manifest="$workspace/imports/polytools/PolyToolsRuntimeExports/tree/manifest.json"
-jq -e '.schema_version == 19 and (.regions | length == 2)' "$imported_manifest" >/dev/null
+jq -e '.schema_version == 20 and (.regions | length == 2)' "$imported_manifest" >/dev/null
 jq -e '.assets == [
   {
     "asset_key": "bog",
@@ -244,13 +244,13 @@ if POLYTOOLS_WORLD_DIR="$source_world" \
 fi
 test "$(cksum "$imported_manifest")" = "$published_checksum"
 
-jq '.schema_version = 18 | .regions[1] |= del(.vertices, .indices)' \
+jq '.schema_version = 19 | .regions[1] |= del(.vertices, .indices)' \
   "$manifest" >"$invalid_manifest"
 mv "$invalid_manifest" "$manifest"
 if POLYTOOLS_WORLD_DIR="$source_world" \
   SCENEMAKER_WORKSPACE_DIR="$workspace" \
   "$project_directory/scripts/sync_polytools_world.sh"; then
-  printf '%s\n' 'Expected schema 15 to fail preflight.' >&2
+  printf '%s\n' 'Expected an older manifest schema to fail preflight.' >&2
   exit 1
 fi
 test "$(cksum "$imported_manifest")" = "$published_checksum"

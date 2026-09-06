@@ -17,19 +17,19 @@
       "color": "#B89033"
     },
     {
-      "asset_key": "deck",
-      "display_name": "Deck",
-      "role": "placement",
-      "color": "#8C6239",
-      "surface": "wood"
-    },
-    {
       "asset_key": "grass",
       "display_name": "Grass",
       "role": "terrain",
       "color": "#99E550",
       "surface": "land",
       "authoring": "cells"
+    },
+    {
+      "asset_key": "plank",
+      "display_name": "Plank",
+      "role": "placement",
+      "color": "#8C6239",
+      "surface": "wood"
     },
     {
       "asset_key": "river",

@@ -13,20 +13,24 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 13;
+    public const int Version = 14;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
-    // ElevationRegion contours remain folded into Terrain. Embedded scene 14
+    // ElevationRegion contours remain folded into Terrain. Embedded scene 15
     // authors a bridge deck as a Placement repeated along the span - a count
-    // and a gap - and export 13 adds their derived half: the planks laid out,
+    // and a gap - and export 14 adds their derived half: the planks laid out,
     // the deck quad the walking surface is, and the four corner posts, all
     // worked out here rather than by every consumer.
     //
-    // Export 13 also widens `surface` on an asset_profile: it is no longer
+    // Export 14 also widens `surface` on an asset_profile: it is no longer
     // Terrain-only, because a deck is walked on and is wood while nothing
     // underneath it can say so.
-    private const int EmbeddedSceneVersion = 14;
+    //
+    // The Asset a bridge names is plank_asset_key, not deck_asset_key: a deck
+    // is the row, and the Asset is the one part it repeats. Export 13 called
+    // it after the whole and was never read by a consumer.
+    private const int EmbeddedSceneVersion = 15;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -265,7 +269,7 @@ public static class SceneExport
                 return new ExportBridgeBakeDocument
                 {
                     BridgeId = bridge.BridgeId,
-                    DeckAssetKey = bridge.DeckAssetKey,
+                    PlankAssetKey = bridge.PlankAssetKey,
                     LengthMeters = layout.LengthMeters,
                     HeadingDegrees = layout.HeadingDegrees,
                     PlankCount = bridge.PlankCount,
@@ -276,7 +280,7 @@ public static class SceneExport
                         {
                             PlankId = FormattableString.Invariant(
                                 $"{bridge.BridgeId}.plank_{plank.Index:0000}"),
-                            AssetKey = bridge.DeckAssetKey,
+                            AssetKey = bridge.PlankAssetKey,
                             XMeters = plank.CenterXMeters,
                             YMeters = plank.CenterYMeters,
                             ElevationMeters = bridge.ElevationMeters,
@@ -441,7 +445,7 @@ public static class SceneExport
         foreach (var bridge in scene.Bridges)
         {
             _ = propAssets.Resolve(bridge.AnchorAssetKey);
-            _ = propAssets.Resolve(bridge.DeckAssetKey);
+            _ = propAssets.Resolve(bridge.PlankAssetKey);
         }
     }
 
@@ -558,8 +562,8 @@ public static class SceneExport
     {
         public required string BridgeId { get; init; }
 
-        /// <summary>The Placement Asset one plank of this deck is.</summary>
-        public required string DeckAssetKey { get; init; }
+        /// <summary>The Placement Asset this deck is planked with.</summary>
+        public required string PlankAssetKey { get; init; }
 
         /// <summary>The span, end to end.</summary>
         public required decimal LengthMeters { get; init; }

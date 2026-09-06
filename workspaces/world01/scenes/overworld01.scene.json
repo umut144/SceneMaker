@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 18,
+  "version": 19,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60813,7 +60813,7 @@
   "bridges": [
     {
       "bridge_id": "bridge_0001",
-      "deck_asset_key": "deck",
+      "plank_asset_key": "plank",
       "anchor_asset_key": "rope_post",
       "start_authoring_px": {
         "x": 1184,
@@ -60830,7 +60830,7 @@
     },
     {
       "bridge_id": "bridge_0002",
-      "deck_asset_key": "deck",
+      "plank_asset_key": "plank",
       "anchor_asset_key": "rope_post",
       "start_authoring_px": {
         "x": 1437,
@@ -60839,23 +60839,6 @@
       "end_authoring_px": {
         "x": 1780,
         "y": 852
-      },
-      "width_meters": 4.0,
-      "elevation_meters": 1.0,
-      "plank_count": 12,
-      "plank_gap_meters": 0.1
-    },
-    {
-      "bridge_id": "bridge_0003",
-      "deck_asset_key": "deck",
-      "anchor_asset_key": "rope_post",
-      "start_authoring_px": {
-        "x": 1724,
-        "y": 640
-      },
-      "end_authoring_px": {
-        "x": 1393,
-        "y": 463
       },
       "width_meters": 4.0,
       "elevation_meters": 1.0,

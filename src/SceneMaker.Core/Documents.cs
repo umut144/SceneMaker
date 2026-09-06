@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 18;
+    public const int SceneVersion = 19;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -190,11 +190,12 @@ public sealed record BridgeDocument
     public required string BridgeId { get; init; }
 
     /// <summary>
-    /// The Placement Asset one plank of the deck is. A deck is not a material
+    /// The Placement Asset a deck is planked with. A deck is not a material
     /// laid over the span: it is a row of planks, so what the bridge names is
-    /// the thing that gets repeated, and how many times is authored below.
+    /// the thing that gets repeated - one plank - and how many times is
+    /// authored below. The deck is the row; the Asset is the part.
     /// </summary>
-    public required string DeckAssetKey { get; init; }
+    public required string PlankAssetKey { get; init; }
 
     /// <summary>
     /// The Placement Asset whose named Component stands at each corner. The

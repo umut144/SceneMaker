@@ -274,7 +274,7 @@ public static class BridgeAnchorAssets
 /// chosen. Every enabled Placement qualifies: what makes something a plank is
 /// that a bridge repeats it, not a property the Asset carries.
 /// </summary>
-public static class BridgeDeckAssets
+public static class BridgePlankAssets
 {
     public static IReadOnlyList<PropDisplayAsset> Offered(PropDisplayCatalog catalog)
     {
@@ -374,7 +374,7 @@ public sealed class EditorInteractionState
     /// a Workspace offers one, which the field shows rather than inventing a
     /// plank to fill the gap.
     /// </summary>
-    public string? BridgeDeckAssetKey { get; private set; }
+    public string? BridgePlankAssetKey { get; private set; }
 
     /// <summary>
     /// How many planks the next deck is laid with, and the gap between two of
@@ -393,7 +393,7 @@ public sealed class EditorInteractionState
 
     public void SelectBridgeAnchorAsset(string? assetKey) => BridgeAnchorAssetKey = assetKey;
 
-    public void SelectBridgeDeckAsset(string? assetKey) => BridgeDeckAssetKey = assetKey;
+    public void SelectBridgePlankAsset(string? assetKey) => BridgePlankAssetKey = assetKey;
 
     public void SetBridgePlankCount(int plankCount) => BridgePlankCount = plankCount;
 

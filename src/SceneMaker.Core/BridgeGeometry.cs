@@ -130,7 +130,7 @@ public static class BridgeGeometry
         return new RouteSurfaceDocument
         {
             RouteSurfaceId = bridge.BridgeId,
-            AssetKey = bridge.DeckAssetKey,
+            AssetKey = bridge.PlankAssetKey,
             Points =
             [
                 DeckPoint(bridge, bridge.StartAuthoringPx),

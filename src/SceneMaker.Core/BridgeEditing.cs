@@ -2,6 +2,16 @@ using System.Globalization;
 
 namespace SceneMaker.Core;
 
+/// <summary>
+/// Which of a span's two ends. They are told apart by the order they were
+/// authored in, which is also what gives left and right a meaning.
+/// </summary>
+public enum BridgeEnd
+{
+    Start,
+    End,
+}
+
 /// <summary>Whether a bridge may be authored as it was asked for.</summary>
 public readonly record struct BridgeValidationResult(bool IsValid, string? Reason)
 {
@@ -40,7 +50,7 @@ public static class BridgeEditing
         int startAnchorY,
         int endAnchorX,
         int endAnchorY,
-        string deckAssetKey,
+        string plankAssetKey,
         string anchorAssetKey,
         decimal widthMeters,
         decimal elevationMeters,
@@ -55,7 +65,7 @@ public static class BridgeEditing
             startAnchorY,
             endAnchorX,
             endAnchorY,
-            deckAssetKey,
+            plankAssetKey,
             anchorAssetKey,
             widthMeters,
             elevationMeters,
@@ -83,7 +93,7 @@ public static class BridgeEditing
         int startAnchorY,
         int endAnchorX,
         int endAnchorY,
-        string deckAssetKey,
+        string plankAssetKey,
         string anchorAssetKey,
         decimal widthMeters,
         decimal elevationMeters,
@@ -103,7 +113,7 @@ public static class BridgeEditing
                     startAnchorY,
                     endAnchorX,
                     endAnchorY,
-                    deckAssetKey,
+                    plankAssetKey,
                     anchorAssetKey,
                     widthMeters,
                     elevationMeters,
@@ -114,6 +124,135 @@ public static class BridgeEditing
         {
             return new BridgeValidationResult(false, "Bridge coordinates exceed the supported range.");
         }
+    }
+
+    /// <summary>
+    /// Moves an existing bridge's ends and numbers, keeping its id and the two
+    /// Assets it is built from. Reshaping rather than replacing is what lets
+    /// an author drag an end without the bridge becoming a different one - and
+    /// the posts follow, because they were never stored.
+    /// </summary>
+    public static SceneDocument Reshape(
+        SceneDocument scene,
+        PropDisplayCatalog propAssets,
+        string bridgeId,
+        int startAnchorX,
+        int startAnchorY,
+        int endAnchorX,
+        int endAnchorY,
+        decimal widthMeters,
+        decimal elevationMeters,
+        int plankCount,
+        decimal plankGapMeters)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(propAssets);
+        var candidate = Reshaped(
+            scene,
+            bridgeId,
+            startAnchorX,
+            startAnchorY,
+            endAnchorX,
+            endAnchorY,
+            widthMeters,
+            elevationMeters,
+            plankCount,
+            plankGapMeters);
+        var validation = Validate(scene, propAssets, candidate);
+        if (!validation.IsValid)
+            throw new SceneMakerDocumentException(validation.Reason!);
+
+        // Ordered by id already, and the id has not changed, so the entry is
+        // replaced where it stands rather than sorted again.
+        var bridges = scene.Bridges
+            .Select(bridge => string.Equals(bridge.BridgeId, bridgeId, StringComparison.Ordinal)
+                ? candidate
+                : bridge)
+            .ToList();
+        return scene with { Bridges = bridges };
+    }
+
+    /// <summary>
+    /// Whether that reshape would be taken, answered by the same call the
+    /// commit makes so a drag that looks Ready cannot then be refused.
+    /// </summary>
+    public static BridgeValidationResult ValidateReshape(
+        SceneDocument scene,
+        PropDisplayCatalog propAssets,
+        string bridgeId,
+        int startAnchorX,
+        int startAnchorY,
+        int endAnchorX,
+        int endAnchorY,
+        decimal widthMeters,
+        decimal elevationMeters,
+        int plankCount,
+        decimal plankGapMeters)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(propAssets);
+        try
+        {
+            return Validate(
+                scene,
+                propAssets,
+                Reshaped(
+                    scene,
+                    bridgeId,
+                    startAnchorX,
+                    startAnchorY,
+                    endAnchorX,
+                    endAnchorY,
+                    widthMeters,
+                    elevationMeters,
+                    plankCount,
+                    plankGapMeters));
+        }
+        catch (OverflowException)
+        {
+            return new BridgeValidationResult(false, "Bridge coordinates exceed the supported range.");
+        }
+    }
+
+    /// <summary>The bridge with this id, or an exception naming it.</summary>
+    public static BridgeDocument Require(SceneDocument scene, string bridgeId)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        return scene.Bridges.FirstOrDefault(bridge =>
+                string.Equals(bridge.BridgeId, bridgeId, StringComparison.Ordinal))
+            ?? throw new SceneMakerDocumentException($"Scene has no bridge '{bridgeId}'.");
+    }
+
+    /// <summary>
+    /// Which end of which bridge sits under an authoring position, within
+    /// <paramref name="radiusAuthoringPixels"/>, or none. The nearer end of the
+    /// nearer bridge wins, so two ends meeting at a pier stay separable.
+    /// </summary>
+    public static (BridgeDocument Bridge, BridgeEnd End)? FindEndAt(
+        SceneDocument scene,
+        double authoringX,
+        double authoringY,
+        double radiusAuthoringPixels)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        (BridgeDocument Bridge, BridgeEnd End)? best = null;
+        var bestDistance = radiusAuthoringPixels;
+        foreach (var bridge in scene.Bridges)
+        {
+            foreach (var end in new[] { BridgeEnd.Start, BridgeEnd.End })
+            {
+                var position = end == BridgeEnd.Start
+                    ? bridge.StartAuthoringPx
+                    : bridge.EndAuthoringPx;
+                var deltaX = position.X - authoringX;
+                var deltaY = position.Y - authoringY;
+                var distance = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+                if (distance > bestDistance) continue;
+                bestDistance = distance;
+                best = (bridge, end);
+            }
+        }
+        return best;
     }
 
     /// <summary>The whole bridge under an authoring position, or none.</summary>
@@ -194,13 +333,33 @@ public static class BridgeEditing
                 MidpointRounding.AwayFromZero)));
     }
 
+    private static BridgeDocument Reshaped(
+        SceneDocument scene,
+        string bridgeId,
+        int startAnchorX,
+        int startAnchorY,
+        int endAnchorX,
+        int endAnchorY,
+        decimal widthMeters,
+        decimal elevationMeters,
+        int plankCount,
+        decimal plankGapMeters) => Require(scene, bridgeId) with
+    {
+        StartAuthoringPx = new AuthoringPixelPosition { X = startAnchorX, Y = startAnchorY },
+        EndAuthoringPx = new AuthoringPixelPosition { X = endAnchorX, Y = endAnchorY },
+        WidthMeters = widthMeters,
+        ElevationMeters = elevationMeters,
+        PlankCount = plankCount,
+        PlankGapMeters = plankGapMeters,
+    };
+
     private static BridgeDocument Candidate(
         string bridgeId,
         int startAnchorX,
         int startAnchorY,
         int endAnchorX,
         int endAnchorY,
-        string deckAssetKey,
+        string plankAssetKey,
         string anchorAssetKey,
         decimal widthMeters,
         decimal elevationMeters,
@@ -208,7 +367,7 @@ public static class BridgeEditing
         decimal plankGapMeters) => new()
     {
         BridgeId = bridgeId,
-        DeckAssetKey = deckAssetKey,
+        PlankAssetKey = plankAssetKey,
         AnchorAssetKey = anchorAssetKey,
         StartAuthoringPx = new AuthoringPixelPosition { X = startAnchorX, Y = startAnchorY },
         EndAuthoringPx = new AuthoringPixelPosition { X = endAnchorX, Y = endAnchorY },
@@ -229,7 +388,7 @@ public static class BridgeEditing
         PropDisplayCatalog propAssets,
         BridgeDocument bridge)
     {
-        _ = propAssets.Resolve(bridge.DeckAssetKey);
+        _ = propAssets.Resolve(bridge.PlankAssetKey);
         var metrics = propAssets.Metrics;
         if (bridge.WidthMeters <= 0m)
             return new BridgeValidationResult(false, "A bridge needs a positive width.");
@@ -289,7 +448,16 @@ public static class BridgeEditing
             }
         }
         foreach (var existing in scene.Bridges)
+        {
+            // Not against itself. A bridge being reshaped carries the id it
+            // already has, so its current posts are about to stop existing and
+            // must not block where its new ones go - otherwise nudging an end
+            // by a pixel would be refused by the bridge's own shadow. A newly
+            // placed bridge takes an unused id, so this skips nothing for it.
+            if (string.Equals(existing.BridgeId, bridge.BridgeId, StringComparison.Ordinal))
+                continue;
             occupied.AddRange(PostBounds(metrics, propAssets, existing));
+        }
 
         foreach (var postBounds in PostBounds(metrics, propAssets, bridge))
         {

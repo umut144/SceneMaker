@@ -478,7 +478,7 @@ public static class ToolPreviewBuilder
         EditorTool tool,
         AuthoringPoint? start,
         AuthoringPoint? pointer,
-        string? deckAssetKey,
+        string? plankAssetKey,
         string? anchorAssetKey,
         decimal widthMeters,
         decimal elevationMeters,
@@ -489,7 +489,7 @@ public static class ToolPreviewBuilder
         ArgumentNullException.ThrowIfNull(propAssets);
         if (tool != EditorTool.DrawBridge) return BridgeDraftPreview.Empty;
         if (start is not { } fixedEnd) return BridgeDraftPreview.Empty;
-        if (pointer is not { } end || deckAssetKey is null || anchorAssetKey is null)
+        if (pointer is not { } end || plankAssetKey is null || anchorAssetKey is null)
         {
             return BridgeDraftPreview.Empty with { Start = fixedEnd };
         }
@@ -502,7 +502,7 @@ public static class ToolPreviewBuilder
         var candidate = new BridgeDocument
         {
             BridgeId = "bridge_preview",
-            DeckAssetKey = deckAssetKey,
+            PlankAssetKey = plankAssetKey,
             AnchorAssetKey = anchorAssetKey,
             StartAuthoringPx = new AuthoringPixelPosition { X = fixedEnd.X, Y = fixedEnd.Y },
             EndAuthoringPx = new AuthoringPixelPosition { X = end.X, Y = end.Y },
@@ -518,7 +518,7 @@ public static class ToolPreviewBuilder
             fixedEnd.Y,
             end.X,
             end.Y,
-            deckAssetKey,
+            plankAssetKey,
             anchorAssetKey,
             widthMeters,
             elevationMeters,

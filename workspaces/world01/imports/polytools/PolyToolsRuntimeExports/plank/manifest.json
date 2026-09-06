@@ -1,6 +1,6 @@
 {
 	"asset_category": "single",
-	"asset_key": "deck",
+	"asset_key": "plank",
 	"asset_pivot": [
 		0.0,
 		0.0
@@ -1066,7 +1066,7 @@
 					]
 				]
 			},
-			"name": "plank",
+			"name": "main",
 			"parent_component_id": null,
 			"projection_depth_corners": [
 				{
@@ -1112,12 +1112,12 @@
 		"x_axis": "right",
 		"y_axis": "up"
 	},
-	"display_name": "Deck",
+	"display_name": "Plank",
 	"presentation": {
 		"authored_facing": "neutral"
 	},
 	"regions": [],
-	"schema_version": 19,
+	"schema_version": 20,
 	"z_order": {
 		"back_to_front": "ascending",
 		"scope": "global",

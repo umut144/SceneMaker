@@ -510,7 +510,7 @@ public sealed class ToolInteraction
     {
         if (context.Scene.SceneKind != SceneKind.Instance)
             return new ToolOutcome.Message("Bridge: a Scene Template cannot carry bridges.");
-        if (State.BridgeDeckAssetKey is not { } deckAssetKey)
+        if (State.BridgePlankAssetKey is not { } plankAssetKey)
         {
             return new ToolOutcome.Message(
                 "Bridge: this Workspace has no Placement Asset to plank a deck with.");
@@ -540,7 +540,7 @@ public sealed class ToolInteraction
             start.Y,
             point.X,
             point.Y,
-            deckAssetKey,
+            plankAssetKey,
             anchorAssetKey,
             width,
             elevation,
@@ -559,7 +559,7 @@ public sealed class ToolInteraction
                 start.Y,
                 point.X,
                 point.Y,
-                deckAssetKey,
+                plankAssetKey,
                 anchorAssetKey,
                 width,
                 elevation,

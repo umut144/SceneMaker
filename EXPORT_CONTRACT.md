@@ -5,17 +5,21 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 13**, embedded **scene 14**. A reader must reject any
+Current schemas: **export 14**, embedded **scene 15**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
 
-Export 13 rebuilds the bridge deck. A deck is no longer a material laid over
+Export 14 rebuilds the bridge deck. A deck is no longer a material laid over
 the span: it is a row of planks, and a plank is a Placement Asset. The authored
-record names that Asset in `deck_asset_key` and says how many planks fill the
+record names that Asset in `plank_asset_key` and says how many planks fill the
 span and what gap sits between two of them; `bridge_bakes` ships the planks
 already laid out, beside the quad they add up to and the four corner posts.
 
-Export 13 also widens `surface` on an `asset_profiles` entry. It is no longer
+The field is named after the part, not the whole: a deck is the row, and the
+Asset is the one plank it repeats. Export 13 called it `deck_asset_key` and was
+never read by a consumer, so 14 is the only name there has been in practice.
+
+Export 14 also widens `surface` on an `asset_profiles` entry. It is no longer
 Terrain-only: a Placement that is walked on says so there, because a bridge
 deck is wood and has no Terrain underneath it to say so for it. Most Placements
 still carry `null`.
@@ -94,7 +98,7 @@ purpose.
       "anchor_meters":    { "x": 0.53125, "y": 0.3125 }
     },
     {
-      "asset_key": "deck",
+      "asset_key": "plank",
       "surface": "wood",               // a Placement that is walked on
       "footprint_meters": { "width": 4.0, "height": 0.75 },
       "anchor_meters":    { "x": 2.0, "y": 0.375 }
@@ -180,7 +184,7 @@ purpose.
   "bridge_bakes": [                    // derived from scene.bridges
     {
       "bridge_id": "bridge_0001",
-      "deck_asset_key": "deck",        // the Placement one plank is
+      "plank_asset_key": "plank",      // the Placement one plank is
       "length_meters": 10.0,           // the span, end to end
       "heading_degrees": 0.0,          // counter-clockwise from +X
       "plank_count": 12,               // as authored
@@ -189,7 +193,7 @@ purpose.
       "planks": [
         {
           "plank_id": "bridge_0001.plank_0000",
-          "asset_key": "deck",
+          "asset_key": "plank",
           "x_meters": 10.370833,       // the plank's centre
           "y_meters": 10.0,
           "elevation_meters": 1.125,
@@ -288,7 +292,7 @@ purpose.
     "bridges": [
       {
         "bridge_id": "bridge_0001",
-        "deck_asset_key": "deck",      // Placement Asset, one plank of the deck
+        "plank_asset_key": "plank",    // Placement Asset, one plank of the deck
         "anchor_asset_key": "rope_post", // the Placement standing at each corner
         "start_authoring_px": { "x": 320, "y": 320 },
         "end_authoring_px":   { "x": 640, "y": 320 },
@@ -597,7 +601,7 @@ is possible, and both happen in the simulation.
 ## Bridges
 
 A bridge is a straight level span. Eight authored numbers say all of it - the
-deck's Placement Asset, the anchor Asset, two ends, a width, one height, a
+deck's plank Asset, the anchor Asset, two ends, a width, one height, a
 plank count and a plank gap - and everything else follows from them, which is
 why nothing else is stored.
 
@@ -678,7 +682,7 @@ because there is nothing for it to know. Passing under a bridge is the point:
 one place carries two surfaces, and which one an Actor uses is the
 simulation's question.
 
-The deck presents the surface of its `deck_asset_key`, read from
+The deck presents the surface of its `plank_asset_key`, read from
 `asset_profiles` exactly as a Terrain cell's is. That is why `surface` is no
 longer Terrain-only: the deck Asset is a Placement, and a bridge over a river
 has no Terrain underneath it that could carry `wood` on its behalf.

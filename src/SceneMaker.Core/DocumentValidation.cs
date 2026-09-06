@@ -326,8 +326,8 @@ public static partial class DocumentValidation
             previousBridgeId = bridge.BridgeId;
 
             var label = $"Bridge '{bridge.BridgeId}'";
-            if (string.IsNullOrWhiteSpace(bridge.DeckAssetKey))
-                throw new SceneMakerDocumentException($"{label} requires a deck_asset_key.");
+            if (string.IsNullOrWhiteSpace(bridge.PlankAssetKey))
+                throw new SceneMakerDocumentException($"{label} requires a plank_asset_key.");
             if (string.IsNullOrWhiteSpace(bridge.AnchorAssetKey))
                 throw new SceneMakerDocumentException($"{label} requires an anchor_asset_key.");
             if (bridge.WidthMeters <= 0m)
