@@ -116,6 +116,9 @@ public sealed partial class SceneMakerMain : Control
     private readonly HBoxContainer _landscapeBar = new();
     private readonly ButtonGroup _landscapeAreaButtons = new();
     private readonly Dictionary<EditorMode, Button> _landscapeAreaControls = [];
+    private readonly HBoxContainer _structuresBar = new();
+    private readonly ButtonGroup _structuresAreaButtons = new();
+    private readonly Dictionary<EditorMode, Button> _structuresAreaControls = [];
     private readonly HBoxContainer _overviewNavigationBar = new();
     private readonly HBoxContainer _contextNavigationBar = new();
     private readonly HBoxContainer _contextMenuBar = new();
@@ -124,6 +127,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly Button _returnNavigationButton = new();
     private readonly Button _mapNavigationButton = new();
     private readonly Button _landscapeNavigationButton = new();
+    private readonly Button _structuresNavigationButton = new();
 
     /// <summary>
     /// Which Landscape area the group opens on. River, Path and ElevationRegion
@@ -131,6 +135,7 @@ public sealed partial class SceneMakerMain : Control
     /// author left off rather than always on the first of them.
     /// </summary>
     private EditorMode _landscapeArea = EditorMode.River;
+    private EditorMode _structuresArea = EditorMode.Bridge;
     private readonly Label _mapDimensionsLabel = new();
     private readonly SpinBox _mapExtensionCellsEdit = new();
     private readonly Label _mapExtensionMetricsLabel = new();
@@ -259,11 +264,12 @@ public sealed partial class SceneMakerMain : Control
         _landscapeNavigationButton.CustomMinimumSize = new Vector2(130f, 0f);
         _landscapeNavigationButton.Pressed += SelectLandscapeContext;
         _overviewNavigationBar.AddChild(_landscapeNavigationButton);
-        AddPerspectiveButton(
-            _overviewNavigationBar,
-            "Structures",
-            available: true,
-            "Bridges: the things built onto a landscape rather than out of it.");
+        _structuresNavigationButton.Text = "Structures";
+        _structuresNavigationButton.TooltipText =
+            "Bridges: the things built onto a landscape rather than out of it.";
+        _structuresNavigationButton.CustomMinimumSize = new Vector2(130f, 0f);
+        _structuresNavigationButton.Pressed += SelectStructuresContext;
+        _overviewNavigationBar.AddChild(_structuresNavigationButton);
         AddPerspectiveButton(
             _overviewNavigationBar,
             "Placements",
@@ -310,6 +316,10 @@ public sealed partial class SceneMakerMain : Control
         _landscapeBar.Name = "LandscapeAreas";
         _contextNavigationBar.AddChild(_landscapeBar);
         BuildLandscapeBar();
+
+        _structuresBar.Name = "StructuresAreas";
+        _contextNavigationBar.AddChild(_structuresBar);
+        BuildStructuresBar();
 
         _terrainAssetBar.Name = "TerrainAssets";
         _terrainAssetBar.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -1460,25 +1470,58 @@ public sealed partial class SceneMakerMain : Control
             "Draw and reshape raised Terrain regions.");
     }
 
-    private void AddLandscapeAreaButton(EditorMode mode, string name, string tooltip)
+    /// <summary>
+    /// The Structures areas, built the same way Landscape is. Bridge is the
+    /// only one today and the bar still exists, because Structures is a family
+    /// - fences, walls, stairs, ladders - and a family with one member is what
+    /// every family starts as. The alternative was jumping straight into Bridge
+    /// and having nowhere to put the second one.
+    /// </summary>
+    private void BuildStructuresBar()
+    {
+        _structuresBar.AddChild(new Label { Text = "Structures  ›" });
+        AddAreaButton(
+            _structuresBar,
+            _structuresAreaButtons,
+            _structuresAreaControls,
+            EditorMode.Bridge,
+            "Bridge",
+            "Draw, select and reshape straight level spans.");
+    }
+
+    private void AddLandscapeAreaButton(EditorMode mode, string name, string tooltip) =>
+        AddAreaButton(
+            _landscapeBar, _landscapeAreaButtons, _landscapeAreaControls, mode, name, tooltip);
+
+    private void AddAreaButton(
+        Container bar,
+        ButtonGroup group,
+        Dictionary<EditorMode, Button> controls,
+        EditorMode mode,
+        string name,
+        string tooltip)
     {
         var button = new Button
         {
             Name = name,
             Text = name,
             ToggleMode = true,
-            ButtonGroup = _landscapeAreaButtons,
+            ButtonGroup = group,
             TooltipText = tooltip,
             CustomMinimumSize = new Vector2(110f, 0f),
         };
         button.Pressed += () => SelectPerspective(mode, name);
-        _landscapeBar.AddChild(button);
-        _landscapeAreaControls.Add(mode, button);
+        bar.AddChild(button);
+        controls.Add(mode, button);
     }
 
     /// <summary>Opens Landscape on the area it was last left in.</summary>
     private void SelectLandscapeContext() =>
         SelectPerspective(_landscapeArea, EditorToolRegistry.ModeDisplayName(_landscapeArea));
+
+    /// <summary>The same for Structures.</summary>
+    private void SelectStructuresContext() =>
+        SelectPerspective(_structuresArea, EditorToolRegistry.ModeDisplayName(_structuresArea));
 
     private static EditorMode EditorModeForPerspective(string perspective) => perspective switch
     {
@@ -1885,6 +1928,7 @@ public sealed partial class SceneMakerMain : Control
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
         ShowLandscapeAreas(mode);
+        ShowStructuresAreas(mode);
         _terrainAssetBar.Visible =
             EditorToolRegistry.TerrainAuthoringFor(mode) == TerrainAuthoring.Cells;
         _propAssetBar.Visible = mode == EditorMode.Props;
@@ -1909,6 +1953,16 @@ public sealed partial class SceneMakerMain : Control
         _landscapeBar.Visible = inLandscape;
         foreach (var (area, control) in _landscapeAreaControls)
             control.ButtonPressed = inLandscape && area == mode;
+    }
+
+    /// <summary>The same for Structures.</summary>
+    private void ShowStructuresAreas(EditorMode mode)
+    {
+        var inStructures = _structuresAreaControls.ContainsKey(mode);
+        if (inStructures) _structuresArea = mode;
+        _structuresBar.Visible = inStructures;
+        foreach (var (area, control) in _structuresAreaControls)
+            control.ButtonPressed = inStructures && area == mode;
     }
 
     /// <summary>
@@ -1941,6 +1995,7 @@ public sealed partial class SceneMakerMain : Control
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
         _landscapeBar.Visible = false;
+        _structuresBar.Visible = false;
         _terrainAssetBar.Visible = false;
         _propAssetBar.Visible = false;
         _templateBar.Visible = false;
@@ -2387,6 +2442,7 @@ public sealed partial class SceneMakerMain : Control
         var riverActive = _interaction.Mode == EditorMode.River;
         var pathActive = _interaction.Mode == EditorMode.Path;
         var elevationRegionActive = _interaction.Mode == EditorMode.ElevationRegion;
+        var bridgeActive = _interaction.Mode == EditorMode.Bridge;
         var elevationRegionDrawing = elevationRegionActive
             && _interaction.ActiveTool == EditorTool.DrawElevationRegion;
         var selectedElevationRegion = elevationRegionActive
@@ -2447,7 +2503,6 @@ public sealed partial class SceneMakerMain : Control
         _riverWidthEdit.Visible = riverActive;
         _pathWidthLabel.Visible = pathActive;
         _pathWidthEdit.Visible = pathActive;
-        var bridgeActive = _interaction.Mode == EditorMode.Bridge;
         _bridgePlankCountLabel.Visible = bridgeActive;
         _bridgePlankCountEdit.Visible = bridgeActive;
         _bridgePlankGapLabel.Visible = bridgeActive;
@@ -2484,14 +2539,16 @@ public sealed partial class SceneMakerMain : Control
         _waterClearanceEdit.Visible = riverActive;
         _waterDerivedSpanLabel.Visible = riverActive;
         // Height authors Terrain, Placements and Hills. River carries its own
-        // profile and Path derives its points from Start plus Grade, so leaving
-        // the general field in either area would offer a number that changes nothing.
+        // profile, Path derives its points from Start plus Grade, and a bridge
+        // has one height of its own beside its width, so leaving the general
+        // field in any of the three would offer a number that changes nothing -
+        // and in Structures it read as a second Height beside the real one.
         // Section only changes what is drawn, not what can be authored (see
         // SceneCanvas's DrawProps), so it stays out of this condition: Height
         // keeps working - independently of the Section bar's own Start field -
         // exactly as it did before Section had a bar of its own.
         var elevationRegionHeightEditing = selectedElevationRegion is not null;
-        var elevationActive = !riverActive && !pathActive
+        var elevationActive = !riverActive && !pathActive && !bridgeActive
             && (!elevationRegionActive || elevationRegionDrawing || elevationRegionHeightEditing);
         _elevationLabel.Visible = elevationActive;
         _elevationEdit.Visible = elevationActive;
