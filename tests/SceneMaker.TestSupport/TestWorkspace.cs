@@ -109,7 +109,7 @@ public sealed class TestWorkspace : IDisposable
             $$"""
             {
               "format": "scene_maker_workspace",
-              "version": 11,
+              "version": {{WorkspaceConfigurationStore.Version}},
               "workspace_key": "{{worldKey}}",
               "grid": {
                 "terrain_cell_meters": 1.0,
@@ -118,6 +118,7 @@ public sealed class TestWorkspace : IDisposable
                 "water_cell_meters": 0.5,
                 "elevation_quantum_meters": 0.125
               },
+              "bridge_set": "bridge",
               "assets": [
                 { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" },
                 { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF" },
@@ -149,10 +150,17 @@ public sealed class TestWorkspace : IDisposable
             Path.Combine(importDirectory, PolyToolsCatalogImporter.CatalogFileName),
             $$"""
             {
-              "schema_version": 2,
+              "schema_version": {{PolyToolsCatalogImporter.CatalogSchemaVersion}},
               "world_key": "{{worldKey}}",
               "world_name": "Test World",
               "assets": [
+                {
+                  "asset_key": "bridge",
+                  "display_name": "Bridge",
+                  "asset_type": "props",
+                  "asset_category": "set",
+                  "runtime_package": "PolyToolsRuntimeExports/bridge/manifest.json"
+                },
                 {
                   "asset_key": "grass",
                   "display_name": "Grass",
@@ -192,6 +200,7 @@ public sealed class TestWorkspace : IDisposable
             }
             """);
 
+        WriteBridgeSetManifest(importDirectory);
         WriteManifest(importDirectory, "grass", "terrain");
         if (secondCurveAsset) WriteManifest(importDirectory, "lava", "terrain");
         WriteManifest(importDirectory, "portal", "props");
@@ -202,6 +211,59 @@ public sealed class TestWorkspace : IDisposable
         // point an anchor_component at it without changing the Asset's
         // footprint - the case a bridge's post is.
         WriteManifest(importDirectory, "stone", "props", withNamedPart: true);
+    }
+
+    /// <summary>
+    /// The Set a bridge is built from: portal in the plank role, stone in the
+    /// post role. The roles are what SceneMaker reads; that the Assets are
+    /// called something else entirely is the point, since a name follows a
+    /// rename and a role does not.
+    /// </summary>
+    private static void WriteBridgeSetManifest(string importDirectory)
+    {
+        var directory = Path.Combine(importDirectory, "PolyToolsRuntimeExports", "bridge");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(
+            Path.Combine(directory, "manifest.json"),
+            $$"""
+            {
+              "schema_version": {{PolyToolsCatalogImporter.ManifestSchemaVersion}},
+              "asset_key": "bridge",
+              "display_name": "Bridge",
+              "asset_type": "props",
+              "asset_category": "set",
+              "asset_pivot": [0.0, 0.0],
+              "components": [
+                {
+                  "component_id": "member_plank",
+                  "kind": "asset_reference",
+                  "name": "plank",
+                  "role": "{{BridgeKit.PlankRole}}",
+                  "source_asset_key": "portal",
+                  "parent_component_id": null,
+                  "local_transform": {
+                    "position": [0.0, 0.0],
+                    "rotation_radians": 0.0,
+                    "scale": [1.0, 1.0]
+                  }
+                },
+                {
+                  "component_id": "member_post",
+                  "kind": "asset_reference",
+                  "name": "post",
+                  "role": "{{BridgeKit.AnchorRole}}",
+                  "source_asset_key": "stone",
+                  "parent_component_id": null,
+                  "local_transform": {
+                    "position": [0.0, 0.0],
+                    "rotation_radians": 0.0,
+                    "scale": [1.0, 1.0]
+                  }
+                }
+              ],
+              "regions": []
+            }
+            """);
     }
 
     private static void WriteManifest(
@@ -252,7 +314,7 @@ public sealed class TestWorkspace : IDisposable
             Path.Combine(directory, "manifest.json"),
             $$"""
             {
-              "schema_version": 19,
+              "schema_version": {{PolyToolsCatalogImporter.ManifestSchemaVersion}},
               "asset_key": "{{assetKey}}",
               "display_name": "{{assetKey}}",
               "asset_type": "{{assetType}}",

@@ -70,18 +70,28 @@ public sealed class WorkspaceConfiguration
     internal WorkspaceConfiguration(
         string workspaceKey,
         WorkspaceGridConfiguration grid,
-        SortedDictionary<string, WorkspaceAssetProfile> assetProfiles)
+        SortedDictionary<string, WorkspaceAssetProfile> assetProfiles,
+        string? bridgeSetAssetKey)
     {
         WorkspaceKey = workspaceKey;
         Grid = grid;
         Metrics = new WorkspaceMetrics(grid);
         _assetProfiles = new ReadOnlyDictionary<string, WorkspaceAssetProfile>(assetProfiles);
+        BridgeSetAssetKey = bridgeSetAssetKey;
     }
 
     public string WorkspaceKey { get; }
     public WorkspaceGridConfiguration Grid { get; }
     public WorkspaceMetrics Metrics { get; }
     public IReadOnlyList<WorkspaceAssetProfile> AssetProfiles => [.. _assetProfiles.Values];
+
+    /// <summary>
+    /// The PolyTools Set this Workspace builds bridges from, or null when it
+    /// builds none. The Workspace names the Set and nothing else: which Asset
+    /// is the plank and which the post is published by that Set, and copying
+    /// those two keys here would be the same fact in two places, free to drift.
+    /// </summary>
+    public string? BridgeSetAssetKey { get; }
 
     public WorkspaceAssetProfile ResolveAssetProfile(string assetKey) =>
         _assetProfiles.TryGetValue(assetKey, out var profile)
@@ -91,14 +101,15 @@ public sealed class WorkspaceConfiguration
 
     public WorkspaceConfiguration WithAssetProfiles(
         IEnumerable<WorkspaceAssetProfile> assetProfiles) =>
-        WorkspaceConfigurationStore.Create(WorkspaceKey, Grid, assetProfiles);
+        WorkspaceConfigurationStore.Create(
+            WorkspaceKey, Grid, assetProfiles, BridgeSetAssetKey);
 }
 
 public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 11;
+    public const int Version = 12;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -135,7 +146,8 @@ public static class WorkspaceConfigurationStore
     public static WorkspaceConfiguration Create(
         string workspaceKey,
         WorkspaceGridConfiguration grid,
-        IEnumerable<WorkspaceAssetProfile> profiles)
+        IEnumerable<WorkspaceAssetProfile> profiles,
+        string? bridgeSetAssetKey = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceKey);
         ArgumentNullException.ThrowIfNull(grid);
@@ -153,6 +165,7 @@ public static class WorkspaceConfigurationStore
                 WaterCellMeters = grid.WaterCellMeters,
                 ElevationQuantumMeters = grid.ElevationQuantumMeters,
             },
+            BridgeSet = bridgeSetAssetKey,
             Assets = profiles.Select(profile => new AssetProfileDocument
             {
                 AssetKey = profile.AssetKey,
@@ -183,6 +196,7 @@ public static class WorkspaceConfigurationStore
                 WaterCellMeters = configuration.Grid.WaterCellMeters,
                 ElevationQuantumMeters = configuration.Grid.ElevationQuantumMeters,
             },
+            BridgeSet = configuration.BridgeSetAssetKey,
             Assets = configuration.AssetProfiles.Select(profile => new AssetProfileDocument
             {
                 AssetKey = profile.AssetKey,
@@ -324,7 +338,10 @@ public static class WorkspaceConfigurationStore
                     $"Workspace config contains duplicate asset_key '{entry.AssetKey}'.");
             }
         }
-        return new WorkspaceConfiguration(document.WorkspaceKey, grid, profiles);
+        if (document.BridgeSet is { } bridgeSet)
+            DocumentValidation.ValidateStableId("Workspace bridge_set", bridgeSet);
+        return new WorkspaceConfiguration(
+            document.WorkspaceKey, grid, profiles, document.BridgeSet);
     }
 
     private sealed record ConfigurationDocument
@@ -333,6 +350,14 @@ public static class WorkspaceConfigurationStore
         public required int Version { get; init; }
         public required string WorkspaceKey { get; init; }
         public required GridDocument Grid { get; init; }
+
+        /// <summary>
+        /// Optional: the PolyTools Set bridges are built from. Absent in a
+        /// Workspace that authors no bridges, which is a real state rather than
+        /// an omission - world02 has no geometry at all yet.
+        /// </summary>
+        public string? BridgeSet { get; init; }
+
         public required List<AssetProfileDocument> Assets { get; init; }
     }
 

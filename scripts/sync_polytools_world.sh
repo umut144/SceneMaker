@@ -9,7 +9,7 @@ config_path="$workspace_dir/config.json"
 import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
 current_manifest_schema=20
-current_config_version=11
+current_config_version=12
 
 cleanup() {
   local status=$?
@@ -91,6 +91,8 @@ if ! jq -e --arg world "$world_key" --argjson version "$current_config_version" 
       and (has("authoring") | not)
     end)
   and (([.assets[].asset_key] | unique | length) == ([.assets[].asset_key] | length))
+  and (.bridge_set == null
+    or (.bridge_set | type == "string" and test("^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")))
 ' "$config_path" >/dev/null; then
   # Naming the version alone reads as a version mismatch even when the
   # version is right, and that is the likelier case: this gate also refuses a
@@ -176,6 +178,10 @@ validate_manifest() {
       )
       and (([.components[].component_id] | unique | length)
         == ([.components[].component_id] | length))
+      and (if .asset_category == "set" then
+        all(.components[] | select(.kind == "asset_reference" and .parent_component_id == null);
+          .role | type == "string" and test("^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"))
+      else true end)
       and (.regions | type == "array")
       and (([.regions[].region_id] | unique | length)
         == ([.regions[].region_id] | length))
@@ -223,6 +229,22 @@ required_asset_keys=()
 while IFS= read -r asset_key; do
   [[ -z "$asset_key" ]] || required_asset_keys+=("$asset_key")
 done < <(jq -r '.assets[] | select(.role == "placement") | .asset_key' "$config_path")
+
+# The bridge Set travels too. SceneMaker never places it - a Set has no box to
+# be placed by - but it is the only thing that says which Asset is the plank and
+# which the post, and asking an author that instead was the mistake this
+# replaces. Its members follow as ordinary Asset References below.
+bridge_set_key="$(jq -r '.bridge_set // empty' "$config_path")"
+if [[ -n "$bridge_set_key" ]]; then
+  if ! jq -e --arg key "$bridge_set_key" \
+      'any(.assets[]; .asset_key == $key and .asset_category == "set")' \
+      "$source_catalog" >/dev/null; then
+    printf 'ERROR: SceneMaker bridge_set %s is not a Set in the PolyTools catalog.\n' \
+      "$bridge_set_key" >&2
+    exit 1
+  fi
+  contains_required_asset "$bridge_set_key" || required_asset_keys+=("$bridge_set_key")
+fi
 
 for ((required_index = 0; required_index < ${#required_asset_keys[@]}; required_index++)); do
   asset_key="${required_asset_keys[$required_index]}"

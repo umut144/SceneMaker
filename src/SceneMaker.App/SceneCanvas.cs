@@ -90,6 +90,7 @@ public sealed partial class SceneCanvas : Control
     private bool _mapContextActive;
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
     private TerrainDisplayCatalog? _terrainAssets;
+    private BridgeKit? _bridgeKit;
     private PropDisplayCatalog? _propAssets;
     private ToolInteraction _interaction = new();
     private bool _pointerOverCanvas;
@@ -311,6 +312,13 @@ public sealed partial class SceneCanvas : Control
         QueueRedraw();
     }
 
+    /// <summary>
+    /// Which Assets a bridge is built from here, or null in a Workspace that
+    /// names no Set. It arrives with the catalogs because it is the same kind
+    /// of fact: read once when the Workspace opens, never chosen.
+    /// </summary>
+    public void ConfigureBridgeKit(BridgeKit? kit) => _bridgeKit = kit;
+
     public void ConfigurePropAssets(PropDisplayCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
@@ -411,7 +419,8 @@ public sealed partial class SceneCanvas : Control
             SelectedPropAssetKey,
             TemplateAnchorGroupNumber,
             ElevationMeters,
-            PointerHitRadiusAuthoringPixels: 8.0 / ViewState.Zoom);
+            PointerHitRadiusAuthoringPixels: 8.0 / ViewState.Zoom,
+            BridgeKit: _bridgeKit);
     }
 
     private void Publish(ToolOutcome outcome)
@@ -1101,8 +1110,8 @@ public sealed partial class SceneCanvas : Control
             ActiveTool,
             _interaction.BridgeStart,
             _interaction.PointerAuthoring,
-            _interaction.State.BridgePlankAssetKey,
-            _interaction.State.BridgeAnchorAssetKey,
+            _bridgeKit?.PlankAssetKey,
+            _bridgeKit?.AnchorAssetKey,
             _interaction.State.BridgeWidthMeters,
             _interaction.State.BridgeElevationMeters,
             _interaction.State.BridgePlankCount,

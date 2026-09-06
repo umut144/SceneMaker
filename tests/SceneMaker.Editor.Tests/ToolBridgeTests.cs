@@ -177,35 +177,25 @@ public sealed class ToolBridgeTests
         Assert.Empty(preview.Posts);
     }
 
+    /// <summary>
+    /// A Workspace that names no Set builds no bridges. That is a state worth
+    /// saying out loud: the alternative is picking some Placement and calling
+    /// it a plank.
+    /// </summary>
     [Fact]
-    public void WithoutAPlankAssetTheToolSaysSoRatherThanInventingOne()
+    public void WithoutAKitTheToolSaysSoRatherThanInventingOne()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Map(workspace);
         var interaction = Bridge(workspace);
-        interaction.State.SelectBridgePlankAsset(null);
 
         var outcome = Assert.IsType<ToolOutcome.Message>(
-            interaction.PointerPressed(Context(workspace, scene), Point(320, 320), Cell(10, 10)));
+            interaction.PointerPressed(
+                Context(workspace, scene) with { BridgeKit = null },
+                Point(320, 320),
+                Cell(10, 10)));
 
-        Assert.Contains(
-            "no Placement Asset to plank a deck with",
-            outcome.Text,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void WithoutAnAnchorAssetTheToolSaysSoRatherThanInventingAPost()
-    {
-        using var workspace = TestWorkspace.Create();
-        var scene = Map(workspace);
-        var interaction = Bridge(workspace);
-        interaction.State.SelectBridgeAnchorAsset(null);
-
-        var outcome = Assert.IsType<ToolOutcome.Message>(
-            interaction.PointerPressed(Context(workspace, scene), Point(320, 320), Cell(10, 10)));
-
-        Assert.Contains("no Placement Asset offering a post", outcome.Text, StringComparison.Ordinal);
+        Assert.Contains("names no PolyTools Set", outcome.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -222,42 +212,19 @@ public sealed class ToolBridgeTests
     }
 
     /// <summary>
-    /// A post is an Asset of its own, so every enabled Placement can stand at
-    /// a corner. A composition that could not stand anywhere - a Set, a
-    /// Palette - never reaches the catalog, so the field needs no rule of its
-    /// own beyond remembering what was chosen.
+    /// Nobody chooses the two Assets any more. The Workspace names a PolyTools
+    /// Set, the Set says which Asset fills which role, and the tool reads that
+    /// - which is why a tree can no longer be offered as a plank.
     /// </summary>
     [Fact]
-    public void EveryEnabledPlacementIsOfferedAsAnAnchor()
+    public void TheKitComesFromTheSetRatherThanFromAChoice()
     {
         using var workspace = TestWorkspace.Create();
+        var session = WorkspaceSession.Load(workspace.RootPath);
 
-        var offered = BridgeAnchorAssets.Offered(workspace.Props)
-            .Select(static asset => asset.AssetKey)
-            .ToList();
-
-        Assert.Equal(["portal", "stone"], offered);
-        Assert.Equal("portal", BridgeAnchorAssets.Choose(workspace.Props, null));
-        Assert.Equal("stone", BridgeAnchorAssets.Choose(workspace.Props, "stone"));
-    }
-
-    /// <summary>
-    /// The same for the deck. What makes something a plank is that a bridge
-    /// repeats it, not a property the Asset carries, so every enabled
-    /// Placement is offered.
-    /// </summary>
-    [Fact]
-    public void EveryEnabledPlacementIsOfferedAsAPlank()
-    {
-        using var workspace = TestWorkspace.Create();
-
-        var offered = BridgePlankAssets.Offered(workspace.Props)
-            .Select(static asset => asset.AssetKey)
-            .ToList();
-
-        Assert.Equal(["portal", "stone"], offered);
-        Assert.Equal("portal", BridgePlankAssets.Choose(workspace.Props, null));
-        Assert.Equal("stone", BridgePlankAssets.Choose(workspace.Props, "stone"));
+        Assert.NotNull(session.BridgeKit);
+        Assert.Equal("portal", session.BridgeKit!.PlankAssetKey);
+        Assert.Equal("stone", session.BridgeKit!.AnchorAssetKey);
     }
 
     private static BridgeDraftPreview Preview(
@@ -299,8 +266,6 @@ public sealed class ToolBridgeTests
         var interaction = new ToolInteraction();
         interaction.SelectMode(EditorMode.Bridge);
         interaction.SelectTool(EditorTool.DrawBridge);
-        interaction.State.SelectBridgePlankAsset("portal");
-        interaction.State.SelectBridgeAnchorAsset("stone");
         interaction.State.SetBridgeElevation(1m);
         return interaction;
     }
@@ -313,7 +278,8 @@ public sealed class ToolBridgeTests
         SelectedTerrainAssetKey: "grass",
         SelectedPropAssetKey: "stone",
         TemplateAnchorGroupNumber: 1,
-        ElevationMeters: 1m);
+        ElevationMeters: 1m,
+        BridgeKit: new BridgeKit("portal", "stone"));
 
     private static AuthoringPoint Point(int x, int y) => new(x, y);
 

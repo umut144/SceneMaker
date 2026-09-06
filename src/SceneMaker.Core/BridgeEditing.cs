@@ -388,7 +388,21 @@ public static class BridgeEditing
         PropDisplayCatalog propAssets,
         BridgeDocument bridge)
     {
-        _ = propAssets.Resolve(bridge.PlankAssetKey);
+        // Asked rather than resolved, because this answer is a refusal and not
+        // a fault: the kit names what the PolyTools Set names, and a Workspace
+        // may have stopped enabling one of the two.
+        if (!propAssets.Enables(bridge.PlankAssetKey))
+        {
+            return new BridgeValidationResult(
+                false,
+                $"This Workspace does not enable the plank Asset '{bridge.PlankAssetKey}'.");
+        }
+        if (!propAssets.Enables(bridge.AnchorAssetKey))
+        {
+            return new BridgeValidationResult(
+                false,
+                $"This Workspace does not enable the post Asset '{bridge.AnchorAssetKey}'.");
+        }
         var metrics = propAssets.Metrics;
         if (bridge.WidthMeters <= 0m)
             return new BridgeValidationResult(false, "A bridge needs a positive width.");
@@ -405,8 +419,6 @@ public static class BridgeEditing
         }
         if (bridge.StartAuthoringPx == bridge.EndAuthoringPx)
             return new BridgeValidationResult(false, "A bridge needs two different ends.");
-
-        _ = propAssets.Resolve(bridge.AnchorAssetKey);
 
         // Depth is what the gaps leave over, so too many of them - or too wide
         // - is a deck of nothing. Said here rather than let the layout throw,

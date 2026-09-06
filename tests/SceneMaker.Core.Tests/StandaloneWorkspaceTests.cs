@@ -297,12 +297,15 @@ public sealed class StandaloneWorkspaceTests
             32m,
             192m,
             """{ "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" }""",
-            version: 10);
+            version: WorkspaceConfigurationStore.Version - 1);
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             WorkspaceConfigurationStore.Load(directory.Path));
 
-        Assert.Contains("version 11", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            FormattableString.Invariant($"version {WorkspaceConfigurationStore.Version}"),
+            exception.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -380,19 +383,32 @@ public sealed class StandaloneWorkspaceTests
         Assert.DoesNotContain("#99E550", json, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Both directions are refused, and the offsets are taken from the current
+    /// schema rather than written out: a pinned number here turns every
+    /// PolyTools bump into an edit in a test about rejection, and one of those
+    /// numbers silently became the accepted schema once already.
+    /// </summary>
     [Theory]
-    [InlineData(16)]
-    [InlineData(18)]
-    [InlineData(20)]
-    public void ImportRejectsReplacedPolyToolsManifestSchemas(int schema)
+    [InlineData(-3)]
+    [InlineData(-1)]
+    [InlineData(1)]
+    public void ImportRejectsReplacedPolyToolsManifestSchemas(int offset)
     {
         using var directory = TemporaryDirectory.Create();
-        WritePolyToolsImport(directory.Path, "game06", manifestSchema: schema);
+        WritePolyToolsImport(
+            directory.Path,
+            "game06",
+            manifestSchema: PolyToolsCatalogImporter.ManifestSchemaVersion + offset);
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             PolyToolsCatalogImporter.Load(directory.Path));
 
-        Assert.Contains("schema_version 19", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            FormattableString.Invariant(
+                $"schema_version {PolyToolsCatalogImporter.ManifestSchemaVersion}"),
+            exception.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]

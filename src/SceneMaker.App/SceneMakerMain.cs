@@ -70,14 +70,10 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _riverWidthEdit = new();
     private readonly Label _pathWidthLabel = new();
     private readonly SpinBox _pathWidthEdit = new();
-    private readonly Label _bridgePlankAssetLabel = new();
-    private readonly OptionButton _bridgePlankAssetEdit = new();
     private readonly Label _bridgePlankCountLabel = new();
     private readonly SpinBox _bridgePlankCountEdit = new();
     private readonly Label _bridgePlankGapLabel = new();
     private readonly SpinBox _bridgePlankGapEdit = new();
-    private readonly Label _bridgeAnchorLabel = new();
-    private readonly OptionButton _bridgeAnchorEdit = new();
     private readonly Label _bridgeWidthLabel = new();
     private readonly SpinBox _bridgeWidthEdit = new();
     private readonly Label _bridgeElevationLabel = new();
@@ -554,14 +550,6 @@ public sealed partial class SceneMakerMain : Control
             "Manual absolute height of the first point when Auto start is off.";
         _pathStartElevationEdit.ValueChanged += SetPathStartElevation;
         _contextMenuBar.AddChild(_pathStartElevationEdit);
-        _bridgePlankAssetLabel.Name = "BridgePlankAssetLabel";
-        _bridgePlankAssetLabel.Text = "Plank";
-        _bridgePlankAssetLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_bridgePlankAssetLabel);
-        _bridgePlankAssetEdit.Name = "BridgePlankAsset";
-        _bridgePlankAssetEdit.CustomMinimumSize = new Vector2(130f, 0f);
-        _bridgePlankAssetEdit.ItemSelected += SelectBridgePlankAssetItem;
-        _contextMenuBar.AddChild(_bridgePlankAssetEdit);
         _bridgePlankCountLabel.Name = "BridgePlankCountLabel";
         _bridgePlankCountLabel.Text = "Planks";
         _bridgePlankCountLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -585,14 +573,6 @@ public sealed partial class SceneMakerMain : Control
             + "and never at the ends, so a deck always starts and finishes on wood.";
         _bridgePlankGapEdit.ValueChanged += SetBridgePlankGap;
         _contextMenuBar.AddChild(_bridgePlankGapEdit);
-        _bridgeAnchorLabel.Name = "BridgeAnchorLabel";
-        _bridgeAnchorLabel.Text = "Anchor";
-        _bridgeAnchorLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_bridgeAnchorLabel);
-        _bridgeAnchorEdit.Name = "BridgeAnchor";
-        _bridgeAnchorEdit.CustomMinimumSize = new Vector2(130f, 0f);
-        _bridgeAnchorEdit.ItemSelected += SelectBridgeAnchorItem;
-        _contextMenuBar.AddChild(_bridgeAnchorEdit);
         _bridgeWidthLabel.Name = "BridgeWidthLabel";
         _bridgeWidthLabel.Text = "Width";
         _bridgeWidthLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -699,6 +679,7 @@ public sealed partial class SceneMakerMain : Control
             _canvas.ConfigureMetrics(_controller.Session.Metrics);
             _canvas.ConfigureTerrainAssets(_controller.Session.TerrainAssets);
             _canvas.ConfigurePropAssets(_controller.Session.PropAssets);
+            _canvas.ConfigureBridgeKit(_controller.Session.BridgeKit);
         }
         _canvas.ViewChanged += UpdateViewStatus;
         _canvas.OutcomeProduced += HandleToolOutcome;
@@ -878,8 +859,6 @@ public sealed partial class SceneMakerMain : Control
                 && string.Equals(assetKey, chosen, StringComparison.Ordinal);
         }
         ShowSurfaceField(mode, field);
-        ShowBridgePlankAssetField();
-        ShowBridgeAnchorField();
     }
 
     /// <summary>
@@ -2193,113 +2172,11 @@ public sealed partial class SceneMakerMain : Control
         _interaction.State.SetBridgePlankGap(DecimalOf(value));
 
     /// <summary>
-    /// The Deck control answers with an item index; the Asset travels as that
-    /// item's metadata, exactly as the Anchor control does.
-    /// </summary>
-    private void SelectBridgePlankAssetItem(long index)
-    {
-        if (index < 0 || index >= _bridgePlankAssetEdit.ItemCount) return;
-        if (_bridgePlankAssetEdit.GetItemMetadata((int)index).AsString() is { Length: > 0 } assetKey)
-            _interaction.State.SelectBridgePlankAsset(assetKey);
-    }
-
-    /// <summary>
-    /// Fills the Deck control with the Placement Assets a deck can be planked
-    /// with, which is every one the Workspace enables: what makes something a
-    /// plank is that a bridge repeats it, not a property it carries.
-    /// </summary>
-    private void ShowBridgePlankAssetField()
-    {
-        _bridgePlankAssetEdit.Clear();
-        if (_controller.Session is not { } session)
-        {
-            _bridgePlankAssetEdit.Disabled = true;
-            return;
-        }
-
-        var offered = BridgePlankAssets.Offered(session.PropAssets);
-        var chosen = BridgePlankAssets.Choose(
-            session.PropAssets, _interaction.State.BridgePlankAssetKey);
-        _interaction.State.SelectBridgePlankAsset(chosen);
-        var selected = -1;
-        for (var index = 0; index < offered.Count; index++)
-        {
-            _bridgePlankAssetEdit.AddItem(offered[index].Name);
-            _bridgePlankAssetEdit.SetItemMetadata(_bridgePlankAssetEdit.ItemCount - 1, offered[index].AssetKey);
-            if (string.Equals(offered[index].AssetKey, chosen, StringComparison.Ordinal))
-                selected = index;
-        }
-        _bridgePlankAssetEdit.Selected = selected;
-        _bridgePlankAssetEdit.Disabled = offered.Count <= 1;
-        _bridgePlankAssetEdit.TooltipText = offered.Count switch
-        {
-            > 1 => "The Placement Asset a deck is planked with. A deck is a row of "
-                + "these, not a material laid over the span.",
-            1 => "This Workspace offers only one Placement Asset, so there is nothing "
-                + "to choose between.",
-            _ => "This Workspace enables no Placement Asset, so no deck can be "
-                + "planked yet.",
-        };
-    }
-
-    /// <summary>
     /// A directly authored height, so it snaps to the Workspace quantum the
     /// moment it is typed rather than being refused when the bridge is placed.
     /// </summary>
     private void SetBridgeElevation(double value) =>
         _interaction.State.SetBridgeElevation(ElevationOf(_bridgeElevationEdit, value));
-
-    /// <summary>
-    /// The Anchor control answers with an item index; the Asset travels as that
-    /// item's metadata, like the Surface control, because a position changes
-    /// with what the Workspace happens to offer.
-    /// </summary>
-    private void SelectBridgeAnchorItem(long index)
-    {
-        if (index < 0 || index >= _bridgeAnchorEdit.ItemCount) return;
-        if (_bridgeAnchorEdit.GetItemMetadata((int)index).AsString() is { Length: > 0 } assetKey)
-            _interaction.State.SelectBridgeAnchorAsset(assetKey);
-    }
-
-    /// <summary>
-    /// Fills the Anchor control with the Placement Assets that offer a part to
-    /// stand at a corner. A Workspace may offer none - that is a real state and
-    /// the tooltip says so rather than the control inventing a post.
-    /// </summary>
-    private void ShowBridgeAnchorField()
-    {
-        _bridgeAnchorEdit.Clear();
-        if (_controller.Session is not { } session)
-        {
-            _bridgeAnchorEdit.Disabled = true;
-            return;
-        }
-
-        var offered = BridgeAnchorAssets.Offered(session.PropAssets);
-        var chosen = BridgeAnchorAssets.Choose(
-            session.PropAssets, _interaction.State.BridgeAnchorAssetKey);
-        _interaction.State.SelectBridgeAnchorAsset(chosen);
-        var selected = -1;
-        for (var index = 0; index < offered.Count; index++)
-        {
-            _bridgeAnchorEdit.AddItem(offered[index].Name);
-            _bridgeAnchorEdit.SetItemMetadata(_bridgeAnchorEdit.ItemCount - 1, offered[index].AssetKey);
-            if (string.Equals(offered[index].AssetKey, chosen, StringComparison.Ordinal))
-                selected = index;
-        }
-        _bridgeAnchorEdit.Selected = selected;
-        _bridgeAnchorEdit.Disabled = offered.Count <= 1;
-        _bridgeAnchorEdit.TooltipText = offered.Count switch
-        {
-            > 1 => "The Placement Asset whose named part stands at each corner. "
-                + "Only an Asset that names one can: setting a whole Placement at "
-                + "four corners would set four of it.",
-            1 => "This Workspace offers only one Asset with a part for a corner, "
-                + "so there is nothing to choose between.",
-            _ => "This Workspace enables no Placement Asset naming an "
-                + "anchor_component, so no bridge can be authored yet.",
-        };
-    }
 
     private static void ConfigurePathWidthInput(SpinBox input)
     {
@@ -2571,14 +2448,10 @@ public sealed partial class SceneMakerMain : Control
         _pathWidthLabel.Visible = pathActive;
         _pathWidthEdit.Visible = pathActive;
         var bridgeActive = _interaction.Mode == EditorMode.Bridge;
-        _bridgePlankAssetLabel.Visible = bridgeActive;
-        _bridgePlankAssetEdit.Visible = bridgeActive;
         _bridgePlankCountLabel.Visible = bridgeActive;
         _bridgePlankCountEdit.Visible = bridgeActive;
         _bridgePlankGapLabel.Visible = bridgeActive;
         _bridgePlankGapEdit.Visible = bridgeActive;
-        _bridgeAnchorLabel.Visible = bridgeActive;
-        _bridgeAnchorEdit.Visible = bridgeActive;
         _bridgeWidthLabel.Visible = bridgeActive;
         _bridgeWidthEdit.Visible = bridgeActive;
         _bridgeElevationLabel.Visible = bridgeActive;
@@ -3050,6 +2923,7 @@ public sealed partial class SceneMakerMain : Control
         _canvas.ConfigureMetrics(session.Metrics);
         _canvas.ConfigureTerrainAssets(session.TerrainAssets);
         _canvas.ConfigurePropAssets(session.PropAssets);
+        _canvas.ConfigureBridgeKit(session.BridgeKit);
         ConfigureRiverWidthInput(_riverWidthEdit);
         _interaction.State.SetRiverWidth(DecimalOf(_riverWidthEdit.Value));
         ConfigurePathWidthInput(_pathWidthEdit);

@@ -40,13 +40,7 @@
       }
     },
     {
-      "asset_key": "river",
-      "surface": "water",
-      "footprint_meters": null,
-      "anchor_meters": null
-    },
-    {
-      "asset_key": "rope_post",
+      "asset_key": "post",
       "surface": null,
       "footprint_meters": {
         "width": 0.3125,
@@ -56,6 +50,12 @@
         "x": 0.15625,
         "y": 0.03125
       }
+    },
+    {
+      "asset_key": "river",
+      "surface": "water",
+      "footprint_meters": null,
+      "anchor_meters": null
     },
     {
       "asset_key": "tree",
@@ -17786,7 +17786,7 @@
         {
           "post_id": "bridge_0001.post_start_left",
           "corner": "start_left",
-          "asset_key": "rope_post",
+          "asset_key": "post",
           "x_meters": 38.818905,
           "y_meters": 34.894116,
           "elevation_meters": 1.0
@@ -17794,7 +17794,7 @@
         {
           "post_id": "bridge_0001.post_start_right",
           "corner": "start_right",
-          "asset_key": "rope_post",
+          "asset_key": "post",
           "x_meters": 35.181095,
           "y_meters": 33.230884,
           "elevation_meters": 1.0
@@ -17802,7 +17802,7 @@
         {
           "post_id": "bridge_0001.post_end_left",
           "corner": "end_left",
-          "asset_key": "rope_post",
+          "asset_key": "post",
           "x_meters": 45.162655,
           "y_meters": 21.019116,
           "elevation_meters": 1.0
@@ -17810,7 +17810,7 @@
         {
           "post_id": "bridge_0001.post_end_right",
           "corner": "end_right",
-          "asset_key": "rope_post",
+          "asset_key": "post",
           "x_meters": 41.524845,
           "y_meters": 19.355884,
           "elevation_meters": 1.0
@@ -17987,7 +17987,7 @@
         {
           "post_id": "bridge_0002.post_start_left",
           "corner": "start_left",
-          "asset_key": "rope_post",
+          "asset_key": "post",
           "x_meters": 46.281857,
           "y_meters": 38.233044,
           "elevation_meters": 1.0
@@ -17995,7 +17995,7 @@
         {
           "post_id": "bridge_0002.post_start_right",
           "corner": "start_right",
-          "asset_key": "rope_post",
+          "asset_key": "post",
           "x_meters": 43.530643,
           "y_meters": 35.329456,
           "elevation_meters": 1.0
@@ -18003,7 +18003,7 @@
         {
           "post_id": "bridge_0002.post_end_left",
           "corner": "end_left",
-          "asset_key": "rope_post",
+          "asset_key": "post",
           "x_meters": 57.000607,
           "y_meters": 28.076794,
           "elevation_meters": 1.0
@@ -18011,7 +18011,7 @@
         {
           "post_id": "bridge_0002.post_end_right",
           "corner": "end_right",
-          "asset_key": "rope_post",
+          "asset_key": "post",
           "x_meters": 54.249393,
           "y_meters": 25.173206,
           "elevation_meters": 1.0
@@ -78620,7 +78620,7 @@
       {
         "bridge_id": "bridge_0001",
         "plank_asset_key": "plank",
-        "anchor_asset_key": "rope_post",
+        "anchor_asset_key": "post",
         "start_authoring_px": {
           "x": 1184,
           "y": 1090
@@ -78637,7 +78637,7 @@
       {
         "bridge_id": "bridge_0002",
         "plank_asset_key": "plank",
-        "anchor_asset_key": "rope_post",
+        "anchor_asset_key": "post",
         "start_authoring_px": {
           "x": 1437,
           "y": 1177

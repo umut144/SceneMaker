@@ -40,13 +40,7 @@
       }
     },
     {
-      "asset_key": "river",
-      "surface": "water",
-      "footprint_meters": null,
-      "anchor_meters": null
-    },
-    {
-      "asset_key": "rope_post",
+      "asset_key": "post",
       "surface": null,
       "footprint_meters": {
         "width": 0.3125,
@@ -56,6 +50,12 @@
         "x": 0.15625,
         "y": 0.03125
       }
+    },
+    {
+      "asset_key": "river",
+      "surface": "water",
+      "footprint_meters": null,
+      "anchor_meters": null
     },
     {
       "asset_key": "tree",

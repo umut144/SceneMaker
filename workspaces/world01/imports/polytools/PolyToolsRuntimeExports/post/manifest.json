@@ -1,6 +1,6 @@
 {
 	"asset_category": "single",
-	"asset_key": "rope_post",
+	"asset_key": "post",
 	"asset_pivot": [
 		0.0,
 		0.0
@@ -1461,7 +1461,7 @@
 		"x_axis": "right",
 		"y_axis": "up"
 	},
-	"display_name": "Rope Post",
+	"display_name": "Post",
 	"presentation": {
 		"authored_facing": "neutral"
 	},

@@ -60814,7 +60814,7 @@
     {
       "bridge_id": "bridge_0001",
       "plank_asset_key": "plank",
-      "anchor_asset_key": "rope_post",
+      "anchor_asset_key": "post",
       "start_authoring_px": {
         "x": 1184,
         "y": 1090
@@ -60831,7 +60831,7 @@
     {
       "bridge_id": "bridge_0002",
       "plank_asset_key": "plank",
-      "anchor_asset_key": "rope_post",
+      "anchor_asset_key": "post",
       "start_authoring_px": {
         "x": 1437,
         "y": 1177

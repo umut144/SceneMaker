@@ -23,7 +23,14 @@ public sealed record ToolContext(
     string? SelectedPropAssetKey,
     int TemplateAnchorGroupNumber,
     decimal ElevationMeters,
-    double PointerHitRadiusAuthoringPixels = 8.0);
+    double PointerHitRadiusAuthoringPixels = 8.0,
+
+    /// <summary>
+    /// Which Assets a bridge is built from here, or null in a Workspace that
+    /// builds none. It is not a selection: the Set says it, so no tool asks and
+    /// no field offers it.
+    /// </summary>
+    BridgeKit? BridgeKit = null);
 
 /// <summary>
 /// The single answer a tool gives to an input event. Closed hierarchy: an input

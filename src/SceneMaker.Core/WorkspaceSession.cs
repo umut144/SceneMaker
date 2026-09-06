@@ -19,7 +19,8 @@ public sealed record WorkspaceSession(
     PolyToolsCatalog Catalog,
     WorkspaceConfiguration Configuration,
     TerrainDisplayCatalog TerrainAssets,
-    PropDisplayCatalog PropAssets)
+    PropDisplayCatalog PropAssets,
+    BridgeKit? BridgeKit)
 {
     public string WorkspaceKey => Workspace.WorkspaceKey;
     public string DirectoryPath => Workspace.DirectoryPath;
@@ -50,7 +51,20 @@ public sealed record WorkspaceSession(
                 $"Workspace '{configuration.WorkspaceKey}' requires PolyTools world "
                 + $"'{configuration.WorkspaceKey}', not '{catalog.WorldKey}'.");
         }
-        return Derive(workspace, catalog, configuration);
+        // The bridge kit is read once, here, from the Set the Workspace names.
+        // A Workspace that names none, or that enables no Placements at all and
+        // therefore has no import to read, simply has no kit - a state, not an
+        // omission, which the Bridge tool says out loud.
+        //
+        // Whether its two members are enabled is deliberately not checked here.
+        // Narrowing the enabled Assets is an ordinary edit, and a Workspace that
+        // refused to open afterwards would be one an author could edit shut. The
+        // refusal belongs where a bridge is actually authored or exported, and
+        // both already resolve the Assets they name.
+        var bridgeKit = configuration.BridgeSetAssetKey is { } bridgeSet && placementKeys.Length > 0
+            ? PolyToolsCatalogImporter.LoadBridgeKit(workspace.DirectoryPath, bridgeSet)
+            : null;
+        return Derive(workspace, catalog, configuration, bridgeKit);
     }
 
     /// <summary>
@@ -59,16 +73,18 @@ public sealed record WorkspaceSession(
     /// validate the candidate before persisting and adopting it.
     /// </summary>
     public WorkspaceSession WithAssetProfiles(IEnumerable<WorkspaceAssetProfile> assetProfiles) =>
-        Derive(Workspace, Catalog, Configuration.WithAssetProfiles(assetProfiles));
+        Derive(Workspace, Catalog, Configuration.WithAssetProfiles(assetProfiles), BridgeKit);
 
     private static WorkspaceSession Derive(
         LoadedWorkspace workspace,
         PolyToolsCatalog catalog,
-        WorkspaceConfiguration configuration) =>
+        WorkspaceConfiguration configuration,
+        BridgeKit? bridgeKit) =>
         new(
             workspace,
             catalog,
             configuration,
             TerrainDisplayCatalogLoader.Load(configuration),
-            PropDisplayCatalogLoader.Load(catalog, configuration));
+            PropDisplayCatalogLoader.Load(catalog, configuration),
+            bridgeKit);
 }

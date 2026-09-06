@@ -233,73 +233,6 @@ public static class TerrainAreaAssets
 }
 
 /// <summary>
-/// Which Placement Assets can stand at a bridge corner, and which one is
-/// chosen. Only an Asset that names a part qualifies: setting a Placement used
-/// whole at four corners would set four bridges rather than four posts.
-/// </summary>
-public static class BridgeAnchorAssets
-{
-    /// <summary>
-    /// Every Placement a bridge can stand on its corners - which is every one
-    /// the Workspace enables. A post is an Asset of its own; nothing asks an
-    /// Asset for a part of itself, and a composition that could not stand
-    /// somewhere never reaches the catalog.
-    /// </summary>
-    public static IReadOnlyList<PropDisplayAsset> Offered(PropDisplayCatalog catalog)
-    {
-        ArgumentNullException.ThrowIfNull(catalog);
-        return catalog.Assets;
-    }
-
-    /// <summary>
-    /// The one to show: the remembered choice while it still qualifies, and
-    /// otherwise the first offered. Null when the Workspace offers none, which
-    /// the field shows rather than papering over.
-    /// </summary>
-    public static string? Choose(PropDisplayCatalog catalog, string? remembered)
-    {
-        var offered = Offered(catalog);
-        if (remembered is not null
-            && offered.Any(asset => string.Equals(
-                asset.AssetKey, remembered, StringComparison.Ordinal)))
-        {
-            return remembered;
-        }
-        return offered.Count == 0 ? null : offered[0].AssetKey;
-    }
-}
-
-/// <summary>
-/// Which Placement Assets a bridge deck can be built out of, and which one is
-/// chosen. Every enabled Placement qualifies: what makes something a plank is
-/// that a bridge repeats it, not a property the Asset carries.
-/// </summary>
-public static class BridgePlankAssets
-{
-    public static IReadOnlyList<PropDisplayAsset> Offered(PropDisplayCatalog catalog)
-    {
-        ArgumentNullException.ThrowIfNull(catalog);
-        return catalog.Assets;
-    }
-
-    /// <summary>
-    /// The one to show: the remembered choice while it still qualifies, and
-    /// otherwise the first offered. Null when the Workspace offers none.
-    /// </summary>
-    public static string? Choose(PropDisplayCatalog catalog, string? remembered)
-    {
-        var offered = Offered(catalog);
-        if (remembered is not null
-            && offered.Any(asset => string.Equals(
-                asset.AssetKey, remembered, StringComparison.Ordinal)))
-        {
-            return remembered;
-        }
-        return offered.Count == 0 ? null : offered[0].AssetKey;
-    }
-}
-
-/// <summary>
 /// What an area's Surface control should show: the Assets to offer, the one
 /// that is chosen, and whether there is anything to choose between.
 /// </summary>
@@ -362,21 +295,6 @@ public sealed class EditorInteractionState
         SceneDocument.GroundElevationMeters;
 
     /// <summary>
-    /// The Placement Asset whose named part stands at the next bridge's
-    /// corners. Null until a Workspace offers one, which is a real state: a
-    /// Workspace with no Asset carrying an anchor_component cannot author a
-    /// bridge, and the field says so rather than inventing a post.
-    /// </summary>
-    public string? BridgeAnchorAssetKey { get; private set; }
-
-    /// <summary>
-    /// The Placement Asset the next bridge's deck is planked with. Null until
-    /// a Workspace offers one, which the field shows rather than inventing a
-    /// plank to fill the gap.
-    /// </summary>
-    public string? BridgePlankAssetKey { get; private set; }
-
-    /// <summary>
     /// How many planks the next deck is laid with, and the gap between two of
     /// them. Count is what an author names; the depth of a plank is what falls
     /// out of it once the span is known.
@@ -390,10 +308,6 @@ public sealed class EditorInteractionState
 
     public void SetBridgeElevation(decimal elevationMeters) =>
         BridgeElevationMeters = elevationMeters;
-
-    public void SelectBridgeAnchorAsset(string? assetKey) => BridgeAnchorAssetKey = assetKey;
-
-    public void SelectBridgePlankAsset(string? assetKey) => BridgePlankAssetKey = assetKey;
 
     public void SetBridgePlankCount(int plankCount) => BridgePlankCount = plankCount;
 

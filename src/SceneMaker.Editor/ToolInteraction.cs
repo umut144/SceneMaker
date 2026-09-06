@@ -510,16 +510,13 @@ public sealed class ToolInteraction
     {
         if (context.Scene.SceneKind != SceneKind.Instance)
             return new ToolOutcome.Message("Bridge: a Scene Template cannot carry bridges.");
-        if (State.BridgePlankAssetKey is not { } plankAssetKey)
+        if (context.BridgeKit is not { } kit)
         {
             return new ToolOutcome.Message(
-                "Bridge: this Workspace has no Placement Asset to plank a deck with.");
+                "Bridge: this Workspace names no PolyTools Set to build bridges from.");
         }
-        if (State.BridgeAnchorAssetKey is not { } anchorAssetKey)
-        {
-            return new ToolOutcome.Message(
-                "Bridge: this Workspace has no Placement Asset offering a post.");
-        }
+        var plankAssetKey = kit.PlankAssetKey;
+        var anchorAssetKey = kit.AnchorAssetKey;
         if (!IsInsideScene(context, point))
             return new ToolOutcome.Message("Bridge: an end has to sit inside the Scene.");
 

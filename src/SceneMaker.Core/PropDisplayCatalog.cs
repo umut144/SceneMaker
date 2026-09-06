@@ -53,6 +53,14 @@ public sealed class PropDisplayCatalog
             ? asset
             : throw new SceneMakerDocumentException(
                 $"Placement asset_key '{assetKey}' is not enabled in this Workspace.");
+
+    /// <summary>
+    /// Whether this Workspace enables the Asset, asked without an exception.
+    /// A draft has to be able to say "no" about an Asset that is merely
+    /// missing - a bridge kit points at what a Set names, and what a Set names
+    /// is not something the author of this Workspace has to have enabled.
+    /// </summary>
+    public bool Enables(string assetKey) => _byKey.ContainsKey(assetKey);
 }
 
 public static class PropDisplayCatalogLoader

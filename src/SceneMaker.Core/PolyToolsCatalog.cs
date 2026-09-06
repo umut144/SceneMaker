@@ -86,6 +86,81 @@ public static class PolyToolsCatalogImporter
             requestedAssetKeys.ToHashSet(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// The bridge kit a Set publishes: which Asset fills which role. Read
+    /// through its own path rather than through <see cref="Load"/>, because a
+    /// Set is not placeable geometry and that path refuses one on purpose -
+    /// what is wanted here is the one thing a Set is for, its membership.
+    ///
+    /// <para>Only top-level members carry a role. A reference nested under a
+    /// component is part of how that Asset is drawn, not a member of the Set,
+    /// and PolyTools publishes no role for it.</para>
+    /// </summary>
+    public static BridgeKit LoadBridgeKit(string workspaceDirectory, string setAssetKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(setAssetKey);
+        var importDirectory = Path.Combine(
+            Path.GetFullPath(workspaceDirectory),
+            ImportDirectoryName,
+            PolyToolsDirectoryName);
+        var manifestPath = Path.Combine(
+            importDirectory,
+            "PolyToolsRuntimeExports",
+            setAssetKey,
+            "manifest.json");
+        var label = $"PolyTools manifest '{setAssetKey}'";
+        try
+        {
+            using var json = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var root = RequireObject(json.RootElement, label);
+            RequireManifestSchema(root, label);
+            var assetKey = RequireString(root, "asset_key", label);
+            if (!string.Equals(assetKey, setAssetKey, StringComparison.Ordinal))
+                throw new SceneMakerDocumentException($"{label} names asset_key '{assetKey}'.");
+            if (RequireCategory(root, label) != PolyToolsAssetCategory.Set)
+            {
+                throw new SceneMakerDocumentException(
+                    $"PolyTools asset '{setAssetKey}' is not a Set, so it publishes no membership.");
+            }
+
+            Dictionary<string, string> assetKeysByRole = new(StringComparer.Ordinal);
+            foreach (var element in RequireArray(root, "components", label).EnumerateArray())
+            {
+                var component = RequireObject(element, $"{label} Component");
+                if (!component.TryGetProperty("kind", out var kind)
+                    || kind.ValueKind != JsonValueKind.String
+                    || kind.GetString() != "asset_reference")
+                {
+                    continue;
+                }
+                if (component.TryGetProperty("parent_component_id", out var parent)
+                    && parent.ValueKind is not JsonValueKind.Null)
+                {
+                    continue;
+                }
+                var role = RequireString(component, "role", $"{label} member");
+                var source = RequireString(component, "source_asset_key", $"{label} member");
+                if (!assetKeysByRole.TryAdd(role, source))
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} fills the role '{role}' twice; a bridge kit needs one Asset per role.");
+                }
+            }
+            return BridgeKit.From(setAssetKey, assetKeysByRole);
+        }
+        catch (SceneMakerDocumentException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is IOException or JsonException
+                                          or UnauthorizedAccessException)
+        {
+            throw new SceneMakerDocumentException(
+                $"Could not read PolyTools Set '{setAssetKey}': {exception.Message}", exception);
+        }
+    }
+
     private static PolyToolsCatalog Load(
         string workspaceDirectory,
         IReadOnlySet<string>? requestedAssetKeys)
@@ -138,6 +213,12 @@ public static class PolyToolsCatalogImporter
             var roots = requestedAssetKeys is null
                 ? catalogEntries.Values
                     .Where(static entry => entry.AssetType is "terrain" or "props")
+                    // A composition is not something to put somewhere, and this
+                    // overload means "everything authorable". A Set now reaches
+                    // the import because a bridge kit is read out of one, so
+                    // skipping it here is what keeps that from looking like a
+                    // Placement nobody can place.
+                    .Where(static entry => entry.Category == PolyToolsAssetCategory.Single)
                     .ToArray()
                 : catalogEntries.Values
                     .Where(entry => requestedAssetKeys.Contains(entry.AssetKey))

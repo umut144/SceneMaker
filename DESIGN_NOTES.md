@@ -196,11 +196,34 @@ nowhere else.
 
 What it gives up is deliberate: a single post cannot be nudged. Nobody asked to.
 
-### Where a post comes from
+### Where the plank and the post come from
 
-The post is an ordinary Placement Asset. PolyTools publishes `bridge` as a Set
-of `rope_post` and `plank`, so the post is a package of its own with its own
-collision Region, and the bridge names it like any other Placement.
+Both are ordinary Placement Assets, and neither is chosen by an author. That
+was tried: the bridge bar offered every enabled Placement in two fields, which
+meant offering a tree as a plank and re-answering per bridge a question that is
+settled per world. The rule behind it was sound and the conclusion was not -
+the document must record which Placement, and nothing on an Asset marks it as a
+plank, but "the document must record it" is not "a human must type it".
+
+PolyTools publishes the answer. `bridge` is a Set, and a Set says which Assets
+belong together; each member carries a **role**, which is authored, never
+derived, and does not follow a rename. The Workspace names the Set in
+`bridge_set` and nothing more: which Asset fills which role belongs to the other
+project, and copying the two keys here would be the same fact in two places.
+
+The role is what survives. A reference's `name` follows the Asset it points at -
+the place was called `plank` while the Asset was called `deck`, and today it
+would have moved with it - and component names are explicitly arbitrary, free to
+be `abc` and meaningful only together. So a name can never say what a member is
+for.
+
+`role` names the part and the Asset names the execution: a stone post is a
+second Asset in the same `post` role, not a second role. That is why the role is
+`post` and not `rope_post` - a role named after one execution ages exactly as
+badly as `deck` did for a plank.
+
+The resolved keys are still written into the bridge record, because the export
+has to name what to build without a consumer resolving a Set.
 
 It was not always so, and the detour is worth keeping because the rule that
 came out of it stands: **a Prop must never name a Component of an Asset.**
