@@ -43,7 +43,7 @@ removes from the Terrain. Export 10 refused such a Scene outright rather than
 writing it through the additive shape; it is the version that could not say
 what a tunnel means, not a version whose meaning changed.
 
-The authored Scene currently has its own schema 18. It is deliberately newer
+The authored Scene currently has its own schema 19. It is deliberately newer
 than the embedded Scene: elevation-region contours are editor source, folded
 into the ordinary `terrain_cells` below and omitted from export. Authored route
 surfaces remain independent continuous bands and are exported separately from
