@@ -32,6 +32,12 @@ that folded Terrain.
 `<scene_id>.scene_export.json`. Exporting from the editor writes all of them at
 once; `scripts/export_scene.sh <workspace> <scene-id>` rewrites a single one.
 
+**Every file in that directory carries the same `version`.** The directory is
+one set, written by one export, and a consumer reads it as one: a mixed set is
+a half-finished export rather than something to be tolerated. Exporting from
+the editor writes them all; the single-Scene export exists for a surgical swap
+between two runs of the same version, never for straddling two.
+
 There is no index. The directory is the list, and every file says what it is —
 so a consumer finds the Templates by reading `exports/` and keeping the files
 whose `scene.scene_kind` is `"template"`. An index was considered and rejected:
@@ -576,6 +582,33 @@ never contains one, so the two cannot collide.
 `elevation_meters` on a post is the deck height its corner sits at. How far the
 model reaches below or above that is the model's business.
 
+**The bake is the authority.** A consumer places what `bridge_bakes` gives it
+and derives nothing again from `start_authoring_px` and `width_meters`: those
+are the authored source, kept so a later SceneMaker can reshape the bridge, and
+recomputing corners from them is the one way to disagree with what the author
+saw. The two do agree today - an end divided by `authoring_pixels_per_meter` is
+exactly the midpoint of its two corner vertices, and their distance is exactly
+`width_meters` - and that agreement is a consequence, not an invitation.
+
+**A bridge deck is exactly one quad.** A bridge is straight and level, so its
+bake holds four vertices, two triangles and one edge loop; `boundary_edges` is
+therefore the outline of the walking surface and may be read as the edge one
+falls from. That is a promise about bridges alone. In `route_surface_bakes` the
+same field lists **each primitive's** edge loop - one per flattened segment
+quad and one per round join - so a Path's union outline is not the
+concatenation of them, and inner edges are in there too.
+
+**A bridge cuts nothing.** It adds a surface at its own elevation over the
+Terrain it crosses; the Terrain below is untouched and stays walkable, water
+below stays water, and `route_surface_cut_raster` knows nothing about bridges
+because there is nothing for it to know. Passing under a bridge is the point:
+one place carries two surfaces, and which one an Actor uses is the
+simulation's question.
+
+The deck presents the surface of its `asset_key`, read from `asset_profiles`
+exactly as a Terrain cell's is. A deck therefore names a Terrain Asset - the
+one kind of Asset that carries a `surface` - and never a Placement.
+
 A Scene Template carries no bridge, for the reason it carries no water:
 composition moves Terrain cells and Props and nothing else, so authoring one is
 refused rather than losing it at every Anchor.
@@ -585,6 +618,12 @@ refused rather than losing it at every Anchor.
 The origin is the lower left corner of the Scene, x to the right and y upwards.
 That is what `coordinate_space` asserts; a reader that assumes y-down will
 mirror every map.
+
+Numbers are JSON numbers. Whether one is written `1`, `1.0` or `1.125` follows
+from how the value was produced and says nothing about its kind: read every
+`*_meters` field as a real number. In particular a deck height is not an
+integer - it sits on the Workspace `elevation_quantum_meters`, which is
+`0.125 m` for `world01`, so `1.125` is as ordinary a deck as `1`.
 
 Three units appear, and only one of them is stored:
 

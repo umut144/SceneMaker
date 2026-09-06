@@ -12,9 +12,8 @@ every fix has to stay inside.
 
 | ID | Area | Outcome | Status |
 |---|---|---|---|
-| `PATH-05` | Export contract | Raise world01's reader to export 11: the new `operation`/`clearance_above_meters` on every route segment and the `route_surface_cut_raster` beside the Scene. Lives in `BevyProjects/world01`, not here. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Ready** |
 | `PATH-02` | Paths | Make the red authoring wire pickable and emphasize a selected Path; manual acceptance of an additive-to-tunnel-to-additive Path through a hill. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Ready** |
-| `BRIDGE-04` | Export contract | Carry bridges in the export instead of refusing them: the authored record, the deck in the bake arrays, and a decision on whether the four posts travel as derived `props[]` or are computed by the consumer. [Notes](DESIGN_NOTES.md#bridges-a-straight-span-that-sets-its-own-posts) | **Ready** |
+| `BRIDGE-05` | Export contract | Decide where a bridge deck's material comes from: `grass` is a placeholder, a deck names a Terrain Asset, and whether a `planks` Asset needs PolyTools geometry is world01's call. [Notes](DESIGN_NOTES.md#bridges-a-straight-span-that-sets-its-own-posts) | **Ready** |
 
 ## Optional Later — Paths and sections
 
