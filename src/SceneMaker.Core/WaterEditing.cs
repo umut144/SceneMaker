@@ -76,6 +76,190 @@ public static class WaterEditing
         };
     }
 
+    /// <summary>
+    /// Replaces a body's whole point list, keeping its id and everything else.
+    ///
+    /// <para>One operation rather than move / insert / delete / retype, because
+    /// from the document's side those are all the same thing: a curve is its
+    /// points, and what a tool did to arrive at a new list is the tool's
+    /// business. The id does not change, so the entry is replaced where it
+    /// stands and the canonical order is untouched.</para>
+    /// </summary>
+    public static SceneDocument Reshape(
+        SceneDocument scene,
+        string waterBodyId,
+        IReadOnlyList<WaterCurvePointDocument> points)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentException.ThrowIfNullOrWhiteSpace(waterBodyId);
+        ArgumentNullException.ThrowIfNull(points);
+        var body = Require(scene, waterBodyId);
+        if (points.Count < 2)
+        {
+            throw new SceneMakerDocumentException(
+                "A river needs at least two points; the first is its source and the last its mouth.");
+        }
+        if (points.Any(static point => point.WidthMeters <= 0m))
+            throw new SceneMakerDocumentException("A river needs a positive width at every point.");
+        return Replace(scene, body with { Points = [.. points] });
+    }
+
+    /// <summary>
+    /// Puts a body into an activation group, or takes it out of every group
+    /// with null. What the states mean and when they change is not decided
+    /// here and never will be; this only records which of them the body exists
+    /// in.
+    /// </summary>
+    public static SceneDocument SetActivation(
+        SceneDocument scene,
+        string waterBodyId,
+        WaterActivationDocument? activation)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        var body = Require(scene, waterBodyId);
+        if (activation is not null)
+        {
+            var group = scene.ActivationGroups.FirstOrDefault(candidate =>
+                string.Equals(candidate.Group, activation.Group, StringComparison.Ordinal))
+                ?? throw new SceneMakerDocumentException(
+                    $"The Scene declares no activation group '{activation.Group}'.");
+            if (activation.ActiveIn.Count == 0)
+            {
+                throw new SceneMakerDocumentException(
+                    "A body has to be active in at least one state; one active in none is a body nobody can see.");
+            }
+            foreach (var state in activation.ActiveIn)
+            {
+                if (!group.States.Contains(state, StringComparer.Ordinal))
+                {
+                    throw new SceneMakerDocumentException(
+                        $"Activation group '{group.Group}' has no state '{state}'.");
+                }
+            }
+        }
+        return Replace(scene, body with { Activation = activation });
+    }
+
+    /// <summary>
+    /// Records which bodies this one's ends sit on, in the canonical order the
+    /// document keeps them in. Only the partner is stated here; where exactly
+    /// the two meet is worked out from the curves whenever anybody asks.
+    /// </summary>
+    public static SceneDocument SetJunctions(
+        SceneDocument scene,
+        string waterBodyId,
+        IReadOnlyList<WaterJunctionDocument> junctions)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(junctions);
+        var body = Require(scene, waterBodyId);
+        var ordered = junctions
+            .DistinctBy(static claim => (claim.End, claim.WaterBodyId))
+            .OrderBy(static claim => claim.End)
+            .ThenBy(static claim => claim.WaterBodyId, StringComparer.Ordinal)
+            .ToList();
+        foreach (var claim in ordered)
+        {
+            if (string.Equals(claim.WaterBodyId, waterBodyId, StringComparison.Ordinal))
+                throw new SceneMakerDocumentException($"Water body '{waterBodyId}' cannot meet itself.");
+            _ = Require(scene, claim.WaterBodyId);
+        }
+        return Replace(scene, body with { Junctions = ordered });
+    }
+
+    /// <summary>The body under this id, or a refusal naming it.</summary>
+    public static WaterBodyDocument Require(SceneDocument scene, string waterBodyId)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        return scene.WaterBodies.FirstOrDefault(body =>
+            string.Equals(body.WaterBodyId, waterBodyId, StringComparison.Ordinal))
+            ?? throw new SceneMakerDocumentException($"Water body '{waterBodyId}' does not exist.");
+    }
+
+    /// <summary>
+    /// The curve point of this body within reach of a position, nearest first,
+    /// or null. A point is grabbed by its position and not by its corridor, so
+    /// two points close together are told apart by which one is nearer.
+    /// </summary>
+    public static int? FindPointAt(
+        WaterBodyDocument body,
+        int authoringX,
+        int authoringY,
+        double hitRadiusAuthoringPixels)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        int? nearest = null;
+        var best = hitRadiusAuthoringPixels * hitRadiusAuthoringPixels;
+        for (var index = 0; index < body.Points.Count; index++)
+        {
+            var position = body.Points[index].PositionAuthoringPx;
+            double dx = position.X - authoringX;
+            double dy = position.Y - authoringY;
+            var distance = dx * dx + dy * dy;
+            if (distance > best) continue;
+            best = distance;
+            nearest = index;
+        }
+        return nearest;
+    }
+
+    /// <summary>
+    /// Every junction a Scene states that its curves no longer support, as
+    /// sentences for the author.
+    ///
+    /// <para>Moving a point is allowed to break a fork - the editor validates
+    /// at its IO boundaries like everything else here, so a document may be
+    /// invalid between two edits. What must not happen is that the author
+    /// learns about it from an export hours later, so a tool asks this after
+    /// every change and says the answer out loud.</para>
+    /// </summary>
+    public static IReadOnlyList<string> BrokenJunctions(
+        SceneDocument scene,
+        WorkspaceMetrics metrics)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+        List<string> broken = [];
+        foreach (var body in scene.WaterBodies)
+        {
+            foreach (var claim in body.Junctions)
+            {
+                var partner = scene.WaterBodies.FirstOrDefault(candidate =>
+                    string.Equals(candidate.WaterBodyId, claim.WaterBodyId, StringComparison.Ordinal));
+                var end = claim.End.ToString().ToLowerInvariant();
+                if (partner is null)
+                {
+                    broken.Add($"'{body.WaterBodyId}' meets '{claim.WaterBodyId}' at its {end}, which the Scene no longer has.");
+                    continue;
+                }
+                if (WaterGeometry.SurfaceAtJunction(metrics, body, claim.End, partner) is not { } surface)
+                {
+                    broken.Add($"'{body.WaterBodyId}' no longer touches '{partner.WaterBodyId}' at its {end}.");
+                    continue;
+                }
+                var own = claim.End == WaterEnd.Source
+                    ? body.Points[0].ElevationMeters
+                    : body.Points[^1].ElevationMeters;
+                if (Math.Abs(own - surface) > metrics.ElevationQuantumMeters)
+                {
+                    broken.Add(FormattableString.Invariant(
+                        $"'{body.WaterBodyId}' meets '{partner.WaterBodyId}' at {own:0.###} m while its surface there is {surface:0.###} m."));
+                }
+            }
+        }
+        return broken;
+    }
+
+    private static SceneDocument Replace(SceneDocument scene, WaterBodyDocument body) => scene with
+    {
+        WaterBodies = scene.WaterBodies
+            .Select(candidate => string.Equals(
+                candidate.WaterBodyId, body.WaterBodyId, StringComparison.Ordinal)
+                    ? body
+                    : candidate)
+            .ToList(),
+    };
+
     public static SceneDocument Remove(SceneDocument scene, string waterBodyId)
     {
         ArgumentNullException.ThrowIfNull(scene);
