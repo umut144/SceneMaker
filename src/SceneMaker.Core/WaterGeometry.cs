@@ -14,7 +14,22 @@ public readonly record struct WaterCellSpan(
     int Y,
     decimal BedMeters,
     decimal SurfaceMeters,
-    decimal CutTopMeters);
+    decimal CutTopMeters,
+    decimal StationMeters);
+
+/// <summary>
+/// Where one body's end sits on another body, in both bodies' own stations.
+///
+/// <para>There is no kind here on purpose. A branch leaving a river and a side
+/// channel rejoining it are the same fact read at different stations, so a
+/// consumer that reads it generally handles both without telling them apart -
+/// which is exactly what an <c>end</c> field would have forced it to do
+/// twice.</para>
+/// </summary>
+public readonly record struct WaterJunctionPoint(
+    string WaterBodyId,
+    decimal OwnStationMeters,
+    decimal StationMeters);
 
 /// <summary>
 /// A river's flattened centerline together with where its authored points sit
@@ -219,8 +234,12 @@ public static class WaterGeometry
                 var centreX = x * step + half;
                 if (shape.NearestStation(centreX, centreY, row) is not { } station) continue;
                 var sample = SampleAt(points, shape.Centerline.AnchorStations, station);
+                // The station the profile came from, kept rather than dropped:
+                // it is what orders the raster along the flow, and recomputing
+                // it later would be a second answer to the same projection.
                 cells.Add(new WaterCellSpan(
-                    x, y, sample.BedMeters, sample.ElevationMeters, sample.CutTopMeters));
+                    x, y, sample.BedMeters, sample.ElevationMeters, sample.CutTopMeters,
+                    StationMeters(metrics, station)));
             }
         }
         return cells;
@@ -319,6 +338,98 @@ public static class WaterGeometry
             .OrderBy(static cell => cell.Y)
             .ThenBy(static cell => cell.X)
             .ToList();
+    }
+
+    /// <summary>
+    /// The station in metres of a station measured in authoring pixels, rounded
+    /// the way every written-down height is: a file that says 1.4999999999 one
+    /// day and 1.5 the next is a file nobody can diff.
+    /// </summary>
+    public static decimal StationMeters(WorkspaceMetrics metrics, double stationAuthoringPx)
+    {
+        ArgumentNullException.ThrowIfNull(metrics);
+        return decimal.Round(
+            (decimal)(stationAuthoringPx / (double)metrics.AuthoringPixelsPerMeter),
+            HeightDecimals,
+            MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>The last station of a body's centerline: its mouth.</summary>
+    public static decimal LengthMeters(WorkspaceMetrics metrics, WaterBodyDocument body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        var shape = CorridorShape(metrics, body.Points);
+        return StationMeters(metrics, shape.Centerline.Stations[^1]);
+    }
+
+    /// <summary>
+    /// Where <paramref name="end"/> of <paramref name="body"/> sits on
+    /// <paramref name="partner"/>, or null when it does not sit on it at all.
+    ///
+    /// <para>Both stations are worked out here and neither is stored. Storing
+    /// the partner's station would mean that an edit far upstream of a fork -
+    /// which changes arc length and nothing else - moved a fork nobody
+    /// touched.</para>
+    ///
+    /// <para>The test is the corridor rule itself rather than a distance
+    /// threshold, so there is no tolerance to choose and none to get wrong: an
+    /// end either lies in the other body's corridor or it does not.</para>
+    /// </summary>
+    public static WaterJunctionPoint? Junction(
+        WorkspaceMetrics metrics,
+        WaterBodyDocument body,
+        WaterEnd end,
+        WaterBodyDocument partner)
+    {
+        ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(partner);
+
+        var point = end == WaterEnd.Source ? body.Points[0] : body.Points[^1];
+        var partnerShape = CorridorShape(metrics, partner.Points);
+        if (partnerShape.NearestStation(
+                point.PositionAuthoringPx.X,
+                point.PositionAuthoringPx.Y) is not { } station)
+        {
+            return null;
+        }
+
+        var ownShape = CorridorShape(metrics, body.Points);
+        var ownStation = end == WaterEnd.Source ? 0.0 : ownShape.Centerline.Stations[^1];
+        return new WaterJunctionPoint(
+            partner.WaterBodyId,
+            StationMeters(metrics, ownStation),
+            StationMeters(metrics, station));
+    }
+
+    /// <summary>
+    /// The water surface <paramref name="partner"/> carries where
+    /// <paramref name="end"/> of <paramref name="body"/> meets it. What a
+    /// branch's source has to agree with, so that two bodies at one cell are
+    /// the same water twice rather than two answers that differ.
+    /// </summary>
+    public static decimal? SurfaceAtJunction(
+        WorkspaceMetrics metrics,
+        WaterBodyDocument body,
+        WaterEnd end,
+        WaterBodyDocument partner)
+    {
+        ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(partner);
+
+        var point = end == WaterEnd.Source ? body.Points[0] : body.Points[^1];
+        var partnerShape = CorridorShape(metrics, partner.Points);
+        if (partnerShape.NearestStation(
+                point.PositionAuthoringPx.X,
+                point.PositionAuthoringPx.Y) is not { } station)
+        {
+            return null;
+        }
+        return SampleAt(
+            partner.Points,
+            partnerShape.Centerline.AnchorStations,
+            station).ElevationMeters;
     }
 
     /// <summary>

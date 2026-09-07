@@ -76,6 +76,7 @@ public static partial class DocumentValidation
         ValidateElevationRegions(document);
         ValidateRouteSurfaces(document);
         ValidateBridges(document);
+        ValidateActivationGroups(document);
         ValidateWaterBodies(document);
 
         if (document.TemplateAnchors is null)
@@ -102,6 +103,12 @@ public static partial class DocumentValidation
             // author one until composition knows what to do with it.
             if (document.WaterBodies.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own water bodies.");
+
+            // A group exists to relate water bodies, and a Template has none.
+            // An empty group would be a name a consumer could bind a trigger to
+            // that switches nothing, which is worse than refusing it.
+            if (document.ActivationGroups.Count > 0)
+                throw new SceneMakerDocumentException("Scene Template cannot own activation groups.");
             if (document.ElevationRegions.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own elevation regions.");
             if (document.Bridges.Count > 0)
@@ -498,6 +505,116 @@ public static partial class DocumentValidation
     }
 
     /// <summary>
+    /// The states a Scene can be in.
+    ///
+    /// <para>Two states at least, because a group with one switches nothing and
+    /// would be a name a consumer binds a trigger to for no effect. The initial
+    /// state is named rather than taken to be the first, so the authored order
+    /// of the states can stay whatever reads best.</para>
+    /// </summary>
+    private static void ValidateActivationGroups(SceneDocument document)
+    {
+        if (document.ActivationGroups is null)
+            throw new SceneMakerDocumentException("Scene requires activation_groups.");
+
+        string? previousGroup = null;
+        foreach (var group in document.ActivationGroups)
+        {
+            ValidateStableId("activation group", group.Group);
+            if (previousGroup is not null
+                && string.CompareOrdinal(group.Group, previousGroup) <= 0)
+            {
+                throw new SceneMakerDocumentException(
+                    "Activation groups must have unique names in canonical ordinal order.");
+            }
+            previousGroup = group.Group;
+
+            var label = $"Activation group '{group.Group}'";
+            if (group.States is null || group.States.Count < 2)
+                throw new SceneMakerDocumentException($"{label} requires at least two states.");
+            HashSet<string> seen = new(StringComparer.Ordinal);
+            foreach (var state in group.States)
+            {
+                ValidateStableId($"{label} state", state);
+                if (!seen.Add(state))
+                    throw new SceneMakerDocumentException($"{label} lists state '{state}' twice.");
+            }
+            if (group.InitialState is null || !seen.Contains(group.InitialState))
+            {
+                throw new SceneMakerDocumentException(
+                    $"{label} requires an initial_state that is one of its states.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// What a body says about when it exists and what it meets.
+    ///
+    /// <para><c>active_in</c> is checked against its own group rather than
+    /// against every state in the Scene, because a state name is only meaningful
+    /// inside the group that declares it.</para>
+    /// </summary>
+    private static void ValidateWaterBodyRelations(SceneDocument document, WaterBodyDocument body)
+    {
+        var label = $"Water body '{body.WaterBodyId}'";
+
+        if (body.Activation is { } activation)
+        {
+            var group = document.ActivationGroups.FirstOrDefault(
+                candidate => string.Equals(candidate.Group, activation.Group, StringComparison.Ordinal))
+                ?? throw new SceneMakerDocumentException(
+                    $"{label} names activation group '{activation.Group}', which the Scene does not declare.");
+            if (!Enum.IsDefined(activation.Inactive))
+                throw new SceneMakerDocumentException($"{label} requires a supported inactive.");
+            if (activation.ActiveIn is null || activation.ActiveIn.Count == 0)
+            {
+                throw new SceneMakerDocumentException(
+                    $"{label} requires at least one state in active_in; a body active in none of them is a body nobody can see.");
+            }
+            HashSet<string> seen = new(StringComparer.Ordinal);
+            foreach (var state in activation.ActiveIn)
+            {
+                if (!group.States.Contains(state, StringComparer.Ordinal))
+                {
+                    throw new SceneMakerDocumentException(
+                        $"{label} is active in '{state}', which is not a state of group '{group.Group}'.");
+                }
+                if (!seen.Add(state))
+                    throw new SceneMakerDocumentException($"{label} lists state '{state}' twice.");
+            }
+        }
+
+        if (body.Junctions is null)
+            throw new SceneMakerDocumentException($"{label} requires junctions.");
+
+        (WaterEnd End, string Id)? previous = null;
+        foreach (var claim in body.Junctions)
+        {
+            if (!Enum.IsDefined(claim.End))
+                throw new SceneMakerDocumentException($"{label} requires a supported junction end.");
+            ValidateStableId($"{label} junction water_body_id", claim.WaterBodyId);
+            if (string.Equals(claim.WaterBodyId, body.WaterBodyId, StringComparison.Ordinal))
+                throw new SceneMakerDocumentException($"{label} cannot meet itself.");
+            if (!document.WaterBodies.Any(
+                    other => string.Equals(other.WaterBodyId, claim.WaterBodyId, StringComparison.Ordinal)))
+            {
+                throw new SceneMakerDocumentException(
+                    $"{label} meets '{claim.WaterBodyId}', which the Scene does not contain.");
+            }
+            var current = (claim.End, claim.WaterBodyId);
+            if (previous is { } earlier
+                && (earlier.End > current.End
+                    || (earlier.End == current.End
+                        && string.CompareOrdinal(earlier.Id, current.Item2) >= 0)))
+            {
+                throw new SceneMakerDocumentException(
+                    $"{label} must list its junctions once each, by end and then by id.");
+            }
+            previous = current;
+        }
+    }
+
+    /// <summary>
     /// The authored curve, checked without the Workspace grid. Where its points
     /// are allowed to sit is a grid question and belongs to
     /// <see cref="ValidateGrid"/>; that they describe a curve at all is checked
@@ -519,6 +636,8 @@ public static partial class DocumentValidation
                     "Water bodies must have unique IDs in canonical ordinal order.");
             }
             previousBodyId = body.WaterBodyId;
+
+            ValidateWaterBodyRelations(document, body);
 
             var label = $"Water body '{body.WaterBodyId}'";
             if (!Enum.IsDefined(body.WaterKind))

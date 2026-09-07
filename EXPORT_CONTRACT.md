@@ -5,9 +5,25 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 16**, embedded **scene 15**. A reader must reject any
+Current schemas: **export 17**, embedded **scene 16**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
+
+Export 17 lets a river be switched. An authored branch that a game trigger
+opens was not expressible: a body was simply there, and the only way to have one
+appear was a second map. `scene.activation_groups` names the states a Scene can
+be in and `scene.water_bodies[].activation` says which of them a body exists in,
+so a fork is authored once and the runtime chooses. Alternatives are bodies
+rather than variants inside one - the band is per body, so a stretch with two
+widths is two bodies that are never active together, and neither the band nor
+the raster changed shape to carry it. `inactive` says what the world looks like
+without that water, a cut channel or no trace at all, because those are two
+different authored intentions and neither is guessable from the geometry. Two
+derived additions come with it: `junctions` says where a body's ends meet
+another body, and `station_meters` on every water cell says where along its
+river that cell lies. Both were already computed and thrown away. The embedded
+Scene moves to 16 for the two authored fields; everything else is derived as
+before.
 
 Export 16 draws the water. A river was readable and invisible: `water_raster`
 said which cells it occupies and nothing said where its banks are, so a map
@@ -128,12 +144,20 @@ purpose.
       "water_body_id": "river_0001",
       "water_kind": "river",
       "asset_key": "river",
+      "junctions": [                   // where this body's ends meet another
+        {
+          "water_body_id": "river_0004",
+          "own_station_meters": 42.5,  // station on THIS body
+          "station_meters": 0.0        // station on the named body
+        }
+      ],
       "cells": [                       // water cells, not Terrain cells
         {
           "x": 64, "y": 20,
           "bed_meters": 1.5,           // floor of the channel
           "surface_meters": 2.0,       // top of the water
-          "cut_top_meters": 7.0        // Terrain is removed up to here
+          "cut_top_meters": 7.0,       // Terrain is removed up to here
+          "station_meters": 42.5       // where along the body this cell lies
         }
       ]
     }
@@ -322,11 +346,19 @@ purpose.
         "elevation_meters": 1.0
       }
     ],
+    "activation_groups": [             // the states this Scene can be in
+      {
+        "group": "fork_at_mill",       // author-given, unique in the Scene
+        "states": ["dry", "flowing"],
+        "initial_state": "dry"
+      }
+    ],
     "water_bodies": [                  // the authored curves themselves
       {
         "water_body_id": "river_0001",
         "water_kind": "river",
         "asset_key": "river",
+        "activation": null,            // null or absent: exists in every state
         "points": [
           {
             "position_authoring_px": { "x": 1024, "y": 320 },
@@ -506,7 +538,14 @@ sample, exactly as on a Path.
 
 **The band carries the surface and nothing else.** The bed, the cut and the
 headroom stay in `water_raster`, where a volume belongs. One band per body,
-never one per span.
+never one per stretch of it - which is also why a river that must be two widths
+is two bodies rather than one body cut into pieces.
+
+A note on one word, because it is used for two things here and a consumer once
+read the wrong one. A **height span** is an interval on the height axis at one
+cell: `[bed_meters, surface_meters]` is a fill, `[bed_meters, cut_top_meters]` a
+cut. A **stretch** is a length of river along its stations. A bridge's *span* is
+neither; it is that structure's length, end to end.
 
 **The raster and the band may disagree by a fraction of a cell, and that is
 correct.** They answer two questions. The raster decides which cells the water
@@ -526,6 +565,106 @@ stops being rastered there, exactly as a Path's bake is not clipped. And where
 two bodies overlap, their **bands overlap too**: a simulation reads the union
 of the rasters, and a renderer draws two bands over one another, which is what
 a widening river or a river running into a lake looks like.
+
+### Where along the river a cell is
+
+Every water cell carries `station_meters`: the station of the projection the
+corridor rule already chose in order to give that cell its profile. It makes the
+raster orderable along the flow, which is what a consumer cutting a river into
+chunks, advancing or retreating a waterline, or asking how far a cell lies from
+the source hangs its work on. Flow direction needs nothing else - a river runs
+from station `0` to its last - and the value is rounded to the millimetre, like
+the three heights and for the same reason.
+
+Nothing follows from it about time. How fast a river fills, whether it recedes
+from the mouth or falls in depth, and whether the walkable edge moves with the
+picture are the consumer's decisions; the export says where water can be and
+which way it runs.
+
+### Where bodies meet
+
+`junctions` lists every place one of a body's **ends** meets another body. It is
+derived: the endpoint position and both curves are authored, so the projection
+and both stations follow from them.
+
+```jsonc
+{ "water_body_id": "river_0001", "own_station_meters": 0.0, "station_meters": 42.5 }
+```
+
+`station_meters` is the station on the **named** body; `own_station_meters` is
+the station on the body carrying the entry. Both use the unit
+`centerline_samples[].station_meters` uses. An `own_station_meters` of `0` is
+this body's source, its last station is its mouth, and anything between is
+another body leaving this one's course.
+
+There is no kind field, and that is deliberate: a branch and a rejoining side
+channel are the same entry read at different stations, so a consumer that reads
+it generally handles both without having to tell them apart. Every junction
+appears on **both** bodies with the stations swapped, which is a checked
+invariant, so a consumer holding one body never scans the file to find where its
+water goes. Only ends produce a junction - a river merely crossing another
+produces none.
+
+### Water that switches
+
+A water body can be switched on and off by the game. `scene.activation_groups`
+names the states a Scene can be in; `scene.water_bodies[].activation` says which
+of them a body exists in. A body with no `activation` exists in every state.
+
+```jsonc
+"activation_groups": [
+  { "group": "fork_at_mill", "states": ["dry", "flowing"], "initial_state": "dry" }
+]
+
+"activation": { "group": "fork_at_mill", "active_in": ["flowing"], "inactive": "dry_bed" }
+```
+
+Exactly one state of a group is current, and a body is active when the current
+state is listed in its `active_in`. **The list is what keeps geometry from being
+authored twice.** With two branches on one stretch and states
+`none | first | both`, the first branch flows in `first` and in `both`; with a
+single state per body it would have to exist as two bodies with identical
+curves, which is the duplication a per-body band was chosen to avoid. A
+one-element list is the common case and reads unchanged.
+
+**Alternatives are bodies.** A stretch that is wide while a branch is shut and
+narrow while it flows is two bodies whose `active_in` lists never both contain
+the current state. A body carries no sections and no per-state widths: the band
+is per body, so a second width is a second body, and nothing in `water_bakes` or
+`water_raster` had to change to express it.
+
+**What switches is the fill; `inactive` says what is left.** `"dry_bed"` means
+the body's cut applies whatever the state - switched off it is the channel
+without the water, and the column presents its bed as a surface with the
+authored headroom above it. `"absent"` means the body leaves no trace at all,
+neither fill nor cut, and the Terrain stands as though it had never been
+authored. Those are two different authored intentions - a river that falls dry,
+and a branch that carves itself when it opens - and neither can be read off the
+geometry. The field is therefore required whenever `activation` is present and
+has no default.
+
+`inactive` says what the world looks like without that water. It is not a
+statement about what a state change costs a consumer to apply: water leaving a
+channel changes where an actor may stand either way.
+
+**Everything is exported in every state.** A body's raster and its band are in
+the file whatever its activation says. Nothing is omitted, nothing is fetched
+later, and there is no second file: what a state decides is which of them a
+consumer applies. The initial state belongs to the **group**, not to a body, so
+two bodies of one group cannot disagree about where a Scene starts.
+
+**What triggers a state change is not here.** SceneMaker says that a body is
+switchable and what the states are called; when they change is the consumer's
+decision, in the way an Anchor's Template is. The two are not one mechanism: an
+Anchor swaps a whole Template and belongs to the server, an activation group
+switches authored elements inside one Scene.
+
+Two consequences are worth stating rather than discovering. Every `dry_bed`
+body's cut applies in every state, so two exclusive variants of one stretch
+carve the **union** of their channels; author them on the same bed unless that
+union is what is wanted. And a body whose `active_in` lists every state of its
+group is a body with no activation at all - it is allowed and it means exactly
+what it says.
 
 ## Height is a stack
 
@@ -612,9 +751,32 @@ quantum. Only a Path's starting height is chosen directly on the quantum.
 Heights are absolute. Nothing stores a relationship to the ground, so repainting
 Terrain under a river never moves the water.
 
-Bodies may overlap - that is how a widening river or, later, a river running
-into a lake is authored. **A simulation reads their union.** Cells are not
-deduplicated across bodies, and a cell listed twice is water once.
+### Two bodies at one cell
+
+Bodies may overlap, and at a branch they always do. A widening river, a fork and
+later a river running into a lake are all authored that way, so an overlap is
+never an error and **a consumer must not keep one water value per cell**. Which
+body was read last decides nothing.
+
+**A simulation reads the union.** Cells are not deduplicated across bodies, and
+a cell listed twice is water once. Resolve such a cell by the column rule above:
+the fills of every body covering it stack rather than compete.
+
+- Two fills whose height spans overlap or touch are one water span,
+  `[min bed_meters, max surface_meters]`.
+- Two fills whose spans are disjoint are two water surfaces at that cell - an
+  aqueduct over a river, the shape a bridge over one already has.
+- Cuts unite the same way, `[min bed_meters, max cut_top_meters]`, and apply to
+  Terrain alone.
+
+Only an active body contributes a fill. A `dry_bed` body contributes its cut in
+every state, an `absent` body contributes neither when it is off; see
+[Water that switches](#water-that-switches).
+
+Where a branch leaves its parent the two agree by construction: SceneMaker
+refuses an export whose branch source does not sit on its parent's surface at
+that station, so the union there is the same water twice rather than two
+answers that differ.
 
 The raster is clipped to the Scene: a river drawn over the map edge simply
 stops being authored there rather than failing to export. Terrain under a river
@@ -946,7 +1108,22 @@ treat a violation as a corrupt file rather than a case to handle:
   an `asset_key` that appears in `asset_profiles`. Every curve point sits on the
   water grid and inside the Scene, carries a positive `channel_depth_meters` and
   a non-negative `clearance_above_meters`.
-- In every exported water cell, `bed_meters ≤ surface_meters ≤ cut_top_meters`.
+- In every exported water cell, `bed_meters ≤ surface_meters ≤ cut_top_meters`,
+  and `station_meters` lies between `0` and that body's last centerline station.
+- Every entry of `scene.activation_groups` has a `group` unique in the Scene, at
+  least two `states` with no duplicates among them, and an `initial_state` that
+  is one of those states.
+- Every `activation` names a group that exists; its `active_in` is non-empty,
+  lists only that group's states, and lists none of them twice; its `inactive`
+  is `"dry_bed"` or `"absent"`. A body whose `activation` is absent or null
+  exists in every state. Only a water body may carry one - a Placement, a bridge
+  or a Path with an `activation` is refused rather than ignored.
+- Every junction appears on both bodies, with `water_body_id` and the two
+  stations exchanged, and names a body that exists. Each station lies between
+  `0` and its own body's last centerline station. A junction is produced only by
+  an end of a body.
+- The source of a body that meets another carries that other body's surface
+  height at the junction station, within the Workspace's elevation quantum.
 - `water_raster` lists the same bodies as `scene.water_bodies`, in the same
   order, and each body's `cells` are what the corridor rule above produces from
   its curve. A reader may recompute them and must get the same set.
@@ -975,7 +1152,11 @@ treat a violation as a corrupt file rather than a case to handle:
 - `terrain_cells` and every body's `cells` are ordered by `y`, then `x`. `props`,
   `asset_profiles`, `scene.water_bodies`, `water_raster`, `water_bakes`,
   `scene.route_surfaces` and `route_surface_bakes` are ordered by their id,
-  ordinal. Segment and sample arrays retain their deterministic chain order.
+  ordinal; `scene.activation_groups` by `group`. A `junctions` array is
+  ordered by `water_body_id` and then by `own_station_meters`, because one body
+  may meet another at both of its ends. `active_in` and a group's `states` keep
+  their authored order - `initial_state` names the starting state rather than
+  being the first of them, so nothing is lost by leaving that order alone. Segment and sample arrays retain their deterministic chain order.
   This ordering is a checked invariant, not a
   coincidence, so a reader may binary-search it.
 - Editor-only data is absent: authoring colours, PolyTools geometry, and the

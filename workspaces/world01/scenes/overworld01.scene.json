@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 19,
+  "version": 20,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60668,11 +60668,14 @@
       ]
     }
   ],
+  "activation_groups": [],
   "water_bodies": [
     {
       "water_body_id": "river_0001",
       "water_kind": "river",
       "asset_key": "river",
+      "activation": null,
+      "junctions": [],
       "points": [
         {
           "position_authoring_px": {

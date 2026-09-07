@@ -27,7 +27,7 @@ public sealed class SceneExportContractTests
             ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(16, root.GetProperty("version").GetInt32());
+        Assert.Equal(17, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             [
@@ -47,13 +47,14 @@ public sealed class SceneExportContractTests
         Assert.Equal(
             [
                 "schema", "version", "scene_id", "scene_kind", "coordinate_space",
-                "size_cells", "terrain_cells", "props", "water_bodies", "route_surfaces",
+                "size_cells", "terrain_cells", "props", "activation_groups",
+                "water_bodies", "route_surfaces",
                 "bridges", "template_definition", "template_anchors",
                 "default_elevation_meters",
             ],
             Keys(scene));
         Assert.Equal("srt.scene_maker_scene", scene.GetProperty("schema").GetString());
-        Assert.Equal(15, scene.GetProperty("version").GetInt32());
+        Assert.Equal(16, scene.GetProperty("version").GetInt32());
         Assert.Equal("instance", scene.GetProperty("scene_kind").GetString());
         Assert.Equal(
             "scene_local_bottom_left_y_up",
@@ -220,8 +221,13 @@ public sealed class SceneExportContractTests
 
         var body = Assert.Single(root.GetProperty("scene").GetProperty("water_bodies").EnumerateArray());
         Assert.Equal(
-            ["water_body_id", "water_kind", "asset_key", "points"],
+            ["water_body_id", "water_kind", "asset_key", "activation", "junctions", "points"],
             Keys(body));
+
+        // Activation is an authored statement, so it sits in the Scene block
+        // beside the curve the author drew. A body that says nothing about it
+        // exists in every state, which is what a Scene with no groups is.
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("activation").ValueKind);
         Assert.Equal("river_0001", body.GetProperty("water_body_id").GetString());
         Assert.Equal("river", body.GetProperty("water_kind").GetString());
 
@@ -242,7 +248,7 @@ public sealed class SceneExportContractTests
 
         var raster = Assert.Single(root.GetProperty("water_raster").EnumerateArray());
         Assert.Equal(
-            ["water_body_id", "water_kind", "asset_key", "cells"],
+            ["water_body_id", "water_kind", "asset_key", "activation", "junctions", "cells"],
             Keys(raster));
         Assert.Equal("river_0001", raster.GetProperty("water_body_id").GetString());
 
@@ -250,11 +256,20 @@ public sealed class SceneExportContractTests
         // and bed..cut_top is what the Terrain gives up for it.
         var cell = raster.GetProperty("cells").EnumerateArray().First();
         Assert.Equal(
-            ["x", "y", "bed_meters", "surface_meters", "cut_top_meters"],
+            ["x", "y", "bed_meters", "surface_meters", "cut_top_meters", "station_meters"],
             Keys(cell));
         Assert.Equal(1.5m, cell.GetProperty("bed_meters").GetDecimal());
         Assert.Equal(2.0m, cell.GetProperty("surface_meters").GetDecimal());
         Assert.Equal(7.0m, cell.GetProperty("cut_top_meters").GetDecimal());
+
+        // The station the corridor rule already chose in order to give this
+        // cell its profile, kept rather than dropped: it is what orders the
+        // raster along the flow, and it never runs past the mouth.
+        var station = cell.GetProperty("station_meters").GetDecimal();
+        Assert.True(station >= 0m);
+        Assert.True(
+            station <= raster.GetProperty("cells").EnumerateArray()
+                .Max(other => other.GetProperty("station_meters").GetDecimal()));
     }
 
     /// <summary>

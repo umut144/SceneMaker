@@ -13,7 +13,7 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 16;
+    public const int Version = 17;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -46,7 +46,19 @@ public static class SceneExport
     // cells are water; the band is the truth about where the water is seen.
     // The embedded Scene is unchanged again: both halves are derived, and
     // nothing an author writes moved.
-    private const int EmbeddedSceneVersion = 15;
+    // Export 17 lets a river be switched. `scene.activation_groups` names the
+    // states a Scene can be in and a body says which of them it exists in, so a
+    // branch a trigger opens is authored in the one map instead of needing a
+    // second one. Alternatives are bodies: the band is per body, so a stretch
+    // with two widths is two bodies that are never active together, and neither
+    // half of the derived water changed shape to carry it. `inactive` says what
+    // the world is without that water - a cut channel, or no trace - because
+    // those are two authored intentions and the curve says neither. Two derived
+    // additions come with it: `junctions`, where a body's ends meet another
+    // body, and `station_meters` on every cell, which the corridor rule already
+    // worked out and threw away. The embedded Scene moves to 16 for the two
+    // authored fields; everything else is derived as before.
+    private const int EmbeddedSceneVersion = 16;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -225,6 +237,32 @@ public static class SceneExport
                     $"Water body '{body.WaterBodyId}' floats above the Terrain in {floating} water cell{(floating == 1 ? string.Empty : "s")}: its bed is higher than the ground under it.");
             }
 
+            // A junction is where two bodies are the same water, so the two
+            // have to agree about how high it is. Within the quantum an author
+            // can actually type: closer than that is a number nobody could have
+            // entered, further is a step in a river surface at a fork.
+            foreach (var claim in body.Junctions)
+            {
+                var partner = scene.WaterBodies.First(
+                    other => string.Equals(other.WaterBodyId, claim.WaterBodyId, StringComparison.Ordinal));
+                if (WaterGeometry.SurfaceAtJunction(metrics, body, claim.End, partner)
+                    is not { } partnerSurface)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"Water body '{body.WaterBodyId}' names '{claim.WaterBodyId}' at its "
+                        + $"{claim.End.ToString().ToLowerInvariant()}, but that end does not lie on it.");
+                }
+                var own = claim.End == WaterEnd.Source
+                    ? body.Points[0].ElevationMeters
+                    : body.Points[^1].ElevationMeters;
+                if (Math.Abs(own - partnerSurface) > metrics.ElevationQuantumMeters)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"Water body '{body.WaterBodyId}' meets '{claim.WaterBodyId}' at "
+                        + $"{own:0.###} m while that body's surface there is {partnerSurface:0.###} m.");
+                }
+            }
+
             // The first point is the source and the last the mouth, so a
             // surface that climbs between them is water running uphill.
             for (var index = 0; index + 1 < body.Points.Count; index++)
@@ -247,13 +285,19 @@ public static class SceneExport
     /// </summary>
     private static List<ExportWaterBodyDocument> ExportWaterRaster(
         SceneDocument scene,
-        WorkspaceMetrics metrics) =>
-        scene.WaterBodies
+        WorkspaceMetrics metrics)
+    {
+        var junctions = DeriveJunctions(scene, metrics);
+        return scene.WaterBodies
             .Select(body => new ExportWaterBodyDocument
             {
                 WaterBodyId = body.WaterBodyId,
                 WaterKind = body.WaterKind,
                 AssetKey = body.AssetKey,
+                Activation = body.Activation,
+                Junctions = junctions.TryGetValue(body.WaterBodyId, out var meetings)
+                    ? meetings
+                    : [],
                 Cells = WaterGeometry
                     .Corridor(scene, metrics, body)
                     .Select(static cell => new ExportWaterCellDocument
@@ -263,10 +307,72 @@ public static class SceneExport
                         BedMeters = cell.BedMeters,
                         SurfaceMeters = cell.SurfaceMeters,
                         CutTopMeters = cell.CutTopMeters,
+                        StationMeters = cell.StationMeters,
                     })
                     .ToList(),
             })
             .ToList();
+    }
+
+    /// <summary>
+    /// Every junction, on both of the bodies it joins.
+    ///
+    /// <para>An author states one side of it - "my source sits on that body" -
+    /// and both entries come from here, with the two stations exchanged. A
+    /// consumer holding one body therefore never scans the file to learn where
+    /// its water goes, and the two sides cannot disagree, because there is only
+    /// one statement behind them.</para>
+    /// </summary>
+    private static Dictionary<string, List<ExportWaterJunctionDocument>> DeriveJunctions(
+        SceneDocument scene,
+        WorkspaceMetrics metrics)
+    {
+        var byId = scene.WaterBodies.ToDictionary(static body => body.WaterBodyId, StringComparer.Ordinal);
+        Dictionary<string, List<ExportWaterJunctionDocument>> meetings = new(StringComparer.Ordinal);
+
+        void Add(string bodyId, string partnerId, decimal ownStation, decimal partnerStation)
+        {
+            if (!meetings.TryGetValue(bodyId, out var list))
+            {
+                list = [];
+                meetings[bodyId] = list;
+            }
+            list.Add(new ExportWaterJunctionDocument
+            {
+                WaterBodyId = partnerId,
+                OwnStationMeters = ownStation,
+                StationMeters = partnerStation,
+            });
+        }
+
+        foreach (var body in scene.WaterBodies)
+        {
+            foreach (var claim in body.Junctions)
+            {
+                // Validation resolved this already; a miss here would mean the
+                // curve moved between the two, which cannot happen in one pass.
+                var partner = byId[claim.WaterBodyId];
+                if (WaterGeometry.Junction(metrics, body, claim.End, partner) is not { } meeting)
+                {
+                    throw new SceneMakerDocumentException(
+                        $"Water body '{body.WaterBodyId}' names '{claim.WaterBodyId}' at its "
+                        + $"{claim.End.ToString().ToLowerInvariant()}, but that end no longer lies on it.");
+                }
+                Add(body.WaterBodyId, partner.WaterBodyId, meeting.OwnStationMeters, meeting.StationMeters);
+                Add(partner.WaterBodyId, body.WaterBodyId, meeting.StationMeters, meeting.OwnStationMeters);
+            }
+        }
+
+        foreach (var list in meetings.Values)
+        {
+            list.Sort(static (left, right) =>
+            {
+                var byPartner = string.CompareOrdinal(left.WaterBodyId, right.WaterBodyId);
+                return byPartner != 0 ? byPartner : left.OwnStationMeters.CompareTo(right.OwnStationMeters);
+            });
+        }
+        return meetings;
+    }
 
     /// <summary>
     /// The other derived half of the water: the band a consumer draws, in the
@@ -443,6 +549,7 @@ public static class SceneExport
     {
         Schema = scene.Schema,
         Version = EmbeddedSceneVersion,
+        ActivationGroups = scene.ActivationGroups,
         SceneId = scene.SceneId,
         SceneKind = scene.SceneKind,
         CoordinateSpace = scene.CoordinateSpace,
@@ -582,6 +689,14 @@ public static class SceneExport
         public required SceneSizeCells SizeCells { get; init; }
         public required List<TerrainCellDocument> TerrainCells { get; init; }
         public required List<PropDocument> Props { get; init; }
+
+        /// <summary>
+        /// The states this Scene can be in. Authored, so it belongs here rather
+        /// than beside the derived water: a group relates several bodies to each
+        /// other, which is a statement an author made and not one worked out.
+        /// </summary>
+        public required List<ActivationGroupDocument> ActivationGroups { get; init; }
+
         public required List<WaterBodyDocument> WaterBodies { get; init; }
         public required List<ExportRouteSurfaceDocument> RouteSurfaces { get; init; }
         public required List<BridgeDocument> Bridges { get; init; }
@@ -811,7 +926,32 @@ public static class SceneExport
         public required string WaterBodyId { get; init; }
         public required WaterKind WaterKind { get; init; }
         public required string AssetKey { get; init; }
+
+        /// <summary>
+        /// Which states this body exists in, or null for a body that exists in
+        /// all of them. It is repeated from the Scene block, which is where the
+        /// author wrote it, because a consumer reading the derived water should
+        /// not have to join three arrays to learn whether to apply one of them.
+        /// </summary>
+        public required WaterActivationDocument? Activation { get; init; }
+
+        /// <summary>Where this body's ends meet another, on both sides.</summary>
+        public required List<ExportWaterJunctionDocument> Junctions { get; init; }
+
         public required List<ExportWaterCellDocument> Cells { get; init; }
+    }
+
+    /// <summary>
+    /// One meeting of two bodies. <c>station_meters</c> is the station on the
+    /// named body, <c>own_station_meters</c> the station on the body carrying
+    /// the entry - so an own station of zero is this body's source, its last is
+    /// its mouth, and anything between is another body leaving its course.
+    /// </summary>
+    private sealed record ExportWaterJunctionDocument
+    {
+        public required string WaterBodyId { get; init; }
+        public required decimal OwnStationMeters { get; init; }
+        public required decimal StationMeters { get; init; }
     }
 
     /// <summary>
@@ -826,6 +966,13 @@ public static class SceneExport
         public required decimal BedMeters { get; init; }
         public required decimal SurfaceMeters { get; init; }
         public required decimal CutTopMeters { get; init; }
+
+        /// <summary>
+        /// Where along its body this cell lies: the station of the projection
+        /// the corridor rule already chose to give the cell its profile. It is
+        /// what orders the raster along the flow.
+        /// </summary>
+        public required decimal StationMeters { get; init; }
     }
 
     /// <summary>

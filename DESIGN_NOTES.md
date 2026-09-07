@@ -418,14 +418,96 @@ it could mesh one itself - is closed by not needing an answer: since branches
 are authored rather than generated, SceneMaker ships the geometry and the
 consumer recomputes nothing.
 
-What is left open is deliberate. Phase 2 brings an authored branch that a
-trigger switches on in the game, and with it two questions this slice did not
-answer: whether a branch is its own water body naming its parent or something
-inside one, and what marks a body as activatable. Neither is guessable from
-what a river is today, and shaping `water_bakes` around a guess would fix the
-answer before the question has a case. The band is per body, so a branch that
-turns out to be its own body already has its own band; that is as far as it is
-honest to go now. `WATER-01` holds the question.
+What was left open here is now answered by export 17; the section below says
+how, and why waiting for world01's case was right.
+
+## A branch is a body, and a state switches which bodies there are
+
+`src/SceneMaker.Core/WaterGeometry.cs`, `SceneExport.cs` - closes `WATER-01`
+
+World01's Phase 2 gave the question a case, and every part of the answer fell
+out of what a river already is rather than out of a new idea.
+
+### A branch could not be anything but its own body
+
+A body *is* an open curve, source to mouth. Four separate things rest on that:
+the corridor rule projects a cell onto **one** centerline, the flattener turns
+**one** Bezier chain into segments, `water_bakes` ships **one** band per body,
+and the export refuses a body whose surface climbs between consecutive points of
+**one** chain. A branching tree inside a body opens all four at once and answers
+none of them. A branch as its own body costs no new geometry at all: it already
+has an id, a place in the order, a raster and a band.
+
+Its parent and the station it leaves at are **derived**. The endpoint position
+and both curves are authored, so the projection follows from them; storing the
+station would mean an edit far upstream, which changes arc length, silently
+moving a fork nobody touched. What the drawing tool does author is the parent's
+identity, so that a fork pulled apart becomes a refused export rather than a
+junction that quietly stops being reported.
+
+The entry carries both stations and no kind field. A branch and a rejoining side
+channel are then the same entry read at different stations, which is what let
+world01 implement both without telling them apart - the shape did the work an
+enum would have made them do twice.
+
+### Why alternatives are bodies and not sections
+
+A river that is wide while a branch is shut and narrow while it flows is two
+geometries. They have to be authored, because SceneMaker rasters nothing it was
+not given.
+
+Sections inside a body were the obvious shape and are the wrong one twice over.
+A Path's interval carries a grade, an additive/subtractive operation and a
+clearance; a river has none of the three, and this project already refused to
+give water a segment array carrying invented values. And a section with its own
+width needs its own band, which contradicts one band per body - the rule that
+made a river readable by the code that reads a Path.
+
+So the alternatives are bodies, and the author splits the main river at the
+fork. That splitting is worth doing in the phase *before* the narrowing exists,
+even though nothing needs it yet: it keeps the ids stable across the change, and
+it makes the fork a real authored point of three curves - the shared node an
+author pictures, without the document having to know what a node is.
+
+### The list, and the hole it closed
+
+The first draft gave a body one state, and world01 found the hole in the example
+that was meant to demonstrate the design: with two branches on one stretch and
+states `none | first | both`, the first branch flows in `first` **and** in
+`both`. One state per body would have forced it to exist twice with identical
+curves - the same multiplication of geometry that ruled out shipping the river
+in several versions, one level further down.
+
+`active_in` is therefore a list, and it is called that rather than `states`
+because `activation_groups[].states` already means the definition of the states.
+Two meanings of one word in neighbouring fields is exactly what went wrong with
+`span`, in this same file, in the same week.
+
+Named states rather than a boolean per body for the same reason the list is a
+list: the states a Scene is really in are enumerated by the author, not produced
+as the cross product of independent switches. Two branches give three states if
+only three combinations occur.
+
+### `inactive` says what the world is without that water
+
+Switching the fill and never the cut was one rule too few. A river that falls
+dry leaves its bed; a branch that opens by carving does not have one beforehand.
+Both are ordinary, neither is readable from the curve, so the field is required
+and has no default - a default here would decide silently which of two authored
+intentions was meant.
+
+The first draft justified it by what a state change costs a consumer, and world01
+corrected that: when water leaves a channel, where an actor may stand changes
+either way. The field is about meaning, and the contract says so in those terms.
+
+### What is still open
+
+Nothing about the format. What the model cannot express is a body that leaves no
+trace while inactive **and** carries a cut in some states but not others; there
+is no case for it, and `inactive` would have to become a per-state answer to get
+it. World01 offered a list of former group names so a rename could be reported
+rather than lost, and declined it themselves in the same paragraph - their sync
+already reports an unknown name. `WATER-02` holds that, deliberately.
 
 ## A Scene Template cannot carry water
 

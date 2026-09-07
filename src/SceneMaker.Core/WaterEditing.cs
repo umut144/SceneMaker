@@ -60,6 +60,11 @@ public static class WaterEditing
             WaterBodyId = NextWaterBodyId(scene, WaterKind.River),
             WaterKind = WaterKind.River,
             AssetKey = assetKey,
+            // A drawn river exists in every state and meets nothing. Both are
+            // changed by their own operations rather than by drawing, so that
+            // the tool that authors geometry authors only geometry.
+            Activation = null,
+            Junctions = [],
             Points = [.. points],
         };
         return scene with

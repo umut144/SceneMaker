@@ -12,6 +12,7 @@ every fix has to stay inside.
 
 | ID | Area | Outcome | Status |
 |---|---|---|---|
+| `WATER-01` | Export contract | Express an authored river branch and what switches it: a branch is its own body, alternatives are bodies, `activation_groups` with named states, `inactive`, derived `junctions` and per-cell `station_meters`. Scene 20 / export 17. [Notes](DESIGN_NOTES.md#a-branch-is-a-body-and-a-state-switches-which-bodies-there-are) | **In progress** |
 | `PATH-02` | Paths | Make the red authoring wire pickable and emphasize a selected Path; manual acceptance of an additive-to-tunnel-to-additive Path through a hill. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Ready** |
 
 ## Optional Later — Paths and sections
@@ -47,8 +48,21 @@ repainting a cell.
 | `BRIDGE-04` | Structures | Let a Scene Template carry a bridge instead of refusing it: composition moves Terrain cells and Props and nothing else today, so a Template's bridge would be lost at every Anchor. Needs the composition rule for an independent band and its posts, and an export-contract answer for a Template's bridge landing on an Instance. [Notes](DESIGN_NOTES.md#not-in-the-first-slice) | **Optional / Later** |
 | `BRIDGE-05` | Structures | Show the author what each end of a selected bridge stands over — the same `ground_at_start` / `ground_at_end` the export ships — so a bridge into the river is visible while it is being drawn, not first in the consumer's error log. [Notes](DESIGN_NOTES.md#what-is-built) | **Optional / Later** |
 | `TPL-01` | Templates | Let a Scene Template carry water instead of refusing it; requires an export-contract answer for a Template's water landing on an Instance's. [Notes](DESIGN_NOTES.md#a-scene-template-cannot-carry-water) | **Optional / Later** |
-| `WATER-01` | Export contract | Say how an authored river branch is expressed and what marks one as activatable by a game trigger, once world01's Phase 2 has a concrete case; `water_bakes` is per body today and a branch that is its own body already has its own band. [Notes](DESIGN_NOTES.md#water-is-drawn-not-only-counted) | **Optional / Later** |
+| `WATER-02` | Export contract | Carry a list of a group's former names so a rename is reported as "now called X" rather than as an unknown group; world01 offered it and declined it themselves, because their sync already reports an unknown name loudly. [Notes](DESIGN_NOTES.md#what-is-still-open) | **Deliberately deferred** |
 | `ID-01` | Documents | Widen the Instance ID pad so IDs keep reading in placement order past 9 999; a document migration, worth doing only if a Scene approaches that many Props of one asset. [Notes](DESIGN_NOTES.md#instance-ids-and-document-ordering) | **Optional / Later** |
+
+## Optional Later — Authoring a switchable river
+
+`WATER-01` gives the document and the export their shape. Nothing in the editor
+yet draws a branch, selects a body, or reads activation at all: the Canvas and
+the Section view draw every body whatever its state, so an author sees a map the
+game never shows. A switchable river is therefore authorable only by hand.
+
+| ID | Area | Outcome | Status |
+|---|---|---|---|
+| `OUTLINE-01` | Views | A dockable Outliner listing the current mode's objects, generic over modes, with per-object editor visibility that never reaches the document or the export, water bodies nested under the parent their junction names, and a per-group state selector that previews a Scene in one state without editing it. Its toggle belongs in its own group of the `ToolOptionsBar`, below the three mutually exclusive views, because a panel is orthogonal to them. [Notes](DESIGN_NOTES.md#a-branch-is-a-body-and-a-state-switches-which-bodies-there-are) | **Ready** |
+| `WATER-03` | Water | A `Create Branch` tool whose first point snaps to the centerline of an existing body, records that body as the authored parent, and takes its surface height at that station; the point still lands on the water grid, within half a cell of the curve. [Notes](DESIGN_NOTES.md#a-branch-is-a-body-and-a-state-switches-which-bodies-there-are) | **Ready** |
+| `WATER-04` | Water | `River:Select River`: pick an existing body, show its identity, junctions and activation, and assign its group and states. Rivers are the only curve area with no selector, so a body's activation is otherwise only changeable by redrawing it. Related to `PATH-03`. | **Ready** |
 
 ## Optional Later — Application code
 

@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 19;
+    public const int SceneVersion = 20;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -249,6 +249,93 @@ public sealed record RouteSurfaceDocument
 }
 
 /// <summary>
+/// One end of an open water body. A River runs from its source to its mouth and
+/// that is the whole of its flow direction, so an end is the only place where
+/// one body can be said to meet another.
+/// </summary>
+public enum WaterEnd
+{
+    Source,
+    Mouth,
+}
+
+/// <summary>
+/// What a body leaves behind while it is inactive.
+///
+/// <para><c>DryBed</c> keeps the cut in every state: switched off the body is
+/// its channel without the water. <c>Absent</c> keeps neither cut nor fill, so
+/// the Terrain stands as though the body had never been authored.</para>
+///
+/// <para>These are two ordinary and completely different authored intentions -
+/// a river that falls dry, and a branch that carves itself when it opens - and
+/// neither can be read off the curve. That is why the field is required
+/// wherever <see cref="WaterActivationDocument"/> is and carries no default: a
+/// default would decide silently which of the two an author meant.</para>
+/// </summary>
+public enum WaterInactive
+{
+    DryBed,
+    Absent,
+}
+
+/// <summary>
+/// One named set of states a Scene can be in, of which exactly one is current.
+///
+/// <para>The group lives on the Scene rather than on a body because it relates
+/// several bodies to each other: a fork is two stretches and a branch agreeing
+/// about when each of them exists. The initial state is the group's for the
+/// same reason - two bodies of one group must not be able to disagree about
+/// where the Scene starts.</para>
+///
+/// <para>What causes a state to change is not authored here and never will be.
+/// SceneMaker says that something is switchable and what the states are called;
+/// when they change is the consumer's decision.</para>
+/// </summary>
+public sealed record ActivationGroupDocument
+{
+    /// <summary>Author-given and unique in the Scene: a consumer binds triggers to it.</summary>
+    public required string Group { get; init; }
+
+    /// <summary>At least two, in authored order, which need not begin with <see cref="InitialState"/>.</summary>
+    public required List<string> States { get; init; }
+
+    public required string InitialState { get; init; }
+}
+
+/// <summary>
+/// Which states of one group a water body exists in.
+///
+/// <para><see cref="ActiveIn"/> is a list rather than a single state, and that
+/// is not generality for its own sake: with two branches on one stretch and
+/// states <c>none | first | both</c>, the first branch flows in <c>first</c> and
+/// in <c>both</c>. One state per body would force it to be authored twice with
+/// identical curves - the same duplication of geometry that a per-body band was
+/// chosen to avoid. A one-element list is the common case.</para>
+/// </summary>
+public sealed record WaterActivationDocument
+{
+    public required string Group { get; init; }
+    public required List<string> ActiveIn { get; init; }
+    public required WaterInactive Inactive { get; init; }
+}
+
+/// <summary>
+/// An authored claim that one of this body's ends sits on another body: the
+/// fork a branch leaves at, or the place a side channel rejoins.
+///
+/// <para>Only the partner is authored. Both stations are derived at export
+/// time, because storing one would make an edit far upstream - which changes
+/// arc length - move a fork nobody touched. Authoring the partner is what turns
+/// a fork pulled apart into a refused export instead of a junction that quietly
+/// stops being reported.</para>
+/// </summary>
+public sealed record WaterJunctionDocument
+{
+    public required WaterEnd End { get; init; }
+    public required string WaterBodyId { get; init; }
+}
+
+/// <summary>
 /// What kind of water a body is. A River is an open curve carrying a corridor
 /// whose width is interpolated between its points. A Lake - a closed curve, filled - is the kind
 /// this will grow, which is why the document says which kind it holds instead
@@ -346,6 +433,21 @@ public sealed record WaterBodyDocument
     /// </summary>
     public required string AssetKey { get; init; }
 
+    /// <summary>
+    /// Which states this body exists in, or null for a body that exists in all
+    /// of them. A stretch that is wide while a branch is shut and narrow while
+    /// it flows is two bodies whose lists never both hold the current state:
+    /// alternatives are bodies, because the band is per body and a second width
+    /// is therefore a second body.
+    /// </summary>
+    public required WaterActivationDocument? Activation { get; init; }
+
+    /// <summary>
+    /// The bodies this one's ends sit on, ordered by end and then by id. Empty
+    /// for a river that begins and ends on its own.
+    /// </summary>
+    public required List<WaterJunctionDocument> Junctions { get; init; }
+
     public required List<WaterCurvePointDocument> Points { get; init; }
 }
 
@@ -384,6 +486,12 @@ public sealed record SceneDocument
     /// Layered-3D surfaces and never fold into the Terrain height field.
     /// </summary>
     public required List<RouteSurfaceDocument> RouteSurfaces { get; init; }
+
+    /// <summary>
+    /// The states this Scene can be in, ordered by group. Empty for a Scene
+    /// nothing switches.
+    /// </summary>
+    public required List<ActivationGroupDocument> ActivationGroups { get; init; }
 
     /// <summary>
     /// The authored water of this Scene. Its raster is derived at export time,
@@ -475,6 +583,7 @@ public sealed record SceneDocument
         Props = [],
         ElevationRegions = [],
         RouteSurfaces = [],
+        ActivationGroups = [],
         WaterBodies = [],
         Bridges = [],
         TemplateDefinition = templateDefinition,

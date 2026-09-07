@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 19,
+  "version": 20,
   "scene_id": "test_template",
   "scene_kind": "template",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -607,6 +607,7 @@
   "props": [],
   "elevation_regions": [],
   "route_surfaces": [],
+  "activation_groups": [],
   "water_bodies": [],
   "bridges": [],
   "template_definition": {

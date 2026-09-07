@@ -425,6 +425,8 @@ public sealed class LayeredSceneColumnsTests
             WaterBodyId = "river_0001",
             WaterKind = WaterKind.River,
             AssetKey = "river",
+            Activation = null,
+            Junctions = [],
             Points =
             [
                 WaterEditing.Point(0, 96, WaterPointMode.Linear, 2m, 0.5m, 5m, 1m),
@@ -477,6 +479,8 @@ public sealed class LayeredSceneColumnsTests
             WaterBodyId = "river_0001",
             WaterKind = WaterKind.River,
             AssetKey = "river",
+            Activation = null,
+            Junctions = [],
             Points =
             [
                 WaterEditing.Point(0, 96, WaterPointMode.Linear, 2m, 0.5m, 5m, 1m),
@@ -959,6 +963,8 @@ public sealed class LayeredSceneColumnsTests
             WaterBodyId = id,
             WaterKind = WaterKind.River,
             AssetKey = "river",
+            Activation = null,
+            Junctions = [],
             Points =
             [
                 WaterEditing.Point(
