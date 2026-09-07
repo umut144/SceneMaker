@@ -893,41 +893,65 @@ public sealed class ToolInteraction
     }
 
     /// <summary>
-    /// Replaces the selected point's section and width with what the context
-    /// bar currently holds. The bar is defaults for the next river while
-    /// nothing is selected and an edit of this point while something is - the
-    /// same field meaning the same thing either way.
+    /// Writes the context bar's section and width onto the selection: onto one
+    /// point when a point is picked, and onto the whole river when only the
+    /// body is.
+    ///
+    /// <para>The second case is the one that matters. The fields show a single
+    /// number, so typing into them while a river is selected means that number
+    /// for that river - anything else leaves the author reading a status line
+    /// that says the depth was set while the document still holds the old one.
+    /// A body whose points differ is flattened by it, which is why the status
+    /// line says how many points it touched.</para>
     /// </summary>
-    public ToolOutcome ReshapeSelectedWaterPoint(ToolContext context)
+    public ToolOutcome ReshapeSelectedWater(ToolContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (Mode != EditorMode.River || ActiveTool != EditorTool.SelectRiver
-            || SelectedWaterBodyId is not { } bodyId
-            || SelectedWaterPointIndex is not { } index)
+            || SelectedWaterBodyId is not { } bodyId)
         {
             return ToolOutcome.Idle.Instance;
         }
         var body = context.Scene.WaterBodies.FirstOrDefault(candidate =>
             string.Equals(candidate.WaterBodyId, bodyId, StringComparison.Ordinal));
-        if (body is null || index >= body.Points.Count) return ToolOutcome.Idle.Instance;
+        if (body is null) return ToolOutcome.Idle.Instance;
 
-        var replaced = body.Points[index] with
-        {
-            ElevationMeters = State.WaterElevationMeters,
-            ChannelDepthMeters = State.WaterChannelDepthMeters,
-            ClearanceAboveMeters = State.WaterClearanceAboveMeters,
-            WidthMeters = State.RiverWidthMeters,
-        };
-        if (replaced == body.Points[index]) return ToolOutcome.Idle.Instance;
+        var index = SelectedWaterPointIndex;
+        if (index is { } picked && picked >= body.Points.Count) return ToolOutcome.Idle.Instance;
 
-        var points = body.Points.ToList();
-        points[index] = replaced;
+        var points = body.Points
+            .Select((point, at) => index is { } only && only != at ? point : Retyped(point))
+            .ToList();
+        if (points.SequenceEqual(body.Points)) return ToolOutcome.Idle.Instance;
+
+        var touched = index is null ? body.Points.Count : 1;
+        var name = index is null ? "Reshape River" : "Reshape River Point";
         return new ToolOutcome.Edit(
-            "Reshape River Point",
+            name,
             document => WaterEditing.Reshape(document, bodyId, points),
             Describe: (_, after) =>
-                $"Reshape River Point: {WaterPointText(WaterEditing.Require(after, bodyId), index)}"
-                + JunctionComplaint(after, context.Metrics));
+            {
+                var reshaped = WaterEditing.Require(after, bodyId);
+                var what = index is { } one
+                    ? WaterPointText(reshaped, one)
+                    : $"'{bodyId}': {WaterPointValuesText(reshaped.Points[0])} on all {touched} points.";
+                return $"{name}: {what}{JunctionComplaint(after, context.Metrics)}";
+            });
+    }
+
+    private WaterCurvePointDocument Retyped(WaterCurvePointDocument point) => point with
+    {
+        ElevationMeters = State.WaterElevationMeters,
+        ChannelDepthMeters = State.WaterChannelDepthMeters,
+        ClearanceAboveMeters = State.WaterClearanceAboveMeters,
+        WidthMeters = State.RiverWidthMeters,
+    };
+
+    private static string WaterPointValuesText(WaterCurvePointDocument point)
+    {
+        var bed = point.ElevationMeters - point.ChannelDepthMeters;
+        return FormattableString.Invariant(
+            $"{point.WidthMeters:0.##} m wide, surface {point.ElevationMeters:0.###} m, bed {bed:0.###} m");
     }
 
     /// <summary>Puts the selected body into an activation group, or takes it out.</summary>

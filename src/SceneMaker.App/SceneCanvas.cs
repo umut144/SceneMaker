@@ -303,14 +303,15 @@ public sealed partial class SceneCanvas : Control
     public int? SelectedWaterPointIndex => _interaction.SelectedWaterPointIndex;
 
     /// <summary>
-    /// Applies the context bar's water numbers to the selected point, or
-    /// nothing when none is selected - in which case those numbers stay what
-    /// they were, the defaults for the next river.
+    /// Applies the context bar's water numbers to the selection - one point, or
+    /// the whole river when only the body is picked - or nothing when nothing
+    /// is selected, in which case those numbers stay the defaults for the next
+    /// river.
     /// </summary>
-    public ToolOutcome ReshapeSelectedWaterPoint()
+    public ToolOutcome ReshapeSelectedWater()
     {
         if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
-        var outcome = _interaction.ReshapeSelectedWaterPoint(context);
+        var outcome = _interaction.ReshapeSelectedWater(context);
         QueueRedraw();
         return outcome;
     }

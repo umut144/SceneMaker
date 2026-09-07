@@ -115,6 +115,60 @@ public sealed class ToolRiverSelectionTests
         Assert.Equal(400, after.WaterBodies[1].Points[0].PositionAuthoringPx.Y);
     }
 
+    /// <summary>
+    /// The case that was silently doing nothing: a body selected, no point
+    /// picked, a number typed. The status line said the depth was set while the
+    /// document kept the old one, which is the worst of both answers.
+    /// </summary>
+    [Fact]
+    public void WithOnlyTheBodySelectedTheValuesReachEveryPoint()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WaterEditing.Reshape(
+            Forked(workspace),
+            "river_0002",
+            [
+                WaterEditing.Point(96, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+                WaterEditing.Point(96, 96, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+                WaterEditing.Point(96, 160, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+            ]);
+        var interaction = Selecting();
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(96, 130), Cell(3, 4));
+        Assert.Equal("river_0002", interaction.SelectedWaterBodyId);
+        Assert.Null(interaction.SelectedWaterPointIndex);
+
+        interaction.State.SetWaterElevation(2.0m);
+        interaction.State.SetWaterClearanceAbove(5.0m);
+        interaction.State.SetRiverWidth(1.0m);
+        interaction.State.SetWaterChannelDepth(1.0m);
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.ReshapeSelectedWater(context));
+        var after = edit.Apply(scene);
+
+        Assert.All(
+            after.WaterBodies[1].Points,
+            point => Assert.Equal(1.0m, point.ChannelDepthMeters));
+        Assert.Contains("all 3 points", edit.Describe!(scene, after), StringComparison.Ordinal);
+
+        // And the river it hangs on is untouched: one selection, one body.
+        Assert.All(
+            after.WaterBodies[0].Points,
+            point => Assert.Equal(0.5m, point.ChannelDepthMeters));
+    }
+
+    [Fact]
+    public void WithNothingSelectedTheValuesStayDefaultsForTheNextRiver()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Forked(workspace);
+        var interaction = Selecting();
+        interaction.State.SetWaterChannelDepth(1.0m);
+
+        Assert.IsType<ToolOutcome.Idle>(
+            interaction.ReshapeSelectedWater(Context(workspace, scene)));
+    }
+
     [Fact]
     public void TheContextBarValuesEditTheSelectedPoint()
     {
@@ -130,7 +184,7 @@ public sealed class ToolRiverSelectionTests
         interaction.State.SetRiverWidth(2.5m);
         interaction.State.SetWaterChannelDepth(0.75m);
         var edit = Assert.IsType<ToolOutcome.Edit>(
-            interaction.ReshapeSelectedWaterPoint(Context(workspace, scene)));
+            interaction.ReshapeSelectedWater(Context(workspace, scene)));
         var point = edit.Apply(scene).WaterBodies[1].Points[1];
 
         Assert.Equal(2.5m, point.WidthMeters);

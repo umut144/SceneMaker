@@ -2423,8 +2423,10 @@ public sealed partial class SceneMakerMain : Control
     {
         if (_loadingRiverNumbers) return false;
         if (_interaction.ActiveTool != EditorTool.SelectRiver) return false;
-        if (_canvas.SelectedWaterPointIndex is null) return false;
-        HandleToolOutcome(_canvas.ReshapeSelectedWaterPoint());
+        // A picked point, or the whole selected river. What is not allowed is
+        // reporting that a number was set while the document keeps the old one.
+        if (_canvas.SelectedWaterBody is null) return false;
+        HandleToolOutcome(_canvas.ReshapeSelectedWater());
         return true;
     }
 
@@ -2449,9 +2451,13 @@ public sealed partial class SceneMakerMain : Control
         _loadingRiverNumbers = true;
         try
         {
-            if (_canvas.SelectedWaterPointIndex is { } index && index < body.Points.Count)
+            // Without a picked point the fields show the source and act on the
+            // whole river, so what is displayed is what typing would write.
+            var shown = _canvas.SelectedWaterPointIndex is { } index && index < body.Points.Count
+                ? index
+                : 0;
             {
-                var point = body.Points[index];
+                var point = body.Points[shown];
                 _riverWidthEdit.Value = (double)point.WidthMeters;
                 _waterElevationEdit.Value = (double)point.ElevationMeters;
                 _waterDepthEdit.Value = (double)point.ChannelDepthMeters;
