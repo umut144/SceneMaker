@@ -43,9 +43,27 @@ public sealed record RouteSurfaceBakeSegment
 }
 
 /// <summary>
-/// Runtime-ready geometry for one Path. Triangle indices are a flat list of
-/// triples. Boundary edges describe each union primitive explicitly: one quad
-/// per flattened segment and one round join at every interior sample.
+/// The runtime geometry of one band, without a word about what the band is.
+/// Triangle indices are a flat list of triples; boundary edges describe each
+/// union primitive explicitly - one quad per flattened segment and one round
+/// join at every interior sample.
+///
+/// <para>Every authored kind that is drawn as a band ends up here: a Path, a
+/// bridge deck, and the surface of a water body. That is the point of the type
+/// - a consumer reads one shape, and SceneMaker has one place where authored
+/// points become triangles.</para>
+/// </summary>
+public sealed record BakedSurfaceBand
+{
+    public required IReadOnlyList<RouteSurfaceBakeVertex> Vertices { get; init; }
+    public required IReadOnlyList<int> TriangleIndices { get; init; }
+    public required IReadOnlyList<RouteSurfaceBoundaryEdge> BoundaryEdges { get; init; }
+    public required IReadOnlyList<RouteSurfaceCenterlineSample> CenterlineSamples { get; init; }
+}
+
+/// <summary>
+/// Runtime-ready geometry for one Path: the band above, plus the identity and
+/// the authored intervals only a Path has.
 /// </summary>
 public sealed record BakedRouteSurface
 {
@@ -70,9 +88,14 @@ internal readonly record struct RouteSurfaceBakeTriangle(
     int? EndPortalSampleIndex);
 
 /// <summary>
-/// Bakes the exact Path primitives used by the Canvas into engine-neutral
+/// Bakes the exact band primitives used by the Canvas into engine-neutral
 /// runtime geometry. Consumers never need to flatten Beziers, interpolate
 /// width or elevation, or choose join and cap rules independently.
+///
+/// <para>A Path is what it was written for and no longer all it serves: a
+/// bridge deck arrives as the two-point Path it is, and a water body's surface
+/// arrives as bare band points. One flattener, one mesher, one shape - so a
+/// second way of turning authored data into geometry never has to exist.</para>
 /// </summary>
 public static class RouteSurfaceBake
 {
@@ -86,6 +109,67 @@ public static class RouteSurfaceBake
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(route);
         var surface = RouteSurfaceGeometry.Prepare(metrics, route);
+        var centerline = surface.Centerline;
+        var band = Bake(metrics, $"Path '{route.RouteSurfaceId}'", surface);
+        var segments = route.Segments
+            .Select((segment, index) => new RouteSurfaceBakeSegment
+            {
+                SegmentId = segment.SegmentId,
+                GradePercent = segment.GradePercent,
+                Operation = segment.Operation,
+                ClearanceAboveMeters = segment.ClearanceAboveMeters,
+                StartPointIndex = index,
+                EndPointIndex = index + 1,
+                StartSampleIndex = SampleIndex(centerline, centerline.AnchorStations[index]),
+                EndSampleIndex = SampleIndex(centerline, centerline.AnchorStations[index + 1]),
+            })
+            .ToList();
+
+        return new BakedRouteSurface
+        {
+            RouteSurfaceId = route.RouteSurfaceId,
+            AssetKey = route.AssetKey,
+            Vertices = band.Vertices,
+            TriangleIndices = band.TriangleIndices,
+            BoundaryEdges = band.BoundaryEdges,
+            CenterlineSamples = band.CenterlineSamples,
+            Segments = segments,
+        };
+    }
+
+    /// <summary>
+    /// The band alone, for an authored kind that is drawn as one without being
+    /// a Path. A water body's surface is the case that asked for it: it has a
+    /// centerline, a width and a height at every point, and no grade, no
+    /// operation and no clearance that a baked interval could carry.
+    ///
+    /// <para><paramref name="subject"/> is how the caller names itself in a
+    /// refusal - "Water body 'river_0001'", the way a Path says "Path
+    /// 'route_0001'". A mesh that cannot be built has to say what it came
+    /// from, and this layer deliberately does not know.</para>
+    /// </summary>
+    public static BakedSurfaceBand BuildBand(
+        WorkspaceMetrics metrics,
+        string subject,
+        IReadOnlyList<RouteSurfacePoint> points)
+    {
+        ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentException.ThrowIfNullOrEmpty(subject);
+        ArgumentNullException.ThrowIfNull(points);
+        return Bake(metrics, subject, RouteSurfaceGeometry.Prepare(metrics, points));
+    }
+
+    /// <summary>
+    /// One prepared band, meshed and sampled: a quad per flattened segment, a
+    /// round join at every interior sample, square outer caps, and a centerline
+    /// sample carrying the interpolated elevation and width at each flattened
+    /// point. Nothing here knows what the band is for.
+    /// </summary>
+    private static BakedSurfaceBand Bake(
+        WorkspaceMetrics metrics,
+        string subject,
+        PreparedRouteSurface surface)
+    {
         var centerline = surface.Centerline;
         var pixelsPerMeter = (double)metrics.AuthoringPixelsPerMeter;
         var vertices = new List<RouteSurfaceBakeVertex>();
@@ -105,7 +189,7 @@ public static class RouteSurfaceBake
                 pixelsPerMeter);
         }
 
-        // A route has square outer caps. Every interior flattened point gets
+        // A band has square outer caps. Every interior flattened point gets
         // one round join, matching the Canvas's historical visible union.
         for (var index = 1; index + 1 < centerline.Points.Count; index++)
         {
@@ -128,30 +212,14 @@ public static class RouteSurfaceBake
                 Round(centerline.Stations[index] / pixelsPerMeter),
                 AuthoredPointIndex(centerline, index)))
             .ToList();
-        var segments = route.Segments
-            .Select((segment, index) => new RouteSurfaceBakeSegment
-            {
-                SegmentId = segment.SegmentId,
-                GradePercent = segment.GradePercent,
-                Operation = segment.Operation,
-                ClearanceAboveMeters = segment.ClearanceAboveMeters,
-                StartPointIndex = index,
-                EndPointIndex = index + 1,
-                StartSampleIndex = SampleIndex(centerline, centerline.AnchorStations[index]),
-                EndSampleIndex = SampleIndex(centerline, centerline.AnchorStations[index + 1]),
-            })
-            .ToList();
 
-        ValidateMesh(route.RouteSurfaceId, vertices, triangleIndices, boundaryEdges);
-        return new BakedRouteSurface
+        ValidateMesh(subject, vertices, triangleIndices, boundaryEdges);
+        return new BakedSurfaceBand
         {
-            RouteSurfaceId = route.RouteSurfaceId,
-            AssetKey = route.AssetKey,
             Vertices = vertices,
             TriangleIndices = triangleIndices,
             BoundaryEdges = boundaryEdges,
             CenterlineSamples = samples,
-            Segments = segments,
         };
     }
 
@@ -232,7 +300,7 @@ public static class RouteSurfaceBake
         var chain = segment.Chain;
         var length = Math.Sqrt(chain.LengthSquared);
         if (!double.IsFinite(length) || length <= 0.0)
-            throw new SceneMakerDocumentException("A baked Path segment has no finite horizontal run.");
+            throw new SceneMakerDocumentException("A baked band segment has no finite horizontal run.");
         var normalX = -chain.DeltaY / length;
         var normalY = chain.DeltaX / length;
         var endX = chain.StartX + chain.DeltaX;
@@ -272,7 +340,7 @@ public static class RouteSurfaceBake
         double pixelsPerMeter)
     {
         if (!double.IsFinite(radius) || radius <= 0.0)
-            throw new SceneMakerDocumentException("A baked Path join needs a finite positive radius.");
+            throw new SceneMakerDocumentException("A baked band join needs a finite positive radius.");
         var centerIndex = vertices.Count;
         vertices.Add(Vertex(center.X, center.Y, elevation, pixelsPerMeter));
         var ringStart = vertices.Count;
@@ -343,32 +411,37 @@ public static class RouteSurfaceBake
     private static decimal Round(double value)
     {
         if (!double.IsFinite(value))
-            throw new SceneMakerDocumentException("A baked Path contains a non-finite value.");
+            throw new SceneMakerDocumentException("A baked band contains a non-finite value.");
         return Math.Round((decimal)value, DecimalPlaces, MidpointRounding.AwayFromZero);
     }
 
+    /// <summary>
+    /// What a band has to be before it is written down. <paramref name="subject"/>
+    /// is the caller's own name for itself, so the refusal names the Path or
+    /// the water body rather than the layer that noticed.
+    /// </summary>
     private static void ValidateMesh(
-        string routeSurfaceId,
+        string subject,
         IReadOnlyList<RouteSurfaceBakeVertex> vertices,
         IReadOnlyList<int> triangles,
         IReadOnlyList<RouteSurfaceBoundaryEdge> edges)
     {
         if (triangles.Count == 0 || triangles.Count % 3 != 0)
-            throw new SceneMakerDocumentException($"Path '{routeSurfaceId}' has no valid baked triangles.");
+            throw new SceneMakerDocumentException($"{subject} has no valid baked triangles.");
         for (var index = 0; index < triangles.Count; index += 3)
         {
             var a = triangles[index];
             var b = triangles[index + 1];
             var c = triangles[index + 2];
             if ((uint)a >= vertices.Count || (uint)b >= vertices.Count || (uint)c >= vertices.Count)
-                throw new SceneMakerDocumentException($"Path '{routeSurfaceId}' has an invalid triangle index.");
+                throw new SceneMakerDocumentException($"{subject} has an invalid triangle index.");
             var av = vertices[a];
             var bv = vertices[b];
             var cv = vertices[c];
             var twiceArea = (bv.XMeters - av.XMeters) * (cv.YMeters - av.YMeters)
                 - (bv.YMeters - av.YMeters) * (cv.XMeters - av.XMeters);
             if (twiceArea == 0m)
-                throw new SceneMakerDocumentException($"Path '{routeSurfaceId}' has a degenerate baked triangle.");
+                throw new SceneMakerDocumentException($"{subject} has a degenerate baked triangle.");
         }
         foreach (var edge in edges)
         {
@@ -376,7 +449,7 @@ public static class RouteSurfaceBake
                 || (uint)edge.EndVertexIndex >= vertices.Count
                 || edge.StartVertexIndex == edge.EndVertexIndex)
             {
-                throw new SceneMakerDocumentException($"Path '{routeSurfaceId}' has an invalid boundary edge.");
+                throw new SceneMakerDocumentException($"{subject} has an invalid boundary edge.");
             }
         }
     }

@@ -227,6 +227,64 @@ public static class WaterGeometry
     }
 
     /// <summary>
+    /// The water surface as the band it is looked at: the same triangles, edge
+    /// loops and centerline samples a Path and a bridge deck ship, from the
+    /// same flattener and the same mesher.
+    ///
+    /// <para>The band and the raster are two answers about one river and they
+    /// are allowed to differ by a fraction of a cell. The raster decides which
+    /// cells the water occupies and is what a simulation reads - it is what the
+    /// author checked in the Section view. The band is what the water looks
+    /// like: it follows the curve continuously instead of asking each cell
+    /// centre a yes-or-no question, so a bank sits where the curve is rather
+    /// than where the grid rounded it to. Forcing the two to coincide would
+    /// mean giving one of them up.</para>
+    ///
+    /// <para>Height comes per sample, never per body. A river falls from its
+    /// source to its mouth, so the one number a level bridge deck has does not
+    /// exist here; every vertex and every sample carries the surface height
+    /// interpolated at its own station, by the same arc-length rule the section
+    /// uses. The band carries the water surface alone - the bed and the cut
+    /// stay in the raster, which is where a volume belongs.</para>
+    ///
+    /// <para>Unlike the raster it is not clipped to the Scene, exactly as a
+    /// Path's bake is not: a river drawn over the edge keeps its geometry and
+    /// simply stops being rastered there.</para>
+    /// </summary>
+    public static BakedSurfaceBand SurfaceBand(
+        WorkspaceMetrics metrics,
+        WaterBodyDocument body)
+    {
+        ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentNullException.ThrowIfNull(body);
+        return RouteSurfaceBake.BuildBand(
+            metrics,
+            $"Water body '{body.WaterBodyId}'",
+            BandPoints(body.Points));
+    }
+
+    /// <summary>
+    /// A river's points as the band points every meshed surface is built from:
+    /// the plan curve, the full corridor width, and the water surface as the
+    /// height. Depth and clearance are deliberately left behind - they describe
+    /// a volume, and a band is a surface.
+    /// </summary>
+    private static IReadOnlyList<RouteSurfacePoint> BandPoints(
+        IReadOnlyList<WaterCurvePointDocument> points)
+    {
+        var chain = ToChain(points);
+        var band = new RouteSurfacePoint[points.Count];
+        for (var index = 0; index < points.Count; index++)
+        {
+            band[index] = new RouteSurfacePoint(
+                chain[index],
+                points[index].WidthMeters,
+                points[index].ElevationMeters);
+        }
+        return band;
+    }
+
+    /// <summary>
     /// Whether an authoring-pixel position lies in the body's corridor. The
     /// same predicate the raster is built from, so what the pointer picks and
     /// what the Scene exports can never disagree.

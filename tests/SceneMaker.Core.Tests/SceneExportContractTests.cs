@@ -22,12 +22,12 @@ public sealed class SceneExportContractTests
         Assert.Equal(
             [
                 "format", "version", "workspace_key", "grid", "asset_profiles",
-                "water_raster", "route_surface_bakes", "route_surface_cut_raster",
-                "bridge_bakes", "scene",
+                "water_raster", "water_bakes", "route_surface_bakes",
+                "route_surface_cut_raster", "bridge_bakes", "scene",
             ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(15, root.GetProperty("version").GetInt32());
+        Assert.Equal(16, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             [
@@ -257,6 +257,132 @@ public sealed class SceneExportContractTests
         Assert.Equal(7.0m, cell.GetProperty("cut_top_meters").GetDecimal());
     }
 
+    /// <summary>
+    /// A river ships both derived halves: the cells it occupies, and the band
+    /// it is seen as. The band is deliberately the shape a Path and a bridge
+    /// deck already ship, so a consumer reads it with the reader it has - which
+    /// is also why it carries no segments: a river has no grade, no operation
+    /// and no clearance for one to hold.
+    /// </summary>
+    [Fact]
+    public void AWaterBodyShipsTheBandItIsSeenAsBesideTheCellsItOccupies()
+    {
+        using var workspace = TestWorkspace.Create();
+        var root = Export(workspace, WithRiver);
+
+        var bake = Assert.Single(root.GetProperty("water_bakes").EnumerateArray());
+        Assert.Equal(
+            [
+                "water_body_id", "asset_key", "vertices", "triangle_indices",
+                "boundary_edges", "centerline_samples",
+            ],
+            Keys(bake));
+        Assert.Equal("river_0001", bake.GetProperty("water_body_id").GetString());
+        Assert.Equal(
+            root.GetProperty("water_raster")[0].GetProperty("water_body_id").GetString(),
+            bake.GetProperty("water_body_id").GetString());
+        Assert.Equal("river", bake.GetProperty("asset_key").GetString());
+
+        Assert.NotEmpty(bake.GetProperty("vertices").EnumerateArray());
+        Assert.NotEmpty(bake.GetProperty("triangle_indices").EnumerateArray());
+        Assert.NotEmpty(bake.GetProperty("boundary_edges").EnumerateArray());
+        Assert.Equal(
+            ["x_meters", "y_meters", "elevation_meters"],
+            Keys(bake.GetProperty("vertices")[0]));
+        Assert.Equal(
+            ["start_vertex_index", "end_vertex_index"],
+            Keys(bake.GetProperty("boundary_edges")[0]));
+
+        var samples = bake.GetProperty("centerline_samples").EnumerateArray().ToList();
+        Assert.Equal(
+            [
+                "x_meters", "y_meters", "elevation_meters", "width_meters",
+                "station_meters", "authored_point_index",
+            ],
+            Keys(samples[0]));
+        // Source to mouth, station from zero, and the authored points named on
+        // the samples they fall on - the same reading a Path's centerline has.
+        Assert.Equal(1m, samples[0].GetProperty("x_meters").GetDecimal());
+        Assert.Equal(0m, samples[0].GetProperty("station_meters").GetDecimal());
+        Assert.Equal(0, samples[0].GetProperty("authored_point_index").GetInt32());
+        Assert.Equal(5m, samples[^1].GetProperty("x_meters").GetDecimal());
+        Assert.Equal(4m, samples[^1].GetProperty("station_meters").GetDecimal());
+        Assert.Equal(1, samples[^1].GetProperty("authored_point_index").GetInt32());
+        Assert.All(samples, sample =>
+            Assert.Equal(1.0m, sample.GetProperty("width_meters").GetDecimal()));
+    }
+
+    /// <summary>
+    /// A river is not level, and that is the one thing a consumer must not read
+    /// off it the way it reads a bridge deck. The height sits on every vertex
+    /// and every sample, interpolated over arc length between the authored
+    /// points, so a body carries no single elevation for anything to check the
+    /// rest against.
+    /// </summary>
+    [Fact]
+    public void AWaterBandCarriesItsHeightPerSampleBecauseARiverFalls()
+    {
+        using var workspace = TestWorkspace.Create();
+        var root = Export(workspace, WithFallingRiver);
+        var bake = Assert.Single(root.GetProperty("water_bakes").EnumerateArray());
+
+        var samples = bake.GetProperty("centerline_samples").EnumerateArray().ToList();
+        var elevations = samples
+            .Select(sample => sample.GetProperty("elevation_meters").GetDecimal())
+            .ToList();
+        var stations = samples
+            .Select(sample => sample.GetProperty("station_meters").GetDecimal())
+            .ToList();
+
+        Assert.Equal(3.0m, elevations[0]);
+        Assert.Equal(1.0m, elevations[^1]);
+        Assert.Equal(elevations.OrderByDescending(static elevation => elevation), elevations);
+        Assert.Equal(0m, stations[0]);
+        Assert.Equal(stations.Order(), stations);
+        Assert.Equal(
+            [0, 1, 2],
+            samples
+                .Select(sample => sample.GetProperty("authored_point_index"))
+                .Where(index => index.ValueKind != JsonValueKind.Null)
+                .Select(index => index.GetInt32()));
+
+        // The mesh falls with the samples rather than sitting at one height.
+        var vertexElevations = bake.GetProperty("vertices").EnumerateArray()
+            .Select(vertex => vertex.GetProperty("elevation_meters").GetDecimal())
+            .ToHashSet();
+        Assert.True(vertexElevations.Count > 1);
+        Assert.Equal(3.0m, vertexElevations.Max());
+        Assert.Equal(1.0m, vertexElevations.Min());
+    }
+
+    /// <summary>
+    /// The three water arrays are one list read three ways. Nothing joins them
+    /// but position and id, so both have to hold for every body - including the
+    /// two that overlap, which is how a widening river is authored and not a
+    /// case to deduplicate.
+    /// </summary>
+    [Fact]
+    public void EveryWaterBodyAppearsOnceInEachArrayInTheSameOrder()
+    {
+        using var workspace = TestWorkspace.Create();
+        var root = Export(workspace, (scene, ws) => WithFallingRiver(WithRiver(scene, ws), ws));
+
+        var authored = root.GetProperty("scene").GetProperty("water_bodies")
+            .EnumerateArray()
+            .Select(body => body.GetProperty("water_body_id").GetString())
+            .ToList();
+
+        Assert.Equal(["river_0001", "river_0002"], authored);
+        Assert.Equal(
+            authored,
+            root.GetProperty("water_raster").EnumerateArray()
+                .Select(raster => raster.GetProperty("water_body_id").GetString()));
+        Assert.Equal(
+            authored,
+            root.GetProperty("water_bakes").EnumerateArray()
+                .Select(bake => bake.GetProperty("water_body_id").GetString()));
+    }
+
     [Fact]
     public void ASceneWithoutWaterCarriesEmptyWaterArraysRatherThanNull()
     {
@@ -264,6 +390,7 @@ public sealed class SceneExportContractTests
         var root = Export(workspace);
 
         Assert.Empty(root.GetProperty("water_raster").EnumerateArray());
+        Assert.Empty(root.GetProperty("water_bakes").EnumerateArray());
         Assert.Empty(root.GetProperty("route_surface_bakes").EnumerateArray());
         Assert.Empty(root.GetProperty("route_surface_cut_raster").EnumerateArray());
         Assert.Empty(root.GetProperty("bridge_bakes").EnumerateArray());
@@ -471,6 +598,24 @@ public sealed class SceneExportContractTests
             [
                 WaterEditing.Point(32, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
                 WaterEditing.Point(160, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+            ],
+            "river");
+
+    /// <summary>
+    /// A river that falls the way a river does: three metres at the source, one
+    /// at the mouth, with a bend between them so the band has an interior
+    /// sample to interpolate at.
+    /// </summary>
+    private static SceneDocument WithFallingRiver(
+        SceneDocument scene,
+        TestWorkspace workspace) =>
+        WaterEditing.PlaceRiver(
+            scene,
+            workspace.Terrain,
+            [
+                WaterEditing.Point(32, 32, WaterPointMode.Linear, 3.0m, 0.5m, 5.0m, 1.0m),
+                WaterEditing.Point(96, 96, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+                WaterEditing.Point(160, 32, WaterPointMode.Linear, 1.0m, 0.5m, 5.0m, 1.0m),
             ],
             "river");
 

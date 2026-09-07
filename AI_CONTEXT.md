@@ -464,6 +464,19 @@ what the simulation reads; the smooth mesh is presentation, and the authored
 curve travels in the export so a consumer that wants a smooth band instead of a
 marched one has it.
 
+Since export 16 it no longer has to build that band itself. `RouteSurfaceBake`
+is the one place authored points become triangles, and water arrives there
+like everything else that is drawn as a band: `WaterGeometry.SurfaceBand`
+hands the curve's points to it as plan, width and surface height, and gets
+back the vertices, triangles, edge loops and centerline samples a Path and a
+bridge deck already ship. So the rasterization still exists exactly once, and
+now so does the meshing. The band carries the surface alone - depth and
+clearance describe a volume and stay in the raster - and its height sits on
+every sample, because a river falls and has no single elevation for anything to
+check the rest against. Band and raster are allowed to differ by a fraction of
+a cell: the raster answers which cells are water and the band answers where the
+water is seen, and forcing them together would give one of the two up.
+
 ## Bridges
 
 A bridge is a straight level span with its own record. Its deck is

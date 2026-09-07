@@ -47,6 +47,7 @@ repainting a cell.
 | `BRIDGE-04` | Structures | Let a Scene Template carry a bridge instead of refusing it: composition moves Terrain cells and Props and nothing else today, so a Template's bridge would be lost at every Anchor. Needs the composition rule for an independent band and its posts, and an export-contract answer for a Template's bridge landing on an Instance. [Notes](DESIGN_NOTES.md#not-in-the-first-slice) | **Optional / Later** |
 | `BRIDGE-05` | Structures | Show the author what each end of a selected bridge stands over — the same `ground_at_start` / `ground_at_end` the export ships — so a bridge into the river is visible while it is being drawn, not first in the consumer's error log. [Notes](DESIGN_NOTES.md#what-is-built) | **Optional / Later** |
 | `TPL-01` | Templates | Let a Scene Template carry water instead of refusing it; requires an export-contract answer for a Template's water landing on an Instance's. [Notes](DESIGN_NOTES.md#a-scene-template-cannot-carry-water) | **Optional / Later** |
+| `WATER-01` | Export contract | Say how an authored river branch is expressed and what marks one as activatable by a game trigger, once world01's Phase 2 has a concrete case; `water_bakes` is per body today and a branch that is its own body already has its own band. [Notes](DESIGN_NOTES.md#water-is-drawn-not-only-counted) | **Optional / Later** |
 | `ID-01` | Documents | Widen the Instance ID pad so IDs keep reading in placement order past 9 999; a document migration, worth doing only if a Scene approaches that many Props of one asset. [Notes](DESIGN_NOTES.md#instance-ids-and-document-ordering) | **Optional / Later** |
 
 ## Optional Later — Application code
@@ -66,7 +67,7 @@ reasoning is under [Settled decisions](DESIGN_NOTES.md#settled-decisions).
 | `NAME-01` | Documents | The editor says Placements while internal `Prop*` types and the persisted `props` array stay unchanged; renaming is a migration with no runtime benefit. | **Deliberately left alone** |
 | `TRANS-01` | Documents | Transitions wait for their own simulation-owned target/region contract with a consumer and tests, rather than a second copy of `PropDocument`. | **Deliberately deferred** |
 | `BRIDGE-01` | Export contract | `asset_profiles[].traversable_surface` is not coming: a bridge deck is an independent Path-like surface, so no Prop needs to offer a walkable one. | **Superseded** |
-| `BRIDGE-05` | Export contract | A deck's material is settled: a deck is a row of planks, so it names a Placement Asset carrying `surface: "wood"` and no Terrain Asset is involved. | **Settled** |
+| `BRIDGE-06` | Export contract | A deck's material is settled: a deck is a row of planks, so it names a Placement Asset carrying `surface: "wood"` and no Terrain Asset is involved. | **Settled** |
 
 ## Tracker rules
 

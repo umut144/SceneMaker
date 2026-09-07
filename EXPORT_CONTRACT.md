@@ -5,9 +5,20 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 15**, embedded **scene 15**. A reader must reject any
+Current schemas: **export 16**, embedded **scene 15**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
+
+Export 16 draws the water. A river was readable and invisible: `water_raster`
+said which cells it occupies and nothing said where its banks are, so a map
+could be walked into a river nobody could see. `water_bakes` ships one band per
+water body - the same `vertices`, `triangle_indices`, `boundary_edges` and
+`centerline_samples` `route_surface_bakes` and `bridge_bakes` carry, from the
+same flattener and the same mesher - so a consumer needs no third way of
+turning authored data into geometry. Its height is on every vertex and every
+sample and never on the body, because a river falls; a deck's one level height
+has no counterpart here. The raster is unchanged and stays what a simulation
+reads. The embedded Scene is unchanged: both halves are derived.
 
 Export 15 gives a bridge deck the two things a consumer needs to walk it rather
 than merely stand on it. `bridge_bakes` now carries `centerline_samples` in the
@@ -84,7 +95,7 @@ purpose.
 ```jsonc
 {
   "format": "scene_maker_scene_export",
-  "version": 10,
+  "version": 16,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,        // edge length of one Terrain cell
@@ -123,6 +134,43 @@ purpose.
           "bed_meters": 1.5,           // floor of the channel
           "surface_meters": 2.0,       // top of the water
           "cut_top_meters": 7.0        // Terrain is removed up to here
+        }
+      ]
+    }
+  ],
+  "water_bakes": [                     // also derived from scene.water_bodies
+    {
+      "water_body_id": "river_0001",   // the same body, in the same order
+      "asset_key": "river",
+      "vertices": [                    // one quad per flattened segment
+        { "x_meters": 32.0, "y_meters": 14.0, "elevation_meters": 2.0 },
+        { "x_meters": 40.0, "y_meters": 14.0, "elevation_meters": 1.5 },
+        { "x_meters": 40.0, "y_meters": 6.0,  "elevation_meters": 1.5 },
+        { "x_meters": 32.0, "y_meters": 6.0,  "elevation_meters": 2.0 }
+      ],
+      "triangle_indices": [0, 1, 2, 0, 2, 3],
+      "boundary_edges": [              // this primitive's loop, not the outline
+        { "start_vertex_index": 0, "end_vertex_index": 1 },
+        { "start_vertex_index": 1, "end_vertex_index": 2 },
+        { "start_vertex_index": 2, "end_vertex_index": 3 },
+        { "start_vertex_index": 3, "end_vertex_index": 0 }
+      ],
+      "centerline_samples": [          // same shape as a route bake's
+        {
+          "x_meters": 32.0,            // the source
+          "y_meters": 10.0,
+          "elevation_meters": 2.0,     // per sample: a river is not level
+          "width_meters": 8.0,
+          "station_meters": 0.0,
+          "authored_point_index": 0
+        },
+        {
+          "x_meters": 40.0,
+          "y_meters": 10.0,
+          "elevation_meters": 1.5,     // further down, so lower
+          "width_meters": 8.0,
+          "station_meters": 8.0,
+          "authored_point_index": 1
         }
       ]
     }
@@ -258,7 +306,7 @@ purpose.
   ],
   "scene": {
     "schema": "srt.scene_maker_scene",
-    "version": 14,
+    "version": 15,
     "scene_id": "overworld01",   // names the map, not the Workspace
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
@@ -428,6 +476,57 @@ whole corridor would reach across the map and cut away whatever part of the
 river happens to lie behind it, which is a real shape - a river that bends back
 near its own mouth - and not an error the author could see coming.
 
+### The band beside the raster
+
+`water_bakes` is the third delivery of the same river and the one to draw:
+the water surface as a band, in the shape `route_surface_bakes` and
+`bridge_bakes` use. `vertices` are scene-local metres carrying absolute
+elevation, `triangle_indices` is a flat list of triples, `boundary_edges` lists
+**each primitive's** edge loop - one quad per flattened segment and one
+16-sided round join at every interior sample, as on a Path and unlike a
+bridge's single quad - and `centerline_samples` runs from the source at station
+`0` to the mouth. It is produced by the same code that bakes a Path, from the
+same flattened centerline the raster is built on.
+
+**A river is not level.** This is the one thing a reader must not carry over
+from a deck. A bridge has one `elevation_meters` and every corner and sample
+sits at it; a water body has no such field at all, and a check that every
+vertex shares one height is wrong here rather than merely unnecessary. The
+height is on every vertex and every sample, interpolated over arc length
+between the authored points by the rule the section above states. Read it per
+sample.
+
+**Density is the flattener's, not the raster's.** A Bezier is subdivided until
+it is straight within tolerance; a straight stretch stays one segment, and
+`plank_count` has no counterpart here to argue with. `station_meters` is
+cumulative horizontal arc length from the source, which is what a consumer
+cutting the band into chunks hangs its cuts on. `authored_point_index` names
+the authored curve point a sample falls on and is null for a subdivision
+sample, exactly as on a Path.
+
+**The band carries the surface and nothing else.** The bed, the cut and the
+headroom stay in `water_raster`, where a volume belongs. One band per body,
+never one per span.
+
+**The raster and the band may disagree by a fraction of a cell, and that is
+correct.** They answer two questions. The raster decides which cells the water
+occupies - it is what a simulation reads and what the author checked in the
+Section view - and it decides them by asking each cell centre a yes-or-no
+question at half-metre resolution. The band follows the curve continuously, so
+its bank sits where the curve is rather than where the grid rounded it to, and
+at an inner bend the union of quads and joins reaches a hair differently than
+the nearest-projection rule does. Neither is a correction of the other and
+neither should be snapped to the other. Heights differ in the same small way
+and for the same reason: the raster rounds to the millimetre because it is
+written down per cell, the band to six decimal places because every bake does.
+
+Two further differences follow from what a band is. It is **not clipped to the
+Scene** - a river drawn over the map edge keeps its geometry here and simply
+stops being rastered there, exactly as a Path's bake is not clipped. And where
+two bodies overlap, their **bands overlap too**: a simulation reads the union
+of the rasters, and a renderer draws two bands over one another, which is what
+a widening river or a river running into a lake looks like.
+
 ## Height is a stack
 
 A place is not one height. `terrain_cells[].elevation_meters` is **the top of a
@@ -524,9 +623,9 @@ which grid is asked - the water grid is finer and answers for its own cells -
 and that is a resolution question, not the two-surfaces-at-one-place case a
 bridge poses further down.
 
-A Scene Template carries no water. Composition moves Terrain cells and Props
-and nothing else, so a Template with a river would lose it at every Anchor;
-authoring one is refused instead.
+A Scene Template carries no water, so `water_bakes` is empty in every Template
+file. Composition moves Terrain cells and Props and nothing else, so a Template
+with a river would lose it at every Anchor; authoring one is refused instead.
 
 ## Paths and route surfaces
 
@@ -851,6 +950,17 @@ treat a violation as a corrupt file rather than a case to handle:
 - `water_raster` lists the same bodies as `scene.water_bodies`, in the same
   order, and each body's `cells` are what the corridor rule above produces from
   its curve. A reader may recompute them and must get the same set.
+- `water_bakes` lists those same bodies, once each, in that same order, with
+  matching `water_body_id` and `asset_key`. Position and id are the whole of
+  the join between the three arrays.
+- Every water band has at least two centerline samples, its first at station
+  `0` and carrying `authored_point_index` `0`, its last carrying the index of
+  the mouth. Stations do not decrease. Every baked value is finite, every index
+  is in range, and no emitted triangle is degenerate at export precision - the
+  same promise `route_surface_bakes` makes.
+- Nothing is promised about a water band agreeing with its raster cell for
+  cell. The two are derived by different rules on purpose; see the section
+  above.
 - `route_surface_bakes` lists exactly the same Paths as
   `scene.route_surfaces`, in the same order, with matching Path IDs, Asset keys,
   segment IDs and exact grades. Every Path has at least one segment.
@@ -863,7 +973,7 @@ treat a violation as a corrupt file rather than a case to handle:
   Whether an Actor can reach or stand on it is the consumer's question, and the
   export carries the heights it needs to answer it.
 - `terrain_cells` and every body's `cells` are ordered by `y`, then `x`. `props`,
-  `asset_profiles`, `scene.water_bodies`, `water_raster`,
+  `asset_profiles`, `scene.water_bodies`, `water_raster`, `water_bakes`,
   `scene.route_surfaces` and `route_surface_bakes` are ordered by their id,
   ordinal. Segment and sample arrays retain their deterministic chain order.
   This ordering is a checked invariant, not a

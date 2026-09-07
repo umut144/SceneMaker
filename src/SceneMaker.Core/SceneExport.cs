@@ -13,7 +13,7 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 15;
+    public const int Version = 16;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -36,6 +36,16 @@ public static class SceneExport
     // end of the deck, so a consumer can hang its navigation on the same line
     // it hangs a Path on and tell a bridge that reaches ground from one that
     // ends over the river. The embedded Scene is unchanged.
+    //
+    // Export 16 draws the water. `water_bakes` ships every water body's
+    // surface as the band a Path and a deck already ship - the same vertices,
+    // triangles, edge loops and centerline samples, from the same flattener
+    // and mesher - so a consumer needs no third way to turn authored data into
+    // geometry. Height sits on the sample and never on the body, because a
+    // river falls. The raster is unchanged and stays the truth about which
+    // cells are water; the band is the truth about where the water is seen.
+    // The embedded Scene is unchanged again: both halves are derived, and
+    // nothing an author writes moved.
     private const int EmbeddedSceneVersion = 15;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -84,6 +94,7 @@ public static class SceneExport
             },
             AssetProfiles = ExportProfiles(configuration, propAssets),
             WaterRaster = ExportWaterRaster(scene.Document, configuration.Metrics),
+            WaterBakes = ExportWaterBakes(scene.Document, configuration.Metrics),
             RouteSurfaceBakes = scene.Document.RouteSurfaces
                 .Select(route => RouteSurfaceBake.Build(configuration.Metrics, route))
                 .ToList(),
@@ -254,6 +265,31 @@ public static class SceneExport
                         CutTopMeters = cell.CutTopMeters,
                     })
                     .ToList(),
+            })
+            .ToList();
+
+    /// <summary>
+    /// The other derived half of the water: the band a consumer draws, in the
+    /// order and with the identity <c>water_raster</c> uses, so the two halves
+    /// of one body are joined by nothing more than their position in the array
+    /// and the id they both carry.
+    /// </summary>
+    private static List<ExportWaterBakeDocument> ExportWaterBakes(
+        SceneDocument scene,
+        WorkspaceMetrics metrics) =>
+        scene.WaterBodies
+            .Select(body =>
+            {
+                var band = WaterGeometry.SurfaceBand(metrics, body);
+                return new ExportWaterBakeDocument
+                {
+                    WaterBodyId = body.WaterBodyId,
+                    AssetKey = body.AssetKey,
+                    Vertices = band.Vertices,
+                    TriangleIndices = band.TriangleIndices,
+                    BoundaryEdges = band.BoundaryEdges,
+                    CenterlineSamples = band.CenterlineSamples,
+                };
             })
             .ToList();
 
@@ -502,6 +538,12 @@ public static class SceneExport
         /// simulation reads their union. Empty for a Scene without water.
         /// </summary>
         public required List<ExportWaterBodyDocument> WaterRaster { get; init; }
+
+        /// <summary>
+        /// The visible surface of every water body, one band per body in the
+        /// same order. Empty for a Scene without water.
+        /// </summary>
+        public required List<ExportWaterBakeDocument> WaterBakes { get; init; }
 
         /// <summary>
         /// Runtime-ready Path geometry derived by the same code the Canvas
@@ -784,6 +826,38 @@ public static class SceneExport
         public required decimal BedMeters { get; init; }
         public required decimal SurfaceMeters { get; init; }
         public required decimal CutTopMeters { get; init; }
+    }
+
+    /// <summary>
+    /// One water body as it is drawn: the same band a Path and a bridge deck
+    /// ship, in the same shape and at the same place, so a consumer that has a
+    /// reader for those has one for this.
+    ///
+    /// <para>It carries no segments. A Path's intervals hold a grade, an
+    /// operation and a clearance, and a river has none of the three; its
+    /// authored points are in the Scene block and its volume is in the raster.
+    /// It carries no single elevation either - a river falls, so the height is
+    /// on every vertex and every sample, and a consumer that checked a deck for
+    /// one level height must not check this for one.</para>
+    /// </summary>
+    private sealed record ExportWaterBakeDocument
+    {
+        public required string WaterBodyId { get; init; }
+
+        /// <summary>What the band is made of, as the raster's entry says it.</summary>
+        public required string AssetKey { get; init; }
+
+        public required IReadOnlyList<RouteSurfaceBakeVertex> Vertices { get; init; }
+        public required IReadOnlyList<int> TriangleIndices { get; init; }
+        public required IReadOnlyList<RouteSurfaceBoundaryEdge> BoundaryEdges { get; init; }
+
+        /// <summary>
+        /// The centerline from source to mouth, with the station running from
+        /// zero at the source. Its density is the shared flattener's rule and
+        /// nothing the raster decided: a consumer cutting the band into chunks
+        /// at stations gets the same line the Canvas drew.
+        /// </summary>
+        public required IReadOnlyList<RouteSurfaceCenterlineSample> CenterlineSamples { get; init; }
     }
 
     private sealed record ExportAssetProfileDocument

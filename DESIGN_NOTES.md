@@ -348,6 +348,85 @@ above the deck shows the planks' colour and a plane below it shows the river.
 The posts are Placements and stay hidden there like every Placement, by the
 rule in the Section section rather than by an omission.
 
+## Water is drawn, not only counted
+
+`src/SceneMaker.Core/WaterGeometry.cs`, `SurfaceBand` - `WATER-01`
+
+A river was readable and invisible. `water_raster` said which cells the water
+occupies, the column rule said what that means vertically, and world01 could
+keep an Actor on the bank and send it over the bridges - all of it correct, and
+none of it visible. One walked against nothing. Export 16 adds `water_bakes`:
+the water surface as a band, one per body.
+
+### It is the band that already existed
+
+Nothing new was meshed for it. `RouteSurfaceBake` is the one place authored
+points become triangles - it was written for Paths, took the bridge deck as the
+two-point Path a deck is, and now takes a river's curve as what it is: a plan
+with a width and a height at every point. What used to be `Build(route)` split
+into a shared `Bake` and the route-specific half around it, and water asks for
+the shared half through `BuildBand`.
+
+That was the whole point of the request from world01, and it is ours too: a
+consumer that reads a Path's bake and a deck's bake reads this with the same
+types, and SceneMaker keeps one answer to what a curve looks like. A river-only
+mesher would have been a second one, and the two would have disagreed on a bend
+eventually.
+
+### A river carries no segments and no single height
+
+The band is `BakedSurfaceBand` rather than `BakedRouteSurface`, and the export
+record drops what a route has that a river does not. A Path's interval holds a
+grade, an additive/subtractive operation and a clearance; a river has none of
+the three, and giving it a segment array carrying invented values would be the
+shape this project already refused for water and routes as documents. It does
+not get one as derived data either.
+
+The height needed the same care in the other direction. A bridge is level by
+definition, so a deck's bake ships one `elevation_meters` and a consumer may
+check every corner and sample against it. A river falls - that is the whole of
+its flow direction - so there is no body-level height here at all, and the
+contract says outright that carrying that check over from a deck is wrong
+rather than merely unnecessary. Every vertex and every sample holds the height
+interpolated at its own station.
+
+The bed and the cut stay out of the band. They describe a volume, the raster
+already delivers them per cell, and a second place to read a river's depth from
+is a second place for it to be wrong.
+
+### The band and the raster are allowed to disagree
+
+They answer different questions and are derived by different rules, so they
+differ by fractions of a cell at an inner bend and by rounding everywhere - the
+raster to the millimetre because it is written down per cell, the band to six
+decimals because every bake is. World01 said so first and it is worth writing
+down as ours: the raster is the truth for the game, because it is what the
+author checked in the Section view and what the simulation reads; the band is
+the truth for the eye. Snapping either to the other would give up what makes it
+the answer to its own question. The contract states the divergence as a
+guarantee about what is *not* promised, which is the only way a consumer can
+rely on it.
+
+Two consequences follow rather than being decided: the band is not clipped to
+the Scene, exactly as a Path's bake is not, and two overlapping bodies produce
+two overlapping bands, which is what a widening river looks like.
+
+### What this closes and what it leaves open
+
+World01's earlier question - what rule to flatten and join a water curve by, so
+it could mesh one itself - is closed by not needing an answer: since branches
+are authored rather than generated, SceneMaker ships the geometry and the
+consumer recomputes nothing.
+
+What is left open is deliberate. Phase 2 brings an authored branch that a
+trigger switches on in the game, and with it two questions this slice did not
+answer: whether a branch is its own water body naming its parent or something
+inside one, and what marks a body as activatable. Neither is guessable from
+what a river is today, and shaping `water_bakes` around a guess would fix the
+answer before the question has a case. The band is per body, so a branch that
+turns out to be its own body already has its own band; that is as far as it is
+honest to go now. `WATER-01` holds the question.
+
 ## A Scene Template cannot carry water
 
 `src/SceneMaker.Core/DocumentValidation.cs`, the Scene Template branch —
