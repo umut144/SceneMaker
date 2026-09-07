@@ -35,9 +35,9 @@ the `exit=` line of the header, 4 it is still running — call again with
 request of this session, and 5 that the request was dropped; request again
 there instead of waiting.
 
-Exit code 3 is the one case that needs the developer: say plainly that the
-watcher is off, ask them to type `checkw start` in a terminal tab, and wait for
-their confirmation instead of falling back to "please run it by hand".
+Exit code 3 always needs the developer: say plainly that the watcher is off,
+ask them to type `checkw start` in a terminal tab, and wait for their
+confirmation instead of falling back to "please run it by hand".
 
 Beyond exit code 3, stop and ask the developer whenever the obstacle is not
 yours to remove: the same request fails or is dropped three times in a row, a
