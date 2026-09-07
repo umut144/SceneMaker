@@ -60668,7 +60668,16 @@
       ]
     }
   ],
-  "activation_groups": [],
+  "activation_groups": [
+    {
+      "group": "ford_between_bridges",
+      "states": [
+        "dry",
+        "flowing"
+      ],
+      "initial_state": "dry"
+    }
+  ],
   "water_bodies": [
     {
       "water_body_id": "river_0001",
@@ -60752,6 +60761,39 @@
           "channel_depth_meters": 0.5,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
+        }
+      ]
+    },
+    {
+      "water_body_id": "river_0002",
+      "water_kind": "river",
+      "asset_key": "river",
+      "activation": null,
+      "junctions": [
+        {
+          "end": "source",
+          "water_body_id": "river_0001"
+        }
+      ],
+      "points": [
+        {
+          "position_authoring_px": {
+            "x": 1472,
+            "y": 864
+          },
+          "mode": "aligned",
+          "handle_in_authoring_px": {
+            "x": -91,
+            "y": -57
+          },
+          "handle_out_authoring_px": {
+            "x": 122,
+            "y": 76
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0,
+          "width_meters": 4.0
         },
         {
           "position_authoring_px": {
@@ -60809,6 +60851,64 @@
           "channel_depth_meters": 0.5,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
+        }
+      ]
+    },
+    {
+      "water_body_id": "river_0003",
+      "water_kind": "river",
+      "asset_key": "river",
+      "activation": {
+        "group": "ford_between_bridges",
+        "active_in": [
+          "flowing"
+        ],
+        "inactive": "dry_bed"
+      },
+      "junctions": [
+        {
+          "end": "source",
+          "water_body_id": "river_0001"
+        }
+      ],
+      "points": [
+        {
+          "position_authoring_px": {
+            "x": 1472,
+            "y": 864
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0,
+          "width_meters": 3.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 1248,
+            "y": 1312
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 0.875,
+          "channel_depth_meters": 0.5,
+          "clearance_above_meters": 5.0,
+          "width_meters": 3.0
         }
       ]
     }

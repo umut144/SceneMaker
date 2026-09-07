@@ -104,6 +104,77 @@ public sealed class WaterActivationTests
     }
 
     /// <summary>
+    /// The shape an author is told to use before a narrowing exists: the main
+    /// river split at the fork, so that the fork is an authored point of three
+    /// curves and the ids stay stable when the second width arrives.
+    ///
+    /// <para>It is also the awkward case for the junction rule. The branch's
+    /// source does not sit somewhere along the parent - it sits exactly on the
+    /// parent's last point, on the square cap the corridor ends with. If that
+    /// boundary did not count as inside, the recommended way to author a fork
+    /// would be the one way that cannot be exported.</para>
+    /// </summary>
+    [Fact]
+    public void ASplitRiverAndItsBranchAllMeetOnTheParentsLastPoint()
+    {
+        using var workspace = TestWorkspace.Create();
+        var raster = Export(workspace, (scene, work) =>
+        {
+            foreach (var (fromX, fromY, toX, toY) in new[]
+                     {
+                         (32, 32, 96, 32),    // river_0001, source to the fork
+                         (96, 32, 160, 32),   // river_0002, the fork onwards
+                         (96, 32, 96, 160),   // river_0003, the branch
+                     })
+            {
+                scene = WaterEditing.PlaceRiver(
+                    scene,
+                    work.Terrain,
+                    [
+                        WaterEditing.Point(fromX, fromY, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+                        WaterEditing.Point(toX, toY, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+                    ],
+                    "river");
+            }
+
+            // Both children name the body the water arrives from, which is what
+            // lets a consumer split what travels down it at the fork.
+            List<WaterJunctionDocument> fedByTheUpperRiver =
+                [new WaterJunctionDocument { End = WaterEnd.Source, WaterBodyId = "river_0001" }];
+            return scene with
+            {
+                WaterBodies =
+                [
+                    scene.WaterBodies[0],
+                    scene.WaterBodies[1] with { Junctions = fedByTheUpperRiver },
+                    scene.WaterBodies[2] with { Junctions = fedByTheUpperRiver },
+                ],
+            };
+        }).GetProperty("water_raster");
+
+        // The upper river carries both meetings, at its own mouth: two
+        // authored statements, and this is the side neither of them was made on.
+        var upstream = raster[0].GetProperty("junctions").EnumerateArray().ToList();
+        Assert.Equal(2, upstream.Count);
+        Assert.Equal(
+            ["river_0002", "river_0003"],
+            upstream.Select(meeting => meeting.GetProperty("water_body_id").GetString()));
+        Assert.All(upstream, meeting =>
+        {
+            Assert.Equal(2.0m, meeting.GetProperty("own_station_meters").GetDecimal());
+            Assert.Equal(0.0m, meeting.GetProperty("station_meters").GetDecimal());
+        });
+
+        foreach (var child in new[] { raster[1], raster[2] })
+        {
+            var meeting = Assert.Single(child.GetProperty("junctions").EnumerateArray());
+            Assert.Equal("river_0001", meeting.GetProperty("water_body_id").GetString());
+            Assert.Equal(0.0m, meeting.GetProperty("own_station_meters").GetDecimal());
+            Assert.Equal(2.0m, meeting.GetProperty("station_meters").GetDecimal());
+        }
+    }
+
+    /// <summary>
     /// The group is authored, so it belongs in the Scene block; the raster
     /// repeats a body's own activation so that a consumer reading the derived
     /// water need not join three arrays to learn whether to apply one of them.
