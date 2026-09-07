@@ -22,8 +22,11 @@
 # Environment:
 #   CHECK_AGENT_DIR      state directory        (default .agent-check)
 #   CHECK_AGENT_SESSION  session identity       (default: derived, see above)
-#   CHECK_AGENT_WAIT     seconds to wait        (default 40)
+#   CHECK_AGENT_WAIT     seconds to wait        (default 90)
 #   CHECK_AGENT_TAIL     tail lines to print    (default 80)
+#   CHECK_AGENT_FAIL     regex of a first failure  (default error|FAILED|Diff in)
+#   CHECK_AGENT_FAIL_LINES  lines shown from it    (default 40)
+#   CHECK_AGENT_ARGS     arguments a request may carry (default --tests)
 
 set -eu
 
@@ -34,8 +37,16 @@ root=$(git rev-parse --show-toplevel 2>/dev/null) || {
 cd "$root"
 
 dir=${CHECK_AGENT_DIR:-.agent-check}
-wait_secs=${CHECK_AGENT_WAIT:-40}
+wait_secs=${CHECK_AGENT_WAIT:-90}
 tail_lines=${CHECK_AGENT_TAIL:-80}
+# Where a failing run went wrong is usually where it FIRST went wrong, and the
+# words for that belong to the project, not to this script.
+fail_pattern=${CHECK_AGENT_FAIL:-error|FAILED|Diff in}
+fail_lines=${CHECK_AGENT_FAIL_LINES:-40}
+# Which arguments a request may carry. This keeps a typo from becoming a
+# command; it is not a defence against anyone, because whoever can write a
+# request here can already run anything on this machine.
+allowed_args=${CHECK_AGENT_ARGS:---tests}
 
 session=${CHECK_AGENT_SESSION:-}
 if [ -n "$session" ]; then
@@ -55,6 +66,20 @@ for a in "$@"; do
   esac
 done
 
+# A wrong argument is wrong whether or not a watcher is listening, so it is
+# said here rather than after the queue has been found.
+for a in $args; do
+  known=0
+  for allowed in $allowed_args; do
+    [ "$a" = "$allowed" ] && known=1
+  done
+  if [ "$known" -eq 0 ]; then
+    echo "check-agent-run: unbekanntes Argument '$a'" >&2
+    echo "erlaubt sind: ${allowed_args:-<keine>} (CHECK_AGENT_ARGS)" >&2
+    exit 2
+  fi
+done
+
 read_field() {
   [ -f "$1" ] || return 0
   sed -n "s/^$2=//p" "$1" | tail -n 1
@@ -63,19 +88,30 @@ read_field() {
 report() {
   # report <id>
   sed -n '1,/^--- output ---$/p' "$dir/results/$1"
-  if [ "$full" -eq 1 ]; then
-    cat "$dir/logs/$1.log" 2>/dev/null || true
-  else
-    total=$(read_field "$dir/results/$1" lines)
-    case "$total" in ''|*[!0-9]*) total=0 ;; esac
-    if [ "$total" -gt "$tail_lines" ]; then
-      printf '(letzte %s von %s Zeilen; komplett: %s/logs/%s.log)\n' \
-        "$tail_lines" "$total" "$dir" "$1"
-    fi
-    tail -n "$tail_lines" "$dir/logs/$1.log" 2>/dev/null || true
-  fi
+  log="$dir/logs/$1.log"
   rc=$(read_field "$dir/results/$1" exit)
   case "$rc" in ''|*[!0-9]*) rc=1 ;; esac
+  total=$(read_field "$dir/results/$1" lines)
+  case "$total" in ''|*[!0-9]*) total=0 ;; esac
+
+  if [ "$full" -eq 1 ]; then
+    cat "$log" 2>/dev/null || true
+  elif [ "$rc" -eq 0 ]; then
+    if [ "$total" -gt "$tail_lines" ]; then
+      printf '(letzte %s von %s Zeilen; komplett: %s)\n' "$tail_lines" "$total" "$log"
+    fi
+    tail -n "$tail_lines" "$log" 2>/dev/null || true
+  else
+    # A run stops at the first thing it could not do, so that is what is worth
+    # reading. Without a hit the beginning is still a better guess than the end.
+    first=$(grep -n -E "$fail_pattern" "$log" 2>/dev/null | head -n 1 | cut -d: -f1 || true)
+    case "$first" in ''|*[!0-9]*) first=1 ;; esac
+    last=$(( first + fail_lines - 1 ))
+    printf '(Zeilen %s-%s von %s ab dem ersten Treffer; komplett: %s)\n' \
+      "$first" "$last" "$total" "$log"
+    sed -n "${first},${last}p" "$log" 2>/dev/null || true
+  fi
+
   [ "$rc" -eq 0 ] && exit 0
   exit 1
 }

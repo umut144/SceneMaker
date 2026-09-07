@@ -101,6 +101,14 @@ while :; do
     started=$(date +%s)
     log="$dir/logs/$id.log"
 
+    # What this run is about to test. Taken before the run, because that is the
+    # tree it sees. `--no-optional-locks` matters: without it this very query
+    # writes .git/index.lock and collides with whoever else is working here.
+    head=$(git --no-optional-locks rev-parse --short HEAD 2>/dev/null || echo unknown)
+    worktree=$(git --no-optional-locks status --porcelain 2>/dev/null || true)
+    dirty=no
+    [ -z "$worktree" ] || dirty=yes
+
     set +e
     # Word splitting is intended: args is a plain argument list.
     # shellcheck disable=SC2086
@@ -118,6 +126,8 @@ while :; do
       printf 'args=%s\n' "$args"
       printf 'duration=%s\n' "$duration"
       printf 'lines=%s\n' "$lines"
+      printf 'head=%s\n' "$head"
+      printf 'dirty=%s\n' "$dirty"
       printf -- '--- output ---\n'
       cat "$log"
     } > "$dir/results/$id.tmp"
