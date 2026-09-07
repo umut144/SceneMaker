@@ -116,7 +116,8 @@ public sealed class TestWorkspace : IDisposable
                 "authoring_pixels_per_meter": 32,
                 "game_pixels_per_meter": 192,
                 "water_cell_meters": 0.5,
-                "elevation_quantum_meters": 0.125
+                "elevation_quantum_meters": 0.125,
+                "minimum_channel_depth_meters": 0.25
               },
               "bridge_set": "bridge",
               "assets": [

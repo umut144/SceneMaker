@@ -744,7 +744,11 @@ precision to arrive at the same set.
 That millimetre precision belongs to the derived raster, not to authoring.
 Directly authored absolute heights align to the Workspace's
 `elevation_quantum_meters`, which is not exported; a consumer receives the
-actual heights. Depth, clearance, values interpolated between valid authored
+actual heights. A channel is likewise never shallower than the Workspace's
+`minimum_channel_depth_meters`, also not exported: how deep a bed has to be is
+a fact about a World - in `world01` it follows from how high a character can
+climb, so that a river is not crossable dry or flowing - and SceneMaker only
+holds an author to the number that World wrote down. Depth, clearance, values interpolated between valid authored
 points, and later Path anchors derived from grade need not align to that
 quantum. Only a Path's starting height is chosen directly on the quantum.
 

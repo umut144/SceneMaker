@@ -273,6 +273,15 @@ public static partial class DocumentValidation
                     $"Water body '{body.WaterBodyId}' point {index} elevation_meters",
                     body.Points[index].ElevationMeters,
                     metrics);
+
+                // How deep a bed has to be is the World's statement, not this
+                // file's: in world01 it follows from how high a character can
+                // climb, so that a river is not crossable in either state.
+                if (body.Points[index].ChannelDepthMeters < metrics.MinimumChannelDepthMeters)
+                {
+                    throw new SceneMakerDocumentException(FormattableString.Invariant(
+                        $"Water body '{body.WaterBodyId}' point {index} is {body.Points[index].ChannelDepthMeters:0.###} m deep; this Workspace asks for at least {metrics.MinimumChannelDepthMeters:0.###} m."));
+                }
                 ValidateGridPosition(
                     $"Water body '{body.WaterBodyId}' point {index}",
                     body.Points[index].PositionAuthoringPx,

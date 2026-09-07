@@ -206,6 +206,22 @@ public static class SceneExport
             }
         }
 
+        // A group nothing is in is a name a consumer can bind a trigger to that
+        // switches nothing. It is a warning rather than a refusal because
+        // authoring one comes before putting the first body in it, and this
+        // runs on the way to a file rather than after every edit.
+        foreach (var group in scene.ActivationGroups)
+        {
+            if (scene.WaterBodies.Any(body =>
+                    body.Activation is { } activation
+                    && string.Equals(activation.Group, group.Group, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+            warnings.Add(
+                $"Activation group '{group.Group}' is declared but no water body is in it, so nothing switches with it.");
+        }
+
         foreach (var body in scene.WaterBodies)
         {
             var cells = WaterGeometry.Corridor(scene, metrics, body);

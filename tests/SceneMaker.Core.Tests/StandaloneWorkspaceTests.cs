@@ -223,7 +223,7 @@ public sealed class StandaloneWorkspaceTests
         WritePolyToolsImport(directory.Path, "game03");
         var configuration = WorkspaceConfigurationStore.Create(
             "game03",
-            new WorkspaceGridConfiguration(1m, 10m, 40m, 0.5m, 0.125m),
+            new WorkspaceGridConfiguration(1m, 10m, 40m, 0.5m, 0.125m, 0.25m),
             [
                 new WorkspaceAssetProfile(
                     "grass", "Grass", WorkspaceAssetRole.Terrain,
@@ -322,7 +322,7 @@ public sealed class StandaloneWorkspaceTests
     public void WorkspaceMetricsSnapElevationsSymmetricallyToTheirQuantum()
     {
         var metrics = new WorkspaceMetrics(
-            new WorkspaceGridConfiguration(1m, 32m, 192m, 0.5m, 0.125m));
+            new WorkspaceGridConfiguration(1m, 32m, 192m, 0.5m, 0.125m, 0.25m));
 
         Assert.True(metrics.IsElevationAligned(1.125m));
         Assert.False(metrics.IsElevationAligned(1.1m));
@@ -874,12 +874,16 @@ public sealed class StandaloneWorkspaceTests
         string assets,
         decimal? waterCellMeters = null,
         int version = WorkspaceConfigurationStore.Version,
-        string? elevationQuantumJson = "0.125")
+        string? elevationQuantumJson = "0.125",
+        string? minimumChannelDepthJson = "0.25")
     {
         var waterCell = waterCellMeters ?? terrainCellMeters;
         var quantumProperty = elevationQuantumJson is null
             ? string.Empty
             : $"\"elevation_quantum_meters\": {elevationQuantumJson},";
+        var minimumDepthProperty = minimumChannelDepthJson is null
+            ? string.Empty
+            : $"\"minimum_channel_depth_meters\": {minimumChannelDepthJson},";
         File.WriteAllText(Path.Combine(directory, WorkspaceConfigurationStore.FileName), $$"""
         {
           "format": "scene_maker_workspace",
@@ -890,6 +894,7 @@ public sealed class StandaloneWorkspaceTests
             "authoring_pixels_per_meter": {{authoringPixelsPerMeter.ToString(CultureInfo.InvariantCulture)}},
             "game_pixels_per_meter": {{gamePixelsPerMeter.ToString(CultureInfo.InvariantCulture)}},
             {{quantumProperty}}
+            {{minimumDepthProperty}}
             "water_cell_meters": {{waterCell.ToString(CultureInfo.InvariantCulture)}}
           },
           "assets": [

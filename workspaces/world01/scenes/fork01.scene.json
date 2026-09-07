@@ -3885,8 +3885,8 @@
             "x": 0,
             "y": 0
           },
-          "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "elevation_meters": 1.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         },
@@ -3904,8 +3904,8 @@
             "x": 0,
             "y": 0
           },
-          "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "elevation_meters": 1.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         }
@@ -3943,8 +3943,8 @@
             "x": 0,
             "y": 0
           },
-          "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "elevation_meters": 1.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         },
@@ -3962,8 +3962,8 @@
             "x": 0,
             "y": 0
           },
-          "elevation_meters": 0.875,
-          "channel_depth_meters": 0.5,
+          "elevation_meters": 1.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         }

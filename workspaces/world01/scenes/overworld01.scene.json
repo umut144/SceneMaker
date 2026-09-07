@@ -60670,7 +60670,7 @@
   ],
   "activation_groups": [
     {
-      "group": "ford_between_bridges",
+      "group": "branch_between_bridges",
       "states": [
         "dry",
         "flowing"
@@ -60701,7 +60701,7 @@
             "y": 0
           },
           "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         },
@@ -60720,7 +60720,7 @@
             "y": 20
           },
           "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         },
@@ -60739,7 +60739,7 @@
             "y": 7
           },
           "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         },
@@ -60758,7 +60758,7 @@
             "y": 76
           },
           "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         }
@@ -60791,7 +60791,7 @@
             "y": 76
           },
           "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         },
@@ -60810,7 +60810,7 @@
             "y": 71
           },
           "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         },
@@ -60829,7 +60829,7 @@
             "y": 66
           },
           "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         },
@@ -60848,7 +60848,7 @@
             "y": 0
           },
           "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 4.0
         }
@@ -60859,7 +60859,7 @@
       "water_kind": "river",
       "asset_key": "river",
       "activation": {
-        "group": "ford_between_bridges",
+        "group": "branch_between_bridges",
         "active_in": [
           "flowing"
         ],
@@ -60887,7 +60887,7 @@
             "y": 0
           },
           "elevation_meters": 1.0,
-          "channel_depth_meters": 0.5,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 3.0
         },
@@ -60905,8 +60905,8 @@
             "x": 0,
             "y": 0
           },
-          "elevation_meters": 0.875,
-          "channel_depth_meters": 0.5,
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 3.0
         }
@@ -60919,12 +60919,12 @@
       "plank_asset_key": "plank",
       "anchor_asset_key": "post",
       "start_authoring_px": {
-        "x": 1190,
-        "y": 1089
+        "x": 1191,
+        "y": 1047
       },
       "end_authoring_px": {
-        "x": 1387,
-        "y": 646
+        "x": 1487,
+        "y": 1173
       },
       "width_meters": 4.25,
       "elevation_meters": 1.0,
@@ -60936,12 +60936,12 @@
       "plank_asset_key": "plank",
       "anchor_asset_key": "post",
       "start_authoring_px": {
-        "x": 1437,
-        "y": 1177
+        "x": 1776,
+        "y": 1445
       },
       "end_authoring_px": {
-        "x": 1780,
-        "y": 852
+        "x": 2119,
+        "y": 1120
       },
       "width_meters": 4.0,
       "elevation_meters": 1.0,

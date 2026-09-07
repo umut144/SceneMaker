@@ -3277,6 +3277,14 @@ public sealed partial class SceneMakerMain : Control
         ConfigureElevationInput(_sectionElevationEdit, metrics);
         ConfigureSectionOffsetInput(_sectionOffsetEdit, metrics);
 
+        // How shallow a channel may be is the Workspace's statement, so the
+        // field cannot offer less than it and a river carried over from a
+        // shallower World is lifted to it rather than saved as it was.
+        _waterDepthEdit.MinValue = (double)metrics.MinimumChannelDepthMeters;
+        if (_waterDepthEdit.Value < _waterDepthEdit.MinValue)
+            _waterDepthEdit.Value = _waterDepthEdit.MinValue;
+        _interaction.State.SetWaterChannelDepth(DecimalOf(_waterDepthEdit.Value));
+
         var authoringElevation = ElevationOf(_elevationEdit, _elevationEdit.Value);
         _canvas.ElevationMeters = authoringElevation;
         _interaction.State.SetBridgeElevation(

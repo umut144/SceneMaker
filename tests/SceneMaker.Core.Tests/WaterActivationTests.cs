@@ -343,6 +343,77 @@ public sealed class WaterActivationTests
         Assert.Throws<SceneMakerDocumentException>(() => DocumentValidation.Validate(template));
     }
 
+    /// <summary>
+    /// The rule world01 gave us: a bed is deeper than a character can climb, so
+    /// a river is not crossable in either state. That number is a fact about a
+    /// World and not about authoring, so it lives in the Workspace and this
+    /// only holds an author to what the World wrote down.
+    /// </summary>
+    [Fact]
+    public void AChannelShallowerThanTheWorkspaceAsksForIsRefused()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WaterEditing.PlaceRiver(
+            TestScenes.Instance(workspace),
+            workspace.Terrain,
+            [
+                WaterEditing.Point(32, 32, WaterPointMode.Linear, 2.0m, 0.1m, 5.0m, 1.0m),
+                WaterEditing.Point(160, 32, WaterPointMode.Linear, 2.0m, 0.1m, 5.0m, 1.0m),
+            ],
+            "river");
+
+        var error = Assert.Throws<SceneMakerDocumentException>(
+            () => DocumentValidation.ValidateGrid(scene, workspace.Metrics));
+        Assert.Contains("0.1 m deep", error.Message, StringComparison.Ordinal);
+        Assert.Contains("at least", error.Message, StringComparison.Ordinal);
+
+        // The Workspace minimum, and anything past it, is fine.
+        var deepEnough = WaterEditing.Reshape(
+            scene,
+            "river_0001",
+            [
+                WaterEditing.Point(32, 32, WaterPointMode.Linear, 2.0m, 0.25m, 5.0m, 1.0m),
+                WaterEditing.Point(160, 32, WaterPointMode.Linear, 2.0m, 1.0m, 5.0m, 1.0m),
+            ]);
+        DocumentValidation.ValidateGrid(deepEnough, workspace.Metrics);
+    }
+
+    /// <summary>
+    /// The gap that let a branch quietly stop being switchable: the group stayed
+    /// declared, nothing was in it, and the file exported without a word.
+    /// </summary>
+    [Fact]
+    public void AGroupNoBodyIsInIsReportedRatherThanExportedInSilence()
+    {
+        using var workspace = TestWorkspace.Create();
+        var warnings = Warnings(workspace, (scene, work) => WithFork(scene, work) with
+        {
+            WaterBodies = [.. WithFork(scene, work).WaterBodies.Select(
+                static body => body with { Activation = null, Junctions = [] })],
+        });
+
+        Assert.Contains(
+            warnings,
+            warning => warning.Contains("fork_at_mill", StringComparison.Ordinal)
+                && warning.Contains("nothing switches", StringComparison.Ordinal));
+
+        // With the branch back in it, there is nothing to say.
+        Assert.DoesNotContain(
+            Warnings(workspace, WithFork),
+            warning => warning.Contains("fork_at_mill", StringComparison.Ordinal));
+    }
+
+    private static IReadOnlyList<string> Warnings(
+        TestWorkspace workspace,
+        Func<SceneDocument, TestWorkspace, SceneDocument> extend)
+    {
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        var scene = new LoadedScene(
+            Path.Combine(session.Workspace.ScenesDirectoryPath, "base.scene.json"),
+            extend(TestScenes.Instance(workspace), workspace));
+        return SceneExport.Write(session, scene).Warnings;
+    }
+
     private static SceneDocument Fixture()
     {
         using var workspace = TestWorkspace.Create();

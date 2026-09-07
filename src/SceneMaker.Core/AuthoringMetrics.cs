@@ -17,6 +17,10 @@ public sealed class WorkspaceMetrics
         if (ElevationQuantumMeters <= 0m)
             throw new SceneMakerDocumentException(
                 "elevation_quantum_meters must be positive.");
+        MinimumChannelDepthMeters = grid.MinimumChannelDepthMeters;
+        if (MinimumChannelDepthMeters <= 0m)
+            throw new SceneMakerDocumentException(
+                "minimum_channel_depth_meters must be positive.");
         var pixelsPerCell = TerrainCellMeters * AuthoringPixelsPerMeter;
         if (pixelsPerCell <= 0m || pixelsPerCell != decimal.Truncate(pixelsPerCell))
             throw new SceneMakerDocumentException(
@@ -47,6 +51,10 @@ public sealed class WorkspaceMetrics
     public decimal GamePixelsPerMeter { get; }
     public decimal WaterCellMeters { get; }
     public decimal ElevationQuantumMeters { get; }
+
+    /// <summary>The shallowest channel this Workspace allows a river to cut.</summary>
+    public decimal MinimumChannelDepthMeters { get; }
+
     public int AuthoringPixelsPerTerrainCell { get; }
     public int AuthoringPixelsPerWaterCell { get; }
     public int WaterCellsPerTerrainCell { get; }

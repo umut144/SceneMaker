@@ -15,7 +15,17 @@ public sealed record WorkspaceGridConfiguration(
     decimal AuthoringPixelsPerMeter,
     decimal GamePixelsPerMeter,
     decimal WaterCellMeters,
-    decimal ElevationQuantumMeters);
+    decimal ElevationQuantumMeters,
+
+    /// <summary>
+    /// How shallow a channel this World allows. It is a Workspace value and not
+    /// a constant here, because what makes a bed deep enough is a fact about a
+    /// game and not about authoring: in world01 it follows from how high a
+    /// character can climb, so that a river is not crossable, dry or flowing.
+    /// SceneMaker knows nothing of characters and only holds the author to the
+    /// number the World wrote down.
+    /// </summary>
+    decimal MinimumChannelDepthMeters);
 
 /// <summary>
 /// How a Terrain Asset is authored. This is editor knowledge rather than game
@@ -110,7 +120,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 14;
+    public const int Version = 15;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -165,6 +175,7 @@ public static class WorkspaceConfigurationStore
                 GamePixelsPerMeter = grid.GamePixelsPerMeter,
                 WaterCellMeters = grid.WaterCellMeters,
                 ElevationQuantumMeters = grid.ElevationQuantumMeters,
+                MinimumChannelDepthMeters = grid.MinimumChannelDepthMeters,
             },
             BridgeSet = bridgeSetAssetKey,
             Assets = profiles.Select(profile => new AssetProfileDocument
@@ -197,6 +208,7 @@ public static class WorkspaceConfigurationStore
                 GamePixelsPerMeter = configuration.Grid.GamePixelsPerMeter,
                 WaterCellMeters = configuration.Grid.WaterCellMeters,
                 ElevationQuantumMeters = configuration.Grid.ElevationQuantumMeters,
+                MinimumChannelDepthMeters = configuration.Grid.MinimumChannelDepthMeters,
             },
             BridgeSet = configuration.BridgeSetAssetKey,
             Assets = configuration.AssetProfiles.Select(profile => new AssetProfileDocument
@@ -327,17 +339,19 @@ public static class WorkspaceConfigurationStore
         if (document.Grid is null || document.Grid.TerrainCellMeters <= 0m
             || document.Grid.AuthoringPixelsPerMeter <= 0m || document.Grid.GamePixelsPerMeter <= 0m
             || document.Grid.WaterCellMeters <= 0m
-            || document.Grid.ElevationQuantumMeters is not > 0m)
+            || document.Grid.ElevationQuantumMeters is not > 0m
+            || document.Grid.MinimumChannelDepthMeters is not > 0m)
         {
             throw new SceneMakerDocumentException(
-                "Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, game_pixels_per_meter, water_cell_meters, and elevation_quantum_meters.");
+                "Workspace grid requires positive terrain_cell_meters, authoring_pixels_per_meter, game_pixels_per_meter, water_cell_meters, elevation_quantum_meters, and minimum_channel_depth_meters.");
         }
         var grid = new WorkspaceGridConfiguration(
             document.Grid.TerrainCellMeters,
             document.Grid.AuthoringPixelsPerMeter,
             document.Grid.GamePixelsPerMeter,
             document.Grid.WaterCellMeters,
-            document.Grid.ElevationQuantumMeters.Value);
+            document.Grid.ElevationQuantumMeters.Value,
+            document.Grid.MinimumChannelDepthMeters.Value);
         _ = new WorkspaceMetrics(grid);
         if (document.Assets is null)
             throw new SceneMakerDocumentException("Workspace config requires an assets array.");
@@ -391,6 +405,7 @@ public static class WorkspaceConfigurationStore
         public required decimal GamePixelsPerMeter { get; init; }
         public required decimal WaterCellMeters { get; init; }
         public decimal? ElevationQuantumMeters { get; init; }
+        public decimal? MinimumChannelDepthMeters { get; init; }
     }
 
     private sealed record AssetProfileDocument

@@ -562,6 +562,43 @@ setting exactly one: a body active in several states stays hand-authored, and
 nothing here creates a group. Both want a list of bodies against a list of
 states, which is the Outliner's picture and not a dropdown's (`WATER-07`).
 
+## How deep a bed has to be is the World's statement
+
+`src/SceneMaker.Core/WorkspaceConfiguration.cs`, `MinimumChannelDepthMeters`
+
+World01 decided that a river bed lies deeper than a character can climb - one
+metre against a step of half a metre - so that a river is not crossable in
+either state. A dry bed stays a place one can be, reached by something authored
+into it rather than by climbing down; falling in was considered and dropped,
+because it would have needed an asymmetric step rule and that would have made
+every edge in that world climbable.
+
+The number belongs in the Workspace and not in Core. It follows from a step
+height, and SceneMaker knows nothing of characters or steps; a constant here
+would be a game rule hidden in an engine-neutral tool, which is what the metric
+rules in `AGENTS.md` exist to prevent. So `minimum_channel_depth_meters` sits
+beside the other grid metrics, world01 sets 1.0, the fixture sets 0.25, and
+validation only holds an author to whatever their World wrote down. It is not
+exported: a consumer receives the actual depths and has no use for the floor
+they were held to.
+
+The field it drives is the one place this is visible while authoring - the
+depth input cannot offer less, and a value carried over from a shallower
+Workspace is lifted rather than saved as it was.
+
+### A group nothing is in
+
+Refusing an empty activation group would block the author between creating one
+and putting the first body in it, and validation runs on the way to disk. So it
+is an export warning, in the company of the subtractive Path segment that
+removes no Terrain: authored intent that has no effect, said out loud on the way
+to a file.
+
+This was not a hypothesis. A branch quietly lost its activation while its group
+stayed declared, and the export wrote the file without a word - a switchable
+branch that was no longer switchable, in the map a consumer was about to test
+its state machine against.
+
 ## A Scene Template cannot carry water
 
 `src/SceneMaker.Core/DocumentValidation.cs`, the Scene Template branch —
