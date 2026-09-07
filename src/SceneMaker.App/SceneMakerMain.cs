@@ -2436,7 +2436,15 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     private void ShowSelectedRiverNumbers()
     {
-        RebuildRiverActivationChoices();
+        _loadingRiverNumbers = true;
+        try
+        {
+            RebuildRiverActivationChoices();
+        }
+        finally
+        {
+            _loadingRiverNumbers = false;
+        }
         if (_canvas.SelectedWaterBody is not { } body) return;
         _loadingRiverNumbers = true;
         try
