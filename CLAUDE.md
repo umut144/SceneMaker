@@ -31,9 +31,11 @@ for a manual run — request one:
 
 Exit codes: 0 the run succeeded, 1 it failed and `check.sh`'s own code is in
 the `exit=` line of the header, 4 it is still running — call again with
-`--poll` rather than requesting a second run. 2 means `--poll` without an open
-request of this session, and 5 that the request was dropped; request again
-there instead of waiting.
+`--poll` rather than requesting a second run. 2 means the call itself was
+wrong: `--poll` without an open request of this session, or an argument
+outside `CHECK_AGENT_ARGS` (`--tests` by default); fix the call instead of
+repeating it. 5 means the request was dropped; request again rather than
+waiting.
 
 Exit code 3 always needs the developer: say plainly that the watcher is off,
 ask them to type `checkw start` in a terminal tab, and wait for their
