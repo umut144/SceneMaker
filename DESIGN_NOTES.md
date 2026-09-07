@@ -509,6 +509,59 @@ it. World01 offered a list of former group names so a rename could be reported
 rather than lost, and declined it themselves in the same paragraph - their sync
 already reports an unknown name. `WATER-02` holds that, deliberately.
 
+## Selecting a river, and the gesture that was left over
+
+`src/SceneMaker.Editor/ToolInteraction.cs`, `SelectOrGrabWaterBody` - `WATER-05`,
+`WATER-06`, `WATER-07`
+
+Rivers were the one curve area with no selector. A drawn body could only be
+redrawn, and a body authored by hand - which is how every branch exists today -
+could not be touched at all. `River:Select River` is the bridge selector's
+shape against a point list: grab a point of the selected body, grab its
+corridor to carry the whole curve, or choose another body.
+
+Two details are worth keeping. Points are tested before corridors, because at a
+fork every point worth grabbing lies inside two corridors at once. And a
+dragged point snaps to the **water** grid rather than the Terrain grid the other
+tools use, because that is the grid a curve point is required to sit on; the
+shared `SnapToGrid` helper would have produced a drag that is refused at the IO
+boundary instead of on release.
+
+### A broken fork is said, not prevented
+
+Moving a point can pull a branch off its parent. Preventing that would mean a
+source that cannot leave its parent's corridor, so dissolving a fork would need
+its own separate step, and a river would have one rule the other curves do not.
+So the move is taken, and `WaterEditing.BrokenJunctions` is asked after every
+change: the status line says it in the same breath, and the selection turns red.
+The editor validates at its IO boundaries like everything else here - a document
+may be wrong between two edits - but the author must not first read about it in
+an export hours later.
+
+### Every press already meant something
+
+Inserting a point has no gesture left. A press on a point grabs it, a press on
+the corridor selects or carries, a press on open ground clears, and the same
+three with the eraser remove a point or the body. `ToolInteraction` is handed a
+position and nothing else - no modifier keys - and that is deliberate: input
+takes one path and answers with exactly one `ToolOutcome`.
+
+The two ways out are a modifier, which would widen that contract for one
+feature, or a tool of its own. `WATER-05` holds it, and a tool is the answer
+that fits what is already here.
+
+### What the context bar can and cannot say
+
+The four water numbers edit the selected point, exactly as the bridge numbers
+edit the selected bridge - the same field meaning the same thing whether
+something is selected or not. Two things are deliberately absent. The `Point`
+mode field is hidden while selecting, because it decides what the *next* drawn
+point does and there is no operation yet for an existing point's handles
+(`WATER-06`). And activation offers only the states a Scene already declares,
+setting exactly one: a body active in several states stays hand-authored, and
+nothing here creates a group. Both want a list of bodies against a list of
+states, which is the Outliner's picture and not a dropdown's (`WATER-07`).
+
 ## A Scene Template cannot carry water
 
 `src/SceneMaker.Core/DocumentValidation.cs`, the Scene Template branch —

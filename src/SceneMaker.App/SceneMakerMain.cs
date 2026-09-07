@@ -56,6 +56,8 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     private const int CurvePointModeLinear = 1;
     private const int CurvePointModeAligned = 2;
+    private const int RiverInactiveDryBed = 1;
+    private const int RiverInactiveAbsent = 2;
     private const int PathGradeDownFifty = 1;
     private const int PathGradeDownTwentyFive = 2;
     private const int PathGradeLevel = 3;
@@ -68,6 +70,15 @@ public sealed partial class SceneMakerMain : Control
 
     private readonly Label _riverWidthLabel = new();
     private readonly SpinBox _riverWidthEdit = new();
+    private readonly Label _riverActivationLabel = new();
+    private readonly OptionButton _riverActivationEdit = new();
+    private readonly Label _riverInactiveLabel = new();
+    private readonly OptionButton _riverInactiveEdit = new();
+
+    // Group and state flattened into one list, because a state only means
+    // anything inside its group and choosing them separately would allow a
+    // pairing that does not exist. Index 0 is "in every state".
+    private readonly List<(string Group, string State)?> _riverActivationChoices = [];
     private readonly Label _pathWidthLabel = new();
     private readonly SpinBox _pathWidthEdit = new();
     private readonly Label _bridgePlankCountLabel = new();
@@ -140,6 +151,7 @@ public sealed partial class SceneMakerMain : Control
     // Set while the bridge fields are being filled from a selection, so that
     // showing a bridge's numbers cannot be mistaken for editing them.
     private bool _loadingBridgeNumbers;
+    private bool _loadingRiverNumbers;
     private readonly Label _mapDimensionsLabel = new();
     private readonly SpinBox _mapExtensionCellsEdit = new();
     private readonly Label _mapExtensionMetricsLabel = new();
@@ -498,6 +510,34 @@ public sealed partial class SceneMakerMain : Control
         _riverWidthEdit.TooltipText = "The width of the corridor around the river's centerline.";
         _riverWidthEdit.ValueChanged += SetRiverWidth;
         _contextMenuBar.AddChild(_riverWidthEdit);
+
+        _riverActivationLabel.Name = "RiverActivationLabel";
+        _riverActivationLabel.Text = "Active in";
+        _riverActivationLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_riverActivationLabel);
+        _riverActivationEdit.Name = "RiverActivation";
+        _riverActivationEdit.TooltipText =
+            "Which state of which group this body exists in. A body in no group "
+            + "is there in every state. Only states the Scene already declares "
+            + "are offered; a body active in several of them is authored by hand "
+            + "for now.";
+        _riverActivationEdit.ItemSelected += SetRiverActivation;
+        _contextMenuBar.AddChild(_riverActivationEdit);
+
+        _riverInactiveLabel.Name = "RiverInactiveLabel";
+        _riverInactiveLabel.Text = "When off";
+        _riverInactiveLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_riverInactiveLabel);
+        _riverInactiveEdit.Name = "RiverInactive";
+        _riverInactiveEdit.AddItem("Dry bed", RiverInactiveDryBed);
+        _riverInactiveEdit.AddItem("No trace", RiverInactiveAbsent);
+        _riverInactiveEdit.TooltipText =
+            "What is left where this body is while it is switched off. A dry bed "
+            + "keeps its channel cut out of the Terrain; no trace leaves the "
+            + "ground as though it had never been authored.";
+        _riverInactiveEdit.ItemSelected += SetRiverInactive;
+        _contextMenuBar.AddChild(_riverInactiveEdit);
+
         _pathWidthLabel.Name = "PathWidthLabel";
         _pathWidthLabel.Text = "Width";
         _pathWidthLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -2369,8 +2409,142 @@ public sealed partial class SceneMakerMain : Control
     {
         var width = DecimalOf(value);
         _interaction.State.SetRiverWidth(width);
+        if (ApplyRiverNumbers()) return;
         SetStatus($"River width set to {width:0.###} m.");
     }
+
+    /// <summary>
+    /// The water numbers are defaults for the next river while nothing is
+    /// selected, and edits of the selected point while something is. Nothing in
+    /// the bar distinguishes the two: the same field means the same thing, and
+    /// what it acts on is whatever is in front of the author.
+    /// </summary>
+    private bool ApplyRiverNumbers()
+    {
+        if (_loadingRiverNumbers) return false;
+        if (_interaction.ActiveTool != EditorTool.SelectRiver) return false;
+        if (_canvas.SelectedWaterPointIndex is null) return false;
+        HandleToolOutcome(_canvas.ReshapeSelectedWaterPoint());
+        return true;
+    }
+
+    /// <summary>
+    /// Fills the water fields and the activation from the selection. Without
+    /// this the first turn of any field would write the defaults over the point
+    /// the author had just picked - the fields have to be showing it before
+    /// they can edit it.
+    /// </summary>
+    private void ShowSelectedRiverNumbers()
+    {
+        RebuildRiverActivationChoices();
+        if (_canvas.SelectedWaterBody is not { } body) return;
+        _loadingRiverNumbers = true;
+        try
+        {
+            if (_canvas.SelectedWaterPointIndex is { } index && index < body.Points.Count)
+            {
+                var point = body.Points[index];
+                _riverWidthEdit.Value = (double)point.WidthMeters;
+                _waterElevationEdit.Value = (double)point.ElevationMeters;
+                _waterDepthEdit.Value = (double)point.ChannelDepthMeters;
+                _waterClearanceEdit.Value = (double)point.ClearanceAboveMeters;
+                _interaction.State.SetRiverWidth(point.WidthMeters);
+                _interaction.State.SetWaterElevation(point.ElevationMeters);
+                _interaction.State.SetWaterChannelDepth(point.ChannelDepthMeters);
+                _interaction.State.SetWaterClearanceAbove(point.ClearanceAboveMeters);
+            }
+            SelectRiverActivationItem(body.Activation);
+            SelectOptionItem(
+                _riverInactiveEdit,
+                body.Activation?.Inactive == WaterInactive.Absent
+                    ? RiverInactiveAbsent
+                    : RiverInactiveDryBed);
+        }
+        finally
+        {
+            _loadingRiverNumbers = false;
+        }
+        UpdateWaterDerivedSpan();
+    }
+
+    /// <summary>
+    /// Every state of every group the Scene declares, flattened into one list
+    /// with "in every state" first. Group and state are chosen together because
+    /// a state name only means anything inside its own group.
+    /// </summary>
+    private void RebuildRiverActivationChoices()
+    {
+        _riverActivationChoices.Clear();
+        _riverActivationEdit.Clear();
+        _riverActivationChoices.Add(null);
+        _riverActivationEdit.AddItem("Every state", 0);
+        var document = _controller.Document;
+        if (document is null) return;
+        foreach (var group in document.ActivationGroups)
+        {
+            foreach (var state in group.States)
+            {
+                _riverActivationEdit.AddItem($"{group.Group}: {state}", _riverActivationChoices.Count);
+                _riverActivationChoices.Add((group.Group, state));
+            }
+        }
+    }
+
+    private void SelectRiverActivationItem(WaterActivationDocument? activation)
+    {
+        var wanted = 0;
+        if (activation is not null && activation.ActiveIn.Count > 0)
+        {
+            for (var index = 1; index < _riverActivationChoices.Count; index++)
+            {
+                if (_riverActivationChoices[index] is not { } choice) continue;
+                if (!string.Equals(choice.Group, activation.Group, StringComparison.Ordinal)) continue;
+                if (!string.Equals(choice.State, activation.ActiveIn[0], StringComparison.Ordinal)) continue;
+                wanted = index;
+                break;
+            }
+        }
+        SelectOptionItem(_riverActivationEdit, wanted);
+    }
+
+    private static void SelectOptionItem(OptionButton button, int itemId)
+    {
+        for (var index = 0; index < button.ItemCount; index++)
+        {
+            if (button.GetItemId(index) != itemId) continue;
+            button.Selected = index;
+            return;
+        }
+    }
+
+    private void SetRiverActivation(long item)
+    {
+        if (_loadingRiverNumbers) return;
+        var id = _riverActivationEdit.GetItemId((int)item);
+        if (id < 0 || id >= _riverActivationChoices.Count) return;
+        var choice = _riverActivationChoices[id];
+        HandleToolOutcome(_canvas.SetSelectedWaterActivation(choice is { } picked
+            ? new WaterActivationDocument
+            {
+                Group = picked.Group,
+                ActiveIn = [picked.State],
+                Inactive = CurrentRiverInactive(),
+            }
+            : null));
+    }
+
+    private void SetRiverInactive(long item)
+    {
+        if (_loadingRiverNumbers) return;
+        if (_canvas.SelectedWaterBody?.Activation is not { } activation) return;
+        HandleToolOutcome(_canvas.SetSelectedWaterActivation(
+            activation with { Inactive = CurrentRiverInactive() }));
+    }
+
+    private WaterInactive CurrentRiverInactive() =>
+        _riverInactiveEdit.GetItemId(_riverInactiveEdit.Selected) == RiverInactiveAbsent
+            ? WaterInactive.Absent
+            : WaterInactive.DryBed;
 
     private void SetPathWidth(double value)
     {
@@ -2459,6 +2633,7 @@ public sealed partial class SceneMakerMain : Control
         var elevation = ElevationOf(_waterElevationEdit, value);
         _interaction.State.SetWaterElevation(elevation);
         UpdateWaterDerivedSpan();
+        if (ApplyRiverNumbers()) return;
         SetStatus($"Water level set to {elevation:0.###} m.");
     }
 
@@ -2467,6 +2642,7 @@ public sealed partial class SceneMakerMain : Control
         var depth = DecimalOf(value);
         _interaction.State.SetWaterChannelDepth(depth);
         UpdateWaterDerivedSpan();
+        if (ApplyRiverNumbers()) return;
         SetStatus($"Channel depth set to {depth:0.###} m; the bed sits that far below the surface.");
     }
 
@@ -2475,6 +2651,7 @@ public sealed partial class SceneMakerMain : Control
         var clearance = DecimalOf(value);
         _interaction.State.SetWaterClearanceAbove(clearance);
         UpdateWaterDerivedSpan();
+        if (ApplyRiverNumbers()) return;
         SetStatus($"Clearance set to {clearance:0.###} m of headroom above the water.");
     }
 
@@ -2512,7 +2689,13 @@ public sealed partial class SceneMakerMain : Control
             ? selectedElevationRegion.Points.ElementAtOrDefault(selectedPointIndex)
             : null;
         var elevationRegionPointEditing = selectedElevationRegionPoint is not null;
-        var curveActive = riverActive || pathActive
+        var riverSelecting = riverActive && _interaction.ActiveTool == EditorTool.SelectRiver;
+        var selectedRiverBody = riverSelecting ? _canvas.SelectedWaterBody : null;
+        // The point mode decides what the NEXT drawn point does, which is
+        // nothing while a body is being selected. Handles of an existing river
+        // point are not editable yet, so the field is hidden rather than left
+        // sitting there meaning something it cannot do.
+        var curveActive = (riverActive && !riverSelecting) || pathActive
             || elevationRegionDrawing || elevationRegionPointEditing;
         var sectionActive = _canvas.PresentationMode == CanvasPresentationMode.Section;
         var heatmapActive = _canvas.PresentationMode == CanvasPresentationMode.Heightmap;
@@ -2557,6 +2740,10 @@ public sealed partial class SceneMakerMain : Control
                 + "it decides what the next point does and leaves the placed ones alone.";
         _riverWidthLabel.Visible = riverActive;
         _riverWidthEdit.Visible = riverActive;
+        _riverActivationLabel.Visible = selectedRiverBody is not null;
+        _riverActivationEdit.Visible = selectedRiverBody is not null;
+        _riverInactiveLabel.Visible = selectedRiverBody?.Activation is not null;
+        _riverInactiveEdit.Visible = selectedRiverBody?.Activation is not null;
         _pathWidthLabel.Visible = pathActive;
         _pathWidthEdit.Visible = pathActive;
         _bridgePlankCountLabel.Visible = bridgeActive;
@@ -2722,6 +2909,7 @@ public sealed partial class SceneMakerMain : Control
                 break;
         }
         if (_interaction.ActiveTool == EditorTool.SelectBridge) ShowSelectedBridgeNumbers();
+        if (_interaction.ActiveTool == EditorTool.SelectRiver) ShowSelectedRiverNumbers();
         UpdateToolContextLabel();
     }
 
@@ -2969,8 +3157,11 @@ public sealed partial class SceneMakerMain : Control
         foreach (var (tool, control) in _drawingToolControlsByTool)
         {
             control.Visible = EditorToolRegistry.Supports(_interaction.Mode, tool);
+            // Select River picks a body that already exists and never asks what
+            // it is made of, so the Asset guard would disable the one tool in
+            // the area that does not need one.
             control.Disabled = _controller.Scene is null
-                || withoutAsset
+                || withoutAsset && tool != EditorTool.SelectRiver
                 || templateMode && !instanceActive;
             control.ButtonPressed = control.Visible && tool == _interaction.ActiveTool;
         }

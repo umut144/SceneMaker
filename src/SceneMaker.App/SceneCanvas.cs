@@ -295,6 +295,34 @@ public sealed partial class SceneCanvas : Control
                 string.Equals(bridge.BridgeId, bridgeId, StringComparison.Ordinal))
             : null;
 
+    /// <summary>The river the Select tool currently holds, if any.</summary>
+    public WaterBodyDocument? SelectedWaterBody =>
+        CurrentContext() is { } context ? _interaction.SelectedWaterBody(context) : null;
+
+    /// <summary>Which authored point of it is selected, if any.</summary>
+    public int? SelectedWaterPointIndex => _interaction.SelectedWaterPointIndex;
+
+    /// <summary>
+    /// Applies the context bar's water numbers to the selected point, or
+    /// nothing when none is selected - in which case those numbers stay what
+    /// they were, the defaults for the next river.
+    /// </summary>
+    public ToolOutcome ReshapeSelectedWaterPoint()
+    {
+        if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
+        var outcome = _interaction.ReshapeSelectedWaterPoint(context);
+        QueueRedraw();
+        return outcome;
+    }
+
+    public ToolOutcome SetSelectedWaterActivation(WaterActivationDocument? activation)
+    {
+        if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
+        var outcome = _interaction.SetSelectedWaterActivation(context, activation);
+        QueueRedraw();
+        return outcome;
+    }
+
     public ToolOutcome SetSelectedElevationRegionPointMode(ElevationRegionPointMode mode)
     {
         if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
@@ -1605,6 +1633,12 @@ public sealed partial class SceneCanvas : Control
         float zoom,
         int sceneHeightAuthoringPixels)
     {
+        if (ActiveTool == EditorTool.SelectRiver)
+        {
+            DrawWaterSelectionPreview(document, pan, zoom, sceneHeightAuthoringPixels);
+            return;
+        }
+
         var preview = ToolPreviewBuilder.BuildWaterDraft(
             document,
             _metrics!,
@@ -1650,6 +1684,65 @@ public sealed partial class SceneCanvas : Control
             // direction, so they are drawn as more than another point.
             var isEnd = index == 0 || index == preview.Curve.Count - 1;
             DrawCircle(centre, isEnd ? 5.0f : 3.5f, WaterCurveColor);
+        }
+    }
+
+    /// <summary>
+    /// The selected river: the cells it claims, its centerline, and its
+    /// authored points as something grabbable. While a point or the whole curve
+    /// is being dragged this draws the candidate rather than what is stored, so
+    /// the author sees where releasing would put it.
+    ///
+    /// <para>A stated fork the curve no longer supports turns the selection
+    /// red. That is a warning and not a refusal - the move is taken either way
+    /// - but it is the one thing an author must not first read in an export.
+    /// </para>
+    /// </summary>
+    private void DrawWaterSelectionPreview(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        if (CurrentContext() is not { } context) return;
+        var preview = _interaction.WaterSelection(context);
+        if (preview.Body is not { } body) return;
+
+        var color = preview.Broken.Count > 0 ? InvalidPreviewColor : SelectionColor;
+        var waterCellSize = _metrics!.AuthoringPixelsPerWaterCell * zoom;
+        var rows = _metrics.SceneHeightWaterCells(document);
+        foreach (var cell in preview.Cells)
+        {
+            DrawRect(
+                new Rect2(
+                    pan + new Vector2(cell.X * waterCellSize, (rows - cell.Y - 1) * waterCellSize),
+                    new Vector2(waterCellSize, waterCellSize)),
+                new Color(color.R, color.G, color.B, 0.35f));
+        }
+
+        Vector2 Screen(double authoringX, double authoringY) => pan + new Vector2(
+            (float)authoringX * zoom,
+            (sceneHeightAuthoringPixels - (float)authoringY) * zoom);
+
+        if (preview.Centerline.Count >= 2)
+        {
+            var line = new Vector2[preview.Centerline.Count];
+            for (var index = 0; index < preview.Centerline.Count; index++)
+                line[index] = Screen(preview.Centerline[index].X, preview.Centerline[index].Y);
+            DrawPolyline(line, color, 3.0f);
+        }
+
+        for (var index = 0; index < body.Points.Count; index++)
+        {
+            var point = body.Points[index];
+            var centre = Screen(point.PositionAuthoringPx.X, point.PositionAuthoringPx.Y);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleInAuthoringPx, Screen);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleOutAuthoringPx, Screen);
+            var selected = _interaction.SelectedWaterPointIndex == index;
+            // The source and the mouth are the whole of a river's flow
+            // direction, so they stay bigger than the points between them.
+            var isEnd = index == 0 || index == body.Points.Count - 1;
+            DrawCircle(centre, selected ? 6.5f : isEnd ? 5.0f : 4.0f, color);
         }
     }
 

@@ -207,6 +207,52 @@ public sealed class ToolRiverSelectionTests
         Assert.Null(interaction.SelectedWaterPointIndex);
     }
 
+    /// <summary>
+    /// The eraser follows the same order a plain press does - points before
+    /// corridors - so what it takes away is what a press would have grabbed.
+    /// </summary>
+    [Fact]
+    public void TheEraserTakesThePointUnderItAndTheBodyEverywhereElse()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WaterEditing.Reshape(
+            Forked(workspace),
+            "river_0002",
+            [
+                WaterEditing.Point(96, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+                WaterEditing.Point(96, 96, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+                WaterEditing.Point(96, 160, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+            ]);
+        var interaction = Selecting();
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(96, 100), Cell(3, 3));
+        interaction.SetEraserEnabled(true);
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(
+            interaction.PointerPressed(context, Point(96, 96), Cell(3, 3)));
+        Assert.Equal(2, edit.Apply(scene).WaterBodies[1].Points.Count);
+
+        // Away from any point it is still the body that goes.
+        var whole = Assert.IsType<ToolOutcome.Edit>(
+            interaction.PointerPressed(context, Point(96, 130), Cell(3, 4)));
+        Assert.Single(whole.Apply(scene).WaterBodies);
+    }
+
+    [Fact]
+    public void ACurveWithOnlyASourceAndAMouthKeepsBothPoints()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Forked(workspace);
+        var interaction = Selecting();
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(96, 100), Cell(3, 3));
+        interaction.SetEraserEnabled(true);
+
+        var message = Assert.IsType<ToolOutcome.Message>(
+            interaction.PointerPressed(context, Point(96, 160), Cell(3, 5)));
+        Assert.Contains("source and a mouth", message.Text, StringComparison.Ordinal);
+    }
+
     private static ToolInteraction Selecting()
     {
         var interaction = new ToolInteraction();

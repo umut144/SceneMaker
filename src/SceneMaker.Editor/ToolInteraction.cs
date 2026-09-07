@@ -583,7 +583,7 @@ public sealed class ToolInteraction
     {
         EditorTool.DrawRiver when EraserEnabled => EraseWaterBody(context, authoring),
         EditorTool.DrawRiver => BeginRiverPoint(context, authoring, cell),
-        EditorTool.SelectRiver when EraserEnabled => EraseWaterBody(context, authoring),
+        EditorTool.SelectRiver when EraserEnabled => EraseWaterPointOrBody(context, authoring),
         EditorTool.SelectRiver => SelectOrGrabWaterBody(context, authoring),
         _ => ToolOutcome.Idle.Instance,
     };
@@ -761,6 +761,38 @@ public sealed class ToolInteraction
         }
         SelectedWaterPointIndex = null;
         return new ToolOutcome.Message(WaterBodyText(context, found));
+    }
+
+    /// <summary>
+    /// With the eraser on, a press takes away the point under it, or the whole
+    /// body when the press is not on a point. Which of the two it is follows
+    /// the same order selecting does - points before corridors - so what an
+    /// eraser removes is what a plain press would have grabbed.
+    /// </summary>
+    private ToolOutcome EraseWaterPointOrBody(ToolContext context, AuthoringPoint point)
+    {
+        if (SelectedWaterBodyId is { } selectedId
+            && context.Scene.WaterBodies.FirstOrDefault(body =>
+                string.Equals(body.WaterBodyId, selectedId, StringComparison.Ordinal)) is { } selected
+            && WaterEditing.FindPointAt(
+                selected, point.X, point.Y, context.PointerHitRadiusAuthoringPixels) is { } index)
+        {
+            if (selected.Points.Count <= 2)
+            {
+                return new ToolOutcome.Message(
+                    $"'{selected.WaterBodyId}' has only a source and a mouth; erase the river itself to remove it.");
+            }
+            var points = selected.Points.ToList();
+            points.RemoveAt(index);
+            SelectedWaterPointIndex = null;
+            return new ToolOutcome.Edit(
+                "Erase River Point",
+                document => WaterEditing.Reshape(document, selectedId, points),
+                Describe: (_, after) =>
+                    $"Erase River Point: '{selectedId}' now has {WaterEditing.Require(after, selectedId).Points.Count} points."
+                    + JunctionComplaint(after, context.Metrics));
+        }
+        return EraseWaterBody(context, point);
     }
 
     /// <summary>
@@ -1112,6 +1144,24 @@ public sealed class ToolInteraction
                 plankGap),
             Describe: (_, _) => FormattableString.Invariant(
                 $"Bridge '{bridgeId}': {plankCount} planks, {width:0.##} m wide at {elevation:0.###} m."));
+    }
+
+    /// <summary>What the Canvas draws for the selected river, dragged or not.</summary>
+    public WaterSelectionPreview WaterSelection(ToolContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return ToolPreviewBuilder.BuildWaterSelection(
+            context.Scene, context.Metrics, ActiveTool, SelectedWaterBodyId, WaterCandidatePoints(context));
+    }
+
+    /// <summary>The body the selection names, or null when nothing is selected.</summary>
+    public WaterBodyDocument? SelectedWaterBody(ToolContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return SelectedWaterBodyId is { } bodyId
+            ? context.Scene.WaterBodies.FirstOrDefault(body =>
+                string.Equals(body.WaterBodyId, bodyId, StringComparison.Ordinal))
+            : null;
     }
 
     /// <summary>What the Canvas draws for the selected bridge, dragged or not.</summary>

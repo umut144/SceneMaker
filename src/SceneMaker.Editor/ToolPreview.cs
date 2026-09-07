@@ -49,6 +49,24 @@ public sealed record WaterDraftPreview(
 }
 
 /// <summary>
+/// The selected river as it currently stands, which during a drag is not where
+/// the document has it. It carries the candidate itself, so the Canvas draws
+/// one thing and the commit takes the same thing.
+///
+/// <para><see cref="Broken"/> is what a stated fork no longer supports. It is
+/// not a refusal - the move is taken either way - it is the sentence the author
+/// has to see before an export says it hours later.</para>
+/// </summary>
+public sealed record WaterSelectionPreview(
+    WaterBodyDocument? Body,
+    IReadOnlyList<ChainPoint> Centerline,
+    IReadOnlyList<WaterCellSpan> Cells,
+    IReadOnlyList<string> Broken)
+{
+    public static WaterSelectionPreview Empty { get; } = new(null, [], [], []);
+}
+
+/// <summary>
 /// The open Path being drawn. A prepared surface is present only when at least
 /// two points form valid route geometry; the same value is used by the canvas
 /// and by Enter.
@@ -324,6 +342,58 @@ public static class ToolPreviewBuilder
             WaterGeometry.Centerline(curve),
             WaterGeometry.Corridor(scene, metrics, curve));
     }
+
+    /// <summary>
+    /// The selected river exactly as stored, or the complete reshape a drag
+    /// would commit. The corridor comes from the same rule the export rasters
+    /// with, so what the author sees highlighted is the set of cells the body
+    /// actually claims.
+    /// </summary>
+    public static WaterSelectionPreview BuildWaterSelection(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        EditorTool tool,
+        string? selectedWaterBodyId,
+        IReadOnlyList<WaterCurvePointDocument>? candidatePoints)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+        if (tool != EditorTool.SelectRiver || selectedWaterBodyId is null)
+            return WaterSelectionPreview.Empty;
+
+        var stored = scene.WaterBodies.FirstOrDefault(body => string.Equals(
+            body.WaterBodyId, selectedWaterBodyId, StringComparison.Ordinal));
+        if (stored is null) return WaterSelectionPreview.Empty;
+
+        var candidate = candidatePoints is null ? stored : stored with { Points = [.. candidatePoints] };
+        try
+        {
+            return new WaterSelectionPreview(
+                candidate,
+                WaterGeometry.Centerline(candidate.Points),
+                WaterGeometry.Corridor(scene, metrics, candidate.Points),
+                candidatePoints is null
+                    ? WaterEditing.BrokenJunctions(scene, metrics)
+                    : WaterEditing.BrokenJunctions(Replaced(scene, candidate), metrics));
+        }
+        catch (SceneMakerDocumentException)
+        {
+            // A curve that is momentarily not a curve - two points on top of
+            // each other during a drag - is a drag passing through, not a
+            // refusal. The points are still drawn; the corridor is not.
+            return new WaterSelectionPreview(candidate, [], [], []);
+        }
+    }
+
+    private static SceneDocument Replaced(SceneDocument scene, WaterBodyDocument body) => scene with
+    {
+        WaterBodies = scene.WaterBodies
+            .Select(candidate => string.Equals(
+                candidate.WaterBodyId, body.WaterBodyId, StringComparison.Ordinal)
+                    ? body
+                    : candidate)
+            .ToList(),
+    };
 
     public static RouteDraftPreview BuildRouteDraft(
         WorkspaceMetrics metrics,
