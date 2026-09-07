@@ -16,6 +16,50 @@ full and follow all instructions and document-reading requirements defined
 there. Treat `AGENTS.md` as the canonical source for project workflow, scope,
 architecture, validation, and Git rules.
 
+## Validation from the sandbox: the check watcher
+
+This session has no .NET and cannot run `./scripts/check.sh` itself. A watcher
+the developer keeps running in a terminal tab runs it instead, so do not ask
+for a manual run — request one:
+
+```sh
+./scripts/check-agent-run.sh            # the default path
+./scripts/check-agent-run.sh --tests    # additionally the test projects
+./scripts/check-agent-run.sh --poll     # keep waiting for a long run
+./scripts/check-agent-run.sh --full     # the whole output instead of a tail
+```
+
+Exit codes: 0 the run succeeded, 1 it failed and `check.sh`'s own code is in
+the `exit=` line of the header, 4 it is still running — call again with
+`--poll` rather than requesting a second run. 2 means `--poll` without an open
+request of this session, and 5 that the request was dropped; request again
+there instead of waiting.
+
+Exit code 3 is the one case that needs the developer: say plainly that the
+watcher is off, ask them to type `checkw start` in a terminal tab, and wait for
+their confirmation instead of falling back to "please run it by hand".
+
+The watcher answers through `.agent-check/`, which is git-ignored. You do not
+read it: `check-agent-run.sh` prints your run's header — id, exit, args,
+duration, lines — and its output, `--full` instead of the tail. The `result`
+and `last.log` at the top of that directory are a copy of whichever run
+finished last, whoever asked for it; they are the developer's view, and with
+several sessions sharing one watcher they may belong to someone else.
+
+The one place worth a look is `manual-result` with its `manual.log`. Those are
+written by the developer's own shell function when he runs the check by hand,
+not by the watcher, and they appear only once he has done so. Their header
+carries the same fields plus `head` and `dirty`, so you can tell which commit
+the run belongs to before trusting it instead of requesting one yourself.
+
+`scripts/check-agent.sh` and `scripts/check-agent-run.sh` come unchanged from
+world01 and carry no project knowledge — they ask Git for the root and call
+`./scripts/check.sh`. Leave them exactly as they are; they are meant to stay
+identical across repositories.
+
+None of this changes what has to be verified: the rules in `AGENTS.md` apply
+unchanged, and the watcher is only how a run is requested from here.
+
 ## Git from the sandbox: no optional locks
 
 The sandbox cannot delete files, so a plain `git status` in this session leaves
