@@ -39,6 +39,13 @@ Exit code 3 is the one case that needs the developer: say plainly that the
 watcher is off, ask them to type `checkw start` in a terminal tab, and wait for
 their confirmation instead of falling back to "please run it by hand".
 
+Beyond exit code 3, stop and ask the developer whenever the obstacle is not
+yours to remove: the same request fails or is dropped three times in a row, a
+run keeps polling far past its usual duration, or the failure names something
+about the machine rather than the code — a missing toolchain, a full disk, a
+binary that is gone. Say what you tried, what you saw, and what you need.
+Changing code in response to a broken environment is worse than waiting.
+
 The watcher answers through `.agent-check/`, which is git-ignored. You do not
 read it: `check-agent-run.sh` prints your run's header — id, exit, args,
 duration, lines — and its output, `--full` instead of the tail. The `result`
