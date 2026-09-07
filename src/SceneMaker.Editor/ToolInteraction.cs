@@ -40,6 +40,14 @@ public sealed class ToolInteraction
     private string? _draggedAnchorId;
     private AuthoringPoint? _draggedAnchorPosition;
 
+    // What a river drag is holding. A point drag moves one authored point, a
+    // body drag carries the whole curve by one offset - the same distinction a
+    // bridge drag makes, against a point list instead of two ends.
+    private int? _draggedWaterPointIndex;
+    private AuthoringPoint? _draggedWaterPointPosition;
+    private AuthoringPoint? _waterBodyDragOrigin;
+    private AuthoringPoint? _waterBodyDragPointer;
+
     // What a bridge drag is holding. An end drag moves one end, a body drag
     // moves both by the same offset - which is the whole difference between
     // reshaping a bridge and carrying it somewhere else.
@@ -62,6 +70,8 @@ public sealed class ToolInteraction
     public string? SelectedElevationRegionId { get; private set; }
     public int? SelectedElevationRegionPointIndex { get; private set; }
     public string? SelectedBridgeId { get; private set; }
+    public string? SelectedWaterBodyId { get; private set; }
+    public int? SelectedWaterPointIndex { get; private set; }
 
     /// <summary>
     /// Where the selected bridge's two ends currently sit while it is being
@@ -233,6 +243,8 @@ public sealed class ToolInteraction
         _pointerCell = null;
         SelectedPropInstanceId = null;
         SelectedTemplateAnchorId = null;
+        SelectedWaterBodyId = null;
+        SelectedWaterPointIndex = null;
         SelectedElevationRegionId = null;
         SelectedElevationRegionPointIndex = null;
         SelectedBridgeId = null;
@@ -332,6 +344,20 @@ public sealed class ToolInteraction
         {
             SelectedElevationRegionPointIndex = null;
         }
+        if (SelectedWaterBodyId is { } waterBodyId
+            && after.WaterBodies.All(body => body.WaterBodyId != waterBodyId))
+        {
+            SelectedWaterBodyId = null;
+            SelectedWaterPointIndex = null;
+        }
+        if (SelectedWaterBodyId is { } selectedWaterId
+            && SelectedWaterPointIndex is { } selectedWaterPoint
+            && after.WaterBodies.First(body => body.WaterBodyId == selectedWaterId)
+                .Points.Count <= selectedWaterPoint)
+        {
+            SelectedWaterPointIndex = null;
+        }
+        if (_draggedWaterPointIndex is not null || _waterBodyDragOrigin is not null) ClearWaterDrag();
         if (_draggedAnchorId is not null) ClearAnchorDrag();
         if (_draggedElevationRegionPointIndex is not null) ClearElevationRegionPointDrag();
         if (_draggedElevationRegionHandleSide is not null) ClearElevationRegionHandleDrag();
@@ -390,6 +416,13 @@ public sealed class ToolInteraction
             case EditorMode.ElevationRegion when ActiveTool == EditorTool.SelectElevationRegion
                                           && _draggedElevationRegionPointIndex is not null:
                 return DragSelectedElevationRegionPoint(context, authoring);
+            case EditorMode.River when ActiveTool == EditorTool.SelectRiver
+                                       && _draggedWaterPointIndex is not null:
+                return DragSelectedWaterPoint(context, authoring);
+            case EditorMode.River when ActiveTool == EditorTool.SelectRiver
+                                       && _waterBodyDragOrigin is not null:
+                _waterBodyDragPointer = authoring;
+                return ToolOutcome.Idle.Instance;
             case EditorMode.Bridge when ActiveTool == EditorTool.SelectBridge
                                         && _bridgeDragPointerOrigin is not null:
                 _bridgeDragPointer = authoring;
@@ -424,6 +457,9 @@ public sealed class ToolInteraction
         if (_draggedElevationRegionHandleSide is not null) return FinishElevationRegionHandleMove(context);
         if (_draggedElevationRegionPointIndex is not null) return FinishElevationRegionPointMove(context);
 
+        if (_draggedWaterPointIndex is not null) return FinishWaterPointMove(context);
+        if (_waterBodyDragOrigin is not null) return FinishWaterBodyMove(context);
+
         if (_bridgeDragPointerOrigin is not null) return FinishBridgeDrag(context);
 
         if (_draggedAnchorId is { } anchorId && _draggedAnchorPosition is { } position)
@@ -451,6 +487,15 @@ public sealed class ToolInteraction
         }
         if (Mode == EditorMode.ElevationRegion && ActiveTool == EditorTool.DrawElevationRegion)
             return key == ToolKey.Enter ? FinishElevationRegion(context) : CancelElevationRegionPoint();
+        if (Mode == EditorMode.River && ActiveTool == EditorTool.SelectRiver)
+        {
+            if (key == ToolKey.Enter) return ToolOutcome.Idle.Instance;
+            if (SelectedWaterBodyId is null) return ToolOutcome.Idle.Instance;
+            SelectedWaterBodyId = null;
+            SelectedWaterPointIndex = null;
+            ClearWaterDrag();
+            return new ToolOutcome.Message("River selection cleared.");
+        }
         if (Mode == EditorMode.Bridge && ActiveTool == EditorTool.SelectBridge)
         {
             if (key == ToolKey.Enter) return ToolOutcome.Idle.Instance;
@@ -538,6 +583,8 @@ public sealed class ToolInteraction
     {
         EditorTool.DrawRiver when EraserEnabled => EraseWaterBody(context, authoring),
         EditorTool.DrawRiver => BeginRiverPoint(context, authoring, cell),
+        EditorTool.SelectRiver when EraserEnabled => EraseWaterBody(context, authoring),
+        EditorTool.SelectRiver => SelectOrGrabWaterBody(context, authoring),
         _ => ToolOutcome.Idle.Instance,
     };
 
@@ -667,6 +714,263 @@ public sealed class ToolInteraction
         return new ToolOutcome.Message(
             FormattableString.Invariant(
                 $"Selected '{found.BridgeId}': {found.PlankCount} planks, {found.WidthMeters:0.##} m wide at {found.ElevationMeters:0.###} m."));
+    }
+
+    /// <summary>
+    /// One press does all three: grabbing an authored point of the selected
+    /// river, grabbing its corridor to carry the whole curve, or choosing a
+    /// different body. Points are tested before corridors so a point stays
+    /// reachable where two bodies overlap - which at a fork they always do -
+    /// and pressing open ground clears the selection, the same answer every
+    /// other selection tool gives.
+    /// </summary>
+    private ToolOutcome SelectOrGrabWaterBody(ToolContext context, AuthoringPoint point)
+    {
+        if (SelectedWaterBodyId is { } selectedId
+            && context.Scene.WaterBodies.FirstOrDefault(body =>
+                string.Equals(body.WaterBodyId, selectedId, StringComparison.Ordinal)) is { } selected
+            && WaterEditing.FindPointAt(
+                selected, point.X, point.Y, context.PointerHitRadiusAuthoringPixels) is { } grabbed)
+        {
+            SelectedWaterPointIndex = grabbed;
+            _draggedWaterPointIndex = grabbed;
+            _draggedWaterPointPosition = new AuthoringPoint(
+                selected.Points[grabbed].PositionAuthoringPx.X,
+                selected.Points[grabbed].PositionAuthoringPx.Y);
+            return new ToolOutcome.Message(WaterPointText(selected, grabbed));
+        }
+
+        var found = WaterEditing.FindAt(context.Scene, context.Metrics, point.X, point.Y);
+        if (found is null)
+        {
+            if (SelectedWaterBodyId is null) return ToolOutcome.Idle.Instance;
+            SelectedWaterBodyId = null;
+            SelectedWaterPointIndex = null;
+            ClearWaterDrag();
+            return new ToolOutcome.Message("River selection cleared.");
+        }
+
+        var wasSelected = string.Equals(found.WaterBodyId, SelectedWaterBodyId, StringComparison.Ordinal);
+        SelectedWaterBodyId = found.WaterBodyId;
+        if (wasSelected)
+        {
+            SelectedWaterPointIndex = null;
+            _waterBodyDragOrigin = point;
+            _waterBodyDragPointer = point;
+            return ToolOutcome.Idle.Instance;
+        }
+        SelectedWaterPointIndex = null;
+        return new ToolOutcome.Message(WaterBodyText(context, found));
+    }
+
+    /// <summary>
+    /// Where the dragged point currently is. It snaps to the water grid rather
+    /// than the Terrain grid, because that is the grid a curve point is
+    /// required to sit on, and a drag that ended off it would be refused at the
+    /// IO boundary instead of on release.
+    /// </summary>
+    private ToolOutcome DragSelectedWaterPoint(ToolContext context, AuthoringPoint point)
+    {
+        var snapped = new AuthoringPoint(
+            context.Metrics.SnapToWaterGrid(point.X),
+            context.Metrics.SnapToWaterGrid(point.Y));
+        if (IsInsideScene(context, snapped)) _draggedWaterPointPosition = snapped;
+        return ToolOutcome.Idle.Instance;
+    }
+
+    /// <summary>The point list a river drag currently describes, or null.</summary>
+    public IReadOnlyList<WaterCurvePointDocument>? WaterCandidatePoints(ToolContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (SelectedWaterBodyId is not { } bodyId) return null;
+        var body = context.Scene.WaterBodies.FirstOrDefault(candidate =>
+            string.Equals(candidate.WaterBodyId, bodyId, StringComparison.Ordinal));
+        if (body is null) return null;
+
+        if (_draggedWaterPointIndex is { } index && _draggedWaterPointPosition is { } moved)
+        {
+            if (index >= body.Points.Count) return null;
+            var points = body.Points.ToList();
+            points[index] = points[index] with
+            {
+                PositionAuthoringPx = new AuthoringPixelPosition { X = moved.X, Y = moved.Y },
+            };
+            return points;
+        }
+        if (WaterBodyDragOffset is { } offset)
+        {
+            return body.Points
+                .Select(candidate => candidate with
+                {
+                    PositionAuthoringPx = new AuthoringPixelPosition
+                    {
+                        X = candidate.PositionAuthoringPx.X + offset.X,
+                        Y = candidate.PositionAuthoringPx.Y + offset.Y,
+                    },
+                })
+                .ToList();
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// How far a body drag has carried the curve, snapped to the water grid so
+    /// every point lands where a point is allowed to be.
+    /// </summary>
+    public (int X, int Y)? WaterBodyDragOffset => _waterBodyDragOrigin is { } origin
+        && _waterBodyDragPointer is { } pointer
+        ? (pointer.X - origin.X, pointer.Y - origin.Y)
+        : null;
+
+    private ToolOutcome FinishWaterPointMove(ToolContext context) =>
+        CommitWaterReshape(context, "Move River Point");
+
+    private ToolOutcome FinishWaterBodyMove(ToolContext context) =>
+        CommitWaterReshape(context, "Move River");
+
+    /// <summary>
+    /// Commits what the drag was showing. A drag that moved nothing is not an
+    /// edit and leaves no undo step behind.
+    ///
+    /// <para>A move is allowed to pull a fork apart. The editor validates at
+    /// its IO boundaries like everything else, so a document may be wrong
+    /// between two edits - but the author hears it in the same breath as the
+    /// move rather than from an export hours later.</para>
+    /// </summary>
+    private ToolOutcome CommitWaterReshape(ToolContext context, string name)
+    {
+        var candidate = WaterCandidatePoints(context);
+        var bodyId = SelectedWaterBodyId;
+        ClearWaterDrag();
+        if (bodyId is null || candidate is null) return ToolOutcome.Idle.Instance;
+
+        var stored = context.Scene.WaterBodies.FirstOrDefault(body =>
+            string.Equals(body.WaterBodyId, bodyId, StringComparison.Ordinal));
+        if (stored is null)
+        {
+            SelectedWaterBodyId = null;
+            SelectedWaterPointIndex = null;
+            return new ToolOutcome.Message("The selected river no longer exists.");
+        }
+        if (stored.Points.SequenceEqual(candidate)) return ToolOutcome.Idle.Instance;
+
+        return new ToolOutcome.Edit(
+            name,
+            document => WaterEditing.Reshape(document, bodyId, candidate),
+            Describe: (_, after) => $"{name}: '{bodyId}' reshaped.{JunctionComplaint(after, context.Metrics)}");
+    }
+
+    /// <summary>
+    /// Replaces the selected point's section and width with what the context
+    /// bar currently holds. The bar is defaults for the next river while
+    /// nothing is selected and an edit of this point while something is - the
+    /// same field meaning the same thing either way.
+    /// </summary>
+    public ToolOutcome ReshapeSelectedWaterPoint(ToolContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (Mode != EditorMode.River || ActiveTool != EditorTool.SelectRiver
+            || SelectedWaterBodyId is not { } bodyId
+            || SelectedWaterPointIndex is not { } index)
+        {
+            return ToolOutcome.Idle.Instance;
+        }
+        var body = context.Scene.WaterBodies.FirstOrDefault(candidate =>
+            string.Equals(candidate.WaterBodyId, bodyId, StringComparison.Ordinal));
+        if (body is null || index >= body.Points.Count) return ToolOutcome.Idle.Instance;
+
+        var replaced = body.Points[index] with
+        {
+            ElevationMeters = State.WaterElevationMeters,
+            ChannelDepthMeters = State.WaterChannelDepthMeters,
+            ClearanceAboveMeters = State.WaterClearanceAboveMeters,
+            WidthMeters = State.RiverWidthMeters,
+        };
+        if (replaced == body.Points[index]) return ToolOutcome.Idle.Instance;
+
+        var points = body.Points.ToList();
+        points[index] = replaced;
+        return new ToolOutcome.Edit(
+            "Reshape River Point",
+            document => WaterEditing.Reshape(document, bodyId, points),
+            Describe: (_, after) =>
+                $"Reshape River Point: {WaterPointText(WaterEditing.Require(after, bodyId), index)}"
+                + JunctionComplaint(after, context.Metrics));
+    }
+
+    /// <summary>Puts the selected body into an activation group, or takes it out.</summary>
+    public ToolOutcome SetSelectedWaterActivation(
+        ToolContext context,
+        WaterActivationDocument? activation)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (Mode != EditorMode.River || ActiveTool != EditorTool.SelectRiver
+            || SelectedWaterBodyId is not { } bodyId)
+        {
+            return ToolOutcome.Idle.Instance;
+        }
+        return new ToolOutcome.Edit(
+            "Set River Activation",
+            document => WaterEditing.SetActivation(document, bodyId, activation),
+            Describe: (_, after) => activation is null
+                ? $"Set River Activation: '{bodyId}' exists in every state."
+                : $"Set River Activation: '{bodyId}' is active in "
+                    + $"{string.Join(", ", activation.ActiveIn)} of '{activation.Group}', "
+                    + $"{ActivationInactiveText(activation.Inactive)} otherwise.");
+    }
+
+    private static string ActivationInactiveText(WaterInactive inactive) => inactive switch
+    {
+        WaterInactive.DryBed => "a dry bed",
+        _ => "no trace",
+    };
+
+    /// <summary>
+    /// What a body is, in one line: what it is made of, how long it runs, what
+    /// it meets and when it exists.
+    /// </summary>
+    private static string WaterBodyText(ToolContext context, WaterBodyDocument body)
+    {
+        var meets = body.Junctions.Count == 0
+            ? string.Empty
+            : $" Meets {string.Join(", ", body.Junctions.Select(claim => $"'{claim.WaterBodyId}'"))}.";
+        var states = body.Activation is { } activation
+            ? $" Active in {string.Join(", ", activation.ActiveIn)} of '{activation.Group}'."
+            : " Always there.";
+        var length = WaterGeometry.LengthMeters(context.Metrics, body);
+        return FormattableString.Invariant(
+            $"Selected '{body.WaterBodyId}': {body.Points.Count} points, {length:0.##} m long.")
+            + meets
+            + states;
+    }
+
+    private static string WaterPointText(WaterBodyDocument body, int index)
+    {
+        var point = body.Points[index];
+        var bed = point.ElevationMeters - point.ChannelDepthMeters;
+        return FormattableString.Invariant(
+            $"'{body.WaterBodyId}' point {index + 1} of {body.Points.Count}: {point.WidthMeters:0.##} m wide,")
+            + FormattableString.Invariant(
+                $" surface {point.ElevationMeters:0.###} m, bed {bed:0.###} m.");
+    }
+
+    /// <summary>
+    /// What to append to a status line when an edit has left a fork stated but
+    /// unsupported. Empty when everything still holds, so the ordinary case
+    /// reads as it did before.
+    /// </summary>
+    private static string JunctionComplaint(SceneDocument scene, WorkspaceMetrics metrics)
+    {
+        var broken = WaterEditing.BrokenJunctions(scene, metrics);
+        return broken.Count == 0 ? string.Empty : " " + string.Join(" ", broken);
+    }
+
+    private void ClearWaterDrag()
+    {
+        _draggedWaterPointIndex = null;
+        _draggedWaterPointPosition = null;
+        _waterBodyDragOrigin = null;
+        _waterBodyDragPointer = null;
     }
 
     private void BeginBridgeDrag(BridgeDocument bridge, AuthoringPoint point, BridgeEnd? end)
@@ -2037,6 +2341,7 @@ public sealed class ToolInteraction
         ClearPathDraft();
         ClearElevationRegionDraft();
         ClearBridgeDrag();
+        ClearWaterDrag();
         _bridgeStart = null;
     }
 
