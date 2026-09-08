@@ -74,6 +74,9 @@ public sealed partial class SceneMakerMain : Control
     private readonly OptionButton _riverActivationEdit = new();
     private readonly Label _riverInactiveLabel = new();
     private readonly OptionButton _riverInactiveEdit = new();
+    private readonly Label _riverGroupLabel = new();
+    private readonly LineEdit _riverGroupEdit = new();
+    private readonly Button _riverGroupRemove = new();
 
     // Group and state flattened into one list, because a state only means
     // anything inside its group and choosing them separately would allow a
@@ -537,6 +540,31 @@ public sealed partial class SceneMakerMain : Control
             + "ground as though it had never been authored.";
         _riverInactiveEdit.ItemSelected += SetRiverInactive;
         _contextMenuBar.AddChild(_riverInactiveEdit);
+
+        // Shown only while the selected river is in no group: naming one is how
+        // a drawn branch becomes switchable, and until today that meant writing
+        // the document by hand.
+        _riverGroupLabel.Name = "RiverGroupLabel";
+        _riverGroupLabel.Text = "New group";
+        _riverGroupLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_riverGroupLabel);
+        _riverGroupEdit.Name = "RiverGroup";
+        _riverGroupEdit.PlaceholderText = "name it, then Enter";
+        _riverGroupEdit.CustomMinimumSize = new Vector2(150f, 0f);
+        _riverGroupEdit.TooltipText =
+            "Declares a group with the states dry and flowing, starting dry, and "
+            + "puts this river in flowing. The name is what a consumer binds its "
+            + "trigger to, so it is worth reading well.";
+        _riverGroupEdit.TextSubmitted += DeclareRiverActivationGroup;
+        _contextMenuBar.AddChild(_riverGroupEdit);
+
+        _riverGroupRemove.Name = "RiverGroupRemove";
+        _riverGroupRemove.Text = "Remove group";
+        _riverGroupRemove.TooltipText =
+            "Takes the group away, and with it the activation of every river in "
+            + "it - those are then there in every state.";
+        _riverGroupRemove.Pressed += RemoveRiverActivationGroup;
+        _contextMenuBar.AddChild(_riverGroupRemove);
 
         _pathWidthLabel.Name = "PathWidthLabel";
         _pathWidthLabel.Text = "Width";
@@ -2555,6 +2583,16 @@ public sealed partial class SceneMakerMain : Control
             activation with { Inactive = CurrentRiverInactive() }));
     }
 
+    private void DeclareRiverActivationGroup(string text)
+    {
+        var outcome = _canvas.MakeSelectedWaterSwitchable(text);
+        if (outcome is ToolOutcome.Edit) _riverGroupEdit.Clear();
+        HandleToolOutcome(outcome);
+    }
+
+    private void RemoveRiverActivationGroup() =>
+        HandleToolOutcome(_canvas.RemoveSelectedWaterActivationGroup());
+
     private WaterInactive CurrentRiverInactive() =>
         _riverInactiveEdit.GetItemId(_riverInactiveEdit.Selected) == RiverInactiveAbsent
             ? WaterInactive.Absent
@@ -2758,6 +2796,11 @@ public sealed partial class SceneMakerMain : Control
         _riverActivationEdit.Visible = selectedRiverBody is not null;
         _riverInactiveLabel.Visible = selectedRiverBody?.Activation is not null;
         _riverInactiveEdit.Visible = selectedRiverBody?.Activation is not null;
+        // One of the two at a time: name a group while the river is in none,
+        // take it away while it is in one.
+        _riverGroupLabel.Visible = selectedRiverBody is { Activation: null };
+        _riverGroupEdit.Visible = selectedRiverBody is { Activation: null };
+        _riverGroupRemove.Visible = selectedRiverBody?.Activation is not null;
         _pathWidthLabel.Visible = pathActive;
         _pathWidthEdit.Visible = pathActive;
         _bridgePlankCountLabel.Visible = bridgeActive;

@@ -228,6 +228,78 @@ public sealed class ToolRiverSelectionTests
         Assert.Null(cleared.Apply(switched).WaterBodies[1].Activation);
     }
 
+    /// <summary>
+    /// The loop that was broken in the middle: a branch could be drawn but not
+    /// made switchable, because a group existed only if somebody wrote it into
+    /// the document by hand.
+    /// </summary>
+    [Fact]
+    public void NamingAGroupDeclaresItAndPutsTheSelectedBodyInIt()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Forked(workspace);
+        var interaction = Selecting();
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(96, 100), Cell(3, 3));
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(
+            interaction.MakeSelectedWaterSwitchable(context, "  mill_gate  "));
+        var after = edit.Apply(scene);
+
+        // Declaring and joining are one undo step, because they are one intention.
+        var group = Assert.Single(after.ActivationGroups);
+        Assert.Equal("mill_gate", group.Group);
+        Assert.Equal(["dry", "flowing"], group.States);
+        Assert.Equal("dry", group.InitialState);
+
+        var activation = after.WaterBodies[1].Activation;
+        Assert.NotNull(activation);
+        Assert.Equal("mill_gate", activation.Group);
+        Assert.Equal(["flowing"], activation.ActiveIn);
+        Assert.Equal(WaterInactive.DryBed, activation.Inactive);
+
+        // As the Scene starts, the branch is not there and its river is.
+        Assert.False(WaterActivation.IsActive(after, after.WaterBodies[1]));
+        Assert.True(WaterActivation.IsActive(after, after.WaterBodies[0]));
+        DocumentValidation.Validate(after);
+    }
+
+    [Fact]
+    public void AGroupWithNoNameIsRefusedRatherThanMinted()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Forked(workspace);
+        var interaction = Selecting();
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(96, 100), Cell(3, 3));
+
+        Assert.IsType<ToolOutcome.Message>(interaction.MakeSelectedWaterSwitchable(context, "   "));
+        // And nothing at all without a selection.
+        Assert.IsType<ToolOutcome.Idle>(
+            Selecting().MakeSelectedWaterSwitchable(context, "mill_gate"));
+    }
+
+    [Fact]
+    public void RemovingTheGroupLeavesItsBodiesThereInEveryState()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Forked(workspace);
+        var interaction = Selecting();
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(96, 100), Cell(3, 3));
+        var declared = Assert.IsType<ToolOutcome.Edit>(
+            interaction.MakeSelectedWaterSwitchable(context, "mill_gate")).Apply(scene);
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(
+            interaction.RemoveSelectedWaterActivationGroup(Context(workspace, declared)));
+        var after = edit.Apply(declared);
+
+        Assert.Empty(after.ActivationGroups);
+        Assert.Null(after.WaterBodies[1].Activation);
+        Assert.Contains("every state", edit.Describe!(declared, after), StringComparison.Ordinal);
+        DocumentValidation.Validate(after);
+    }
+
     [Fact]
     public void EscapeClearsTheSelectionAndNothingElseDoes()
     {

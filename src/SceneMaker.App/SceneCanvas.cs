@@ -316,6 +316,27 @@ public sealed partial class SceneCanvas : Control
         return outcome;
     }
 
+    /// <summary>
+    /// Declares an activation group and puts the selected river in it, or says
+    /// why not. One call because it is one intention: a group with nobody in it
+    /// switches nothing.
+    /// </summary>
+    public ToolOutcome MakeSelectedWaterSwitchable(string group)
+    {
+        if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
+        var outcome = _interaction.MakeSelectedWaterSwitchable(context, group);
+        QueueRedraw();
+        return outcome;
+    }
+
+    public ToolOutcome RemoveSelectedWaterActivationGroup()
+    {
+        if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
+        var outcome = _interaction.RemoveSelectedWaterActivationGroup(context);
+        QueueRedraw();
+        return outcome;
+    }
+
     public ToolOutcome SetSelectedWaterActivation(WaterActivationDocument? activation)
     {
         if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;

@@ -967,6 +967,74 @@ public sealed class ToolInteraction
             $"{point.WidthMeters:0.##} m wide, surface {point.ElevationMeters:0.###} m, bed {bed:0.###} m");
     }
 
+    /// <summary>
+    /// The states a river is offered when a group is declared for it. They are
+    /// the river's words and not the model's - <c>ActivationEditing</c> has no
+    /// opinion about what a state is called - and they are what world01 binds
+    /// its triggers to, so an author types the group's name and gets these.
+    /// </summary>
+    public const string WaterShutState = "dry";
+    public const string WaterFlowingState = "flowing";
+
+    /// <summary>
+    /// Declares a group and puts the selected body in its flowing state, in one
+    /// edit. Two operations in one undo step because they are one intention:
+    /// a group with nobody in it is a name that switches nothing, and this is
+    /// the only way to make a drawn branch switchable without writing the
+    /// document by hand.
+    /// </summary>
+    public ToolOutcome MakeSelectedWaterSwitchable(ToolContext context, string group)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (Mode != EditorMode.River || ActiveTool != EditorTool.SelectRiver
+            || SelectedWaterBodyId is not { } bodyId)
+        {
+            return ToolOutcome.Idle.Instance;
+        }
+        if (string.IsNullOrWhiteSpace(group))
+            return new ToolOutcome.Message("River: a group needs a name before anything can be switched by it.");
+
+        var named = group.Trim();
+        return new ToolOutcome.Edit(
+            "Declare Activation Group",
+            document => WaterEditing.SetActivation(
+                ActivationEditing.AddGroup(
+                    document, named, [WaterShutState, WaterFlowingState], WaterShutState),
+                bodyId,
+                new WaterActivationDocument
+                {
+                    Group = named,
+                    ActiveIn = [WaterFlowingState],
+                    Inactive = WaterInactive.DryBed,
+                }),
+            Describe: (_, _) =>
+                $"'{bodyId}' is now switched by '{named}': there in {WaterFlowingState}, "
+                + $"a dry bed in {WaterShutState}, and the Scene starts {WaterShutState}.");
+    }
+
+    /// <summary>
+    /// Takes away the group the selected body is in, and with it the activation
+    /// of everything else in it - which is what removing a group means, and why
+    /// the status line says how many bodies it touched.
+    /// </summary>
+    public ToolOutcome RemoveSelectedWaterActivationGroup(ToolContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (Mode != EditorMode.River || ActiveTool != EditorTool.SelectRiver
+            || SelectedWaterBody(context)?.Activation is not { } activation)
+        {
+            return ToolOutcome.Idle.Instance;
+        }
+        var group = activation.Group;
+        var members = ActivationEditing.Members(context.Scene, group).Count;
+        return new ToolOutcome.Edit(
+            "Remove Activation Group",
+            document => ActivationEditing.RemoveGroup(document, group),
+            Describe: (_, _) => members == 1
+                ? $"'{group}' is gone; the one body in it is now there in every state."
+                : $"'{group}' is gone; its {members} bodies are now there in every state.");
+    }
+
     /// <summary>Puts the selected body into an activation group, or takes it out.</summary>
     public ToolOutcome SetSelectedWaterActivation(
         ToolContext context,

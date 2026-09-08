@@ -208,6 +208,34 @@ Feld `Ground height` gesetzt hat. Damit findet man die Vorgabe der Scene immer
 wieder vor, kann aber pro Strich davon abweichen, ohne dass das Dokument sich
 ändert.
 
+### River:Select River — Aktivierung
+
+Ist ein Fluss gewählt, zeigt die Kontextleiste `Active in` und daneben genau
+eines von zwei Bedienelementen, je nachdem, wo der Körper steht.
+
+Gehört er **keiner** Gruppe an, steht dort `New group`: ein Namensfeld. Enter
+legt eine Gruppe mit den Zuständen `dry` und `flowing` an, Startzustand `dry`,
+und setzt diesen Fluss auf `flowing` — er ist damit im Anfangszustand der Karte
+nicht da und hinterlässt ein trockenes Bett. Das ist ein einziger
+Rückgängig-Schritt, weil es eine Absicht ist: eine Gruppe ohne Körper darin ist
+ein Name, der nichts schaltet.
+
+Der Name ist das, woran ein Konsument seinen Trigger bindet. Er ist deshalb
+autorenvergeben und keine gemünzte ID — und er wird gegen dieselbe Form geprüft
+wie jede andere ID hier.
+
+Gehört er **einer** Gruppe an, steht dort stattdessen `Remove group`. Das nimmt
+die Gruppe weg **und** die Aktivierung jedes Körpers darin; die betroffenen
+Flüsse sind danach in jedem Zustand da. Die Statuszeile sagt, wie viele es
+waren. Körper auf eine Gruppe zeigen zu lassen, die es nicht mehr gibt, wäre ein
+Dokument, das kein Leser auflösen kann; sie still zu leeren wäre die leise
+Entscheidung, die dieses Projekt heraushält.
+
+Umbenennen, weitere Zustände und ein Körper in mehreren Zuständen gleichzeitig
+fehlen noch (`WATER-11`) und gehören zum Outliner: dort steht eine Liste von
+Körpern gegen eine Liste von Zuständen, was eine Leiste, die einen Körper
+beschreibt, nicht leisten kann.
+
 ### River:Create Branch
 
 `Create Branch` zeichnet einen Fluss wie `Draw River`, mit einem Unterschied:
