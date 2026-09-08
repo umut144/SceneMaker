@@ -167,6 +167,146 @@ public static class WaterEditing
         return Replace(scene, body with { Junctions = ordered });
     }
 
+    /// <summary>
+    /// Inserts an authored point into a body where a position falls on it.
+    ///
+    /// <para>The segment is split by de Casteljau, so the curve is the curve it
+    /// was: a point put into a bend leaves the bend where it was, and the two
+    /// neighbours give up exactly the part of their handles the split takes.
+    /// Zeroing the new point's handles instead would straighten whatever the
+    /// author had drawn, which is the opposite of what inserting a point is
+    /// for.</para>
+    ///
+    /// <para>The section and the width come from the curve at that station, not
+    /// from a tool's defaults, so inserting changes nothing about the river
+    /// except that there is now somewhere to take hold of it. What does move is
+    /// the position: a curve point belongs on the water grid, so it lands at the
+    /// nearest grid position to the split and carries the curve with it, by at
+    /// most half a cell.</para>
+    /// </summary>
+    public static SceneDocument InsertPoint(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        string waterBodyId,
+        int authoringX,
+        int authoringY)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+        var body = Require(scene, waterBodyId);
+
+        if (WaterGeometry.NearestCenterlineAnchor(
+                scene, metrics, authoringX, authoringY, metrics.AuthoringPixelsPerWaterCell * 2.0)
+            is not { } anchor
+            || !string.Equals(anchor.WaterBodyId, waterBodyId, StringComparison.Ordinal))
+        {
+            throw new SceneMakerDocumentException(
+                $"Water body '{waterBodyId}' does not run past that position.");
+        }
+
+        var centerline = WaterGeometry.Flatten(body.Points);
+        var anchors = centerline.AnchorStations;
+        var station = (double)anchor.StationMeters * (double)metrics.AuthoringPixelsPerMeter;
+
+        // Which authored stretch it falls in, and how far along that stretch -
+        // by arc length, which is what every value along a river interpolates
+        // over, and what the author sees.
+        var index = 0;
+        while (index + 2 < anchors.Count && station >= anchors[index + 1]) index++;
+        var span = anchors[index + 1] - anchors[index];
+        if (span <= 0.0)
+        {
+            throw new SceneMakerDocumentException(
+                $"Water body '{waterBodyId}' has no length there to put a point into.");
+        }
+        var t = Math.Clamp((station - anchors[index]) / span, 0.0, 1.0);
+        if (t <= 0.0 || t >= 1.0)
+        {
+            throw new SceneMakerDocumentException(
+                $"Water body '{waterBodyId}' already has a point there.");
+        }
+
+        var sample = WaterGeometry.SampleAt(body.Points, anchors, station);
+        var points = body.Points.ToList();
+        var inserted = new WaterCurvePointDocument
+        {
+            PositionAuthoringPx = anchor.PositionAuthoringPx,
+            Mode = WaterPointMode.Linear,
+            HandleInAuthoringPx = AuthoringPixelOffset.Zero,
+            HandleOutAuthoringPx = AuthoringPixelOffset.Zero,
+            ElevationMeters = sample.ElevationMeters,
+            ChannelDepthMeters = sample.ChannelDepthMeters,
+            ClearanceAboveMeters = sample.ClearanceAboveMeters,
+            WidthMeters = WaterGeometry.WidthAt(body.Points, anchors, station),
+        };
+
+        // A stretch between two Linear points is a straight line, and splitting
+        // a line at a point on it gives two lines - exactly, with no handles and
+        // no tolerance. Running de Casteljau over it would be correct too, but
+        // it would hand the author two Aligned points and a pair of handles
+        // where they had drawn none.
+        var straight = points[index].Mode == WaterPointMode.Linear
+            && points[index + 1].Mode == WaterPointMode.Linear;
+        if (!straight)
+        {
+            var split = BezierChain.SplitSegment(
+                ToChainPoint(points[index]), ToChainPoint(points[index + 1]), t);
+            points[index] = WithHandles(
+                points[index],
+                points[index].HandleInAuthoringPx,
+                SplitHandle(split.From.HandleOutX, split.From.HandleOutY));
+            points[index + 1] = WithHandles(
+                points[index + 1],
+                SplitHandle(split.To.HandleInX, split.To.HandleInY),
+                points[index + 1].HandleOutAuthoringPx);
+            inserted = WithHandles(
+                inserted,
+                SplitHandle(split.Inserted.HandleInX, split.Inserted.HandleInY),
+                SplitHandle(split.Inserted.HandleOutX, split.Inserted.HandleOutY));
+        }
+
+        points.Insert(index + 1, inserted);
+        return Reshape(scene, waterBodyId, points);
+    }
+
+    /// <summary>A split handle, rounded: a handle is stored in whole authoring pixels.</summary>
+    private static AuthoringPixelOffset SplitHandle(double x, double y) => new()
+    {
+        X = (int)Math.Round(x, MidpointRounding.AwayFromZero),
+        Y = (int)Math.Round(y, MidpointRounding.AwayFromZero),
+    };
+
+    private static BezierChainPoint ToChainPoint(WaterCurvePointDocument point) => new(
+        point.PositionAuthoringPx.X,
+        point.PositionAuthoringPx.Y,
+        point.HandleInAuthoringPx.X,
+        point.HandleInAuthoringPx.Y,
+        point.HandleOutAuthoringPx.X,
+        point.HandleOutAuthoringPx.Y);
+
+    /// <summary>
+    /// A point with new handles, and <c>Aligned</c> so they are kept: a
+    /// <c>Linear</c> point is exactly the absence of handles, so a split that
+    /// gave one a handle would have it dropped again at the IO boundary.
+    /// </summary>
+    private static WaterCurvePointDocument WithHandles(
+        WaterCurvePointDocument point,
+        AuthoringPixelOffset handleIn,
+        AuthoringPixelOffset handleOut) =>
+        handleIn.IsZero() && handleOut.IsZero()
+            ? point with
+            {
+                Mode = WaterPointMode.Linear,
+                HandleInAuthoringPx = handleIn,
+                HandleOutAuthoringPx = handleOut,
+            }
+            : point with
+            {
+                Mode = WaterPointMode.Aligned,
+                HandleInAuthoringPx = handleIn,
+                HandleOutAuthoringPx = handleOut,
+            };
+
     /// <summary>The body under this id, or a refusal naming it.</summary>
     public static WaterBodyDocument Require(SceneDocument scene, string waterBodyId)
     {

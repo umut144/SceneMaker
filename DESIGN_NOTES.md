@@ -647,9 +647,22 @@ three with the eraser remove a point or the body. `ToolInteraction` is handed a
 position and nothing else - no modifier keys - and that is deliberate: input
 takes one path and answers with exactly one `ToolOutcome`.
 
-The two ways out are a modifier, which would widen that contract for one
-feature, or a tool of its own. `WATER-05` holds it, and a tool is the answer
-that fits what is already here.
+The two ways out were a modifier, which would widen that contract for one
+feature, or a tool of its own. It became `River:Insert Point`, and the tool was
+the answer that fits what is already here.
+
+Two things that tool had to get right. It authors no value - the section and the
+width come from the curve at that station, because inserting a point is making
+somewhere to take hold and not changing the river. And the bend stays where it
+was: the segment is split by de Casteljau and the neighbours give up exactly the
+part of their handles the split takes, where a point with zero handles would
+have straightened whatever was drawn.
+
+The exception is worth having. A stretch between two `Linear` points is a
+straight line, splitting a line at a point on it gives two lines, and that is
+exact rather than within a tolerance - so there the inserted point stays
+`Linear` with no handles, and an author who drew straight is not handed a pair
+of handles they did not ask for.
 
 ### What the context bar can and cannot say
 

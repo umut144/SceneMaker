@@ -78,7 +78,7 @@ Surface-Token — aber gefragt wird es jetzt von der Assetleiste:
 | Bereich | Werkzeuge | angebotene Assets |
 | --- | --- | --- |
 | `Terrain` | `Pencil`, `Line`, `Terrain Fill` | `authoring: "cells"`, als Palette |
-| `River` | `Draw River`, `Create Branch`, `Select River` | `authoring: "curve"`, als `Surface`-Feld |
+| `River` | `Draw River`, `Create Branch`, `Insert Point`, `Select River` | `authoring: "curve"`, als `Surface`-Feld |
 | `Path` | `Draw Path` | alle Terrain-Assets, als `Surface`-Feld |
 | `Hill` | `Draw Hill`, `Select Hill` | — |
 | `Bridge` | `Draw Bridge` | alle Terrain-Assets, als `Surface`-Feld |
@@ -207,6 +207,34 @@ auf deren `default_elevation_meters` — dem Wert, den der Autor beim Anlegen im
 Feld `Ground height` gesetzt hat. Damit findet man die Vorgabe der Scene immer
 wieder vor, kann aber pro Strich davon abweichen, ohne dass das Dokument sich
 ändert.
+
+### River:Insert Point
+
+Ein Druck auf einen Fluss setzt einen autorierten Punkt dorthin, ein Druck
+daneben sagt es und ändert nichts. `Insert Point` + `Eraser` nimmt umgekehrt den
+Kurvenpunkt unter dem Zeiger weg; eine Kurve, die nur noch Quelle und Mündung
+hat, behält beide.
+
+Das Werkzeug **authoriert keinen Wert**. Schnitt und Breite kommen aus der Kurve
+an dieser Station, nicht aus der Kontextleiste — einen Punkt einzufügen heißt,
+sich eine Stelle zum Anfassen zu machen, nicht den Fluss zu ändern. Aus
+demselben Grund bleibt die Biegung, wo sie war: das Segment wird geteilt, und
+die beiden Nachbarn geben genau den Teil ihrer Handles ab, den die Teilung
+nimmt. Ein Punkt mit Nullhandles hätte begradigt, was der Autor gezeichnet hat.
+
+Zwischen zwei `Linear`-Punkten passiert genau das aber doch, und zwar exakt: die
+Strecke ist eine Gerade, die Teilung einer Geraden sind zwei Geraden, und der
+eingefügte Punkt bleibt `Linear` ohne Handles. Wer gerade gezeichnet hat,
+bekommt keine Handles geschenkt.
+
+Was sich bewegt, ist die Lage: ein Kurvenpunkt gehört aufs Wasserraster, also
+landet er auf der nächsten Rasterposition und zieht die Kurve um weniger als
+eine Zelle mit.
+
+Dass es ein eigenes Werkzeug ist und keine weitere Bedeutung eines Drucks in
+`Select River`, hat einen Grund: dort ist jede Geste belegt — Punkt, Korridor,
+leerer Grund, und dieselben drei mit Eraser —, und `ToolInteraction` bekommt
+bewusst nur eine Position und keine Modifiertasten.
 
 ### River:Select River — Aktivierung
 

@@ -187,6 +187,37 @@ public static class WaterGeometry
     }
 
     /// <summary>
+    /// The authored width at a station, interpolated over arc length the way
+    /// the corridor interpolates it - and unrounded for the same reason: the
+    /// width is never written down, it only decides which cells belong to the
+    /// body, and rounding it first would widen the corridor by up to half a
+    /// millimetre.
+    /// </summary>
+    public static decimal WidthAt(
+        IReadOnlyList<WaterCurvePointDocument> points,
+        IReadOnlyList<double> anchorStations,
+        double station)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        ArgumentNullException.ThrowIfNull(anchorStations);
+        if (points.Count == 0)
+            throw new SceneMakerDocumentException("A water curve has no points to measure.");
+        if (station <= anchorStations[0]) return points[0].WidthMeters;
+        if (station >= anchorStations[^1]) return points[^1].WidthMeters;
+
+        for (var index = 0; index + 1 < points.Count; index++)
+        {
+            var from = anchorStations[index];
+            var to = anchorStations[index + 1];
+            if (station > to) continue;
+            var span = to - from;
+            var fraction = span <= 0.0 ? 1.0 : (station - from) / span;
+            return Between(points[index].WidthMeters, points[index + 1].WidthMeters, fraction);
+        }
+        return points[^1].WidthMeters;
+    }
+
+    /// <summary>
     /// The water cells this body covers and what it occupies in each of them,
     /// canonically ordered by Y then X. Cells outside the Scene are dropped
     /// rather than refused: a river is allowed to run off the edge of the map,

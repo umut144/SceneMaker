@@ -136,6 +136,51 @@ public static class BezierChain
     private const int MaximumSubdivisionDepth = 12;
 
     /// <summary>
+    /// Splits the segment between two anchors at the curve parameter
+    /// <paramref name="t"/>, by de Casteljau, and answers with the three anchors
+    /// the split leaves: the first with a shortened outgoing handle, the new one
+    /// in the middle carrying both of its own, and the last with a shortened
+    /// incoming handle.
+    ///
+    /// <para>The two halves together describe exactly the curve the one segment
+    /// described, which is the whole point: a point inserted into a bend has to
+    /// leave the bend where it was. Zeroing the new point's handles instead
+    /// would straighten whatever the author had drawn.</para>
+    ///
+    /// <para>Only the handles this split owns are touched. The first anchor's
+    /// incoming handle and the last one's outgoing handle belong to their other
+    /// segments and are passed through.</para>
+    /// </summary>
+    public static (BezierChainPoint From, BezierChainPoint Inserted, BezierChainPoint To) SplitSegment(
+        BezierChainPoint start,
+        BezierChainPoint end,
+        double t)
+    {
+        var p0 = new ChainPoint(start.X, start.Y);
+        var p1 = new ChainPoint(start.X + start.HandleOutX, start.Y + start.HandleOutY);
+        var p2 = new ChainPoint(end.X + end.HandleInX, end.Y + end.HandleInY);
+        var p3 = new ChainPoint(end.X, end.Y);
+
+        var a = Lerp(p0, p1, t);
+        var b = Lerp(p1, p2, t);
+        var c = Lerp(p2, p3, t);
+        var d = Lerp(a, b, t);
+        var e = Lerp(b, c, t);
+        var on = Lerp(d, e, t);
+
+        return (
+            start with { HandleOutX = a.X - p0.X, HandleOutY = a.Y - p0.Y },
+            new BezierChainPoint(
+                on.X, on.Y,
+                d.X - on.X, d.Y - on.Y,
+                e.X - on.X, e.Y - on.Y),
+            end with { HandleInX = c.X - p3.X, HandleInY = c.Y - p3.Y });
+    }
+
+    private static ChainPoint Lerp(ChainPoint a, ChainPoint b, double t) =>
+        new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t);
+
+    /// <summary>
     /// Flattens an open chain from its first point to its last, and measures
     /// where the authored points fall on the result. Consecutive duplicates are
     /// dropped, so every segment has a direction.

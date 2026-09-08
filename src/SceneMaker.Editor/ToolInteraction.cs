@@ -596,6 +596,8 @@ public sealed class ToolInteraction
         EditorTool.DrawRiver => BeginRiverPoint(context, authoring, cell),
         EditorTool.CreateBranch when EraserEnabled => EraseWaterBody(context, authoring),
         EditorTool.CreateBranch => BeginBranchPoint(context, authoring, cell),
+        EditorTool.InsertRiverPoint when EraserEnabled => EraseWaterPointUnder(context, authoring),
+        EditorTool.InsertRiverPoint => InsertWaterPoint(context, authoring),
         EditorTool.SelectRiver when EraserEnabled => EraseWaterPointOrBody(context, authoring),
         EditorTool.SelectRiver => SelectOrGrabWaterBody(context, authoring),
         _ => ToolOutcome.Idle.Instance,
@@ -774,6 +776,71 @@ public sealed class ToolInteraction
         }
         SelectedWaterPointIndex = null;
         return new ToolOutcome.Message(WaterBodyText(context, found));
+    }
+
+    /// <summary>
+    /// Puts an authored point into the river under the pointer, where every
+    /// other gesture was already taken: a press on a point grabs it, on a
+    /// corridor selects or carries, on open ground clears, and the same three
+    /// with the eraser remove. Input here carries no modifier keys by design,
+    /// so a fourth meaning for a press was not available and this is a tool of
+    /// its own.
+    ///
+    /// <para>It authors no value. The section and the width come from the curve
+    /// at that station, and the bend stays where it was - inserting a point is
+    /// making somewhere to take hold, not changing the river.</para>
+    /// </summary>
+    private ToolOutcome InsertWaterPoint(ToolContext context, AuthoringPoint point)
+    {
+        if (WaterGeometry.NearestCenterlineAnchor(
+                context.Scene,
+                context.Metrics,
+                point.X,
+                point.Y,
+                context.Metrics.AuthoringPixelsPerWaterCell * 2.0) is not { } anchor)
+        {
+            return new ToolOutcome.Message("Insert Point: press on a river, near the line running down it.");
+        }
+
+        var bodyId = anchor.WaterBodyId;
+        return new ToolOutcome.Edit(
+            "Insert River Point",
+            document => WaterEditing.InsertPoint(document, context.Metrics, bodyId, point.X, point.Y),
+            Describe: (_, after) => FormattableString.Invariant(
+                $"Insert River Point: '{bodyId}' now has {WaterEditing.Require(after, bodyId).Points.Count} points, the new one at station {anchor.StationMeters:0.##} m."),
+            NoChangeText: $"'{bodyId}' already has a point there.");
+    }
+
+    /// <summary>
+    /// The inverse of inserting: the eraser takes away the point under it, from
+    /// whichever body it belongs to. A curve down to its source and its mouth
+    /// keeps both, because those two are what a river is.
+    /// </summary>
+    private ToolOutcome EraseWaterPointUnder(ToolContext context, AuthoringPoint point)
+    {
+        foreach (var body in context.Scene.WaterBodies)
+        {
+            if (WaterEditing.FindPointAt(
+                    body, point.X, point.Y, context.PointerHitRadiusAuthoringPixels) is not { } index)
+            {
+                continue;
+            }
+            if (body.Points.Count <= 2)
+            {
+                return new ToolOutcome.Message(
+                    $"'{body.WaterBodyId}' has only a source and a mouth; erase the river itself to remove it.");
+            }
+            var bodyId = body.WaterBodyId;
+            var points = body.Points.ToList();
+            points.RemoveAt(index);
+            return new ToolOutcome.Edit(
+                "Erase River Point",
+                document => WaterEditing.Reshape(document, bodyId, points),
+                Describe: (_, after) =>
+                    $"Erase River Point: '{bodyId}' now has {WaterEditing.Require(after, bodyId).Points.Count} points."
+                    + JunctionComplaint(after, context.Metrics));
+        }
+        return new ToolOutcome.Message("Insert Point: no curve point under the pointer to erase.");
     }
 
     /// <summary>
