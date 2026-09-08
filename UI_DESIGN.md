@@ -78,7 +78,7 @@ Surface-Token — aber gefragt wird es jetzt von der Assetleiste:
 | Bereich | Werkzeuge | angebotene Assets |
 | --- | --- | --- |
 | `Terrain` | `Pencil`, `Line`, `Terrain Fill` | `authoring: "cells"`, als Palette |
-| `River` | `Draw River` | `authoring: "curve"`, als `Surface`-Feld |
+| `River` | `Draw River`, `Create Branch`, `Select River` | `authoring: "curve"`, als `Surface`-Feld |
 | `Path` | `Draw Path` | alle Terrain-Assets, als `Surface`-Feld |
 | `Hill` | `Draw Hill`, `Select Hill` | — |
 | `Bridge` | `Draw Bridge` | alle Terrain-Assets, als `Surface`-Feld |
@@ -207,6 +207,28 @@ auf deren `default_elevation_meters` — dem Wert, den der Autor beim Anlegen im
 Feld `Ground height` gesetzt hat. Damit findet man die Vorgabe der Scene immer
 wieder vor, kann aber pro Strich davon abweichen, ohne dass das Dokument sich
 ändert.
+
+### River:Create Branch
+
+`Create Branch` zeichnet einen Fluss wie `Draw River`, mit einem Unterschied:
+sein **erster** Punkt wird nicht dort gesetzt, wo gedrückt wurde, sondern auf
+dem Fluss, dem er am nächsten liegt — und er übernimmt dessen Oberflächenhöhe an
+dieser Station statt der aus `Surface level`. Zwei Körper, die sich treffen,
+müssen dort dasselbe Wasser sein; das ist keine Bequemlichkeit, sondern die
+Bedingung, die der Export prüft.
+
+Der Punkt landet dabei weiterhin auf dem Wasserraster und damit bis zu einer
+halben Zelle neben der Mittellinie. Gefangen wird die Rasterposition, die der
+Kurve am nächsten liegt **und** noch im Korridor des Flusses liegt — erst
+runden und dann prüfen würde auf einem schmalen Fluss Fangpunkte anbieten, die
+der Export danach ablehnt.
+
+Trifft der erste Druck keinen Fluss, passiert nichts und die Statuszeile sagt
+es. Jeder weitere Punkt ist ein gewöhnlicher Flusspunkt: ein Ast ist ein
+gewöhnlicher Fluss, außer darin, wo er anfängt. `Enter` legt ihn an, und die
+Angabe, welchen Fluss er verlässt, entsteht in derselben Bearbeitung — sonst
+gäbe es einen Rückgängig-Schritt, in dem ein Fluss auf einem anderen steht und
+nichts darüber sagt.
 
 ### River:Draw River
 

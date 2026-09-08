@@ -28,6 +28,11 @@ public sealed class ToolInteraction
     private bool _terrainLineDragging;
     private readonly List<WaterDraftPoint> _riverDraft = [];
     private WaterDraftPoint? _riverPending;
+
+    // Which body a branch being drawn leaves. Authored the moment its source
+    // snaps onto that body, so a fork pulled apart later is a refused export
+    // rather than a junction that quietly stops being reported.
+    private string? _branchParentWaterBodyId;
     private readonly List<GradedRouteDraftPoint> _pathDraft = [];
     private GradedRouteDraftPoint? _pathPending;
     private decimal? _pathStartElevationMeters;
@@ -208,7 +213,8 @@ public sealed class ToolInteraction
                 ? null
                 : $"The unfinished hill contour of {placed} point{Plural(placed)} was discarded.";
         }
-        if (Mode == EditorMode.River && ActiveTool == EditorTool.DrawRiver)
+        if (Mode == EditorMode.River
+            && ActiveTool is EditorTool.DrawRiver or EditorTool.CreateBranch)
         {
             var placed = _riverDraft.Count + (_riverPending is null ? 0 : 1);
             return placed == 0
@@ -269,7 +275,7 @@ public sealed class ToolInteraction
     /// </summary>
     public bool HasUnfinishedDraft => Mode switch
     {
-        EditorMode.River when ActiveTool == EditorTool.DrawRiver =>
+        EditorMode.River when ActiveTool is EditorTool.DrawRiver or EditorTool.CreateBranch =>
             _riverPending is not null || _riverDraft.Count > 0,
         EditorMode.Path when ActiveTool == EditorTool.DrawPath =>
             _pathPending is not null || _pathDraft.Count > 0,
@@ -416,6 +422,9 @@ public sealed class ToolInteraction
             case EditorMode.ElevationRegion when ActiveTool == EditorTool.SelectElevationRegion
                                           && _draggedElevationRegionPointIndex is not null:
                 return DragSelectedElevationRegionPoint(context, authoring);
+            case EditorMode.River when ActiveTool == EditorTool.CreateBranch
+                                       && _riverPending is not null:
+                return DragRiverHandle(context, authoring);
             case EditorMode.River when ActiveTool == EditorTool.SelectRiver
                                        && _draggedWaterPointIndex is not null:
                 return DragSelectedWaterPoint(context, authoring);
@@ -475,6 +484,8 @@ public sealed class ToolInteraction
         ArgumentNullException.ThrowIfNull(context);
         if (Mode == EditorMode.River && ActiveTool == EditorTool.DrawRiver)
             return key == ToolKey.Enter ? FinishRiver(context) : CancelRiverPoint();
+        if (Mode == EditorMode.River && ActiveTool == EditorTool.CreateBranch)
+            return key == ToolKey.Enter ? FinishBranch(context) : CancelRiverPoint();
         if (Mode == EditorMode.Path && ActiveTool == EditorTool.DrawPath)
             return key == ToolKey.Enter ? FinishPath(context) : CancelPathPoint();
         if (Mode == EditorMode.Bridge && ActiveTool == EditorTool.DrawBridge)
@@ -583,6 +594,8 @@ public sealed class ToolInteraction
     {
         EditorTool.DrawRiver when EraserEnabled => EraseWaterBody(context, authoring),
         EditorTool.DrawRiver => BeginRiverPoint(context, authoring, cell),
+        EditorTool.CreateBranch when EraserEnabled => EraseWaterBody(context, authoring),
+        EditorTool.CreateBranch => BeginBranchPoint(context, authoring, cell),
         EditorTool.SelectRiver when EraserEnabled => EraseWaterPointOrBody(context, authoring),
         EditorTool.SelectRiver => SelectOrGrabWaterBody(context, authoring),
         _ => ToolOutcome.Idle.Instance,
@@ -1794,6 +1807,96 @@ public sealed class ToolInteraction
     /// release, because what happens in between is the handle being pulled out
     /// of it.
     /// </summary>
+    /// <summary>
+    /// The first point of a branch is not placed where the pointer is, but on
+    /// the body it is nearest to - and it takes that body's surface height
+    /// there rather than the context bar's, because two bodies that meet have
+    /// to be the same water where they meet.
+    ///
+    /// <para>Every point after it is an ordinary river point. A branch is an
+    /// ordinary river in every respect but where it starts.</para>
+    /// </summary>
+    private ToolOutcome BeginBranchPoint(
+        ToolContext context,
+        AuthoringPoint point,
+        TerrainCellCoordinate cell)
+    {
+        if (_riverDraft.Count > 0 || _riverPending is not null)
+            return BeginRiverPoint(context, point, cell);
+
+        if (context.Scene.SceneKind != SceneKind.Instance)
+            return new ToolOutcome.Message("Branch: a Scene Template cannot carry water.");
+        if (context.SelectedTerrainAssetKey is null)
+            return new ToolOutcome.Message("Branch: choose a Terrain asset first.");
+
+        // Generous next to the pointer radius: the author is aiming at a line
+        // through a corridor that is metres wide, not at a handle.
+        var reach = Math.Max(
+            context.PointerHitRadiusAuthoringPixels,
+            context.Metrics.AuthoringPixelsPerWaterCell * 2.0);
+        if (WaterGeometry.NearestCenterlineAnchor(
+                context.Scene, context.Metrics, point.X, point.Y, reach) is not { } anchor)
+        {
+            return new ToolOutcome.Message(
+                "Branch: start on a river. Its first point has to sit on the body it leaves.");
+        }
+
+        _branchParentWaterBodyId = anchor.WaterBodyId;
+        _riverPending = new WaterDraftPoint(
+            anchor.PositionAuthoringPx.X,
+            anchor.PositionAuthoringPx.Y,
+            State.WaterPointMode,
+            anchor.SurfaceMeters,
+            State.WaterChannelDepthMeters,
+            State.WaterClearanceAboveMeters,
+            State.RiverWidthMeters);
+        return new ToolOutcome.Message(FormattableString.Invariant(
+            $"Branch: leaves '{anchor.WaterBodyId}' at station {anchor.StationMeters:0.##} m, water {anchor.SurfaceMeters:0.###} m."));
+    }
+
+    /// <summary>
+    /// Places the branch and states, in the same edit, which body it leaves.
+    /// The two belong together: a branch whose junction was written afterwards
+    /// would be undoable to a state in which it is a river standing on another
+    /// one and saying nothing about it.
+    /// </summary>
+    private ToolOutcome FinishBranch(ToolContext context)
+    {
+        if (_branchParentWaterBodyId is not { } parentId)
+        {
+            return new ToolOutcome.Message(
+                "Branch: start on a river. Its first point has to sit on the body it leaves.");
+        }
+        var outcome = FinishRiver(context);
+        if (outcome is not ToolOutcome.Edit edit) return outcome;
+        ClearBranchParent();
+
+        return edit with
+        {
+            Name = "Branch",
+            Apply = document =>
+            {
+                var placed = edit.Apply(document);
+                var added = placed.WaterBodies.First(body =>
+                    document.WaterBodies.All(previous =>
+                        !string.Equals(previous.WaterBodyId, body.WaterBodyId, StringComparison.Ordinal)));
+                return WaterEditing.SetJunctions(
+                    placed,
+                    added.WaterBodyId,
+                    [new WaterJunctionDocument { End = WaterEnd.Source, WaterBodyId = parentId }]);
+            },
+            Describe = (before, after) =>
+            {
+                var added = after.WaterBodies.FirstOrDefault(body =>
+                    before.WaterBodies.All(previous =>
+                        !string.Equals(previous.WaterBodyId, body.WaterBodyId, StringComparison.Ordinal)));
+                var name = added?.WaterBodyId ?? "branch";
+                return $"Authored {name} as a branch of '{parentId}'."
+                    + JunctionComplaint(after, context.Metrics);
+            },
+        };
+    }
+
     private ToolOutcome BeginRiverPoint(
         ToolContext context,
         AuthoringPoint point,
@@ -2419,10 +2522,15 @@ public sealed class ToolInteraction
         _bridgeStart = null;
     }
 
+    private void ClearBranchParent() => _branchParentWaterBodyId = null;
+
     private void ClearRiverDraft()
     {
         _riverDraft.Clear();
         _riverPending = null;
+        // The parent belongs to the draft, not to the tool: a discarded branch
+        // must not hand its parent to the next one.
+        _branchParentWaterBodyId = null;
     }
 
     private void ClearPathDraft()

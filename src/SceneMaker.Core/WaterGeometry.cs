@@ -18,6 +18,22 @@ public readonly record struct WaterCellSpan(
     decimal StationMeters);
 
 /// <summary>
+/// A place on an existing body that a new branch may start from: which body,
+/// where exactly, and what that body's surface is there.
+///
+/// <para>The position is on the water grid, because that is where a curve point
+/// has to sit, and inside the body's corridor, because that is what makes it a
+/// junction rather than two rivers that happen to be near each other. It is
+/// therefore only near the centerline - at most half a cell off - and that is
+/// below the resolution the raster answers in.</para>
+/// </summary>
+public readonly record struct WaterCenterlineAnchor(
+    string WaterBodyId,
+    AuthoringPixelPosition PositionAuthoringPx,
+    decimal StationMeters,
+    decimal SurfaceMeters);
+
+/// <summary>
 /// Where one body's end sits on another body, in both bodies' own stations.
 ///
 /// <para>There is no kind here on purpose. A branch leaving a river and a side
@@ -311,8 +327,8 @@ public static class WaterGeometry
     public static bool Contains(
         WorkspaceMetrics metrics,
         WaterBodyDocument body,
-        int authoringX,
-        int authoringY)
+        double authoringX,
+        double authoringY)
     {
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(body);
@@ -338,6 +354,94 @@ public static class WaterGeometry
             .OrderBy(static cell => cell.Y)
             .ThenBy(static cell => cell.X)
             .ToList();
+    }
+
+    /// <summary>
+    /// The nearest place on any body's centerline that a branch could leave
+    /// from, or null when nothing is close enough.
+    ///
+    /// <para>The centerline is where the author aims, but a curve point may not
+    /// sit anywhere: it belongs on the water grid. So the exact nearest point is
+    /// found first, and then the grid position around it that is nearest to the
+    /// curve <em>and</em> still inside the corridor is taken. Snapping first and
+    /// checking afterwards would offer anchors on a narrow river that the export
+    /// then refuses.</para>
+    /// </summary>
+    public static WaterCenterlineAnchor? NearestCenterlineAnchor(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        int authoringX,
+        int authoringY,
+        double maxDistanceAuthoringPixels)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+
+        WaterBodyDocument? nearestBody = null;
+        var nearestX = 0.0;
+        var nearestY = 0.0;
+        var best = maxDistanceAuthoringPixels * maxDistanceAuthoringPixels;
+        foreach (var body in scene.WaterBodies)
+        {
+            if (body.Points.Count < 2) continue;
+            var line = Centerline(body.Points);
+            for (var index = 0; index + 1 < line.Count; index++)
+            {
+                var (x, y, distance) = NearestOnSegment(
+                    line[index].X, line[index].Y, line[index + 1].X, line[index + 1].Y,
+                    authoringX, authoringY);
+                if (distance > best) continue;
+                best = distance;
+                nearestBody = body;
+                nearestX = x;
+                nearestY = y;
+            }
+        }
+        if (nearestBody is null) return null;
+
+        var step = metrics.AuthoringPixelsPerWaterCell;
+        var loX = (int)Math.Floor(nearestX / step) * step;
+        var loY = (int)Math.Floor(nearestY / step) * step;
+        AuthoringPixelPosition? chosen = null;
+        var chosenDistance = double.MaxValue;
+        for (var dx = 0; dx <= 1; dx++)
+        {
+            for (var dy = 0; dy <= 1; dy++)
+            {
+                var candidateX = loX + dx * step;
+                var candidateY = loY + dy * step;
+                if (!Contains(metrics, nearestBody, candidateX, candidateY)) continue;
+                var distance = (candidateX - nearestX) * (candidateX - nearestX)
+                    + (candidateY - nearestY) * (candidateY - nearestY);
+                if (distance >= chosenDistance) continue;
+                chosenDistance = distance;
+                chosen = new AuthoringPixelPosition { X = candidateX, Y = candidateY };
+            }
+        }
+        if (chosen is not { } anchor) return null;
+
+        var shape = CorridorShape(metrics, nearestBody.Points);
+        if (shape.NearestStation(anchor.X, anchor.Y) is not { } station) return null;
+        return new WaterCenterlineAnchor(
+            nearestBody.WaterBodyId,
+            anchor,
+            StationMeters(metrics, station),
+            SampleAt(nearestBody.Points, shape.Centerline.AnchorStations, station).ElevationMeters);
+    }
+
+    /// <summary>The point on a segment nearest a position, with the squared distance to it.</summary>
+    private static (double X, double Y, double SquaredDistance) NearestOnSegment(
+        double fromX, double fromY, double toX, double toY, double atX, double atY)
+    {
+        var dx = toX - fromX;
+        var dy = toY - fromY;
+        var lengthSquared = dx * dx + dy * dy;
+        var t = lengthSquared <= 0.0
+            ? 0.0
+            : Math.Clamp(((atX - fromX) * dx + (atY - fromY) * dy) / lengthSquared, 0.0, 1.0);
+        var x = fromX + t * dx;
+        var y = fromY + t * dy;
+        return (x, y, (x - atX) * (x - atX) + (y - atY) * (y - atY));
     }
 
     /// <summary>

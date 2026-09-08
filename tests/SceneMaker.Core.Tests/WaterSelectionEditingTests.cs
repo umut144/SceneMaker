@@ -210,6 +210,50 @@ public sealed class WaterSelectionEditingTests
         Assert.Null(WaterEditing.FindPointAt(body, 96, 32, 8.0));
     }
 
+    /// <summary>
+    /// What a branch tool aims at. The author points at a line; a curve point
+    /// belongs on the water grid; so the exact nearest point is found first and
+    /// the grid position around it that is nearest to the curve and still inside
+    /// the corridor is what comes back.
+    /// </summary>
+    [Fact]
+    public void TheNearestAnchorSitsOnTheGridInsideTheCorridorAndCarriesItsBodysSurface()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WaterEditing.Reshape(
+            Fixture(workspace),
+            "river_0001",
+            [
+                WaterEditing.Point(32, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 2.0m),
+                WaterEditing.Point(160, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 2.0m),
+            ]);
+
+        var anchor = Assert.NotNull(
+            WaterGeometry.NearestCenterlineAnchor(scene, workspace.Metrics, 100, 40, 32.0));
+
+        Assert.Equal("river_0001", anchor.WaterBodyId);
+        Assert.Equal(96, anchor.PositionAuthoringPx.X);
+        Assert.Equal(32, anchor.PositionAuthoringPx.Y);
+        Assert.Equal(0, anchor.PositionAuthoringPx.X % workspace.Metrics.AuthoringPixelsPerWaterCell);
+        Assert.Equal(0, anchor.PositionAuthoringPx.Y % workspace.Metrics.AuthoringPixelsPerWaterCell);
+        Assert.Equal(2.0m, anchor.StationMeters);
+
+        // The height is the parent's there, which is what makes the two the same
+        // water where they meet.
+        Assert.Equal(2.0m, anchor.SurfaceMeters);
+    }
+
+    [Fact]
+    public void AnchorsAreOnlyOfferedWithinReachOfARiver()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Fixture(workspace);
+
+        Assert.Null(WaterGeometry.NearestCenterlineAnchor(scene, workspace.Metrics, 96, 400, 32.0));
+        Assert.Null(WaterGeometry.NearestCenterlineAnchor(
+            TestScenes.Instance(workspace), workspace.Metrics, 96, 32, 32.0));
+    }
+
     private static SceneDocument Fixture(TestWorkspace workspace) =>
         WaterEditing.PlaceRiver(
             TestScenes.Instance(workspace),

@@ -538,6 +538,31 @@ The editor validates at its IO boundaries like everything else here - a document
 may be wrong between two edits - but the author must not first read about it in
 an export hours later.
 
+### Where a branch starts is not where the pointer was
+
+`Create Branch` is `Draw River` with one point changed. Its first point is put
+on the body it is nearest to and takes that body's surface height there, and the
+junction is written in the same edit that places the curve.
+
+Both halves of that are load-bearing. Drawing a river whose first point happens
+to land in another's corridor already produced the *shape* of a branch - what it
+did not produce was the statement that it is one, and that statement is what a
+consumer splits its flow at and what the export checks the two heights against.
+And writing the junction afterwards would leave an undo step in which a river
+stands on another one and says nothing about it.
+
+The snap has an order that matters. A curve point belongs on the water grid, so
+the exact nearest point on the centerline is found first, and then the grid
+position around it that is nearest to the curve **and** still inside the
+corridor is taken. Snapping first and checking afterwards offers anchors on a
+narrow river that the export then refuses - the corridor of a one-metre river is
+half a cell wider than the grid step it would have been rounded by.
+
+What the author gives up is exactness: the source sits up to half a cell off the
+centerline. That is below the resolution the raster answers in, and the station
+and the height are read from where the point actually is rather than from where
+it was aimed, so nothing downstream inherits the error.
+
 ### Every press already meant something
 
 Inserting a point has no gesture left. A press on a point grabs it, a press on

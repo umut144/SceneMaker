@@ -318,7 +318,8 @@ public static class ToolPreviewBuilder
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(draft);
-        if (tool != EditorTool.DrawRiver) return WaterDraftPreview.Empty;
+        if (tool is not (EditorTool.DrawRiver or EditorTool.CreateBranch))
+            return WaterDraftPreview.Empty;
 
         List<WaterDraftPoint> points = [.. draft];
         // The pending point can still be sitting on the previous one for as
