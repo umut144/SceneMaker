@@ -672,6 +672,134 @@ stayed declared, and the export wrote the file without a word - a switchable
 branch that was no longer switchable, in the map a consumer was about to test
 its state machine against.
 
+## A flow network in front of the authored curves
+
+`FLOW-01` - nothing built yet
+
+The author drew the river tree on paper and asked whether taking a 2 m branch
+off an 8 m river should leave 6 m. The honest answer turned out to be that
+8 − 2 = 6 is not the absence of a model but a model with a particular exponent,
+and the wrong one for rivers. What follows is the model I would build instead,
+and where it has to sit so that nothing already agreed with world01 moves.
+
+### Where the line goes
+
+```
+flow network  →  authored bodies  →  raster + bands
+      ↑                ↑                    ↑
+  the model       the baking          the export
+```
+
+The network produces ordinary water bodies with ordinary per-point widths and
+depths. **The export contract learns nothing.** World01 keeps reading geometry
+and knows nothing about discharge; export 18 stands. This is authoring, not
+simulation, which is also the only reason it belongs in SceneMaker at all.
+
+It also dissolves the objection that killed width coupling two notes ago. Two
+hundred variants of a trunk are unauthorable by a person and unremarkable for a
+generator, and derived data that says outright that it is derived is not the
+silent cross-object edit this project keeps throwing out.
+
+### The model
+
+The network is already in the document: junctions are its edges and bodies its
+segments. Nothing new is stored for the shape.
+
+What is added is a scalar carried along each segment, three rules, and two
+authored numbers per fork.
+
+**The scalar.** Discharge, normalised so that the root carries 1. Absolute
+cubic metres per second would be false precision - nobody knows the discharge of
+an invented river - and normalising costs nothing, because the author anchors it
+with a width instead.
+
+**At a node, the scalar splits.** For water it is conserved: what arrives leaves,
+so the shares of a fork sum to 1. Two rivers running together add. That is the
+whole node rule.
+
+**Along a segment it is constant** between nodes. Rain and seepage exist and are
+not worth a field until somebody wants a river that grows without tributaries.
+
+**From the scalar to the geometry**, and this is the part worth getting right:
+
+```
+width = a · Q^0.5
+depth = c · Q^0.4
+```
+
+Those exponents are not invented. Downstream hydraulic geometry - Leopold and
+Maddock, and every survey since - finds width ∝ Q^0.5, depth ∝ Q^0.4 and
+velocity ∝ Q^0.1 across a network at a comparable flow frequency. The three
+exponents sum to 1 because they must: Q = width × depth × velocity, so
+continuity fixes their sum and only their division is empirical. The
+*downstream* relation is the one that applies here, because we are comparing
+different channels of one network rather than one channel at different times;
+the at-a-station exponents are different numbers answering a different question.
+
+Two consequences fall out that are worth stating because they are exactly what
+the sketch got wrong, and they are right.
+
+**Branches do not subtract.** An 8 m river splitting its flow evenly gives two
+channels of 8/√2 ≈ 5.7 m, together half again as wide as the trunk. Anyone who
+has seen a delta knows this. Subtraction is the exponent-1 special case, which
+would say that width is proportional to discharge and therefore that velocity
+and depth never change - not a simplification but a different world.
+
+**Depth follows too, and meets the rule world01 just set.** A branch taking a
+twentieth of the flow is not merely narrow, it is shallow: `0.05^0.4 ≈ 0.30`, so
+about a third of the trunk's depth. Against world01's floor - a bed deeper than
+a character can climb - the model can say something a width-only model cannot:
+*this branch is too small to exist in this world*, because its bed would be
+climbable and their rivers may not be. The flow model and the Workspace minimum
+meet without either knowing about the other.
+
+**What the author writes** is then very little: the root's width and depth, which
+anchor `a` and `c`, and one share per branch. Everything else is computed. The
+tool may of course ask for the share as a width - "make this branch 3 m" - and
+invert it; the stored number stays the share, because that is what survives a
+change further up.
+
+### It answers the state question by itself
+
+A branch that is shut carries nothing, and its water goes down its siblings -
+so shutting it redistributes the shares and every width below follows. The
+onion bands the author wanted are then not a drawing convention but a picture of
+the model, and the 2^n variants of a trunk are computed rather than drawn. What
+`activation` switches stays a set of authored bodies; the generator is simply
+what wrote them.
+
+### What carries over to cracks, and what does not
+
+The skeleton does: a directed network, a scalar transported along it, a rule
+that distributes it at nodes, and a power law from scalar to width. That is why
+nothing in the model may be called water.
+
+Three things must be parameters rather than constants, and a crack differs in
+all three. Its node rule is **lossy** - branching dissipates energy, which is
+why branches slow and arrest, while water is conserved. Its segment rule
+**decays** rather than holding constant, for the same reason. And its exponent
+is its own: aperture against energy release is not width against discharge.
+
+So the reuse is real but it is the reuse of a skeleton, not of a formula. A
+model that claimed one set of numbers covered both would be the kind of
+generality that is true only if nobody looks.
+
+### What this costs, and the question it leaves
+
+Storing the network alongside the bodies means the document holds two truths
+about one width, and they can disagree the moment somebody drags a point. The
+answer is the one every procedural tool arrives at: a body carries a mark saying
+which network baked it, editing it by hand **detaches** it, and a detached body
+is left alone by the next bake and says so in the Outliner. That mark is the
+real cost of this design and the thing to get right first - a bake that silently
+overwrites a hand edit is worse than no generator.
+
+The open question is where the network lives. Inside the Scene it travels with
+the map and can never be lost; beside it, it stays out of a document that is
+otherwise only authored geometry. Inside is probably right, for the same reason
+`activation_groups` is inside: a thing that relates several bodies has nowhere
+else to be.
+
 ## A Scene Template cannot carry water
 
 `src/SceneMaker.Core/DocumentValidation.cs`, the Scene Template branch —
