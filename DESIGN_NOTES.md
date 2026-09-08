@@ -639,25 +639,32 @@ states, which is the Outliner's picture and not a dropdown's (`WATER-07`).
 
 `src/SceneMaker.Core/WorkspaceConfiguration.cs`, `MinimumChannelDepthMeters`
 
-World01 decided that a river bed lies deeper than a character can climb - one
-metre against a step of half a metre - so that a river is not crossable in
-either state. A dry bed stays a place one can be, reached by something authored
-into it rather than by climbing down; falling in was considered and dropped,
-because it would have needed an asymmetric step rule and that would have made
-every edge in that world climbable.
+World01 first decided that a river bed lies deeper than a character can climb -
+one metre against a step of half a metre - so that a river is not crossable in
+either state, and then, a day later, that a shallow river should be wadeable
+after all. Both are ordinary game-design decisions and neither is SceneMaker's.
 
-The number belongs in the Workspace and not in Core. It follows from a step
-height, and SceneMaker knows nothing of characters or steps; a constant here
-would be a game rule hidden in an engine-neutral tool, which is what the metric
-rules in `AGENTS.md` exist to prevent. So `minimum_channel_depth_meters` sits
-beside the other grid metrics, world01 sets 1.0, the fixture sets 0.25, and
-validation only holds an author to whatever their World wrote down. It is not
-exported: a consumer receives the actual depths and has no use for the floor
-they were held to.
+That is exactly why the number lives in the Workspace and not in Core. It
+follows from a step height, and SceneMaker knows nothing of characters or steps;
+a constant here would be a game rule hidden in an engine-neutral tool, which is
+what the metric rules in `AGENTS.md` exist to prevent. `minimum_channel_depth_meters`
+therefore sits beside the other grid metrics, and validation holds an author to
+whatever their World wrote down and to nothing else. It is not exported: a
+consumer receives the actual depths and has no use for the floor they were held
+to.
 
-The field it drives is the one place this is visible while authoring - the
-depth input cannot offer less, and a value carried over from a shallower
-Workspace is lifted rather than saved as it was.
+The reversal is what shows the shape was right. A rule that had been a constant
+in Core would have cost a code change, a bump and a release; as a Workspace
+value it cost one number in one file, with no code touched and no test moved.
+World01 now sets `0.125`, one elevation quantum, which is the floor that is left
+once game meaning is taken out of it: a channel shallower than the smallest
+height this Workspace can author is not a channel at all.
+
+What the field still does while authoring is the same - the depth input cannot
+offer less, and a value carried over from a deeper Workspace is lifted rather
+than saved as it was. What it no longer does is decide whether a river can be
+crossed. That question moved back to where it was always going to be answered,
+in the consumer's column rule.
 
 ### A group nothing is in
 
@@ -768,21 +775,33 @@ the model, and the 2^n variants of a trunk are computed rather than drawn. What
 `activation` switches stays a set of authored bodies; the generator is simply
 what wrote them.
 
-### What carries over to cracks, and what does not
+### Cracks were the argument, not the requirement
 
-The skeleton does: a directed network, a scalar transported along it, a rule
-that distributes it at nodes, and a power law from scalar to width. That is why
-nothing in the model may be called water.
+The case for a model rather than a warning was that the same shape would carry
+to crack formation. It examined well - a directed network, a transported scalar,
+a node rule and a power law are common to both - but a crack differs in every
+rule that hangs off that skeleton: its nodes are lossy where water is conserved,
+its segments decay where water holds, and aperture against energy release is not
+width against discharge.
 
-Three things must be parameters rather than constants, and a crack differs in
-all three. Its node rule is **lossy** - branching dissipates energy, which is
-why branches slow and arrest, while water is conserved. Its segment rule
-**decays** rather than holding constant, for the same reason. And its exponent
-is its own: aperture against energy release is not width against discharge.
+The author has since put cracks where they belong, in PolyTexture, and taken
+them out of this. That is a simplification and worth taking: the model may now
+be **about water**. Its node rule is conservation, its segments are constant,
+its exponents are the hydraulic ones. Nothing has to be a parameter in order to
+serve a second case that is not coming, and a shape kept general for a caller
+that never arrives is the kind of generality that is true only if nobody looks.
 
-So the reuse is real but it is the reuse of a skeleton, not of a formula. A
-model that claimed one set of numbers covered both would be the kind of
-generality that is true only if nobody looks.
+The skeleton is written down above; if PolyTexture ever wants it, it is three
+paragraphs, not a dependency.
+
+### Without a generator it still earns its place
+
+The generator is deferred, and the model does not depend on it. Its near-term
+use is a suggestion: `Create Branch` already knows the parent, the station and
+the parent's width, so it can offer the branch and the stretch below the widths
+and depths the model gives instead of the context bar's defaults. That is one
+authored number - the share - turning into four correct ones, in a tool that
+already exists.
 
 ### What this costs, and the question it leaves
 
