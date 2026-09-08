@@ -658,10 +658,17 @@ channel changes where an actor may stand either way.
 
 **Activation runs downhill.** A body's own `activation` is not the whole
 answer: it is there when that says so **and** the body its source sits on is
-there. Follow `junctions` to find that body - the entry whose
-`own_station_meters` is `0` is the one this body's source makes - and ask the
-same question of it. A body with no such junction answers for itself, which is
-what a river's uppermost stretch is.
+there. What feeds a body is stated in the Scene block, on the body itself:
+`scene.water_bodies[].junctions[]` with `"end": "source"` names it. Ask the same
+question of that body. A body with no source junction answers for itself, which
+is what a river's uppermost stretch is.
+
+Read the direction there and nowhere else. The `junctions` beside the raster
+carry the same relations with their stations worked out, which is what they are
+for, but they say nothing about which end of which body made them: a body that
+is itself a branch **and** has a branch leaving it at its own station `0` then
+carries two entries with `own_station_meters` `0`, one for each, and no rule
+over that number can tell them apart. `end` is never ambiguous.
 
 Where two bodies feed one, its source sits on both, and it has water as soon as
 **either** of them does. A ring of bodies feeding one another is refused rather
@@ -1147,8 +1154,12 @@ treat a violation as a corrupt file rather than a case to handle:
   is `"dry_bed"` or `"absent"`. A body whose `activation` is absent or null
   exists in every state. Only a water body may carry one - a Placement, a bridge
   or a Path with an `activation` is refused rather than ignored.
-- No body is fed, around the junctions, by itself: following source junctions
-  from any body never returns to it.
+- No body is fed, around the junctions, by itself: following `"end": "source"`
+  junctions from any body never returns to it.
+- Every junction in `scene.water_bodies[].junctions` has a matching pair beside
+  the raster and the other way round. The Scene states the relation and which
+  end of this body makes it; the raster adds the two stations. A reader may
+  check one against the other and should.
 - Every junction appears on both bodies, with `water_body_id` and the two
   stations exchanged, and names a body that exists. Each station lies between
   `0` and its own body's last centerline station. A junction is produced only by

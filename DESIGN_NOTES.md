@@ -527,6 +527,34 @@ know what the bytes mean, and they now mean more than they did; leaving 17 in
 place would have made two readers of the same number behave differently, which
 is exactly what pinning is for.
 
+### The direction is authored, the stations are derived
+
+World01 found the hole while writing their reader. Export 18 told them to find
+what feeds a body by taking the junction whose `own_station_meters` is `0` -
+a marker that reads a meaning out of a position, and one that stops working the
+moment a body is both a branch and has a branch leaving it at its own station
+`0`. It then carries two such entries, one for each, and nothing about the
+number tells them apart.
+
+The relation was never only in the raster. `scene.water_bodies[].junctions[]`
+carries the authored claim with `"end": "source"` on it, and that is what a
+consumer should read: the Scene says which end of which body makes the relation,
+the raster adds the two stations, and the two can be checked against each other.
+The contract now says so.
+
+Two things worth keeping from this. A marker derived from a value is a rule that
+holds until the value repeats, and this one repeated in a shape the recommended
+authoring produces - splitting at a fork puts a source exactly where another
+body's station `0` is. And I had told world01 the opposite a week earlier: that
+the authored parent binding was an authoring aid and not export data. It ships
+in the Scene block, has all along, and being wrong about our own file is what
+made the bad rule look necessary.
+
+No version moved for it. The bytes always meant this; what was wrong was the
+recipe for reading them, and a reader that followed `end` was right the whole
+time. A number that rises for a corrected sentence teaches a consumer that a
+rise might mean nothing.
+
 ### Widths are not coupled, and that is what keeps the tree cheap
 
 The same sketch asked for something else: a branch taken off an 8 m river should
