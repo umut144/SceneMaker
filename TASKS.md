@@ -12,7 +12,6 @@ every fix has to stay inside.
 
 | ID | Area | Outcome | Status |
 |---|---|---|---|
-| `WATER-01` | Export contract | Express an authored river branch and what switches it: a branch is its own body, alternatives are bodies, `activation_groups` with named states, `inactive`, derived `junctions` and per-cell `station_meters`. Scene 20 / export 17. [Notes](DESIGN_NOTES.md#a-branch-is-a-body-and-a-state-switches-which-bodies-there-are) | **In progress** |
 | `PATH-02` | Paths | Make the red authoring wire pickable and emphasize a selected Path; manual acceptance of an additive-to-tunnel-to-additive Path through a hill. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Ready** |
 
 ## Optional Later — Paths and sections
@@ -24,6 +23,7 @@ subtractive operation are in place. What remains beyond the active slices:
 |---|---|---|---|
 | `PATH-03` | Paths | Selection and per-point reshaping of an existing Path, including Bezier handles, as editing detail rather than re-authoring. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Optional / Later** |
 | `PATH-04` | Paths | Define overlapping-station semantics so a helix stays unambiguous; exactly overlapping Paths must not be disambiguated by an arbitrary semantic choice. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Optional / Later** |
+| `PATH-05` | Paths | A ramp down into a river bed, first authored on `fork01`. World01 asked for it there rather than in a map: a ramp puts a Path cut and a water cut in one column, which is the hardest corner of their column rule and the one they would rather meet with nothing else standing next to it. Wanted only once a Path can be drawn into a bed at all. | **Optional / Later** |
 | `SECT-01` | Views | Separate profile-section tool projecting a marked region onto X-Z or Y-Z to inspect stacked tunnels, clearance, ramps and water spans. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Optional / Later** |
 
 ## Optional Later — Height authoring and analysis
@@ -62,10 +62,9 @@ game never shows. A switchable river is therefore authorable only by hand.
 |---|---|---|---|
 | `OUTLINE-01` | Views | A dockable Outliner listing the current mode's objects, generic over modes, with per-object editor visibility that never reaches the document or the export, water bodies nested under the parent their junction names, and a per-group state selector that previews a Scene in one state without editing it. Its toggle belongs in its own group of the `ToolOptionsBar`, below the three mutually exclusive views, because a panel is orthogonal to them. [Notes](DESIGN_NOTES.md#a-branch-is-a-body-and-a-state-switches-which-bodies-there-are) | **Ready** |
 | `WATER-03` | Water | A `Create Branch` tool whose first point snaps to the centerline of an existing body, records that body as the authored parent, and takes its surface height at that station; the point still lands on the water grid, within half a cell of the curve. [Notes](DESIGN_NOTES.md#a-branch-is-a-body-and-a-state-switches-which-bodies-there-are) | **Ready** |
-| `WATER-08` | Water | Let an author create, rename and delete an activation group; today a group can only be authored by hand, and `River:Select River` offers just the ones a Scene already declares. An orphaned group is reported as an export warning rather than refused, because authoring one comes before putting the first body in it. | **Optional / Later** |
 | `WATER-05` | Water | Insert a curve point into an existing river. Every gesture a press can carry is taken - point, corridor, empty ground, and the same three with the eraser - and `ToolInteraction` sees no modifier keys by design, so this needs its own tool rather than a fourth meaning for a press. [Notes](DESIGN_NOTES.md#selecting-a-river-and-the-gesture-that-was-left-over) | **Ready** |
 | `WATER-06` | Water | Author a river point's handles and its `Linear`/`Aligned` mode after it is drawn; the `Point` field is hidden while selecting because it decides what the next drawn point does and nothing about the selected one. Shares its shape with `PATH-03`. | **Optional / Later** |
-| `WATER-07` | Water | Author activation groups themselves - create, rename, add a state - and put a body in several states at once. The selector offers only the states a Scene already declares and sets exactly one; both belong with the Outliner, where a list of bodies against a list of states is the natural picture. [Notes](DESIGN_NOTES.md#selecting-a-river-and-the-gesture-that-was-left-over) | **Optional / Later** |
+| `WATER-07` | Water | Author activation groups themselves - create, rename, delete, add a state - and put a body in several states at once. A group exists today only if somebody wrote it into the document by hand; `River:Select River` offers the states a Scene already declares and sets exactly one. Both belong with the Outliner, where a list of bodies against a list of states is the natural picture. [Notes](DESIGN_NOTES.md#selecting-a-river-and-the-gesture-that-was-left-over) | **Optional / Later** |
 
 ## Optional Later — Application code
 
