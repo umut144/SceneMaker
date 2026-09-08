@@ -5,9 +5,18 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 17**, embedded **scene 16**. A reader must reject any
+Current schemas: **export 18**, embedded **scene 16**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
+
+Export 18 adds no field and one rule: **a body is active when its own
+activation says so and the body it leaves is active.** A branch is fed by the
+river it comes off, so a branch of a river that is not there has nothing running
+through it, and switching a river off takes everything hanging under it with it.
+The tree this runs down is `junctions`, which export 17 already ships - the
+alternative was to repeat a parent's states on every child, where the two could
+then disagree. The embedded Scene is untouched; the version rises because the
+same bytes mean more than they did.
 
 Export 17 lets a river be switched. An authored branch that a game trigger
 opens was not expressible: a body was simply there, and the only way to have one
@@ -647,6 +656,22 @@ has no default.
 statement about what a state change costs a consumer to apply: water leaving a
 channel changes where an actor may stand either way.
 
+**Activation runs downhill.** A body's own `activation` is not the whole
+answer: it is there when that says so **and** the body its source sits on is
+there. Follow `junctions` to find that body - the entry whose
+`own_station_meters` is `0` is the one this body's source makes - and ask the
+same question of it. A body with no such junction answers for itself, which is
+what a river's uppermost stretch is.
+
+Where two bodies feed one, its source sits on both, and it has water as soon as
+**either** of them does. A ring of bodies feeding one another is refused rather
+than exported, so following this always ends.
+
+Nothing about the chain is authored twice: a child does not repeat its parent's
+states, so the two cannot disagree. And `inactive` still answers for the body
+that carries it - a branch left dry because its river was switched off leaves
+the bed or no trace by its own field, not by its parent's.
+
 **Everything is exported in every state.** A body's raster and its band are in
 the file whatever its activation says. Nothing is omitted, nothing is fetched
 later, and there is no second file: what a state decides is which of them a
@@ -1122,6 +1147,8 @@ treat a violation as a corrupt file rather than a case to handle:
   is `"dry_bed"` or `"absent"`. A body whose `activation` is absent or null
   exists in every state. Only a water body may carry one - a Placement, a bridge
   or a Path with an `activation` is refused rather than ignored.
+- No body is fed, around the junctions, by itself: following source junctions
+  from any body never returns to it.
 - Every junction appears on both bodies, with `water_body_id` and the two
   stations exchanged, and names a body that exists. Each station lies between
   `0` and its own body's last centerline station. A junction is produced only by

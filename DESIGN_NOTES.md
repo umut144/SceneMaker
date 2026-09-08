@@ -500,6 +500,54 @@ The first draft justified it by what a state change costs a consumer, and world0
 corrected that: when water leaves a channel, where an actor may stand changes
 either way. The field is about meaning, and the contract says so in those terms.
 
+### Activation runs downhill
+
+`src/SceneMaker.Core/WaterActivation.cs` - export 18
+
+The first cut had a hole the author found by drawing the thing on paper: nothing
+said what happens to a branch when the river it comes off is switched off. It
+stayed "active" and sat there fed by nothing. The plan had been to refuse that
+combination in validation - which would have been a rule saying that a
+reasonable map is not allowed, instead of a rule saying what it means.
+
+The answer costs no field. A body is there when its own activation says so and
+the body its source sits on is there, and the tree that runs down is the
+junctions we already ship. So switching a river off takes everything hanging
+under it with it, three levels deep or thirty, and a child never repeats its
+parent's states - which is the only way the two cannot disagree.
+
+Two things fell out rather than being decided. Where two bodies feed one, its
+source sits on both, so it has water as soon as either does: that is what water
+does, and the alternative would have needed a rule nobody could have guessed.
+And `inactive` still answers for the body carrying it, so a branch left dry
+because its river was shut leaves its bed or no trace by its own statement.
+
+The version rose for a rule and no field. A reader pins a number in order to
+know what the bytes mean, and they now mean more than they did; leaving 17 in
+place would have made two readers of the same number behave differently, which
+is exactly what pinning is for.
+
+### Widths are not coupled, and that is what keeps the tree cheap
+
+The same sketch asked for something else: a branch taken off an 8 m river should
+narrow it to 6 m from that station down, drawn as nested bands. The bands are a
+good idea and cost nothing - they are a view over the tree, since what each
+branch takes is known.
+
+The coupling itself is refused, and the reason is not the arithmetic. 8 − 2 = 6
+is a convention rather than physics, and an edit to one body silently moving
+another is the shape this project keeps throwing out - but the deciding argument
+is combinatorial. If a branch can be switched, a stretch below it has two widths
+and therefore two bodies that are alternatives. A second branch makes four, a
+third eight, and a tree with nine of them would ask an author to draw five
+hundred versions of a trunk. So the width of a river is authored once, the bands
+show where its water goes, and a branch being shut changes whether it flows and
+not how wide anything is.
+
+`Create Branch` may still offer the subtraction as a starting value. A suggestion
+that the author can overrule is a different thing from a rule that holds two
+bodies together.
+
 ### What is still open
 
 Nothing about the format. What the model cannot express is a body that leaves no

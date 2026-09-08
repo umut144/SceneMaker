@@ -78,6 +78,7 @@ public static partial class DocumentValidation
         ValidateBridges(document);
         ValidateActivationGroups(document);
         ValidateWaterBodies(document);
+        ValidateNoJunctionCycle(document);
 
         if (document.TemplateAnchors is null)
             throw new SceneMakerDocumentException("Scene requires template_anchors.");
@@ -620,6 +621,40 @@ public static partial class DocumentValidation
                     $"{label} must list its junctions once each, by end and then by id.");
             }
             previous = current;
+        }
+    }
+
+    /// <summary>
+    /// A body must not be fed, however far around, by itself.
+    ///
+    /// <para>Activation runs down the junctions - a body is there when what
+    /// feeds it is there - so a ring of them is a question with no answer. It
+    /// cannot be authored by the tools, which only ever hang a new branch on an
+    /// existing body, but a hand-written document can say it, and then every
+    /// reader of that chain has to decide what to do rather than being told.
+    /// </para>
+    /// </summary>
+    private static void ValidateNoJunctionCycle(SceneDocument document)
+    {
+        var byId = document.WaterBodies.ToDictionary(
+            static body => body.WaterBodyId, StringComparer.Ordinal);
+        foreach (var start in document.WaterBodies)
+        {
+            HashSet<string> seen = new(StringComparer.Ordinal) { start.WaterBodyId };
+            Queue<string> pending = new(WaterActivation.Feeders(document, start)
+                .Select(static feeder => feeder.WaterBodyId));
+            while (pending.Count > 0)
+            {
+                var next = pending.Dequeue();
+                if (string.Equals(next, start.WaterBodyId, StringComparison.Ordinal))
+                {
+                    throw new SceneMakerDocumentException(
+                        $"Water body '{start.WaterBodyId}' is fed, around the junctions, by itself.");
+                }
+                if (!seen.Add(next) || !byId.TryGetValue(next, out var body)) continue;
+                foreach (var feeder in WaterActivation.Feeders(document, body))
+                    pending.Enqueue(feeder.WaterBodyId);
+            }
         }
     }
 

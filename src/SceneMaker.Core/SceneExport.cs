@@ -13,7 +13,7 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 17;
+    public const int Version = 18;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -46,6 +46,16 @@ public static class SceneExport
     // cells are water; the band is the truth about where the water is seen.
     // The embedded Scene is unchanged again: both halves are derived, and
     // nothing an author writes moved.
+    // Export 18 changes no field and one rule: a body is active when its own
+    // activation says so AND the body it leaves is active. A branch is fed by
+    // the river it comes off, so a branch of a river that is not there has
+    // nothing running through it, and switching a river off takes everything
+    // hanging under it with it. The tree that runs down is `junctions`, which
+    // export 17 already ships; the alternative was to repeat a parent's states
+    // on every child, where the two could then disagree. The number goes up
+    // because the same bytes now mean something more, which is the whole reason
+    // a reader pins one.
+    //
     // Export 17 lets a river be switched. `scene.activation_groups` names the
     // states a Scene can be in and a body says which of them it exists in, so a
     // branch a trigger opens is authored in the one map instead of needing a
