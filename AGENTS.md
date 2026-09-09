@@ -148,6 +148,13 @@ document can be hours ahead of it and carry work that was never exported. This
 has cost us two corrections already - both times we described the file nearest
 to us instead of the file they have.
 
+Reading the right file is not enough. Counts about a map count **cells**, not
+raster entries: a cell three bodies claim is one cell and three entries, and
+their assurances are about cells. The check is that the arithmetic closes -
+distinct cells, plus one per two-body cell, plus two per three-body cell, equals
+the entry total. That was the third number we got wrong in a week, and the first
+one whose source was already right.
+
 ## Version control
 
 After every completed change, create a Git commit automatically. Each commit
