@@ -1395,6 +1395,14 @@ public sealed class ToolInteraction
                 $"Bridge '{bridgeId}': {plankCount} planks, {width:0.##} m wide at {elevation:0.###} m."));
     }
 
+    /// <summary>What the Canvas draws under an `Insert Point` pointer.</summary>
+    public WaterInsertPreview WaterInsert(ToolContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return ToolPreviewBuilder.BuildWaterInsert(
+            context.Scene, context.Metrics, ActiveTool, PointerAuthoring);
+    }
+
     /// <summary>What the Canvas draws for the selected river, dragged or not.</summary>
     public WaterSelectionPreview WaterSelection(ToolContext context)
     {

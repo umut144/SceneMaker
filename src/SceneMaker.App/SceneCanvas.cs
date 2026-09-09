@@ -1734,6 +1734,12 @@ public sealed partial class SceneCanvas : Control
             return;
         }
 
+        if (ActiveTool == EditorTool.InsertRiverPoint)
+        {
+            DrawWaterInsertPreview(pan, zoom, sceneHeightAuthoringPixels);
+            return;
+        }
+
         var preview = ToolPreviewBuilder.BuildWaterDraft(
             document,
             _metrics!,
@@ -1793,6 +1799,48 @@ public sealed partial class SceneCanvas : Control
     /// - but it is the one thing an author must not first read in an export.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The river under an `Insert Point` pointer: its curve, its authored
+    /// points, and a ring where the new one would land. A river's curve is
+    /// invisible unless something is selected, and this is the one tool whose
+    /// purpose is to put a handle on that curve - pressing into a blue band
+    /// without seeing it is guessing.
+    /// </summary>
+    private void DrawWaterInsertPreview(Vector2 pan, float zoom, int sceneHeightAuthoringPixels)
+    {
+        if (CurrentContext() is not { } context) return;
+        var preview = _interaction.WaterInsert(context);
+        if (preview.Body is not { } body) return;
+
+        Vector2 Screen(double authoringX, double authoringY) => pan + new Vector2(
+            (float)authoringX * zoom,
+            (sceneHeightAuthoringPixels - (float)authoringY) * zoom);
+
+        if (preview.Centerline.Count >= 2)
+        {
+            var line = new Vector2[preview.Centerline.Count];
+            for (var index = 0; index < preview.Centerline.Count; index++)
+                line[index] = Screen(preview.Centerline[index].X, preview.Centerline[index].Y);
+            DrawPolyline(line, WaterCurveColor, 2.0f);
+        }
+
+        for (var index = 0; index < body.Points.Count; index++)
+        {
+            var point = body.Points[index];
+            var centre = Screen(point.PositionAuthoringPx.X, point.PositionAuthoringPx.Y);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleInAuthoringPx, Screen);
+            DrawHandle(centre, point.PositionAuthoringPx, point.HandleOutAuthoringPx, Screen);
+            var isEnd = index == 0 || index == body.Points.Count - 1;
+            DrawCircle(centre, isEnd ? 5.0f : 3.5f, WaterCurveColor);
+        }
+
+        // Hollow, because it is not there yet. Absent while the pointer is off
+        // the line, which is also the answer to whether a press would take.
+        if (preview.Anchor is not { } anchor) return;
+        var landing = Screen(anchor.PositionAuthoringPx.X, anchor.PositionAuthoringPx.Y);
+        DrawArc(landing, 6.5f, 0f, Mathf.Tau, 24, SelectionColor, 2.0f);
+    }
+
     private void DrawWaterSelectionPreview(
         SceneDocument document,
         Vector2 pan,

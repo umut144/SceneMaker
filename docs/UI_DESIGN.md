@@ -268,6 +268,15 @@ daneben sagt es und ändert nichts. `Insert Point` + `Eraser` nimmt umgekehrt de
 Kurvenpunkt unter dem Zeiger weg; eine Kurve, die nur noch Quelle und Mündung
 hat, behält beide.
 
+Solange das Werkzeug aktiv ist, zeigt der Canvas den Fluss unter dem Zeiger
+mit seiner Kurve und seinen authorierten Punkten, und einen hohlen Ring dort,
+wo der neue Punkt landen würde. Ohne das ist es ein Druck in ein blaues Band
+und eine Hoffnung: die Kurve eines Flusses ist unsichtbar, solange nichts
+ausgewählt ist, und ausgerechnet dieses Werkzeug existiert, um einen Griff an
+diese Kurve zu setzen. Der Ring fehlt, wenn der Zeiger zu weit von der
+Mittellinie weg ist — das ist zugleich die Antwort darauf, ob ein Druck etwas
+nähme.
+
 Das Werkzeug **authoriert keinen Wert**. Schnitt und Breite kommen aus der Kurve
 an dieser Station, nicht aus der Kontextleiste — einen Punkt einzufügen heißt,
 sich eine Stelle zum Anfassen zu machen, nicht den Fluss zu ändern. Aus

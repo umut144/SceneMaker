@@ -68,6 +68,23 @@ public sealed record WaterSelectionPreview(
 }
 
 /// <summary>
+/// What `River:Insert Point` is about to do. The body under the pointer with
+/// its authored points, and the place on it the new point would land.
+///
+/// <para>Without this an author presses into a blue band and hopes: the curve
+/// a river is made of is invisible unless something is selected, and inserting
+/// a point is the one operation whose whole purpose is to put a handle on that
+/// curve.</para>
+/// </summary>
+public sealed record WaterInsertPreview(
+    WaterBodyDocument? Body,
+    IReadOnlyList<ChainPoint> Centerline,
+    WaterCenterlineAnchor? Anchor)
+{
+    public static WaterInsertPreview Empty { get; } = new(null, [], null);
+}
+
+/// <summary>
 /// The open Path being drawn. A prepared surface is present only when at least
 /// two points form valid route geometry; the same value is used by the canvas
 /// and by Enter.
@@ -390,6 +407,39 @@ public static class ToolPreviewBuilder
             // each other during a drag - is a drag passing through, not a
             // refusal. The points are still drawn; the corridor is not.
             return new WaterSelectionPreview(candidate, [], [], [], false);
+        }
+    }
+
+    /// <summary>
+    /// The body `Insert Point` would put a point into, found the same way the
+    /// press finds it, so what lights up is what a press would take.
+    /// </summary>
+    public static WaterInsertPreview BuildWaterInsert(
+        SceneDocument scene,
+        WorkspaceMetrics metrics,
+        EditorTool tool,
+        AuthoringPoint? pointer)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+        if (tool != EditorTool.InsertRiverPoint || pointer is not { } at)
+            return WaterInsertPreview.Empty;
+
+        var anchor = WaterGeometry.NearestCenterlineAnchor(
+            scene, metrics, at.X, at.Y, metrics.AuthoringPixelsPerWaterCell * 2.0);
+        var body = anchor is { } found
+            ? scene.WaterBodies.FirstOrDefault(candidate => string.Equals(
+                candidate.WaterBodyId, found.WaterBodyId, StringComparison.Ordinal))
+            : WaterEditing.FindAt(scene, metrics, at.X, at.Y);
+        if (body is null) return WaterInsertPreview.Empty;
+
+        try
+        {
+            return new WaterInsertPreview(body, WaterGeometry.Centerline(body.Points), anchor);
+        }
+        catch (SceneMakerDocumentException)
+        {
+            return new WaterInsertPreview(body, [], anchor);
         }
     }
 

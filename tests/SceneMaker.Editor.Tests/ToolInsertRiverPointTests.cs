@@ -78,6 +78,40 @@ public sealed class ToolInsertRiverPointTests
         Assert.Contains("no curve point", nothing.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A river's curve is invisible unless something is selected, so this tool
+    /// used to be a press into a blue band and a hope. The preview shows the
+    /// body it would put a point into and where that point would land, and it
+    /// finds the body the same way the press does - what lights up is what a
+    /// press takes.
+    /// </summary>
+    [Fact]
+    public void ThePreviewShowsTheRiverUnderThePointerAndWhereThePointWouldLand()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = River(workspace);
+        var interaction = Inserting();
+        var context = Context(workspace, scene);
+
+        interaction.PointerMoved(Point(160, 40), Cell(5, 1));
+        var near = interaction.WaterInsert(context);
+        Assert.Equal("river_0001", near.Body?.WaterBodyId);
+        Assert.NotEmpty(near.Centerline);
+        var anchor = Assert.NotNull(near.Anchor);
+        Assert.Equal(160, anchor.PositionAuthoringPx.X);
+        Assert.Equal(32, anchor.PositionAuthoringPx.Y);
+
+        // Far from every river there is nothing to show and nothing to take.
+        interaction.PointerMoved(Point(160, 400), Cell(5, 12));
+        Assert.Null(interaction.WaterInsert(context).Body);
+
+        // And a tool that is not this one shows nothing, whatever the pointer.
+        var selecting = new ToolInteraction();
+        selecting.SelectMode(EditorMode.River);
+        selecting.PointerMoved(Point(160, 40), Cell(5, 1));
+        Assert.Null(selecting.WaterInsert(context).Body);
+    }
+
     private static ToolInteraction Inserting()
     {
         var interaction = new ToolInteraction();
