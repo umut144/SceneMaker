@@ -676,6 +676,44 @@ setting exactly one: a body active in several states stays hand-authored, and
 nothing here creates a group. Both want a list of bodies against a list of
 states, which is the Outliner's picture and not a dropdown's (`WATER-07`).
 
+## The panel says what the values belong to
+
+The paragraph above claimed that a water number means the same thing whether
+something is selected or not. That was true of what the fields *meant* and
+false of where they *wrote*: with a body selected, a turn of `Depth` reached
+the session value and the status line reported success anyway. The fix at the
+time repaired the write path. What produced it stayed - one control whose
+subject is decided by which tool happens to be active.
+
+The bar could not grow either. `Select River` was the only tool showing both
+kinds of value at once - the body's `Surface`, `Width`, heights and activation
+beside the next stroke's `Snap` - and at nine groups it pushed the tool name off
+the left edge of the window while the derived `Bed · Cut` readout fell off the
+right.
+
+The Inspector answers both. A value that belongs to an object lives in the
+right-hand column under a header that names the object; a value that belongs to
+the gesture in progress stays in the bar above the Canvas. Where the two
+readings are the same object - the river you selected, or the one the next
+stroke will make - one control still serves both, and the header (`New river`
+against `River river_0002 · point 3`) is what distinguishes them. Where they are
+genuinely different subjects, they are now two controls in two places: the bar's
+`Point` decides what the next drawn point does, the Inspector's `Point` changes
+the point that is already selected.
+
+Three consequences worth keeping in view. `Select River`'s bar now holds nothing
+but the tool name, which is the shape a selection tool should have had all
+along. `Height` moved into the panel with everything else, so painting Terrain
+at 3 m and setting a selected Hill's top are the same field under two different
+headers rather than two meanings of one bar entry. And the `Eraser` sits with
+the actions it modifies while the two view toggles overlay the Canvas they
+change, which leaves the right edge free for the panel - and for the Outliner
+above it, once `OUTLINE-01` lands.
+
+What this does not buy is confidence. The App layer still has no automated
+tests, so every visibility rule the panel inherited is only as good as a manual
+pass (`APP-02`).
+
 ## How deep a bed has to be is the World's statement
 
 `src/SceneMaker.Core/WorkspaceConfiguration.cs`, `MinimumChannelDepthMeters`

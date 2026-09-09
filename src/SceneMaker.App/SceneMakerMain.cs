@@ -56,6 +56,9 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     private const int CurvePointModeLinear = 1;
     private const int CurvePointModeAligned = 2;
+    private const float ViewToggleOverlayWidth = 90f;
+    private const float ViewToggleOverlayHeight = 42f;
+    private const float ViewToggleOverlayMargin = 8f;
     private const int RiverInactiveDryBed = 1;
     private const int RiverInactiveAbsent = 2;
     private const int PathGradeDownFifty = 1;
@@ -109,6 +112,8 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _waterClearanceLabel = new();
     private readonly SpinBox _waterClearanceEdit = new();
     private readonly Label _waterDerivedSpanLabel = new();
+    private readonly Label _selectedPointModeLabel = new();
+    private readonly OptionButton _selectedPointModeEdit = new();
     private readonly Button _eraserToggle = new();
     private readonly Button _heatmapToggle = new();
     private readonly Button _sectionToggle = new();
@@ -137,7 +142,19 @@ public sealed partial class SceneMakerMain : Control
     private readonly HBoxContainer _contextNavigationBar = new();
     private readonly HBoxContainer _contextMenuBar = new();
     private readonly HBoxContainer _viewOptionsBar = new();
-    private readonly VBoxContainer _toolOptionsBar = new();
+    private readonly HBoxContainer _viewToggleOverlay = new();
+
+    private readonly VBoxContainer _inspectorColumn = new();
+    private readonly Label _inspectorHeaderLabel = new();
+    private readonly Label _inspectorEmptyLabel = new();
+
+    /// <summary>
+    /// One labelled line of the Inspector. The row exists so that hiding a
+    /// value hides its whole line: two hidden children in a column still cost
+    /// the separation between them, and a panel full of those reads as a panel
+    /// with holes in it.
+    /// </summary>
+    private readonly List<(Container Row, Control Label, Control Edit)> _inspectorRows = [];
     private readonly Button _returnNavigationButton = new();
     private readonly Button _mapNavigationButton = new();
     private readonly Button _landscapeNavigationButton = new();
@@ -414,6 +431,21 @@ public sealed partial class SceneMakerMain : Control
         _anchorGroupEdit.ValueChanged += OnAnchorGroupChanged;
         toolColumn.AddChild(_anchorGroupEdit);
 
+        // Below the separator: not another tool, but the same tool told to take
+        // away instead of put down. It belongs beside the actions it modifies.
+        toolColumn.AddChild(new HSeparator());
+        _eraserToggle.Name = "EraserToggle";
+        _eraserToggle.Text = string.Empty;
+        _eraserToggle.Icon = GD.Load<Texture2D>("res://assets/icons/eraser.svg");
+        _eraserToggle.ExpandIcon = false;
+        _eraserToggle.Alignment = HorizontalAlignment.Center;
+        _eraserToggle.ToggleMode = true;
+        _eraserToggle.TooltipText = "Use the active drawing tool in erase mode";
+        _eraserToggle.CustomMinimumSize = new Vector2(42f, 42f);
+        _eraserToggle.AddThemeConstantOverride("icon_max_width", 24);
+        _eraserToggle.Toggled += SetEraserEnabled;
+        toolColumn.AddChild(_eraserToggle);
+
         _contextMenuBar.Name = "ContextMenu";
         _contextMenuBar.CustomMinimumSize = new Vector2(0f, 38f);
         _contextMenuBar.AddThemeFontSizeOverride("font_size", 14);
@@ -486,11 +518,9 @@ public sealed partial class SceneMakerMain : Control
         _surfaceLabel.Name = "SurfaceLabel";
         _surfaceLabel.Text = "Surface";
         _surfaceLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_surfaceLabel);
         _surfaceEdit.Name = "Surface";
         _surfaceEdit.CustomMinimumSize = new Vector2(130f, 0f);
         _surfaceEdit.ItemSelected += SelectSurfaceItem;
-        _contextMenuBar.AddChild(_surfaceEdit);
         _curvePointModeLabel.Name = "CurvePointModeLabel";
         _curvePointModeLabel.Text = "Point";
         _curvePointModeLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -504,20 +534,32 @@ public sealed partial class SceneMakerMain : Control
             + "it decides what the next point does and leaves the placed ones alone.";
         _curvePointModeEdit.ItemSelected += SetCurvePointMode;
         _contextMenuBar.AddChild(_curvePointModeEdit);
+        // The bar's Point decides what the NEXT point does; this one changes the
+        // point that is already there. They were one control until the panel
+        // existed, and a control that means two things is what put a Depth into
+        // the session while the author was editing a river.
+        _selectedPointModeLabel.Name = "SelectedPointModeLabel";
+        _selectedPointModeLabel.Text = "Point";
+        _selectedPointModeLabel.VerticalAlignment = VerticalAlignment.Center;
+        _selectedPointModeEdit.Name = "SelectedPointMode";
+        _selectedPointModeEdit.AddItem("Linear", CurvePointModeLinear);
+        _selectedPointModeEdit.AddItem("Aligned", CurvePointModeAligned);
+        _selectedPointModeEdit.Selected =
+            _selectedPointModeEdit.GetItemIndex(CurvePointModeLinear);
+        _selectedPointModeEdit.TooltipText =
+            "Changes the selected authored point. Aligned creates editable cyclic Bezier handles.";
+        _selectedPointModeEdit.ItemSelected += SetSelectedPointMode;
         _riverWidthLabel.Name = "RiverWidthLabel";
         _riverWidthLabel.Text = "Width";
         _riverWidthLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_riverWidthLabel);
         _riverWidthEdit.Name = "RiverWidth";
         ConfigureRiverWidthInput(_riverWidthEdit);
         _riverWidthEdit.TooltipText = "The width of the corridor around the river's centerline.";
         _riverWidthEdit.ValueChanged += SetRiverWidth;
-        _contextMenuBar.AddChild(_riverWidthEdit);
 
         _riverActivationLabel.Name = "RiverActivationLabel";
         _riverActivationLabel.Text = "Active in";
         _riverActivationLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_riverActivationLabel);
         _riverActivationEdit.Name = "RiverActivation";
         _riverActivationEdit.TooltipText =
             "Which state of which group this body exists in. A body in no group "
@@ -525,12 +567,10 @@ public sealed partial class SceneMakerMain : Control
             + "are offered; a body active in several of them is authored by hand "
             + "for now.";
         _riverActivationEdit.ItemSelected += SetRiverActivation;
-        _contextMenuBar.AddChild(_riverActivationEdit);
 
         _riverInactiveLabel.Name = "RiverInactiveLabel";
         _riverInactiveLabel.Text = "When off";
         _riverInactiveLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_riverInactiveLabel);
         _riverInactiveEdit.Name = "RiverInactive";
         _riverInactiveEdit.AddItem("Dry bed", RiverInactiveDryBed);
         _riverInactiveEdit.AddItem("No trace", RiverInactiveAbsent);
@@ -539,7 +579,6 @@ public sealed partial class SceneMakerMain : Control
             + "keeps its channel cut out of the Terrain; no trace leaves the "
             + "ground as though it had never been authored.";
         _riverInactiveEdit.ItemSelected += SetRiverInactive;
-        _contextMenuBar.AddChild(_riverInactiveEdit);
 
         // Shown only while the selected river is in no group: naming one is how
         // a drawn branch becomes switchable, and until today that meant writing
@@ -547,7 +586,6 @@ public sealed partial class SceneMakerMain : Control
         _riverGroupLabel.Name = "RiverGroupLabel";
         _riverGroupLabel.Text = "New group";
         _riverGroupLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_riverGroupLabel);
         _riverGroupEdit.Name = "RiverGroup";
         _riverGroupEdit.PlaceholderText = "name it, then Enter";
         _riverGroupEdit.CustomMinimumSize = new Vector2(150f, 0f);
@@ -556,7 +594,6 @@ public sealed partial class SceneMakerMain : Control
             + "puts this river in flowing. The name is what a consumer binds its "
             + "trigger to, so it is worth reading well.";
         _riverGroupEdit.TextSubmitted += DeclareRiverActivationGroup;
-        _contextMenuBar.AddChild(_riverGroupEdit);
 
         _riverGroupRemove.Name = "RiverGroupRemove";
         _riverGroupRemove.Text = "Remove group";
@@ -564,22 +601,18 @@ public sealed partial class SceneMakerMain : Control
             "Takes the group away, and with it the activation of every river in "
             + "it - those are then there in every state.";
         _riverGroupRemove.Pressed += RemoveRiverActivationGroup;
-        _contextMenuBar.AddChild(_riverGroupRemove);
 
         _pathWidthLabel.Name = "PathWidthLabel";
         _pathWidthLabel.Text = "Width";
         _pathWidthLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_pathWidthLabel);
         _pathWidthEdit.Name = "PathWidth";
         ConfigurePathWidthInput(_pathWidthEdit);
         _pathWidthEdit.TooltipText =
             "The full width of the independent route surface at the next point.";
         _pathWidthEdit.ValueChanged += SetPathWidth;
-        _contextMenuBar.AddChild(_pathWidthEdit);
         _pathGradeLabel.Name = "PathGradeLabel";
         _pathGradeLabel.Text = "Grade";
         _pathGradeLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_pathGradeLabel);
         _pathGradeEdit.Name = "PathGrade";
         _pathGradeEdit.AddItem("-50%", PathGradeDownFifty);
         _pathGradeEdit.AddItem("-25%", PathGradeDownTwentyFive);
@@ -591,11 +624,9 @@ public sealed partial class SceneMakerMain : Control
         _pathGradeEdit.TooltipText =
             "Rise or fall per horizontal metre on the segment arriving at the next point.";
         _pathGradeEdit.ItemSelected += SetPathGrade;
-        _contextMenuBar.AddChild(_pathGradeEdit);
         _pathOperationLabel.Name = "PathOperationLabel";
         _pathOperationLabel.Text = "Operation";
         _pathOperationLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_pathOperationLabel);
         _pathOperationEdit.Name = "PathOperation";
         _pathOperationEdit.AddItem("Additive", PathOperationAdditive);
         _pathOperationEdit.AddItem("Subtractive", PathOperationSubtractive);
@@ -604,38 +635,31 @@ public sealed partial class SceneMakerMain : Control
         _pathOperationEdit.TooltipText =
             "Whether the segment arriving at the next point stays above Terrain or excavates it.";
         _pathOperationEdit.ItemSelected += SetPathOperation;
-        _contextMenuBar.AddChild(_pathOperationEdit);
         _pathClearanceLabel.Name = "PathClearanceLabel";
         _pathClearanceLabel.Text = "Clearance";
         _pathClearanceLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_pathClearanceLabel);
         _pathClearanceEdit.Name = "PathClearance";
         ConfigurePathClearanceInput(_pathClearanceEdit);
         _pathClearanceEdit.TooltipText =
             "Terrain height removed above the floor of the next subtractive segment.";
         _pathClearanceEdit.ValueChanged += SetPathClearance;
-        _contextMenuBar.AddChild(_pathClearanceEdit);
         _pathAutoStartToggle.Name = "PathAutoStart";
         _pathAutoStartToggle.Text = "Auto start";
         _pathAutoStartToggle.ButtonPressed = true;
         _pathAutoStartToggle.TooltipText =
             "Copy the effective Terrain height, including Hills, under the first point.";
         _pathAutoStartToggle.Toggled += SetPathAutoStart;
-        _contextMenuBar.AddChild(_pathAutoStartToggle);
         _pathStartElevationLabel.Name = "PathStartElevationLabel";
         _pathStartElevationLabel.Text = "Start";
         _pathStartElevationLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_pathStartElevationLabel);
         _pathStartElevationEdit.Name = "PathStartElevation";
         ConfigureElevationInput(_pathStartElevationEdit);
         _pathStartElevationEdit.TooltipText =
             "Manual absolute height of the first point when Auto start is off.";
         _pathStartElevationEdit.ValueChanged += SetPathStartElevation;
-        _contextMenuBar.AddChild(_pathStartElevationEdit);
         _bridgePlankCountLabel.Name = "BridgePlankCountLabel";
         _bridgePlankCountLabel.Text = "Planks";
         _bridgePlankCountLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_bridgePlankCountLabel);
         _bridgePlankCountEdit.Name = "BridgePlankCount";
         ConfigureBridgePlankCountInput(_bridgePlankCountEdit);
         _bridgePlankCountEdit.TooltipText =
@@ -643,49 +667,40 @@ public sealed partial class SceneMakerMain : Control
             + "one plank comes out is what is left once the gaps are taken off, so a "
             + "longer bridge gets thicker planks rather than more of them.";
         _bridgePlankCountEdit.ValueChanged += SetBridgePlankCount;
-        _contextMenuBar.AddChild(_bridgePlankCountEdit);
         _bridgePlankGapLabel.Name = "BridgePlankGapLabel";
         _bridgePlankGapLabel.Text = "Gap";
         _bridgePlankGapLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_bridgePlankGapLabel);
         _bridgePlankGapEdit.Name = "BridgePlankGap";
         ConfigureBridgePlankGapInput(_bridgePlankGapEdit);
         _bridgePlankGapEdit.TooltipText =
             "The empty run between two neighbouring planks. Gaps sit between planks "
             + "and never at the ends, so a deck always starts and finishes on wood.";
         _bridgePlankGapEdit.ValueChanged += SetBridgePlankGap;
-        _contextMenuBar.AddChild(_bridgePlankGapEdit);
         _bridgeWidthLabel.Name = "BridgeWidthLabel";
         _bridgeWidthLabel.Text = "Width";
         _bridgeWidthLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_bridgeWidthLabel);
         _bridgeWidthEdit.Name = "BridgeWidth";
         ConfigureBridgeWidthInput(_bridgeWidthEdit);
         _bridgeWidthEdit.TooltipText =
             "The full deck width. The four posts sit at the corners it makes, "
             + "so changing it moves them.";
         _bridgeWidthEdit.ValueChanged += SetBridgeWidth;
-        _contextMenuBar.AddChild(_bridgeWidthEdit);
         _bridgeElevationLabel.Name = "BridgeElevationLabel";
         _bridgeElevationLabel.Text = "Height";
         _bridgeElevationLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_bridgeElevationLabel);
         _bridgeElevationEdit.Name = "BridgeElevation";
         ConfigureElevationInput(_bridgeElevationEdit);
         _bridgeElevationEdit.TooltipText =
             "The deck surface, absolute and on the Workspace elevation quantum. "
             + "A bridge is level, so it is one number for the whole span.";
         _bridgeElevationEdit.ValueChanged += SetBridgeElevation;
-        _contextMenuBar.AddChild(_bridgeElevationEdit);
         _elevationLabel.Name = "ElevationLabel";
         _elevationLabel.Text = "Height";
         _elevationLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_elevationLabel);
         _elevationEdit.Name = "Elevation";
         ConfigureElevationInput(_elevationEdit);
         _elevationEdit.TooltipText = "The height the drawing tools author at.";
         _elevationEdit.ValueChanged += SetAuthoringElevation;
-        _contextMenuBar.AddChild(_elevationEdit);
         _snapWaterToggle.Name = "SnapWaterToTerrain";
         _snapWaterToggle.Text = "Snap";
         _snapWaterToggle.ButtonPressed = true;
@@ -699,41 +714,34 @@ public sealed partial class SceneMakerMain : Control
         _waterElevationLabel.Name = "WaterElevationLabel";
         _waterElevationLabel.Text = "Surface level";
         _waterElevationLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_waterElevationLabel);
         _waterElevationEdit.Name = "WaterElevation";
         ConfigureElevationInput(_waterElevationEdit);
         _waterElevationEdit.TooltipText =
             "The surface height the next point takes with Snap off, and the fallback "
             + "for the first point when Snap finds no Terrain.";
         _waterElevationEdit.ValueChanged += SetWaterElevation;
-        _contextMenuBar.AddChild(_waterElevationEdit);
         _waterDepthLabel.Name = "WaterDepthLabel";
         _waterDepthLabel.Text = "Depth";
         _waterDepthLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_waterDepthLabel);
         _waterDepthEdit.Name = "WaterDepth";
         ConfigureWaterSpanInput(_waterDepthEdit, 0.1, WaterEditing.DefaultChannelDepthMeters);
         _waterDepthEdit.TooltipText =
             "How deep the channel is below the surface. The Terrain is carved away "
             + "from the bed upwards, so this is also where the river's floor sits.";
         _waterDepthEdit.ValueChanged += SetWaterDepth;
-        _contextMenuBar.AddChild(_waterDepthEdit);
         _waterClearanceLabel.Name = "WaterClearanceLabel";
         _waterClearanceLabel.Text = "Clearance";
         _waterClearanceLabel.VerticalAlignment = VerticalAlignment.Center;
-        _contextMenuBar.AddChild(_waterClearanceLabel);
         _waterClearanceEdit.Name = "WaterClearance";
         ConfigureWaterSpanInput(_waterClearanceEdit, 0.0, WaterEditing.DefaultClearanceAboveMeters);
         _waterClearanceEdit.TooltipText =
             "The headroom the river needs above its surface. Where the ground never "
             + "reaches it the river is open; where it does, that much is left as a tunnel.";
         _waterClearanceEdit.ValueChanged += SetWaterClearance;
-        _contextMenuBar.AddChild(_waterClearanceEdit);
         _waterDerivedSpanLabel.Name = "WaterDerivedSpan";
         _waterDerivedSpanLabel.VerticalAlignment = VerticalAlignment.Center;
         _waterDerivedSpanLabel.TooltipText =
             "Derived boundaries only: bed = surface - depth; cut top = surface + clearance.";
-        _contextMenuBar.AddChild(_waterDerivedSpanLabel);
         UpdateWaterDerivedSpan();
         _contextMenuBar.AddThemeConstantOverride("separation", 8);
 
@@ -778,10 +786,44 @@ public sealed partial class SceneMakerMain : Control
         canvasRow.AddChild(canvasAndViewOptions);
         canvasAndViewOptions.AddChild(_canvas);
 
+        // Height and Section are ways of looking, not ways of working, and they
+        // change nothing but this Canvas. They therefore sit on it, in its top
+        // right corner, rather than in a column of their own beside it.
+        _viewToggleOverlay.Name = "ViewToggles";
+        _viewToggleOverlay.AddThemeConstantOverride("separation", 6);
+        _viewToggleOverlay.AnchorLeft = 1f;
+        _viewToggleOverlay.AnchorRight = 1f;
+        _viewToggleOverlay.AnchorTop = 0f;
+        _viewToggleOverlay.AnchorBottom = 0f;
+        _viewToggleOverlay.OffsetLeft = -(ViewToggleOverlayWidth + ViewToggleOverlayMargin);
+        _viewToggleOverlay.OffsetRight = -ViewToggleOverlayMargin;
+        _viewToggleOverlay.OffsetTop = ViewToggleOverlayMargin;
+        _viewToggleOverlay.OffsetBottom = ViewToggleOverlayMargin + ViewToggleOverlayHeight;
+        _canvas.AddChild(_viewToggleOverlay);
+        _canvas.TopRightReservedHeight = ViewToggleOverlayMargin + ViewToggleOverlayHeight;
+        _heatmapToggle.Name = "HeatmapToggle";
+        _heatmapToggle.Text = "m";
+        _heatmapToggle.Alignment = HorizontalAlignment.Center;
+        _heatmapToggle.ToggleMode = true;
+        _heatmapToggle.TooltipText =
+            "Show Terrain, Placements and Water by height instead of by Asset";
+        _heatmapToggle.CustomMinimumSize = new Vector2(42f, 42f);
+        _heatmapToggle.Toggled += SetHeatmapEnabled;
+        _viewToggleOverlay.AddChild(_heatmapToggle);
+        _sectionToggle.Name = "SectionToggle";
+        _sectionToggle.Text = "S";
+        _sectionToggle.Alignment = HorizontalAlignment.Center;
+        _sectionToggle.ToggleMode = true;
+        _sectionToggle.TooltipText =
+            "Show the highest remaining surface after clipping the Scene at one elevation";
+        _sectionToggle.CustomMinimumSize = new Vector2(42f, 42f);
+        _sectionToggle.Toggled += SetSectionEnabled;
+        _viewToggleOverlay.AddChild(_sectionToggle);
+
         // A second context bar, mirroring the one above the Canvas but living
         // below it, and reaching only as wide as the Canvas itself: it sits
-        // between the left and right tool columns rather than spanning the
-        // full window. Section and Heatmap are view options, not Landscape
+        // between the ToolBar and the Inspector rather than spanning the full
+        // window. Section and Heatmap are view options, not Landscape
         // tools, so their parameters no longer share the top bar with
         // whichever Landscape tool happens to be active; the bar only takes
         // up room while one of the two views is actually on.
@@ -791,58 +833,45 @@ public sealed partial class SceneMakerMain : Control
         _viewOptionsBar.AddThemeConstantOverride("separation", 8);
         canvasAndViewOptions.AddChild(_viewOptionsBar);
 
-        var toolOptionsPanel = new PanelContainer
+        // The right column shows what is being worked on: the object that is
+        // selected, or the one the next stroke will make. A value that belongs
+        // to an object lives here and nowhere else, which is what stops the bar
+        // above the Canvas from meaning one thing while drawing and another
+        // while selecting.
+        var inspectorPanel = new PanelContainer
         {
-            Name = "ToolOptionsBar",
-            CustomMinimumSize = new Vector2(52f, 0f),
+            Name = "Inspector",
+            CustomMinimumSize = new Vector2(296f, 0f),
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        canvasRow.AddChild(toolOptionsPanel);
-        var toolOptionsMargin = new MarginContainer();
-        toolOptionsMargin.AddThemeConstantOverride("margin_left", 4);
-        toolOptionsMargin.AddThemeConstantOverride("margin_top", 6);
-        toolOptionsMargin.AddThemeConstantOverride("margin_right", 4);
-        toolOptionsMargin.AddThemeConstantOverride("margin_bottom", 6);
-        toolOptionsPanel.AddChild(toolOptionsMargin);
-        _toolOptionsBar.Name = "ToolOptions";
-        _toolOptionsBar.Alignment = BoxContainer.AlignmentMode.Begin;
-        _toolOptionsBar.AddThemeConstantOverride("separation", 6);
-        toolOptionsMargin.AddChild(_toolOptionsBar);
-
-        _eraserToggle.Name = "EraserToggle";
-        _eraserToggle.Text = string.Empty;
-        _eraserToggle.Icon = GD.Load<Texture2D>("res://assets/icons/eraser.svg");
-        _eraserToggle.ExpandIcon = false;
-        _eraserToggle.Alignment = HorizontalAlignment.Center;
-        _eraserToggle.ToggleMode = true;
-        _eraserToggle.TooltipText = "Use the active drawing tool in erase mode";
-        _eraserToggle.CustomMinimumSize = new Vector2(42f, 42f);
-        _eraserToggle.AddThemeConstantOverride("icon_max_width", 24);
-        _eraserToggle.Toggled += SetEraserEnabled;
-        _toolOptionsBar.AddChild(_eraserToggle);
-
-        // A separator, because what follows is a way of looking rather than a
-        // way of working: the tools keep doing what they did.
-        _toolOptionsBar.AddChild(new HSeparator());
-
-        _heatmapToggle.Name = "HeatmapToggle";
-        _heatmapToggle.Text = "m";
-        _heatmapToggle.Alignment = HorizontalAlignment.Center;
-        _heatmapToggle.ToggleMode = true;
-        _heatmapToggle.TooltipText =
-            "Show Terrain, Placements and Water by height instead of by Asset";
-        _heatmapToggle.CustomMinimumSize = new Vector2(42f, 42f);
-        _heatmapToggle.Toggled += SetHeatmapEnabled;
-        _toolOptionsBar.AddChild(_heatmapToggle);
-        _sectionToggle.Name = "SectionToggle";
-        _sectionToggle.Text = "S";
-        _sectionToggle.Alignment = HorizontalAlignment.Center;
-        _sectionToggle.ToggleMode = true;
-        _sectionToggle.TooltipText =
-            "Show the highest remaining surface after clipping the Scene at one elevation";
-        _sectionToggle.CustomMinimumSize = new Vector2(42f, 42f);
-        _sectionToggle.Toggled += SetSectionEnabled;
-        _toolOptionsBar.AddChild(_sectionToggle);
+        canvasRow.AddChild(inspectorPanel);
+        var inspectorMargin = new MarginContainer();
+        inspectorMargin.AddThemeConstantOverride("margin_left", 10);
+        inspectorMargin.AddThemeConstantOverride("margin_top", 8);
+        inspectorMargin.AddThemeConstantOverride("margin_right", 10);
+        inspectorMargin.AddThemeConstantOverride("margin_bottom", 8);
+        inspectorPanel.AddChild(inspectorMargin);
+        var inspectorScroll = new ScrollContainer
+        {
+            Name = "InspectorScroll",
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        inspectorMargin.AddChild(inspectorScroll);
+        _inspectorColumn.Name = "InspectorColumn";
+        _inspectorColumn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _inspectorColumn.AddThemeConstantOverride("separation", 6);
+        _inspectorColumn.AddThemeFontSizeOverride("font_size", 14);
+        inspectorScroll.AddChild(_inspectorColumn);
+        _inspectorHeaderLabel.Name = "InspectorHeader";
+        _inspectorHeaderLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _inspectorColumn.AddChild(_inspectorHeaderLabel);
+        _inspectorColumn.AddChild(new HSeparator());
+        BuildInspectorRows();
+        _inspectorEmptyLabel.Name = "InspectorEmpty";
+        _inspectorEmptyLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _inspectorEmptyLabel.Text = "This tool sets nothing of its own.";
+        _inspectorColumn.AddChild(_inspectorEmptyLabel);
 
         UpdateToolContextLabel();
 
@@ -852,6 +881,124 @@ public sealed partial class SceneMakerMain : Control
         _statusLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         footer.AddChild(_statusLabel);
         footer.AddChild(_viewLabel);
+    }
+
+    /// <summary>
+    /// The order of the panel, decided in one place rather than falling out of
+    /// the order the controls happened to be configured in. Every row is built;
+    /// which of them a tool shows is decided by the same visibility rules that
+    /// used to decide what the bar showed.
+    /// </summary>
+    private void BuildInspectorRows()
+    {
+        AddInspectorRow(_surfaceLabel, _surfaceEdit);
+        AddInspectorRow(_elevationLabel, _elevationEdit);
+        AddInspectorRow(_selectedPointModeLabel, _selectedPointModeEdit);
+        AddInspectorRow(_riverWidthLabel, _riverWidthEdit);
+        AddInspectorRow(_waterElevationLabel, _waterElevationEdit);
+        AddInspectorRow(_waterDepthLabel, _waterDepthEdit);
+        AddInspectorRow(_waterClearanceLabel, _waterClearanceEdit);
+        AddInspectorRow(_waterDerivedSpanLabel);
+        AddInspectorRow(_riverActivationLabel, _riverActivationEdit);
+        AddInspectorRow(_riverInactiveLabel, _riverInactiveEdit);
+        AddInspectorRow(_riverGroupLabel, _riverGroupEdit);
+        AddInspectorRow(_riverGroupRemove);
+        AddInspectorRow(_pathWidthLabel, _pathWidthEdit);
+        AddInspectorRow(_pathGradeLabel, _pathGradeEdit);
+        AddInspectorRow(_pathOperationLabel, _pathOperationEdit);
+        AddInspectorRow(_pathClearanceLabel, _pathClearanceEdit);
+        AddInspectorRow(_pathAutoStartToggle);
+        AddInspectorRow(_pathStartElevationLabel, _pathStartElevationEdit);
+        AddInspectorRow(_bridgeWidthLabel, _bridgeWidthEdit);
+        AddInspectorRow(_bridgeElevationLabel, _bridgeElevationEdit);
+        AddInspectorRow(_bridgePlankCountLabel, _bridgePlankCountEdit);
+        AddInspectorRow(_bridgePlankGapLabel, _bridgePlankGapEdit);
+    }
+
+    /// <summary>A control that carries its own caption and takes the full width.</summary>
+    private void AddInspectorRow(Control edit) => AddInspectorRow(edit, edit);
+
+    /// <summary>
+    /// Puts a caption and its control on one line and remembers the pair, so
+    /// that <see cref="SyncInspectorRows"/> can take the whole line away. Two
+    /// hidden children in a column still cost the separation between them, and
+    /// a panel of those reads as a panel with holes in it.
+    /// </summary>
+    private void AddInspectorRow(Control label, Control edit)
+    {
+        var row = new HBoxContainer
+        {
+            Name = $"Row{_inspectorRows.Count}",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        row.AddThemeConstantOverride("separation", 8);
+        if (!ReferenceEquals(label, edit))
+        {
+            label.CustomMinimumSize = new Vector2(104f, 0f);
+            row.AddChild(label);
+        }
+        edit.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        row.AddChild(edit);
+        _inspectorColumn.AddChild(row);
+        _inspectorRows.Add((row, label, edit));
+    }
+
+    /// <summary>
+    /// Hides a line whose contents are hidden, and says so when every line is.
+    /// </summary>
+    private void SyncInspectorRows()
+    {
+        var anyVisible = false;
+        foreach (var (row, label, edit) in _inspectorRows)
+        {
+            var visible = label.Visible || edit.Visible;
+            row.Visible = visible;
+            anyVisible |= visible;
+        }
+
+        _inspectorEmptyLabel.Visible = !anyVisible;
+    }
+
+    /// <summary>
+    /// What the values below belong to: an object that exists, or the one the
+    /// next stroke will make. Without this line the same fields would again be
+    /// two things at once - which is the reason the panel exists.
+    /// </summary>
+    private string InspectorHeader(
+        WaterBodyDocument? selectedRiverBody,
+        bool riverSelecting,
+        bool riverActive,
+        ElevationRegionDocument? selectedElevationRegion,
+        bool elevationRegionActive,
+        bool pathActive,
+        bool bridgeActive)
+    {
+        if (selectedRiverBody is { } river)
+        {
+            return _canvas.SelectedWaterPointIndex is { } picked
+                ? $"River {river.WaterBodyId} · point {picked + 1}"
+                : $"River {river.WaterBodyId}";
+        }
+
+        if (riverSelecting) return "No river selected";
+        if (riverActive) return "New river";
+        if (selectedElevationRegion is { } hill)
+        {
+            return _canvas.SelectedElevationRegionPointIndex is { } point
+                ? $"Hill {hill.ElevationRegionId} · point {point + 1}"
+                : $"Hill {hill.ElevationRegionId}";
+        }
+
+        if (elevationRegionActive)
+        {
+            return _interaction.ActiveTool == EditorTool.SelectElevationRegion
+                ? "No hill selected"
+                : "New hill";
+        }
+
+        if (pathActive) return "New path";
+        if (bridgeActive) return "New bridge";
+        return EditorToolRegistry.ModeDisplayName(_interaction.Mode);
     }
 
     private void AddDrawingToolButton(
@@ -2386,15 +2533,24 @@ public sealed partial class SceneMakerMain : Control
         input.Value = (double)RouteSurfaceEditing.DefaultClearanceAboveMeters;
     }
 
+    /// <summary>
+    /// The Inspector's Point: it always changes the point that is selected, and
+    /// is only on offer while one is.
+    /// </summary>
+    private void SetSelectedPointMode(long item)
+    {
+        var aligned = _selectedPointModeEdit.GetItemId((int)item) == CurvePointModeAligned;
+        HandleToolOutcome(_canvas.SetSelectedElevationRegionPointMode(
+            aligned ? ElevationRegionPointMode.Aligned : ElevationRegionPointMode.Linear));
+    }
+
+    /// <summary>
+    /// The bar's Point: it always decides what the next drawn point does, and
+    /// never reaches a point that has already been placed.
+    /// </summary>
     private void SetCurvePointMode(long item)
     {
         var aligned = _curvePointModeEdit.GetItemId((int)item) == CurvePointModeAligned;
-        if (_interaction.ActiveTool == EditorTool.SelectElevationRegion)
-        {
-            HandleToolOutcome(_canvas.SetSelectedElevationRegionPointMode(
-                aligned ? ElevationRegionPointMode.Aligned : ElevationRegionPointMode.Linear));
-            return;
-        }
         if (_interaction.ActiveTool == EditorTool.DrawElevationRegion)
         {
             _interaction.State.SetElevationRegionPointMode(
@@ -2748,7 +2904,7 @@ public sealed partial class SceneMakerMain : Control
         // point are not editable yet, so the field is hidden rather than left
         // sitting there meaning something it cannot do.
         var curveActive = (riverActive && !riverSelecting) || pathActive
-            || elevationRegionDrawing || elevationRegionPointEditing;
+            || elevationRegionDrawing;
         var sectionActive = _canvas.PresentationMode == CanvasPresentationMode.Section;
         var heatmapActive = _canvas.PresentationMode == CanvasPresentationMode.Heightmap;
         _toolContextSeparator.Visible = propLineActive || curveActive;
@@ -2778,18 +2934,24 @@ public sealed partial class SceneMakerMain : Control
         _surfaceEdit.Visible = surfaceActive;
         // River, Path and Hill keep their own point modes; the shared control
         // only shows whichever one the active tool authors with.
-        var aligned = elevationRegionPointEditing
-            ? selectedElevationRegionPoint!.Mode == ElevationRegionPointMode.Aligned
-            : elevationRegionDrawing
-                ? _interaction.State.ElevationRegionPointMode == ElevationRegionPointMode.Aligned
-                : pathActive
-                    ? _interaction.State.RoutePointMode == RoutePointMode.Aligned
-                    : _interaction.State.WaterPointMode == WaterPointMode.Aligned;
+        var aligned = elevationRegionDrawing
+            ? _interaction.State.ElevationRegionPointMode == ElevationRegionPointMode.Aligned
+            : pathActive
+                ? _interaction.State.RoutePointMode == RoutePointMode.Aligned
+                : _interaction.State.WaterPointMode == WaterPointMode.Aligned;
         SelectCurvePointModeItem(aligned ? CurvePointModeAligned : CurvePointModeLinear);
-        _curvePointModeEdit.TooltipText = elevationRegionPointEditing
-            ? "Changes the selected authored point. Aligned creates editable cyclic Bezier handles."
-            : "How the next curve point's handles behave. Switchable while drawing; "
-                + "it decides what the next point does and leaves the placed ones alone.";
+        _curvePointModeEdit.TooltipText =
+            "How the next curve point's handles behave. Switchable while drawing; "
+            + "it decides what the next point does and leaves the placed ones alone.";
+        _selectedPointModeLabel.Visible = elevationRegionPointEditing;
+        _selectedPointModeEdit.Visible = elevationRegionPointEditing;
+        if (selectedElevationRegionPoint is { } authoredPoint)
+        {
+            _selectedPointModeEdit.Selected = _selectedPointModeEdit.GetItemIndex(
+                authoredPoint.Mode == ElevationRegionPointMode.Aligned
+                    ? CurvePointModeAligned
+                    : CurvePointModeLinear);
+        }
         _riverWidthLabel.Visible = riverActive;
         _riverWidthEdit.Visible = riverActive;
         _riverActivationLabel.Visible = selectedRiverBody is not null;
@@ -2858,6 +3020,15 @@ public sealed partial class SceneMakerMain : Control
         _elevationEdit.TooltipText = elevationRegionHeightEditing
             ? "The selected Hill's absolute top elevation."
             : "The height the drawing tools author at.";
+        _inspectorHeaderLabel.Text = InspectorHeader(
+            selectedRiverBody,
+            riverSelecting,
+            riverActive,
+            selectedElevationRegion,
+            elevationRegionActive,
+            pathActive,
+            bridgeActive);
+        SyncInspectorRows();
     }
 
     private static int PathGradeItemId(RouteGradePreset grade) => grade switch

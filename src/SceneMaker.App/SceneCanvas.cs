@@ -226,6 +226,12 @@ public sealed partial class SceneCanvas : Control
     }
 
     /// <summary>The Template Anchor the tools currently have selected, if any.</summary>
+    /// <summary>
+    /// How much of the top right corner is taken by controls sitting on the
+    /// Canvas. The legend moves below them rather than underneath them.
+    /// </summary>
+    public float TopRightReservedHeight { get; set; }
+
     public string? SelectedTemplateAnchorId => _interaction.SelectedTemplateAnchorId;
 
     public int? SelectedElevationRegionPointIndex => _interaction.SelectedElevationRegionPointIndex;
@@ -776,7 +782,7 @@ public sealed partial class SceneCanvas : Control
         const float Padding = 8f;
 
         var panel = new Rect2(
-            new Vector2(Size.X - BarWidth - (Padding * 2f), Padding),
+            new Vector2(Size.X - BarWidth - (Padding * 2f), Padding + TopRightReservedHeight),
             new Vector2(BarWidth + (Padding * 2f), BarHeight + 34f));
         DrawRect(panel, new Color(LegendSurface.R, LegendSurface.G, LegendSurface.B, 0.88f));
         DrawRect(panel, new Color(LegendMutedInk.R, LegendMutedInk.G, LegendMutedInk.B, 0.45f),

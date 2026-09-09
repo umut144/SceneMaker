@@ -396,8 +396,8 @@ same immutable Scene repeatedly.
 The interface labels that transient elevation `Cut at`, not `Height`: `Height`
 remains the authoring elevation and is hidden while the Section view is active.
 The height map's water-boundary selector is contextual too; `Surface`, `Bed`
-and `Cut top` appear in the ContextMenu only while the height map is active,
-not as a third permanent control in the right-hand ToolOptionsBar.
+and `Cut top` appear in the ViewOptions bar below the Canvas only while the
+height map is active, not as a permanent control beside the two view toggles.
 
 Section has two transient inspection shapes. `Cut at` is the original upper
 plane. `Cut between` stores a start and a positive offset and inspects the

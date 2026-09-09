@@ -14,9 +14,8 @@ Die Oberfläche ist vertikal aufgebaut:
 4. Statusleiste am unteren Rand.
 
 Im Arbeitsbereich liegt rechts neben der linken Werkzeugleiste der eigentliche
-Canvas-Bereich. Oberhalb des Canvas befindet sich das horizontale `ContextMenu`.
-Unterhalb davon liegt die schmale, vertikale `ToolOptionsBar` rechts neben dem
-Canvas und damit gegenüber der linken `ToolBar`.
+Canvas-Bereich. Oberhalb des Canvas befindet sich das horizontale `ContextMenu`,
+rechts daneben der vertikale `Inspector`.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -25,13 +24,38 @@ Canvas und damit gegenüber der linken `ToolBar`.
 │ Workspace / Scene information                                │
 ├──────────────┬───────────────────────────────────────────────┤
 │              │ ContextMenu                                   │
-│ ToolBar      ├───────────────────────────────────────┬───────┤
-│              │ Canvas                                │ Tool- │
-│              │                                       │Options│
-├──────────────┴───────────────────────────────────────┴───────┤
+│ ToolBar      ├───────────────────────────────────┬───────────┤
+│              │ Canvas                    [m] [S] │           │
+│ ─────────    │                                   │ Inspector │
+│ Eraser       ├───────────────────────────────────┤           │
+│              │ ViewOptions                       │           │
+├──────────────┴───────────────────────────────────┴───────────┤
 │ Status                                                       │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+### Wem gehört der Wert?
+
+Vier Orte, vier Fragen — und jeder Wert steht an genau einem davon:
+
+- Linke `ToolBar`: **welche Aktion?** Darunter, hinter einem Separator, der
+  `Eraser`: dieselbe Aktion, die wegnimmt statt hinzuzufügen.
+- `ContextMenu` über dem Canvas: **was tut die laufende Geste?** Nur was man
+  mitten im Zeichnen umlegt — der Punktmodus des *nächsten* Punktes, `Snap`,
+  der Abstand einer Placement-Linie.
+- `Inspector` rechts: **was hat das Objekt, an dem ich arbeite?** Der
+  ausgewählte Körper, oder der, den der nächste Zug erzeugt. Seine Kopfzeile
+  sagt, welcher von beiden — `River river_0002 · point 3` oder `New river`.
+- Overlay oben rechts auf dem Canvas und die `ViewOptions` darunter: **wie
+  sehe ich hin?** Höhen- und Schnittansicht ändern nichts an der Scene.
+
+Die Regel ist nicht kosmetisch. Solange Breite, Tiefe und Höhe eines Flusses in
+derselben Leiste standen, hieß dasselbe Feld beim Zeichnen „was der nächste
+Fluss bekommt" und beim Auswählen „was dieser Fluss hat". Genau daraus entstand
+der Fehler, bei dem eine geänderte `Depth` in den Sessionwert lief, während ein
+Körper ausgewählt war, und die Statuszeile trotzdem Erfolg meldete. Ein Feld,
+das zwei Dinge bedeuten kann, wird früher oder später als das falsche von
+beiden gelesen — auch von dem, der es geschrieben hat.
 
 ## Werkzeugmodell
 
@@ -55,13 +79,15 @@ Kontext:    [ ← ]  Landscape ›  ( River )  ( Path )  ( Hill )
 Das Material erscheint dort nicht noch einmal. Ein Bereich, der Zellen malt,
 trägt es als **Palette** — eine Leiste von Assetknöpfen, zwischen denen man
 beim Malen wechselt. Ein Bereich, der eine Kurve zeichnet, trägt es als
-**Eigenschaft des Körpers**, den man gerade zieht, und damit in der
-Kontextleiste seines Werkzeugs neben Breite und Höhen:
+**Eigenschaft des Körpers**, den man gerade zieht, und damit im `Inspector`
+neben Breite und Höhen:
 
 ```text
 Terrain-Assetleiste:  Terrain ›  ( Grass ) ( Sand )
-River-Kontext:        Surface [ Water ▾ ] · Point [ Linear ▾ ] · Width […]
-                      · Surface level […] · Snap · Depth […] · Clearance […]
+River-ContextMenu:    Point [ Linear ▾ ] · Snap
+River-Inspector:      New river
+                      Surface [ Water ▾ ] · Width […] · Surface level […]
+                      · Depth […] · Clearance […] · Bed · Cut
 ```
 
 `Landscape` ist der Weg hinein, kein Ort: ein Klick öffnet die Kontextleiste und
@@ -238,7 +264,7 @@ bewusst nur eine Position und keine Modifiertasten.
 
 ### River:Select River — Aktivierung
 
-Ist ein Fluss gewählt, zeigt die Kontextleiste `Active in` und daneben genau
+Ist ein Fluss gewählt, zeigt der `Inspector` `Active in` und darunter genau
 eines von zwei Bedienelementen, je nachdem, wo der Körper steht.
 
 Gehört er **keiner** Gruppe an, steht dort `New group`: ein Namensfeld. Enter
@@ -520,8 +546,8 @@ Katalog. Bietet der Workspace keines an, steht das Feld da und sagt es im
 Tooltip.
 
 Es gibt keinen Point-Modus, keine Steigung und keine Operation. Eine Brücke ist
-gerade, waagerecht und hat zwei Enden; ein Werkzeug, das die halbe
-Kontextleiste ausgraut, wäre ein zweites Werkzeug.
+gerade, waagerecht und hat zwei Enden; ein Werkzeug, das den halben
+`Inspector` ausgraut, wäre ein zweites Werkzeug.
 
 **Gezeichnet wird mit zwei Klicks.** Der erste fixiert ein Ende, der zweite baut
 die Brücke — es gibt kein Enter, weil mit dem zweiten Klick nichts mehr offen
@@ -561,19 +587,20 @@ berechneten Footprint-Abstand entlang der Linie addiert. `0` erzeugt das
 lückenlose Standardverhalten. Der Offset beeinflusst Vorschau, Platzierung und
 Line-Eraser und bleibt reiner Session-Zustand.
 
-## ToolOptionsBar
+## Ansichten
 
-Die rechte Leiste trennt zwei Sorten Schalter durch einen Separator. Oberhalb
-steht, was die Werkzeuge *anders arbeiten* lässt — derzeit der `Eraser`.
-Unterhalb steht, was die Karte *anders aussehen* lässt.
+Die beiden Ansichtsschalter (`m` und `S`) liegen als Overlay in der oberen
+rechten Ecke des Canvas — sie ändern nichts an der Scene, sondern nur den Blick
+darauf, und gehören deshalb auf die Fläche, die sie verändern, statt in eine
+Spalte daneben. Die Höhenlegende rückt unter sie.
 
-Dort sitzen drei gegenseitig ausschließende Ansichten. Sind beide Schalter aus,
+Es sind drei gegenseitig ausschließende Ansichten. Sind beide Schalter aus,
 zeigt der Canvas die normale Asset-Ansicht. Die Höhenansicht (`m`) färbt Terrain,
 Placements und Wasser nach ihrer Höhe statt nach ihrem Asset, mit einem einzigen
 Blauton von dunkel nach hell:
 tiefer Grund tritt zum Hintergrund zurück, hoher Grund hebt sich ab. Wasser hat
-drei relevante Grenzen; die Heatmap zeigt dafür im ContextMenu das Feld `Water`
-mit `Surface`, `Bed` oder `Cut top`. Terrain und Placements behalten dabei ihre
+drei relevante Grenzen; die Heatmap zeigt dafür in den `ViewOptions` das Feld
+`Water` mit `Surface`, `Bed` oder `Cut top`. Terrain und Placements behalten dabei ihre
 eigene Elevation, sodass alles auf derselben Skala vergleichbar bleibt. Die
 Skala spannt sich über die tatsächlich vorkommenden Höhen der Scene, und eine
 Legende oben rechts auf der Canvas nennt Auswahl und beide Enden — ohne sie
@@ -582,7 +609,7 @@ eine Spanne zu zeigen.
 
 Die Schnittansicht (`S`) entfernt alles strikt oberhalb einer horizontalen Ebene
 und blickt anschließend von oben auf die höchste verbleibende Oberfläche. Ihre
-erste Auswahl im ContextMenu ist `Cut at` oder `Cut between`. `Cut at` zeigt
+erste Auswahl in den `ViewOptions` ist `Cut at` oder `Cut between`. `Cut at` zeigt
 daneben nur seine obere Schnitthöhe. `Cut between` zeigt `Start` und einen
 positiven `Offset`; das untersuchte inklusive Höhenfenster ist
 `[Start, Start + Offset]`. Eine Oberfläche, die nach dem oberen Schnitt unter
@@ -613,13 +640,11 @@ Authoring-Feld `Height` ist während der Schnittansicht ausgeblendet, damit es
 nicht mit den rein visuellen Schnittwerten verwechselt wird; sein
 gespeicherter Session-Wert bleibt dabei unverändert.
 
-Die `ToolOptionsBar` ist eine feste, vertikale Optionsleiste rechts neben dem
-Canvas und kein dynamisches `ContextMenu`. Ihre Elemente wechseln nicht
-abhängig von Perspective, Scene-Typ oder Template-Modus. Sie enthält zusätzliche
-Bearbeitungsoptionen, die mit dem primären Werkzeug kombiniert werden können.
+## Eraser
 
-Die erste Option ist der Toggle `Eraser`. Er ist ein unabhängiger
-Bearbeitungszustand und kein eigenes primäres Werkzeug:
+Der `Eraser` steht am Fuß der linken `ToolBar`, hinter einem Separator. Er ist
+ein unabhängiger Bearbeitungszustand und kein eigenes primäres Werkzeug — er
+modifiziert die Aktion und steht deshalb bei den Aktionen:
 
 - `Pencil` + `Eraser` löscht einzelne Terrain-Zellen.
 - `Line` + `Eraser` löscht entlang einer Linie.
@@ -628,16 +653,34 @@ Bearbeitungszustand und kein eigenes primäres Werkzeug:
   Platzierungsaktion aus.
 
 Der Toggle bleibt auch bei Werkzeugen sichtbar, für die er keine Wirkung hat,
-beispielsweise `Selector` oder Template-Werkzeuge. Die Optionsleiste bleibt
-dadurch statisch und vorhersehbar.
+beispielsweise `Selector` oder Template-Werkzeuge. Die Leiste bleibt dadurch
+statisch und vorhersehbar.
 
-Damit wird zwischen zwei unabhängigen Dimensionen unterschieden:
+## Inspector
 
-- Linke Leiste: **Welche Aktion?**
-- `ToolOptionsBar`: **Mit welchen Bearbeitungsoptionen?**
+Der `Inspector` ist die feste Spalte rechts neben dem Canvas. Er zeigt das
+Objekt, an dem gerade gearbeitet wird, und trägt in seiner Kopfzeile dessen
+Namen: `River river_0002`, mit `· point 3` sobald ein Punkt gefangen ist,
+`Hill hill_0001`, sonst `New river`, `New path`, `New bridge`, `New hill` — der
+Körper also, den der nächste Zug erzeugen wird. Ist bei einem Auswahlwerkzeug
+nichts gewählt, sagt die Kopfzeile das (`No river selected`), statt Felder ohne
+Gegenstand anzubieten.
 
-Weitere Optionen können später in derselben Leiste ergänzt werden, ohne das
-primäre Werkzeugmodell zu verändern.
+Darunter steht je eine Zeile aus Beschriftung und Wert. Welche Zeilen ein
+Werkzeug zeigt, entscheiden dieselben Sichtbarkeitsregeln, die vorher darüber
+entschieden haben, was in der Kontextleiste steht; eine Zeile ohne sichtbaren
+Inhalt verschwindet ganz, damit die Spalte keine Löcher bekommt. Zeigt ein
+Werkzeug keine einzige Zeile, sagt der `Inspector` auch das.
+
+Im `Inspector` stehen: `Surface` und `Height`, der Punktmodus des *ausgewählten*
+Punktes, die Flusswerte (`Width`, `Surface level`, `Depth`, `Clearance` und die
+abgeleitete Zeile `Bed · Cut`), die Aktivierung (`Active in`, `When off`,
+`New group` / `Remove group`), die Path-Werte und die Bridge-Werte.
+
+Im `ContextMenu` über dem Canvas bleibt nur, was zur laufenden Geste gehört:
+der Punktmodus des *nächsten* Punktes, `Snap` und der Abstand einer
+Placement-Linie. `River:Select River` behält davon nichts — dessen Leiste trägt
+nur noch den Werkzeugnamen.
 
 ## Eingabeverarbeitung
 
@@ -685,6 +728,7 @@ Jede Bearbeitung landet in einer Historie unveränderlicher Scene-Dokumente:
 ## Aktueller Stand
 
 Das horizontale `ContextMenu` zeigt den Namen des aktuell ausgewählten primären
-Werkzeugs als Label. Die rechte `ToolOptionsBar` enthält den `Eraser` als
-Icon-Toggle. Weitere feste Optionen können dort später vertikal ergänzt werden,
-ohne das primäre Werkzeugmodell zu verändern.
+Werkzeugs als Label und daneben nur noch die Werte der laufenden Geste. Der
+`Eraser` steht als Icon-Toggle am Fuß der linken `ToolBar`, die beiden
+Ansichtsschalter als Overlay auf dem Canvas. Alles, was einem Objekt gehört,
+steht im `Inspector` rechts.
