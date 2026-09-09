@@ -310,56 +310,43 @@ Frage, und eine rote Zelle wäre eine falsche Höhe.
 
 ### River:Select River — Schalter
 
-Ein `activation_group` im Dokument ist ein **Schalter mit benannten
-Stellungen**, und die Oberfläche nennt ihn seit dieser Runde auch so. Das
-Dokument und der Exportvertrag heißen unverändert `activation_group` — world01
-liest darauf, und ein Wort in der UI ist keinen Vertragsbruch wert.
+Ein Schalter ist ein Name und ein Bit: **ist dieser Fluss da oder nicht.** Mehr
+sagt er nicht. Ob ein Fluss, den es gibt, gerade Wasser führt, entscheidet die
+Simulation zur Laufzeit — das ist Wetter und keine Aussage über die Karte.
 
-Ist ein Fluss gewählt, zeigt der `Inspector` zwei Zeilen:
+Ist ein Fluss gewählt, zeigt der `Inspector`:
 
 ```text
-Switch   [ sluice ▾ ]      welcher Schalter entscheidet über diesen Körper
-On in    ☐ dry  ☑ flowing  in welchen Stellungen er da ist
-When off [ Dry bed ▾ ]     was bleibt, wo er nicht ist
+Exists when   [ sluice ▾ ]      welcher Schalter über diesen Körper entscheidet
+Initially on? ☐                 steht dieser Schalter an, wenn die Karte öffnet
 ```
 
-`Switch` bietet `Every state` — ein Körper an keinem Schalter ist immer da —
-und je einen Eintrag pro deklariertem Schalter. `On in` ist eine Ankreuzliste
-über dessen Stellungen; mindestens eine muss angekreuzt bleiben, denn ein
-Körper, der in keiner Stellung da ist, ist ein Körper, den niemand je sieht.
-Wer den Schalter loswerden will, nimmt `Remove switch`.
+`Exists when` bietet `Always` — ein Körper an keinem Schalter ist immer da — und
+je einen Eintrag pro deklariertem Schalter. `Initially on?` gehört dem
+**Schalter**, nicht dem Körper: es bewegt jeden Fluss an diesem Schalter
+gleichzeitig, und die Statuszeile sagt, wie viele das sind.
 
-Vorher standen beide Fragen in **einer** flachen Liste (`sluice: dry`,
-`sluice: flowing`). Zwei Stellungen eines Schalters lasen sich dort als zwei
-Schalter — genau so ist es gelesen worden —, und mehrere Stellungen gleichzeitig
-waren gar nicht ausdrückbar, obwohl `active_in` im Dokument immer schon eine
-Liste war.
+Gehört ein Fluss **keinem** Schalter an, steht statt `Initially on?` das Feld
+`New switch`: ein Namensfeld. Enter legt einen Schalter an, der **aus** startet,
+und hängt diesen Fluss daran. Das ist ein einziger Rückgängig-Schritt, weil es
+eine Absicht ist: ein Schalter ohne Körper daran ist ein Name, der nichts
+schaltet. Der frisch gezeichnete Ast ist damit beim Öffnen der Karte nicht da —
+was ein Ast, den ein Trigger später öffnet, auch sein soll.
 
-Gehört ein Fluss **keinem** Schalter an, steht statt `On in` das Feld
-`New switch`: ein Namensfeld. Enter legt einen Schalter mit den Stellungen
-`dry` und `flowing` an, Startstellung `dry`, und setzt diesen Fluss auf
-`flowing` — er ist damit im Anfangszustand der Karte nicht da und hinterlässt
-ein trockenes Bett. Das ist ein einziger Rückgängig-Schritt, weil es eine
-Absicht ist: ein Schalter ohne Körper daran ist ein Name, der nichts schaltet.
-
-Wechselt ein Körper auf einen Schalter, an dem er schon hing, behält er seine
-Stellungen. Kommt er von keinem, startet er in der **Startstellung** des
-Schalters — das ist die Stellung, die der Autor gerade auf dem Canvas sieht.
+Gehört er **einem** Schalter an, steht `Remove switch` da. Das nimmt den
+Schalter weg **und** die Zuordnung jedes Körpers daran; die betroffenen Flüsse
+sind danach immer da. Die Statuszeile sagt, wie viele es waren. Körper auf einen
+Schalter zeigen zu lassen, den es nicht mehr gibt, wäre ein Dokument, das kein
+Leser auflösen kann; ihn still zu leeren wäre die leise Entscheidung, die dieses
+Projekt heraushält.
 
 Der Name ist das, woran ein Konsument seinen Trigger bindet. Er ist deshalb
 autorenvergeben und keine gemünzte ID — und er wird gegen dieselbe Form geprüft
 wie jede andere ID hier.
 
-Gehört er **einem** Schalter an, steht `Remove switch` da. Das nimmt den
-Schalter weg **und** die Aktivierung jedes Körpers daran; die betroffenen
-Flüsse sind danach in jedem Zustand da. Die Statuszeile sagt, wie viele es
-waren. Körper auf einen Schalter zeigen zu lassen, den es nicht mehr gibt, wäre
-ein Dokument, das kein Leser auflösen kann; ihn still zu leeren wäre die leise
-Entscheidung, die dieses Projekt heraushält.
-
-Umbenennen und Stellungen hinzunehmen oder wegnehmen fehlen noch (`WATER-11`).
-Beides betrifft alle Körper an einem Schalter gleichzeitig und gehört deshalb
-zum Outliner, nicht in eine Zeile, die einen Körper beschreibt.
+Umbenennen fehlt noch (`WATER-11`). Es betrifft alle Körper an einem Schalter
+gleichzeitig und gehört deshalb zum Outliner, nicht in eine Zeile, die einen
+Körper beschreibt.
 
 ### River:Create Branch
 

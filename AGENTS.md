@@ -139,6 +139,15 @@ repository root, because they are what an agent is pointed at first.
   are closed. Every task row links into it, and the prose lives there rather
   than in the tracker.
 
+## Telling the consumer about a map
+
+What we say to `world01` about a Scene comes from
+`workspaces/<workspace>/exports/<scene>.scene_export.json`, never from the
+authored document under `scenes/` or `templates/`. They hold the export; the
+document can be hours ahead of it and carry work that was never exported. This
+has cost us two corrections already - both times we described the file nearest
+to us instead of the file they have.
+
 ## Version control
 
 After every completed change, create a Git commit automatically. Each commit

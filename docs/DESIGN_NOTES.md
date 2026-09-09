@@ -739,29 +739,57 @@ What this does not buy is confidence. The App layer still has no automated
 tests, so every visibility rule the panel inherited is only as good as a manual
 pass (`APP-02`).
 
-## A switch with named positions, called that
+## A switch is a name and a bit
 
-`activation_group` is a good name in the document and a bad one in front of an
-author. What it describes is a switch with named positions: the group is the
-switch, its states are the positions, and a body says which positions it is
-there in. The first author to meet it read the flattened `sluice: dry` /
-`sluice: flowing` list as two groups and asked why the assignment was doubled -
-which it never was, but the list gave every reason to think so.
+`activation_group` was a good name in the document and a bad one in front of an
+author, and renaming it was not enough. What the model actually offered was a
+named set of states with a body naming which of them it lived in - and the first
+author to meet it read `sluice: dry` and `sluice: flowing` as two groups, then
+asked why the assignment was doubled. Renaming the rows to `Switch` and `On in`
+made it worse: "switch" promises on and off, and the positions were called `dry`
+and `flowing`, so `On in: dry` read as "on when it is dry". Worse still, `dry`
+was a position name while `Dry bed` was the answer to what is left where the
+water is not - two different things wearing one word, both of them ours.
 
-So the Inspector asks the two questions separately: `Switch` picks the switch,
-`On in` ticks its positions. Nothing in the document or the export moved -
-world01 is reading `activation_group` right now, and a word in the interface is
-not worth a contract change - and the two are allowed to differ because one is
-a wire format and the other is a sentence an author reads.
+Then we looked at what the six maps had actually been authored with. Every
+binding in every map was "there when on". Nothing had ever been bound to the off
+position. The model could express more than it had ever been asked for, and that
+surplus was the whole of the confusion.
 
-Ticking rather than choosing also finished a piece of `WATER-11` for free.
-`active_in` was always a list; the single dropdown could only ever write one
-entry into it, so a body in several positions was authorable by hand and by
-nothing else. The last tick cannot be removed: a body there in no position of
-its switch is a body nobody can ever see, and taking it off the switch is what
-was meant.
+So a switch is a name and a bit. `scene.switches` is `{switch, initially_on}`, a
+body carries `switch` or null, and the Inspector asks one question: `Exists
+when`. `initially_on` belongs to the switch, so two bodies on one switch cannot
+disagree about where the map opens.
 
-## The list and the panel are one question asked twice
+### The dry bed changed hands rather than disappearing
+
+`inactive: dry_bed | absent` went with the states, and with it the column rule
+that a `dry_bed` body contributes its cut in every state. What it described did
+not go anywhere. Whether a body that exists is carrying water is weather - a
+drought, a season, a gate half shut - and none of that is a fact about the map.
+The export already ships `bed_meters`, `surface_meters` and `cut_top_meters` per
+cell, so a channel drawn without its fill is a dry bed the consumer decides on,
+per body and per moment. Three runtime cases replace two authored fields, and
+world01 named the split better than we did: existence is authored, weather is
+not.
+
+What it costs is two branches on opposite sides of one switch as a single
+statement. The replacement is two switches the consumer holds opposite. We are
+not building the extra bit on suspicion.
+
+### Asking before building, for once
+
+This is a format change, and world01 was building the reader for 18/16 when we
+proposed it. Last time we raised 17 to 18 while they were building and they
+learned it from a mail rather than a refused export; that was luck, not
+judgement. So this time the mail went first and asked when, not whether.
+
+Their answer is worth keeping: they wanted it now, because the rule we were
+deleting sits in the column resolution they were rewriting, and taking it out
+twice - the second time with tests in front of it that pin the old contract -
+is where regressions come from.
+
+## The list and the panel are one question asked twice## The list and the panel are one question asked twice
 
 The Inspector answers what the chosen object has. It cannot answer which
 objects there are, and for water that second question is the one with a shape:

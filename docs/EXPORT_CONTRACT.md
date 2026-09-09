@@ -5,9 +5,36 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 18**, embedded **scene 16**. A reader must reject any
+Current schemas: **export 19**, embedded **scene 17**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
+
+Export 19 makes a switchable body a switch and a name. `scene.switches` is a
+list of `{switch, initially_on}` and `scene.water_bodies[].switch` is one string
+or `null`. Named states, `active_in` and `inactive` are gone, and with them the
+rule that a `dry_bed` body contributes its cut in every state: **a body that is
+off contributes nothing at all**, and the Terrain stands as though it had never
+been authored.
+
+Nothing was lost there; it changed hands. Whether a body that exists is carrying
+water is weather, and weather is the consumer's. An active body ships
+`bed_meters`, `surface_meters` and `cut_top_meters` on every cell, so a dry
+channel is that body drawn without its fill - three runtime cases where the
+document used to carry two authored fields:
+
+| switch | the consumer's simulation | what stands on the map |
+|---|---|---|
+| off | — | nothing; the ground is whole |
+| on | water | the bed under its fill |
+| on | no water | the bed, walkable |
+
+Existence is authored, weather is not, and each now lives on the side that
+decides it. The change came from authoring rather than from the format: with
+named states an author read two positions of one switch as two switches, and
+`dry` as a state name sat beside `dry_bed` as the answer to what is left where
+the water is not. Six maps used the old model and not one ever bound a body to
+the off position. What it costs is the case of two branches on opposite sides of
+one switch, which is now two switches the consumer holds opposite.
 
 Export 18 adds no field and one rule: **a body is active when its own
 activation says so and the body it leaves is active.** A branch is fed by the
@@ -355,11 +382,10 @@ purpose.
         "elevation_meters": 1.0
       }
     ],
-    "activation_groups": [             // the states this Scene can be in
+    "switches": [                      // what this Scene can switch
       {
-        "group": "fork_at_mill",       // author-given, unique in the Scene
-        "states": ["dry", "flowing"],
-        "initial_state": "dry"
+        "switch": "fork_at_mill",      // author-given, unique in the Scene
+        "initially_on": false          // where it stands before anything flips it
       }
     ],
     "water_bodies": [                  // the authored curves themselves
@@ -367,7 +393,7 @@ purpose.
         "water_body_id": "river_0001",
         "water_kind": "river",
         "asset_key": "river",
-        "activation": null,            // null or absent: exists in every state
+        "switch": null,                // null or absent: always there
         "points": [
           {
             "position_authoring_px": { "x": 1024, "y": 320 },
@@ -616,49 +642,48 @@ produces none.
 
 ### Water that switches
 
-A water body can be switched on and off by the game. `scene.activation_groups`
-names the states a Scene can be in; `scene.water_bodies[].activation` says which
-of them a body exists in. A body with no `activation` exists in every state.
+A water body can be switched on and off by the game. `scene.switches` names the
+switches a Scene has and where each one starts; `scene.water_bodies[].switch`
+names the one that decides whether a body exists. A body with `switch: null`
+is always there.
 
 ```jsonc
-"activation_groups": [
-  { "group": "fork_at_mill", "states": ["dry", "flowing"], "initial_state": "dry" }
+"switches": [
+  { "switch": "fork_at_mill", "initially_on": false }
 ]
 
-"activation": { "group": "fork_at_mill", "active_in": ["flowing"], "inactive": "dry_bed" }
+"switch": "fork_at_mill"
 ```
 
-Exactly one state of a group is current, and a body is active when the current
-state is listed in its `active_in`. **The list is what keeps geometry from being
-authored twice.** With two branches on one stretch and states
-`none | first | both`, the first branch flows in `first` and in `both`; with a
-single state per body it would have to exist as two bodies with identical
-curves, which is the duplication a per-body band was chosen to avoid. A
-one-element list is the common case and reads unchanged.
+A switch is one bit. `initially_on` says where it stands before anything has
+flipped it, and it belongs to the **switch**, not to a body, so two bodies on
+one switch cannot disagree about where a Scene starts.
 
 **Alternatives are bodies.** A stretch that is wide while a branch is shut and
-narrow while it flows is two bodies whose `active_in` lists never both contain
-the current state. A body carries no sections and no per-state widths: the band
-is per body, so a second width is a second body, and nothing in `water_bakes` or
-`water_raster` had to change to express it.
+narrow while it flows is two bodies on two switches the consumer holds opposite.
+A body carries no sections and no per-state widths: the band is per body, so a
+second width is a second body, and nothing in `water_bakes` or `water_raster`
+had to change to express it.
 
-**What switches is the fill; `inactive` says what is left.** `"dry_bed"` means
-the body's cut applies whatever the state - switched off it is the channel
-without the water, and the column presents its bed as a surface with the
-authored headroom above it. `"absent"` means the body leaves no trace at all,
-neither fill nor cut, and the Terrain stands as though it had never been
-authored. Those are two different authored intentions - a river that falls dry,
-and a branch that carves itself when it opens - and neither can be read off the
-geometry. The field is therefore required whenever `activation` is present and
-has no default.
+**A body that is off contributes nothing.** No fill, no cut; the Terrain stands
+as though it had never been authored. There is no authored field for what is
+left behind, because there is nothing to leave behind.
 
-`inactive` says what the world looks like without that water. It is not a
-statement about what a state change costs a consumer to apply: water leaving a
-channel changes where an actor may stand either way.
+**A dry bed is yours, not ours.** Whether a body that exists is carrying water
+is weather - a drought, a season, a gate half shut - and none of that is a fact
+about the map. An active body ships `bed_meters`, `surface_meters` and
+`cut_top_meters` on every cell, so a channel drawn without its fill is a dry bed
+that an actor can walk into, decided per body and per moment on your side.
 
-**Activation runs downhill.** A body's own `activation` is not the whole
-answer: it is there when that says so **and** the body its source sits on is
-there. What feeds a body is stated in the Scene block, on the body itself:
+| switch | your simulation | what stands on the map |
+|---|---|---|
+| off | — | nothing; the ground is whole |
+| on | water | the bed under its fill |
+| on | no water | the bed, walkable |
+
+**Switching runs downhill.** A body's own switch is not the whole answer: it is
+there when that switch is on **and** the body its source sits on is there. What
+feeds a body is stated in the Scene block, on the body itself:
 `scene.water_bodies[].junctions[]` with `"end": "source"` names it. Ask the same
 question of that body. A body with no source junction answers for itself, which
 is what a river's uppermost stretch is.
@@ -675,28 +700,20 @@ Where two bodies feed one, its source sits on both, and it has water as soon as
 than exported, so following this always ends.
 
 Nothing about the chain is authored twice: a child does not repeat its parent's
-states, so the two cannot disagree. And `inactive` still answers for the body
-that carries it - a branch left dry because its river was switched off leaves
-the bed or no trace by its own field, not by its parent's.
+switch, so the two cannot disagree. A main river may carry a switch like any
+other body - switch it off and the whole tree under it is off, whatever the
+branches say about themselves.
 
 **Everything is exported in every state.** A body's raster and its band are in
-the file whatever its activation says. Nothing is omitted, nothing is fetched
-later, and there is no second file: what a state decides is which of them a
-consumer applies. The initial state belongs to the **group**, not to a body, so
-two bodies of one group cannot disagree about where a Scene starts.
+the file whatever its switch says. Nothing is omitted, nothing is fetched later,
+and there is no second file: what a switch decides is which of them a consumer
+applies.
 
-**What triggers a state change is not here.** SceneMaker says that a body is
-switchable and what the states are called; when they change is the consumer's
-decision, in the way an Anchor's Template is. The two are not one mechanism: an
-Anchor swaps a whole Template and belongs to the server, an activation group
-switches authored elements inside one Scene.
-
-Two consequences are worth stating rather than discovering. Every `dry_bed`
-body's cut applies in every state, so two exclusive variants of one stretch
-carve the **union** of their channels; author them on the same bed unless that
-union is what is wanted. And a body whose `active_in` lists every state of its
-group is a body with no activation at all - it is allowed and it means exactly
-what it says.
+**What flips a switch is not here.** SceneMaker says that a body is switchable
+and what the switch is called; when it flips is the consumer's decision, in the
+way an Anchor's Template is. The two are not one mechanism: an Anchor swaps a
+whole Template and belongs to the server, a switch changes authored elements
+inside one Scene.
 
 ## Height is a stack
 
@@ -805,9 +822,10 @@ the fills of every body covering it stack rather than compete.
 - Cuts unite the same way, `[min bed_meters, max cut_top_meters]`, and apply to
   Terrain alone.
 
-Only an active body contributes a fill. A `dry_bed` body contributes its cut in
-every state, an `absent` body contributes neither when it is off; see
-[Water that switches](#water-that-switches).
+Only an active body contributes anything at all - neither fill nor cut when its
+switch is off; see [Water that switches](#water-that-switches). Whether an
+active body's fill is drawn is the consumer's, and taking it away leaves the bed
+walkable without changing a cut.
 
 Where a branch leaves its parent the two agree by construction: SceneMaker
 refuses an export whose branch source does not sit on its parent's surface at
@@ -1146,14 +1164,12 @@ treat a violation as a corrupt file rather than a case to handle:
   a non-negative `clearance_above_meters`.
 - In every exported water cell, `bed_meters ≤ surface_meters ≤ cut_top_meters`,
   and `station_meters` lies between `0` and that body's last centerline station.
-- Every entry of `scene.activation_groups` has a `group` unique in the Scene, at
-  least two `states` with no duplicates among them, and an `initial_state` that
-  is one of those states.
-- Every `activation` names a group that exists; its `active_in` is non-empty,
-  lists only that group's states, and lists none of them twice; its `inactive`
-  is `"dry_bed"` or `"absent"`. A body whose `activation` is absent or null
-  exists in every state. Only a water body may carry one - a Placement, a bridge
-  or a Path with an `activation` is refused rather than ignored.
+- Every entry of `scene.switches` has a `switch` unique in the Scene and an
+  `initially_on`.
+- Every `switch` on a body names one that `scene.switches` declares. A body
+  whose `switch` is absent or null is always there. Only a water body may carry
+  one - a Placement, a bridge or a Path with a `switch` is refused rather than
+  ignored.
 - No body is fed, around the junctions, by itself: following `"end": "source"`
   junctions from any body never returns to it.
 - Every junction in `scene.water_bodies[].junctions` has a matching pair beside
@@ -1194,11 +1210,10 @@ treat a violation as a corrupt file rather than a case to handle:
 - `terrain_cells` and every body's `cells` are ordered by `y`, then `x`. `props`,
   `asset_profiles`, `scene.water_bodies`, `water_raster`, `water_bakes`,
   `scene.route_surfaces` and `route_surface_bakes` are ordered by their id,
-  ordinal; `scene.activation_groups` by `group`. A `junctions` array is
+  ordinal; `scene.switches` by `switch`. A `junctions` array is
   ordered by `water_body_id` and then by `own_station_meters`, because one body
-  may meet another at both of its ends. `active_in` and a group's `states` keep
-  their authored order - `initial_state` names the starting state rather than
-  being the first of them, so nothing is lost by leaving that order alone. Segment and sample arrays retain their deterministic chain order.
+  may meet another at both of its ends. Segment and sample arrays retain their
+  deterministic chain order.
   This ordering is a checked invariant, not a
   coincidence, so a reader may binary-search it.
 - Editor-only data is absent: authoring colours, PolyTools geometry, and the
