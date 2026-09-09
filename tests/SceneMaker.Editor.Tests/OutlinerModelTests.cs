@@ -107,6 +107,37 @@ public sealed class OutlinerModelTests
     }
 
     /// <summary>
+    /// The tree is worked out from the source claims every time, so re-attaching
+    /// an end moves the line in the list. Nothing caches the hierarchy, which is
+    /// what lets the panel be the place an author checks that a re-attachment
+    /// meant what they thought it meant.
+    /// </summary>
+    [Fact]
+    public void ReAttachingAnEndMovesTheLineInTheList()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Chained(workspace);
+        Assert.Equal(
+            [("river_0001", 0), ("river_0002", 1), ("river_0003", 2)],
+            OutlinerModel.Build(scene, workspace.Metrics, EditorMode.River)
+                .Select(entry => (entry.ObjectId, entry.Depth)));
+
+        // river_0003 leaves river_0002 and hangs on the main river instead.
+        var anchor = WaterGeometry.NearestCenterlineAnchor(
+            scene, workspace.Metrics, 128, 32, workspace.Metrics.AuthoringPixelsPerWaterCell * 2.0);
+        Assert.Equal("river_0001", Assert.NotNull(anchor).WaterBodyId);
+        var moved = WaterEditing.ReAttach(scene, "river_0003", WaterEnd.Source, anchor!.Value);
+
+        Assert.Equal(
+            [("river_0001", 0), ("river_0002", 1), ("river_0003", 1)],
+            OutlinerModel.Build(moved, workspace.Metrics, EditorMode.River)
+                .Select(entry => (entry.ObjectId, entry.Depth)));
+        Assert.All(
+            OutlinerModel.Build(moved, workspace.Metrics, EditorMode.River),
+            entry => Assert.False(entry.Loose));
+    }
+
+    /// <summary>
     /// Every other kind is a flat list. The panel is generic over modes on
     /// purpose: only water has a relationship to draw.
     /// </summary>
