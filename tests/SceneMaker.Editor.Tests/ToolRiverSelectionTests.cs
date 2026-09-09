@@ -412,6 +412,63 @@ public sealed class ToolRiverSelectionTests
             [new WaterJunctionDocument { End = WaterEnd.Source, WaterBodyId = "river_0001" }]);
     }
 
+    /// <summary>
+    /// The colour belongs to the selected body. Deleting the branch a second
+    /// branch hung on used to turn every river red, the untouched one included,
+    /// because the preview carried the whole document's complaints.
+    /// </summary>
+    [Fact]
+    public void ARiverThatDidNotComeApartIsNotDrawnAsBroken()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WaterEditing.Remove(Chained(workspace), "river_0002");
+        var interaction = Selecting();
+        var context = Context(workspace, scene);
+
+        interaction.PointerPressed(context, Point(48, 32), Cell(1, 1));
+        interaction.PointerReleased(context);
+        Assert.Equal("river_0001", interaction.SelectedWaterBodyId);
+
+        var preview = interaction.WaterSelection(context);
+        Assert.Empty(preview.Broken);
+        Assert.False(preview.Detached);
+    }
+
+    [Fact]
+    public void TheBranchWhoseFeederIsGoneIsDrawnAsBroken()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WaterEditing.Remove(Chained(workspace), "river_0002");
+        var interaction = Selecting();
+        var context = Context(workspace, scene);
+
+        interaction.PointerPressed(context, Point(128, 96), Cell(4, 3));
+        interaction.PointerReleased(context);
+        Assert.Equal("river_0003", interaction.SelectedWaterBodyId);
+
+        var preview = interaction.WaterSelection(context);
+        Assert.True(preview.Detached);
+        var complaint = Assert.Single(preview.Broken);
+        Assert.Equal("river_0003", complaint.WaterBodyId);
+    }
+
+    /// <summary>`Forked`, plus a second branch leaving the first one at y = 96.</summary>
+    private static SceneDocument Chained(TestWorkspace workspace)
+    {
+        var scene = WaterEditing.PlaceRiver(
+            Forked(workspace),
+            workspace.Terrain,
+            [
+                WaterEditing.Point(96, 96, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+                WaterEditing.Point(160, 96, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 1.0m),
+            ],
+            "river");
+        return WaterEditing.SetJunctions(
+            scene,
+            "river_0003",
+            [new WaterJunctionDocument { End = WaterEnd.Source, WaterBodyId = "river_0002" }]);
+    }
+
     private static ToolContext Context(TestWorkspace workspace, SceneDocument scene) => new(
         scene,
         workspace.Terrain,

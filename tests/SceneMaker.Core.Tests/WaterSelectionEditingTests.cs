@@ -170,8 +170,12 @@ public sealed class WaterSelectionEditingTests
             ]);
 
         var complaint = Assert.Single(WaterEditing.BrokenJunctions(pulled, workspace.Metrics));
-        Assert.Contains("river_0002", complaint, StringComparison.Ordinal);
-        Assert.Contains("river_0001", complaint, StringComparison.Ordinal);
+        // Which body states the fork it cannot keep is part of the answer: the
+        // Canvas colours one river by it, not the Scene.
+        Assert.Equal("river_0002", complaint.WaterBodyId);
+        Assert.Equal("river_0001", complaint.PartnerWaterBodyId);
+        Assert.Equal(WaterEnd.Source, complaint.End);
+        Assert.Contains("river_0001", complaint.Message, StringComparison.Ordinal);
 
         // Still a document the editor is happy to hold: only the export refuses.
         DocumentValidation.Validate(pulled);

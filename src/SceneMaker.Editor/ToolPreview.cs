@@ -61,9 +61,10 @@ public sealed record WaterSelectionPreview(
     WaterBodyDocument? Body,
     IReadOnlyList<ChainPoint> Centerline,
     IReadOnlyList<WaterCellSpan> Cells,
-    IReadOnlyList<string> Broken)
+    IReadOnlyList<BrokenJunction> Broken,
+    bool Detached)
 {
-    public static WaterSelectionPreview Empty { get; } = new(null, [], [], []);
+    public static WaterSelectionPreview Empty { get; } = new(null, [], [], [], false);
 }
 
 /// <summary>
@@ -367,22 +368,28 @@ public static class ToolPreviewBuilder
         if (stored is null) return WaterSelectionPreview.Empty;
 
         var candidate = candidatePoints is null ? stored : stored with { Points = [.. candidatePoints] };
+        var scope = candidatePoints is null ? scene : Replaced(scene, candidate);
         try
         {
             return new WaterSelectionPreview(
                 candidate,
                 WaterGeometry.Centerline(candidate.Points),
                 WaterGeometry.Corridor(scene, metrics, candidate.Points),
-                candidatePoints is null
-                    ? WaterEditing.BrokenJunctions(scene, metrics)
-                    : WaterEditing.BrokenJunctions(Replaced(scene, candidate), metrics));
+                // Only what this body states. The document-wide list belongs in
+                // a status line; used as a colour it turned every river red as
+                // soon as one of them broke.
+                WaterEditing.BrokenJunctions(scope, metrics)
+                    .Where(entry => string.Equals(
+                        entry.WaterBodyId, candidate.WaterBodyId, StringComparison.Ordinal))
+                    .ToList(),
+                !WaterAttachment.IsAttached(scope, metrics, candidate));
         }
         catch (SceneMakerDocumentException)
         {
             // A curve that is momentarily not a curve - two points on top of
             // each other during a drag - is a drag passing through, not a
             // refusal. The points are still drawn; the corridor is not.
-            return new WaterSelectionPreview(candidate, [], [], []);
+            return new WaterSelectionPreview(candidate, [], [], [], false);
         }
     }
 

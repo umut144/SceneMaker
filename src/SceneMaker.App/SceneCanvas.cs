@@ -1067,6 +1067,12 @@ public sealed partial class SceneCanvas : Control
         var rows = _metrics.SceneHeightWaterCells(document);
         foreach (var overlay in WaterOverlays(document))
         {
+            // A body that has come off the river reads as red without being
+            // selected: the author deleted the branch it hung on, and nothing
+            // else on the Canvas would say so. The height view keeps its own
+            // colours, because there the colour is the answer to a different
+            // question and a red cell there would be a wrong height.
+            var bodyColor = overlay.Detached ? InvalidPreviewColor : overlay.Color;
             foreach (var cell in overlay.Cells)
             {
                 Color color;
@@ -1078,8 +1084,8 @@ public sealed partial class SceneCanvas : Control
                 else
                 {
                     color = range is { } lightingSpan
-                        ? LitSurfaceColor(overlay.Color, cell.SurfaceMeters, lightingSpan)
-                        : overlay.Color;
+                        ? LitSurfaceColor(bodyColor, cell.SurfaceMeters, lightingSpan)
+                        : bodyColor;
                     if (!highlighted)
                         color = new Color(color.R, color.G, color.B, 0.24f);
                 }
@@ -1104,7 +1110,8 @@ public sealed partial class SceneCanvas : Control
             if (!_terrainColors.TryGetValue(body.AssetKey, out var color)) continue;
             overlays.Add(new WaterOverlay(
                 color,
-                WaterGeometry.Corridor(document, _metrics!, body)));
+                WaterGeometry.Corridor(document, _metrics!, body),
+                !WaterAttachment.IsAttached(document, _metrics!, body)));
         }
         _waterOverlayDocument = document;
         _waterOverlays = overlays;
@@ -1736,7 +1743,12 @@ public sealed partial class SceneCanvas : Control
         var preview = _interaction.WaterSelection(context);
         if (preview.Body is not { } body) return;
 
-        var color = preview.Broken.Count > 0 ? InvalidPreviewColor : SelectionColor;
+        // What this body states and cannot keep, or a body no longer hanging on
+        // anything. Both are this body's problem; a fork somebody else broke is
+        // not, and used to turn this selection red anyway.
+        var color = preview.Broken.Count > 0 || preview.Detached
+            ? InvalidPreviewColor
+            : SelectionColor;
         var waterCellSize = _metrics!.AuthoringPixelsPerWaterCell * zoom;
         var rows = _metrics.SceneHeightWaterCells(document);
         foreach (var cell in preview.Cells)
@@ -2360,7 +2372,10 @@ public sealed partial class SceneCanvas : Control
                 _interaction.State.PropLineOffsetAuthoringPixels);
 
     /// <summary>One authored body's cells, in the colour of its Asset.</summary>
-    private sealed record WaterOverlay(Color Color, IReadOnlyList<WaterCellSpan> Cells);
+    private sealed record WaterOverlay(
+        Color Color,
+        IReadOnlyList<WaterCellSpan> Cells,
+        bool Detached);
     private sealed record RouteOverlay(
         Color Color,
         PreparedRouteSurface Surface,

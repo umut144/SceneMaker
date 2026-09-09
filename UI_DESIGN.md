@@ -286,6 +286,25 @@ Dass es ein eigenes Werkzeug ist und keine weitere Bedeutung eines Drucks in
 leerer Grund, und dieselben drei mit Eraser —, und `ToolInteraction` bekommt
 bewusst nur eine Position und keine Modifiertasten.
 
+### Ein Fluss, der abgehängt ist
+
+Ein Körper, dessen Quelle auf einem Körper sitzt, den es nicht mehr gibt — oder
+den sie nicht mehr berührt —, wird auf dem Canvas **rot statt blau gezeichnet,
+auch ohne Auswahl**. Dasselbe gilt für alles, was unter ihm hängt: die Frage
+läuft die Quellen entlang bis zu einem Fluss, der keine hat. Wer einen Ast
+löscht, sieht also sofort, welche Äste damit trocken liegen, statt es erst beim
+Export zu erfahren.
+
+Die Auswahl wird rot, wenn **dieser** Körper das Problem hat — entweder weil er
+selbst eine Verbindung behauptet, die nicht hält, oder weil er abgehängt ist.
+Ein Fluss, an dem woanders etwas zerbrochen ist, bleibt gelb. Die Statuszeile
+nach einer Änderung nennt dagegen weiter *jede* zerbrochene Verbindung der
+Scene: dort ist genau das die Nachricht, denn ein Zug kann eine Verbindung
+zerreißen, die gar nicht am angefassten Körper hängt.
+
+In der Höhenansicht bleibt die Farbe die Höhe. Dort beantwortet sie eine andere
+Frage, und eine rote Zelle wäre eine falsche Höhe.
+
 ### River:Select River — Aktivierung
 
 Ist ein Fluss gewählt, zeigt der `Inspector` `Active in` und darunter genau

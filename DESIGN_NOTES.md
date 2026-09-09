@@ -614,6 +614,31 @@ The editor validates at its IO boundaries like everything else here - a document
 may be wrong between two edits - but the author must not first read about it in
 an export hours later.
 
+#### One list, two questions
+
+Using that same list as a colour was wrong twice over, and both showed up the
+first time an author deleted a branch that another branch hung on.
+
+It is a list about the *document*, so once anything in the Scene was broken,
+every selection drew red - the river that had never been touched included. A
+status line wants that list, because an edit that broke somebody else's fork is
+exactly what the author has to hear about. A colour wants only what the body
+under the pointer states, so `BrokenJunctions` now carries the body that states
+each claim and the preview keeps its own.
+
+And it is a list of *claims*, which cannot see a body that is loose without
+stating anything wrong. Delete a branch and its children keep claims that still
+hold perfectly - they still name a body that is there and still touch it - while
+the water that fed them is gone. `WaterAttachment` answers that one by walking
+the source claims to a body that has none, the same direction and the same
+cycle guard as the activation cascade, and for the same reason: a branch is fed
+by what it leaves, so what happens to a feeder happens to everything under it.
+
+Being loose is drawn without being selected. Nothing else on the Canvas would
+say so, and a river that carries no water looks exactly like one that does. The
+height view is the exception - there the colour answers a different question,
+and a red cell in it would be a wrong height.
+
 ### Where a branch starts is not where the pointer was
 
 `Create Branch` is `Draw River` with one point changed. Its first point is put

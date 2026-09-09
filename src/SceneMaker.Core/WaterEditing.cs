@@ -9,6 +9,17 @@ namespace SceneMaker.Core;
 /// <see cref="WaterEditing.ResolveCurve"/> tell "no handle wanted" apart from
 /// "a handle of zero length".
 /// </summary>
+/// <summary>
+/// A fork the document states and the geometry no longer supports, together
+/// with the body that states it. Which body it is matters: the same list read
+/// as a colour has to paint one river red, not every river in the Scene.
+/// </summary>
+public sealed record BrokenJunction(
+    string WaterBodyId,
+    string PartnerWaterBodyId,
+    WaterEnd End,
+    string Message);
+
 public readonly record struct WaterDraftPoint(
     int X,
     int Y,
@@ -353,13 +364,13 @@ public static class WaterEditing
     /// learns about it from an export hours later, so a tool asks this after
     /// every change and says the answer out loud.</para>
     /// </summary>
-    public static IReadOnlyList<string> BrokenJunctions(
+    public static IReadOnlyList<BrokenJunction> BrokenJunctions(
         SceneDocument scene,
         WorkspaceMetrics metrics)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
-        List<string> broken = [];
+        List<BrokenJunction> broken = [];
         foreach (var body in scene.WaterBodies)
         {
             foreach (var claim in body.Junctions)
@@ -369,12 +380,20 @@ public static class WaterEditing
                 var end = claim.End.ToString().ToLowerInvariant();
                 if (partner is null)
                 {
-                    broken.Add($"'{body.WaterBodyId}' meets '{claim.WaterBodyId}' at its {end}, which the Scene no longer has.");
+                    broken.Add(new BrokenJunction(
+                        body.WaterBodyId,
+                        claim.WaterBodyId,
+                        claim.End,
+                        $"'{body.WaterBodyId}' meets '{claim.WaterBodyId}' at its {end}, which the Scene no longer has."));
                     continue;
                 }
                 if (WaterGeometry.SurfaceAtJunction(metrics, body, claim.End, partner) is not { } surface)
                 {
-                    broken.Add($"'{body.WaterBodyId}' no longer touches '{partner.WaterBodyId}' at its {end}.");
+                    broken.Add(new BrokenJunction(
+                        body.WaterBodyId,
+                        partner.WaterBodyId,
+                        claim.End,
+                        $"'{body.WaterBodyId}' no longer touches '{partner.WaterBodyId}' at its {end}."));
                     continue;
                 }
                 var own = claim.End == WaterEnd.Source
@@ -382,8 +401,12 @@ public static class WaterEditing
                     : body.Points[^1].ElevationMeters;
                 if (Math.Abs(own - surface) > metrics.ElevationQuantumMeters)
                 {
-                    broken.Add(FormattableString.Invariant(
-                        $"'{body.WaterBodyId}' meets '{partner.WaterBodyId}' at {own:0.###} m while its surface there is {surface:0.###} m."));
+                    broken.Add(new BrokenJunction(
+                        body.WaterBodyId,
+                        partner.WaterBodyId,
+                        claim.End,
+                        FormattableString.Invariant(
+                            $"'{body.WaterBodyId}' meets '{partner.WaterBodyId}' at {own:0.###} m while its surface there is {surface:0.###} m.")));
                 }
             }
         }

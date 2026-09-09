@@ -1165,8 +1165,13 @@ public sealed class ToolInteraction
     /// </summary>
     private static string JunctionComplaint(SceneDocument scene, WorkspaceMetrics metrics)
     {
+        // Deliberately the whole document: an edit that broke somebody else's
+        // fork is exactly what the author has to hear about, and the body they
+        // were touching is not necessarily the one that came apart.
         var broken = WaterEditing.BrokenJunctions(scene, metrics);
-        return broken.Count == 0 ? string.Empty : " " + string.Join(" ", broken);
+        return broken.Count == 0
+            ? string.Empty
+            : " " + string.Join(" ", broken.Select(static entry => entry.Message));
     }
 
     private void ClearWaterDrag()
