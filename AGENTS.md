@@ -155,6 +155,12 @@ distinct cells, plus one per two-body cell, plus two per three-body cell, equals
 the entry total. That was the third number we got wrong in a week, and the first
 one whose source was already right.
 
+And a count over water cells is a claim about one **position of every switch**,
+so say which. "These cells overlap" is unconditional; "these cells meet flowing
+water" is not, and the difference is invisible until somebody flips a switch. A
+table of switch positions beside a table of counts is two answers to two
+questions unless each count names its row.
+
 ## Version control
 
 After every completed change, create a Git commit automatically. Each commit
