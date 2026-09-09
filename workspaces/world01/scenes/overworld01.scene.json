@@ -23250,7 +23250,7 @@
     {
       "x": 73,
       "y": 38,
-      "asset_key": "grass",
+      "asset_key": "cobblestone",
       "elevation_meters": 1.0
     },
     {
@@ -23694,7 +23694,7 @@
     {
       "x": 47,
       "y": 39,
-      "asset_key": "grass",
+      "asset_key": "cobblestone",
       "elevation_meters": 1.0
     },
     {
@@ -60675,7 +60675,7 @@
     },
     {
       "switch": "upper_valley",
-      "initially_on": true
+      "initially_on": false
     }
   ],
   "water_bodies": [
@@ -60907,7 +60907,7 @@
       ]
     },
     {
-      "water_body_id": "river_0004",
+      "water_body_id": "river_0005",
       "water_kind": "river",
       "asset_key": "river",
       "switch": null,
@@ -60920,136 +60920,8 @@
       "points": [
         {
           "position_authoring_px": {
-            "x": 2304,
-            "y": 1392
-          },
-          "mode": "linear",
-          "handle_in_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "handle_out_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "elevation_meters": 1.0,
-          "channel_depth_meters": 0.525,
-          "clearance_above_meters": 5.0,
-          "width_meters": 4.0
-        },
-        {
-          "position_authoring_px": {
-            "x": 2416,
-            "y": 1296
-          },
-          "mode": "linear",
-          "handle_in_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "handle_out_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "elevation_meters": 1.0,
-          "channel_depth_meters": 0.525,
-          "clearance_above_meters": 5.0,
-          "width_meters": 4.0
-        },
-        {
-          "position_authoring_px": {
-            "x": 2624,
-            "y": 1264
-          },
-          "mode": "linear",
-          "handle_in_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "handle_out_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "elevation_meters": 1.0,
-          "channel_depth_meters": 0.525,
-          "clearance_above_meters": 5.0,
-          "width_meters": 4.0
-        },
-        {
-          "position_authoring_px": {
-            "x": 2736,
-            "y": 1280
-          },
-          "mode": "linear",
-          "handle_in_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "handle_out_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "elevation_meters": 1.0,
-          "channel_depth_meters": 0.525,
-          "clearance_above_meters": 5.0,
-          "width_meters": 4.0
-        },
-        {
-          "position_authoring_px": {
-            "x": 2752,
-            "y": 1360
-          },
-          "mode": "linear",
-          "handle_in_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "handle_out_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "elevation_meters": 1.0,
-          "channel_depth_meters": 0.525,
-          "clearance_above_meters": 5.0,
-          "width_meters": 4.0
-        },
-        {
-          "position_authoring_px": {
-            "x": 2816,
-            "y": 1440
-          },
-          "mode": "linear",
-          "handle_in_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "handle_out_authoring_px": {
-            "x": 0,
-            "y": 0
-          },
-          "elevation_meters": 1.0,
-          "channel_depth_meters": 0.525,
-          "clearance_above_meters": 5.0,
-          "width_meters": 4.0
-        }
-      ]
-    },
-    {
-      "water_body_id": "river_0005",
-      "water_kind": "river",
-      "asset_key": "river",
-      "switch": null,
-      "junctions": [
-        {
-          "end": "source",
-          "water_body_id": "river_0004"
-        }
-      ],
-      "points": [
-        {
-          "position_authoring_px": {
-            "x": 2704,
-            "y": 1280
+            "x": 2352,
+            "y": 1408
           },
           "mode": "linear",
           "handle_in_authoring_px": {
