@@ -12,6 +12,7 @@ every fix has to stay inside.
 
 | ID | Area | Outcome | Status |
 |---|---|---|---|
+| `SWITCH-01` | Switches | Something placeable that names a switch, so the map says which switch a thing throws instead of a constant in the consumer's code. World01's button is a `cobblestone` Terrain cell today and the binding lives in their source; the smallest form is a Placement carrying `switch: "<name>"`, checked against `scene.switches` as a water body's is. The shape is agreed with world01 before it is built. Blocks nothing - phase 2 runs. [Notes](DESIGN_NOTES.md#phase-2-came-back-from-world01-and-left-one-thing-here) | **Ready** |
 | `APP-02` | Application | Manual acceptance of the editor after the Inspector split and the Outliner. Accepted so far: `Create Branch`, `Insert Point`, `Re-Attach` in its three phases (a river that came off its parent can be hung back on), the Outliner's nesting and its visibility ticks - a hidden object really is out of reach of a press - the yellow highlight on every toggle, and the switch block from declaring one to `Initially on?` reaching the Outliner. Left to try: the red selection when a drag breaks a junction, selecting by name in the Outliner and the divider between the two panels, the panel headers and rows in every mode, the `Eraser` in its new place, and the view toggles as an overlay with the legend below them. App code has no tests; this is the only thing that checks it. [Notes](DESIGN_NOTES.md#the-panel-says-what-the-values-belong-to) | **Ready** |
 | `PATH-02` | Paths | Make the red authoring wire pickable and emphasize a selected Path; manual acceptance of an additive-to-tunnel-to-additive Path through a hill. [Notes](DESIGN_NOTES.md#horizontal-sections-and-paths-that-excavate-terrain) | **Ready** |
 
@@ -54,10 +55,12 @@ repainting a cell.
 
 ## Optional Later — Authoring a switchable river
 
-`WATER-01` gives the document and the export their shape. Nothing in the editor
-yet draws a branch, selects a body, or reads activation at all: the Canvas and
-the Section view draw every body whatever its state, so an author sees a map the
-game never shows. A switchable river is therefore authorable only by hand.
+`WATER-01` is done on both sides: the document and the export carry switches,
+the editor draws and selects branches, declares switches and puts bodies on
+them, and the Outliner dims what a switch leaves out. World01 reads export 19
+and throws switches in the game. What is left here is comfort and reach - the
+rows below - and `SWITCH-01`, which is the one thing phase 2 could not answer
+from the map alone.
 
 | ID | Area | Outcome | Status |
 |---|---|---|---|

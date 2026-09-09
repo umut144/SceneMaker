@@ -789,7 +789,30 @@ deleting sits in the column resolution they were rewriting, and taking it out
 twice - the second time with tests in front of it that pin the old contract -
 is where regressions come from.
 
-## The list and the panel are one question asked twice## The list and the panel are one question asked twice
+### Phase 2 came back from world01, and left one thing here
+
+Export 19 is read, the fills stack per cell, the cascade runs, and a switch can
+be thrown in the game. Both maps did what they were built to do: on `stack01`
+each crossing resolves to a floor at 0.0 m under its own water, and the upper
+fill carries nobody - the disjoint case being the sharp one, as we said. On
+`overworld01`, `upper_valley` off takes `river_0002` and `river_0005` under it,
+which is the two-step inheritance the switch was put there to witness.
+
+What came back is that **nothing in the map says which switch a thing throws**.
+World01's button is provisional: a Terrain cell of `cobblestone` is a button,
+and which switch it belongs to is a constant in their code. Two such cells are
+already in `overworld01` - at (73, 38) and (47, 39), one per switch - so moving
+a button today means editing their source. That is the coupling we both avoid.
+
+The smallest form that fixes it is a Placement carrying `switch: "<name>"`,
+checked against `scene.switches` exactly as a water body's is. Then the binding
+comes out of the map. It is not built and not designed: world01 asked to settle
+the shape first, the way the switch itself was settled, and the questions worth
+asking are whether the press toggles or sets, whether two Placements may name
+one switch, and what a Template does with a Placement naming a switch its
+Instance has never declared.
+
+## The list and the panel are one question asked twice
 
 The Inspector answers what the chosen object has. It cannot answer which
 objects there are, and for water that second question is the one with a shape:
