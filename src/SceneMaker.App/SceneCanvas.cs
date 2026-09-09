@@ -125,6 +125,7 @@ public sealed partial class SceneCanvas : Control
         {
             _pointerOverCanvas = false;
             _interaction.PointerLeft();
+            PointerChanged?.Invoke();
             QueueRedraw();
         };
         MouseEntered += () => _pointerOverCanvas = true;
@@ -255,6 +256,12 @@ public sealed partial class SceneCanvas : Control
     /// <summary>Raised when the primary pointer button is released, which ends
     /// a continuous edit stroke.</summary>
     public event Action? StrokeEnded;
+
+    /// <summary>
+    /// The pointer moved over the Canvas, or left it. Raised for the footer,
+    /// which says where it is - the Canvas itself already knows and redraws.
+    /// </summary>
+    public event Action? PointerChanged;
 
     public void ConfigureInteraction(ToolInteraction interaction)
     {
@@ -565,6 +572,7 @@ public sealed partial class SceneCanvas : Control
                 Publish(_interaction.PointerReleased(context));
                 StrokeEnded?.Invoke();
             }
+            PointerChanged?.Invoke();
             QueueRedraw();
         }
         else if (input is InputEventMouseMotion motion)
@@ -575,6 +583,7 @@ public sealed partial class SceneCanvas : Control
                 Publish(_interaction.PointerDragged(context, authoring, cell));
             else
                 _interaction.PointerMoved(authoring, cell);
+            PointerChanged?.Invoke();
             QueueRedraw();
         }
     }

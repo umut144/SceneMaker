@@ -841,13 +841,31 @@ Werkzeug keine einzige Zeile, sagt der `Inspector` auch das.
 
 Im `Inspector` stehen: `Surface` und `Height`, der Punktmodus des *ausgewählten*
 Punktes, die Flusswerte (`Width`, `Surface level`, `Depth`, `Clearance` und die
-abgeleitete Zeile `Bed · Cut`), die Aktivierung (`Active in`, `When off`,
-`New group` / `Remove group`), die Path-Werte und die Bridge-Werte.
+abgeleitete Zeile `Bed · Cut`), der Schalter des Körpers (`Switch`,
+`Initially on?` und das Feld, das einen neuen Schalter deklariert), die
+Path-Werte und die Bridge-Werte.
 
 Im `ContextMenu` über dem Canvas bleibt nur, was zur laufenden Geste gehört:
 der Punktmodus des *nächsten* Punktes, `Snap` und der Abstand einer
 Placement-Linie. `River:Select River` behält davon nichts — dessen Leiste trägt
 nur noch den Werkzeugnamen.
+
+## Statusleiste
+
+Die unterste Zeile trägt drei Dinge, von links nach rechts: die **Meldung** des
+letzten Zuges, die **Ansicht** (`Zoom`, `Pan`) und, hinter einem Trenner ganz
+rechts, die **Zeigerposition**.
+
+Die Position steht in den beiden Einheiten, in denen ein Autor denkt: in
+**Metern**, weil das die Sprache ist, in der ein Consumer die Karte liest, und
+als **Terrain-Zelle**, weil das ist, was ein Druck tatsächlich malt. Verlässt
+der Zeiger den Canvas, stehen dort Striche statt der letzten Zahlen — eine
+Position, die niemand mehr zeigt, wäre eine Behauptung über nichts.
+
+Außerhalb der Szene werden die Zahlen weiter gesagt und nicht versteckt: ein
+negativer Meter ist der Abstand zum Rand, und genau danach fragt, wer dort
+überhaupt hinzeigt. Das Feld hat eine feste Breite, damit `Zoom` und `Pan` nicht
+hin- und herrutschen, während die Ziffern unter dem Zeiger laufen.
 
 ## Eingabeverarbeitung
 

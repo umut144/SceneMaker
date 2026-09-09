@@ -116,6 +116,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly Button _sectionToggle = new();
     private readonly MenuButton _waterHeatmapValueEdit = new();
     private readonly Label _viewLabel = new();
+    private readonly Label _pointerLabel = new();
     private readonly Label _statusLabel = new();
     private readonly Label _documentStateLabel = new();
     private readonly Button _undoButton = new();
@@ -778,6 +779,7 @@ public sealed partial class SceneMakerMain : Control
             _canvas.ConfigureBridgeKit(_controller.Session.BridgeKit);
         }
         _canvas.ViewChanged += UpdateViewStatus;
+        _canvas.PointerChanged += UpdatePointerStatus;
         _canvas.OutcomeProduced += HandleToolOutcome;
         _canvas.StrokeEnded += EndEditStroke;
         _canvas.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -952,6 +954,15 @@ public sealed partial class SceneMakerMain : Control
         _statusLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         footer.AddChild(_statusLabel);
         footer.AddChild(_viewLabel);
+        footer.AddChild(new VSeparator());
+        // Held at a width the longest reading fits, so that the numbers
+        // changing under the pointer does not shove Zoom and Pan about.
+        _pointerLabel.Name = "PointerPosition";
+        _pointerLabel.CustomMinimumSize = new Vector2(210f, 0f);
+        _pointerLabel.HorizontalAlignment = HorizontalAlignment.Right;
+        _pointerLabel.VerticalAlignment = VerticalAlignment.Center;
+        footer.AddChild(_pointerLabel);
+        UpdatePointerStatus();
     }
 
     /// <summary>
@@ -3610,6 +3621,7 @@ public sealed partial class SceneMakerMain : Control
         UpdateMapControls();
         UpdateDocumentState();
         UpdateViewStatus();
+        UpdatePointerStatus();
     }
 
     private void UpdateMapControls()
@@ -3671,6 +3683,33 @@ public sealed partial class SceneMakerMain : Control
         _anchorGroupEdit.Editable = instanceActive;
         _regeneratePreviewButton.Disabled = !instanceActive
             || _controller.Document!.TemplateAnchors.Count == 0;
+    }
+
+    /// <summary>
+    /// Where the pointer is, in the two units an author works in: meters,
+    /// which is what a consumer reads, and the Terrain cell, which is what a
+    /// press actually paints.
+    ///
+    /// <para>Outside the Scene the numbers are still said rather than hidden -
+    /// a negative meter is how far past the edge the pointer is, which is the
+    /// question being asked when someone is out there at all.</para>
+    /// </summary>
+    private void UpdatePointerStatus()
+    {
+        if (_controller.Session is not { } session
+            || _controller.Document is null
+            || _interaction.PointerAuthoring is not { } pointer)
+        {
+            _pointerLabel.Text = "x -  y -";
+            return;
+        }
+
+        var x = pointer.X * session.Metrics.MetersPerAuthoringPixel;
+        var y = pointer.Y * session.Metrics.MetersPerAuthoringPixel;
+        var place = _interaction.PointerCell is { } cell
+            ? FormattableString.Invariant($"  ·  cell {cell.X}, {cell.Y}")
+            : string.Empty;
+        _pointerLabel.Text = FormattableString.Invariant($"x {x:0.00} m  y {y:0.00} m") + place;
     }
 
     private void UpdateViewStatus()
