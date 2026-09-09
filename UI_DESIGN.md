@@ -308,33 +308,58 @@ zerreißen, die gar nicht am angefassten Körper hängt.
 In der Höhenansicht bleibt die Farbe die Höhe. Dort beantwortet sie eine andere
 Frage, und eine rote Zelle wäre eine falsche Höhe.
 
-### River:Select River — Aktivierung
+### River:Select River — Schalter
 
-Ist ein Fluss gewählt, zeigt der `Inspector` `Active in` und darunter genau
-eines von zwei Bedienelementen, je nachdem, wo der Körper steht.
+Ein `activation_group` im Dokument ist ein **Schalter mit benannten
+Stellungen**, und die Oberfläche nennt ihn seit dieser Runde auch so. Das
+Dokument und der Exportvertrag heißen unverändert `activation_group` — world01
+liest darauf, und ein Wort in der UI ist keinen Vertragsbruch wert.
 
-Gehört er **keiner** Gruppe an, steht dort `New group`: ein Namensfeld. Enter
-legt eine Gruppe mit den Zuständen `dry` und `flowing` an, Startzustand `dry`,
-und setzt diesen Fluss auf `flowing` — er ist damit im Anfangszustand der Karte
-nicht da und hinterlässt ein trockenes Bett. Das ist ein einziger
-Rückgängig-Schritt, weil es eine Absicht ist: eine Gruppe ohne Körper darin ist
-ein Name, der nichts schaltet.
+Ist ein Fluss gewählt, zeigt der `Inspector` zwei Zeilen:
+
+```text
+Switch   [ sluice ▾ ]      welcher Schalter entscheidet über diesen Körper
+On in    ☐ dry  ☑ flowing  in welchen Stellungen er da ist
+When off [ Dry bed ▾ ]     was bleibt, wo er nicht ist
+```
+
+`Switch` bietet `Every state` — ein Körper an keinem Schalter ist immer da —
+und je einen Eintrag pro deklariertem Schalter. `On in` ist eine Ankreuzliste
+über dessen Stellungen; mindestens eine muss angekreuzt bleiben, denn ein
+Körper, der in keiner Stellung da ist, ist ein Körper, den niemand je sieht.
+Wer den Schalter loswerden will, nimmt `Remove switch`.
+
+Vorher standen beide Fragen in **einer** flachen Liste (`sluice: dry`,
+`sluice: flowing`). Zwei Stellungen eines Schalters lasen sich dort als zwei
+Schalter — genau so ist es gelesen worden —, und mehrere Stellungen gleichzeitig
+waren gar nicht ausdrückbar, obwohl `active_in` im Dokument immer schon eine
+Liste war.
+
+Gehört ein Fluss **keinem** Schalter an, steht statt `On in` das Feld
+`New switch`: ein Namensfeld. Enter legt einen Schalter mit den Stellungen
+`dry` und `flowing` an, Startstellung `dry`, und setzt diesen Fluss auf
+`flowing` — er ist damit im Anfangszustand der Karte nicht da und hinterlässt
+ein trockenes Bett. Das ist ein einziger Rückgängig-Schritt, weil es eine
+Absicht ist: ein Schalter ohne Körper daran ist ein Name, der nichts schaltet.
+
+Wechselt ein Körper auf einen Schalter, an dem er schon hing, behält er seine
+Stellungen. Kommt er von keinem, startet er in der **Startstellung** des
+Schalters — das ist die Stellung, die der Autor gerade auf dem Canvas sieht.
 
 Der Name ist das, woran ein Konsument seinen Trigger bindet. Er ist deshalb
 autorenvergeben und keine gemünzte ID — und er wird gegen dieselbe Form geprüft
 wie jede andere ID hier.
 
-Gehört er **einer** Gruppe an, steht dort stattdessen `Remove group`. Das nimmt
-die Gruppe weg **und** die Aktivierung jedes Körpers darin; die betroffenen
+Gehört er **einem** Schalter an, steht `Remove switch` da. Das nimmt den
+Schalter weg **und** die Aktivierung jedes Körpers daran; die betroffenen
 Flüsse sind danach in jedem Zustand da. Die Statuszeile sagt, wie viele es
-waren. Körper auf eine Gruppe zeigen zu lassen, die es nicht mehr gibt, wäre ein
-Dokument, das kein Leser auflösen kann; sie still zu leeren wäre die leise
+waren. Körper auf einen Schalter zeigen zu lassen, den es nicht mehr gibt, wäre
+ein Dokument, das kein Leser auflösen kann; ihn still zu leeren wäre die leise
 Entscheidung, die dieses Projekt heraushält.
 
-Umbenennen, weitere Zustände und ein Körper in mehreren Zuständen gleichzeitig
-fehlen noch (`WATER-11`) und gehören zum Outliner: dort steht eine Liste von
-Körpern gegen eine Liste von Zuständen, was eine Leiste, die einen Körper
-beschreibt, nicht leisten kann.
+Umbenennen und Stellungen hinzunehmen oder wegnehmen fehlen noch (`WATER-11`).
+Beides betrifft alle Körper an einem Schalter gleichzeitig und gehört deshalb
+zum Outliner, nicht in eine Zeile, die einen Körper beschreibt.
 
 ### River:Create Branch
 

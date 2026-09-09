@@ -739,6 +739,28 @@ What this does not buy is confidence. The App layer still has no automated
 tests, so every visibility rule the panel inherited is only as good as a manual
 pass (`APP-02`).
 
+## A switch with named positions, called that
+
+`activation_group` is a good name in the document and a bad one in front of an
+author. What it describes is a switch with named positions: the group is the
+switch, its states are the positions, and a body says which positions it is
+there in. The first author to meet it read the flattened `sluice: dry` /
+`sluice: flowing` list as two groups and asked why the assignment was doubled -
+which it never was, but the list gave every reason to think so.
+
+So the Inspector asks the two questions separately: `Switch` picks the switch,
+`On in` ticks its positions. Nothing in the document or the export moved -
+world01 is reading `activation_group` right now, and a word in the interface is
+not worth a contract change - and the two are allowed to differ because one is
+a wire format and the other is a sentence an author reads.
+
+Ticking rather than choosing also finished a piece of `WATER-11` for free.
+`active_in` was always a list; the single dropdown could only ever write one
+entry into it, so a body in several positions was authorable by hand and by
+nothing else. The last tick cannot be removed: a body there in no position of
+its switch is a body nobody can ever see, and taking it off the switch is what
+was meant.
+
 ## The list and the panel are one question asked twice
 
 The Inspector answers what the chosen object has. It cannot answer which

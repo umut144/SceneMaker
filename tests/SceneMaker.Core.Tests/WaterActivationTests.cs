@@ -473,6 +473,45 @@ public sealed class WaterActivationTests
         ],
     };
 
+    /// <summary>
+    /// A body may be there in several positions of its switch. The document
+    /// always allowed it - <c>active_in</c> is a list - and until the Inspector
+    /// offered one tick box per position, writing it meant editing the file.
+    /// Being there in none stays refused: that is a body nobody can ever see.
+    /// </summary>
+    [Fact]
+    public void ABodyCanBeThereInSeveralPositionsOfItsSwitchButNeverInNone()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = WithFork(TestScenes.Instance(workspace), workspace);
+        var both = WaterEditing.SetActivation(
+            scene,
+            "river_0002",
+            new WaterActivationDocument
+            {
+                Group = "fork_at_mill",
+                ActiveIn = ["dry", "flowing"],
+                Inactive = WaterInactive.DryBed,
+            });
+
+        var branch = both.WaterBodies[1];
+        Assert.True(WaterActivation.IsActive(both, branch));
+        Assert.True(WaterActivation.IsActive(
+            both,
+            branch,
+            new Dictionary<string, string> { ["fork_at_mill"] = "flowing" }));
+
+        Assert.Throws<SceneMakerDocumentException>(() => WaterEditing.SetActivation(
+            both,
+            "river_0002",
+            new WaterActivationDocument
+            {
+                Group = "fork_at_mill",
+                ActiveIn = [],
+                Inactive = WaterInactive.DryBed,
+            }));
+    }
+
     private static JsonElement Export(
         TestWorkspace workspace,
         Func<SceneDocument, TestWorkspace, SceneDocument> extend)
