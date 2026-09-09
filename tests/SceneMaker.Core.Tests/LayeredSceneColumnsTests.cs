@@ -425,7 +425,7 @@ public sealed class LayeredSceneColumnsTests
             WaterBodyId = "river_0001",
             WaterKind = WaterKind.River,
             AssetKey = "river",
-            Activation = null,
+            Switch = null,
             Junctions = [],
             Points =
             [
@@ -479,7 +479,7 @@ public sealed class LayeredSceneColumnsTests
             WaterBodyId = "river_0001",
             WaterKind = WaterKind.River,
             AssetKey = "river",
-            Activation = null,
+            Switch = null,
             Junctions = [],
             Points =
             [
@@ -963,7 +963,7 @@ public sealed class LayeredSceneColumnsTests
             WaterBodyId = id,
             WaterKind = WaterKind.River,
             AssetKey = "river",
-            Activation = null,
+            Switch = null,
             Junctions = [],
             Points =
             [

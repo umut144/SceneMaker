@@ -27,7 +27,7 @@ public sealed class SceneExportContractTests
             ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(18, root.GetProperty("version").GetInt32());
+        Assert.Equal(19, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
         Assert.Equal(
             [
@@ -47,14 +47,14 @@ public sealed class SceneExportContractTests
         Assert.Equal(
             [
                 "schema", "version", "scene_id", "scene_kind", "coordinate_space",
-                "size_cells", "terrain_cells", "props", "activation_groups",
+                "size_cells", "terrain_cells", "props", "switches",
                 "water_bodies", "route_surfaces",
                 "bridges", "template_definition", "template_anchors",
                 "default_elevation_meters",
             ],
             Keys(scene));
         Assert.Equal("srt.scene_maker_scene", scene.GetProperty("schema").GetString());
-        Assert.Equal(16, scene.GetProperty("version").GetInt32());
+        Assert.Equal(17, scene.GetProperty("version").GetInt32());
         Assert.Equal("instance", scene.GetProperty("scene_kind").GetString());
         Assert.Equal(
             "scene_local_bottom_left_y_up",
@@ -221,13 +221,13 @@ public sealed class SceneExportContractTests
 
         var body = Assert.Single(root.GetProperty("scene").GetProperty("water_bodies").EnumerateArray());
         Assert.Equal(
-            ["water_body_id", "water_kind", "asset_key", "activation", "junctions", "points"],
+            ["water_body_id", "water_kind", "asset_key", "switch", "junctions", "points"],
             Keys(body));
 
-        // Activation is an authored statement, so it sits in the Scene block
+        // The switch is an authored statement, so it sits in the Scene block
         // beside the curve the author drew. A body that says nothing about it
         // exists in every state, which is what a Scene with no groups is.
-        Assert.Equal(JsonValueKind.Null, body.GetProperty("activation").ValueKind);
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("switch").ValueKind);
         Assert.Equal("river_0001", body.GetProperty("water_body_id").GetString());
         Assert.Equal("river", body.GetProperty("water_kind").GetString());
 
@@ -248,7 +248,7 @@ public sealed class SceneExportContractTests
 
         var raster = Assert.Single(root.GetProperty("water_raster").EnumerateArray());
         Assert.Equal(
-            ["water_body_id", "water_kind", "asset_key", "activation", "junctions", "cells"],
+            ["water_body_id", "water_kind", "asset_key", "switch", "junctions", "cells"],
             Keys(raster));
         Assert.Equal("river_0001", raster.GetProperty("water_body_id").GetString());
 

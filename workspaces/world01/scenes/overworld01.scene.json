@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 20,
+  "version": 21,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60668,14 +60668,10 @@
       ]
     }
   ],
-  "activation_groups": [
+  "switches": [
     {
-      "group": "branch_between_bridges",
-      "states": [
-        "dry",
-        "flowing"
-      ],
-      "initial_state": "dry"
+      "switch": "branch_between_bridges",
+      "initially_on": false
     }
   ],
   "water_bodies": [
@@ -60683,7 +60679,7 @@
       "water_body_id": "river_0001",
       "water_kind": "river",
       "asset_key": "river",
-      "activation": null,
+      "switch": null,
       "junctions": [],
       "points": [
         {
@@ -60768,7 +60764,7 @@
       "water_body_id": "river_0002",
       "water_kind": "river",
       "asset_key": "river",
-      "activation": null,
+      "switch": null,
       "junctions": [
         {
           "end": "source",
@@ -60858,13 +60854,7 @@
       "water_body_id": "river_0003",
       "water_kind": "river",
       "asset_key": "river",
-      "activation": {
-        "group": "branch_between_bridges",
-        "active_in": [
-          "flowing"
-        ],
-        "inactive": "dry_bed"
-      },
+      "switch": "branch_between_bridges",
       "junctions": [
         {
           "end": "source",
@@ -60909,6 +60899,224 @@
           "channel_depth_meters": 1.0,
           "clearance_above_meters": 5.0,
           "width_meters": 3.0
+        }
+      ]
+    },
+    {
+      "water_body_id": "river_0004",
+      "water_kind": "river",
+      "asset_key": "river",
+      "switch": null,
+      "junctions": [
+        {
+          "end": "source",
+          "water_body_id": "river_0002"
+        }
+      ],
+      "points": [
+        {
+          "position_authoring_px": {
+            "x": 2304,
+            "y": 1392
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.525,
+          "clearance_above_meters": 5.0,
+          "width_meters": 4.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2416,
+            "y": 1296
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.525,
+          "clearance_above_meters": 5.0,
+          "width_meters": 4.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2624,
+            "y": 1264
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.525,
+          "clearance_above_meters": 5.0,
+          "width_meters": 4.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2736,
+            "y": 1280
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.525,
+          "clearance_above_meters": 5.0,
+          "width_meters": 4.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2752,
+            "y": 1360
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.525,
+          "clearance_above_meters": 5.0,
+          "width_meters": 4.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2816,
+            "y": 1440
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.525,
+          "clearance_above_meters": 5.0,
+          "width_meters": 4.0
+        }
+      ]
+    },
+    {
+      "water_body_id": "river_0005",
+      "water_kind": "river",
+      "asset_key": "river",
+      "switch": null,
+      "junctions": [
+        {
+          "end": "source",
+          "water_body_id": "river_0004"
+        }
+      ],
+      "points": [
+        {
+          "position_authoring_px": {
+            "x": 2704,
+            "y": 1280
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.525,
+          "clearance_above_meters": 5.0,
+          "width_meters": 4.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2864,
+            "y": 1184
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.525,
+          "clearance_above_meters": 5.0,
+          "width_meters": 4.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2928,
+            "y": 1232
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.525,
+          "clearance_above_meters": 5.0,
+          "width_meters": 4.0
+        },
+        {
+          "position_authoring_px": {
+            "x": 2960,
+            "y": 1296
+          },
+          "mode": "linear",
+          "handle_in_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "handle_out_authoring_px": {
+            "x": 0,
+            "y": 0
+          },
+          "elevation_meters": 1.0,
+          "channel_depth_meters": 0.525,
+          "clearance_above_meters": 5.0,
+          "width_meters": 4.0
         }
       ]
     }

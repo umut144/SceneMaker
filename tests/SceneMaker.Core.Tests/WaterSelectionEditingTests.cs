@@ -37,7 +37,7 @@ public sealed class WaterSelectionEditingTests
         Assert.Equal(3, after.Points.Count);
         Assert.Equal(2.5m, after.Points[1].WidthMeters);
         Assert.Equal(before.AssetKey, after.AssetKey);
-        Assert.Equal(before.Activation, after.Activation);
+        Assert.Equal(before.Switch, after.Switch);
         Assert.Equal(before.Junctions, after.Junctions);
         DocumentValidation.Validate(moved);
 
@@ -66,57 +66,25 @@ public sealed class WaterSelectionEditingTests
             () => WaterEditing.Reshape(scene, "river_0404", points));
     }
 
+    /// <summary>
+    /// A body may only name a switch the Scene declares, and taking it off one
+    /// is what "always there" is written as.
+    /// </summary>
     [Fact]
-    public void ActivationIsCheckedAgainstTheGroupsTheSceneDeclares()
+    public void ASwitchIsCheckedAgainstTheOnesTheSceneDeclares()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = Fixture(workspace) with
-        {
-            ActivationGroups =
-            [
-                new ActivationGroupDocument
-                {
-                    Group = "fork_gate",
-                    States = ["shut", "flowing"],
-                    InitialState = "shut",
-                },
-            ],
-        };
+        var scene = SwitchEditing.AddSwitch(Fixture(workspace), "fork_gate", initiallyOn: false);
 
-        var switched = WaterEditing.SetActivation(
-            scene,
-            "river_0001",
-            new WaterActivationDocument
-            {
-                Group = "fork_gate",
-                ActiveIn = ["flowing"],
-                Inactive = WaterInactive.DryBed,
-            });
-        Assert.Equal(["flowing"], switched.WaterBodies[0].Activation!.ActiveIn);
+        var switched = WaterEditing.SetSwitch(scene, "river_0001", "fork_gate");
+        Assert.Equal("fork_gate", switched.WaterBodies[0].Switch);
         DocumentValidation.Validate(switched);
 
-        // And back out of every group, which is what a body with no activation is.
-        Assert.Null(WaterEditing.SetActivation(switched, "river_0001", null).WaterBodies[0].Activation);
+        // And back off every switch, which is what a body that is always there is.
+        Assert.Null(WaterEditing.SetSwitch(switched, "river_0001", null).WaterBodies[0].Switch);
 
-        foreach (var refused in new[]
-                 {
-                     new WaterActivationDocument
-                     {
-                         Group = "no_such_group", ActiveIn = ["flowing"], Inactive = WaterInactive.DryBed,
-                     },
-                     new WaterActivationDocument
-                     {
-                         Group = "fork_gate", ActiveIn = ["flooded"], Inactive = WaterInactive.DryBed,
-                     },
-                     new WaterActivationDocument
-                     {
-                         Group = "fork_gate", ActiveIn = [], Inactive = WaterInactive.DryBed,
-                     },
-                 })
-        {
-            Assert.Throws<SceneMakerDocumentException>(
-                () => WaterEditing.SetActivation(scene, "river_0001", refused));
-        }
+        Assert.Throws<SceneMakerDocumentException>(
+            () => WaterEditing.SetSwitch(scene, "river_0001", "no_such_switch"));
     }
 
     [Fact]

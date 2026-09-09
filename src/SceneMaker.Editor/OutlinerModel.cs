@@ -143,8 +143,5 @@ public static class OutlinerModel
         return null;
     }
 
-    private static string? Switches(WaterBodyDocument body) =>
-        body.Activation is { } activation
-            ? $"{activation.Group}: {string.Join(", ", activation.ActiveIn)}"
-            : null;
+    private static string? Switches(WaterBodyDocument body) => body.Switch;
 }

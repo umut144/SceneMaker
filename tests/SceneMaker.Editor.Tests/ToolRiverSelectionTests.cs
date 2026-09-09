@@ -192,49 +192,32 @@ public sealed class ToolRiverSelectionTests
     }
 
     [Fact]
-    public void ActivationIsSetOnTheSelectedBodyAndTakenOffAgain()
+    public void ASwitchIsSetOnTheSelectedBodyAndTakenOffAgain()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = Forked(workspace) with
-        {
-            ActivationGroups =
-            [
-                new ActivationGroupDocument
-                {
-                    Group = "fork_gate",
-                    States = ["shut", "flowing"],
-                    InitialState = "shut",
-                },
-            ],
-        };
+        var scene = SwitchEditing.AddSwitch(Forked(workspace), "fork_gate", initiallyOn: false);
         var interaction = Selecting();
         var context = Context(workspace, scene);
         interaction.PointerPressed(context, Point(96, 100), Cell(3, 3));
 
-        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.SetSelectedWaterActivation(
-            context,
-            new WaterActivationDocument
-            {
-                Group = "fork_gate",
-                ActiveIn = ["flowing"],
-                Inactive = WaterInactive.DryBed,
-            }));
+        var edit = Assert.IsType<ToolOutcome.Edit>(
+            interaction.SetSelectedWaterSwitch(context, "fork_gate"));
         var switched = edit.Apply(scene);
-        Assert.Equal(["flowing"], switched.WaterBodies[1].Activation!.ActiveIn);
-        Assert.Contains("a dry bed", edit.Describe!(scene, switched), StringComparison.Ordinal);
+        Assert.Equal("fork_gate", switched.WaterBodies[1].Switch);
+        Assert.Contains("fork_gate", edit.Describe!(scene, switched), StringComparison.Ordinal);
 
         var cleared = Assert.IsType<ToolOutcome.Edit>(
-            interaction.SetSelectedWaterActivation(Context(workspace, switched), null));
-        Assert.Null(cleared.Apply(switched).WaterBodies[1].Activation);
+            interaction.SetSelectedWaterSwitch(Context(workspace, switched), null));
+        Assert.Null(cleared.Apply(switched).WaterBodies[1].Switch);
     }
 
     /// <summary>
     /// The loop that was broken in the middle: a branch could be drawn but not
-    /// made switchable, because a group existed only if somebody wrote it into
+    /// made switchable, because a switch existed only if somebody wrote it into
     /// the document by hand.
     /// </summary>
     [Fact]
-    public void NamingAGroupDeclaresItAndPutsTheSelectedBodyInIt()
+    public void NamingASwitchDeclaresItAndPutsTheSelectedBodyOnIt()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Forked(workspace);
@@ -247,16 +230,10 @@ public sealed class ToolRiverSelectionTests
         var after = edit.Apply(scene);
 
         // Declaring and joining are one undo step, because they are one intention.
-        var group = Assert.Single(after.ActivationGroups);
-        Assert.Equal("mill_gate", group.Group);
-        Assert.Equal(["dry", "flowing"], group.States);
-        Assert.Equal("dry", group.InitialState);
-
-        var activation = after.WaterBodies[1].Activation;
-        Assert.NotNull(activation);
-        Assert.Equal("mill_gate", activation.Group);
-        Assert.Equal(["flowing"], activation.ActiveIn);
-        Assert.Equal(WaterInactive.DryBed, activation.Inactive);
+        var declared = Assert.Single(after.Switches);
+        Assert.Equal("mill_gate", declared.Switch);
+        Assert.False(declared.InitiallyOn);
+        Assert.Equal("mill_gate", after.WaterBodies[1].Switch);
 
         // As the Scene starts, the branch is not there and its river is.
         Assert.False(WaterActivation.IsActive(after, after.WaterBodies[1]));
@@ -264,8 +241,32 @@ public sealed class ToolRiverSelectionTests
         DocumentValidation.Validate(after);
     }
 
+    /// <summary>
+    /// Where the Scene starts belongs to the switch, so it moves every body on
+    /// it - which is why it is set from the selection but not stored on it.
+    /// </summary>
     [Fact]
-    public void AGroupWithNoNameIsRefusedRatherThanMinted()
+    public void TheStartOfASwitchIsSetFromTheSelectionAndBelongsToTheSwitch()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Forked(workspace);
+        var interaction = Selecting();
+        var context = Context(workspace, scene);
+        interaction.PointerPressed(context, Point(96, 100), Cell(3, 3));
+        var declared = Assert.IsType<ToolOutcome.Edit>(
+            interaction.MakeSelectedWaterSwitchable(context, "mill_gate")).Apply(scene);
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(
+            interaction.SetSelectedWaterSwitchInitiallyOn(Context(workspace, declared), true));
+        var after = edit.Apply(declared);
+
+        Assert.True(Assert.Single(after.Switches).InitiallyOn);
+        Assert.True(WaterActivation.IsActive(after, after.WaterBodies[1]));
+        DocumentValidation.Validate(after);
+    }
+
+    [Fact]
+    public void ASwitchWithNoNameIsRefusedRatherThanMinted()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Forked(workspace);
@@ -280,7 +281,7 @@ public sealed class ToolRiverSelectionTests
     }
 
     [Fact]
-    public void RemovingTheGroupLeavesItsBodiesThereInEveryState()
+    public void RemovingTheSwitchLeavesItsBodiesAlwaysThere()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Forked(workspace);
@@ -291,12 +292,12 @@ public sealed class ToolRiverSelectionTests
             interaction.MakeSelectedWaterSwitchable(context, "mill_gate")).Apply(scene);
 
         var edit = Assert.IsType<ToolOutcome.Edit>(
-            interaction.RemoveSelectedWaterActivationGroup(Context(workspace, declared)));
+            interaction.RemoveSelectedWaterSwitch(Context(workspace, declared)));
         var after = edit.Apply(declared);
 
-        Assert.Empty(after.ActivationGroups);
-        Assert.Null(after.WaterBodies[1].Activation);
-        Assert.Contains("every state", edit.Describe!(declared, after), StringComparison.Ordinal);
+        Assert.Empty(after.Switches);
+        Assert.Null(after.WaterBodies[1].Switch);
+        Assert.Contains("always there", edit.Describe!(declared, after), StringComparison.Ordinal);
         DocumentValidation.Validate(after);
     }
 
@@ -411,6 +412,12 @@ public sealed class ToolRiverSelectionTests
             "river_0002",
             [new WaterJunctionDocument { End = WaterEnd.Source, WaterBodyId = "river_0001" }]);
     }
+
+    /// <summary>
+    /// The colour belongs to the selected body. Deleting the branch a second
+    /// branch hung on used to turn every river red, the untouched one included,
+    /// because the preview carried the whole document's complaints.
+    /// </summary>
 
     /// <summary>
     /// The colour belongs to the selected body. Deleting the branch a second

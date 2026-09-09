@@ -65,30 +65,11 @@ public sealed class OutlinerModelTests
     public void WhatSwitchesABodyIsWrittenBesideIt()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = Chained(workspace) with
-        {
-            ActivationGroups =
-            [
-                new ActivationGroupDocument
-                {
-                    Group = "sluice",
-                    States = ["dry", "flowing"],
-                    InitialState = "dry",
-                },
-            ],
-        };
-        scene = WaterEditing.SetActivation(
-            scene,
-            "river_0002",
-            new WaterActivationDocument
-            {
-                Group = "sluice",
-                ActiveIn = ["flowing"],
-                Inactive = WaterInactive.DryBed,
-            });
+        var scene = SwitchEditing.AddSwitch(Chained(workspace), "sluice", initiallyOn: false);
+        scene = WaterEditing.SetSwitch(scene, "river_0002", "sluice");
 
         var entries = OutlinerModel.Build(scene, workspace.Metrics, EditorMode.River);
-        Assert.Equal("sluice: flowing", Assert.Single(
+        Assert.Equal("sluice", Assert.Single(
             entries, entry => entry.ObjectId == "river_0002").Note);
         Assert.Null(Assert.Single(
             entries, entry => entry.ObjectId == "river_0001").Note);

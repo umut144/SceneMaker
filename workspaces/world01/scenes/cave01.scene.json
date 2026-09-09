@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 20,
+  "version": 21,
   "scene_id": "cave01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -2413,7 +2413,7 @@
   "props": [],
   "elevation_regions": [],
   "route_surfaces": [],
-  "activation_groups": [],
+  "switches": [],
   "water_bodies": [],
   "bridges": [],
   "template_definition": null,

@@ -76,7 +76,7 @@ public static partial class DocumentValidation
         ValidateElevationRegions(document);
         ValidateRouteSurfaces(document);
         ValidateBridges(document);
-        ValidateActivationGroups(document);
+        ValidateSwitches(document);
         ValidateWaterBodies(document);
         ValidateNoJunctionCycle(document);
 
@@ -105,11 +105,11 @@ public static partial class DocumentValidation
             if (document.WaterBodies.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own water bodies.");
 
-            // A group exists to relate water bodies, and a Template has none.
-            // An empty group would be a name a consumer could bind a trigger to
-            // that switches nothing, which is worse than refusing it.
-            if (document.ActivationGroups.Count > 0)
-                throw new SceneMakerDocumentException("Scene Template cannot own activation groups.");
+            // A switch exists to relate water bodies, and a Template has none.
+            // One with nothing on it would be a name a consumer could bind a
+            // trigger to that switches nothing, which is worse than refusing it.
+            if (document.Switches.Count > 0)
+                throw new SceneMakerDocumentException("Scene Template cannot own switches.");
             if (document.ElevationRegions.Count > 0)
                 throw new SceneMakerDocumentException("Scene Template cannot own elevation regions.");
             if (document.Bridges.Count > 0)
@@ -517,81 +517,47 @@ public static partial class DocumentValidation
     /// <summary>
     /// The states a Scene can be in.
     ///
-    /// <para>Two states at least, because a group with one switches nothing and
-    /// would be a name a consumer binds a trigger to for no effect. The initial
-    /// state is named rather than taken to be the first, so the authored order
-    /// of the states can stay whatever reads best.</para>
+    /// <para>The name is what a consumer binds a trigger to, so the Scene may
+    /// not declare it twice, and the canonical order keeps two files that say
+    /// the same thing byte-identical.</para>
     /// </summary>
-    private static void ValidateActivationGroups(SceneDocument document)
+    private static void ValidateSwitches(SceneDocument document)
     {
-        if (document.ActivationGroups is null)
-            throw new SceneMakerDocumentException("Scene requires activation_groups.");
+        if (document.Switches is null)
+            throw new SceneMakerDocumentException("Scene requires switches.");
 
-        string? previousGroup = null;
-        foreach (var group in document.ActivationGroups)
+        string? previous = null;
+        foreach (var declared in document.Switches)
         {
-            ValidateStableId("activation group", group.Group);
-            if (previousGroup is not null
-                && string.CompareOrdinal(group.Group, previousGroup) <= 0)
+            ValidateStableId("switch", declared.Switch);
+            if (previous is not null
+                && string.CompareOrdinal(declared.Switch, previous) <= 0)
             {
                 throw new SceneMakerDocumentException(
-                    "Activation groups must have unique names in canonical ordinal order.");
+                    "Switches must have unique names in canonical ordinal order.");
             }
-            previousGroup = group.Group;
 
-            var label = $"Activation group '{group.Group}'";
-            if (group.States is null || group.States.Count < 2)
-                throw new SceneMakerDocumentException($"{label} requires at least two states.");
-            HashSet<string> seen = new(StringComparer.Ordinal);
-            foreach (var state in group.States)
-            {
-                ValidateStableId($"{label} state", state);
-                if (!seen.Add(state))
-                    throw new SceneMakerDocumentException($"{label} lists state '{state}' twice.");
-            }
-            if (group.InitialState is null || !seen.Contains(group.InitialState))
-            {
-                throw new SceneMakerDocumentException(
-                    $"{label} requires an initial_state that is one of its states.");
-            }
+            previous = declared.Switch;
         }
     }
 
     /// <summary>
     /// What a body says about when it exists and what it meets.
     ///
-    /// <para><c>active_in</c> is checked against its own group rather than
-    /// against every state in the Scene, because a state name is only meaningful
-    /// inside the group that declares it.</para>
+    /// <para>A body may only name a switch the Scene declares. A name that is
+    /// not declared is a body no reader can resolve, and the consumer refuses
+    /// it too - so it is refused here, where the author can still see why.</para>
     /// </summary>
     private static void ValidateWaterBodyRelations(SceneDocument document, WaterBodyDocument body)
     {
         var label = $"Water body '{body.WaterBodyId}'";
 
-        if (body.Activation is { } activation)
+        if (body.Switch is { } name
+            && !document.Switches.Any(
+                candidate => string.Equals(candidate.Switch, name, StringComparison.Ordinal)))
         {
-            var group = document.ActivationGroups.FirstOrDefault(
-                candidate => string.Equals(candidate.Group, activation.Group, StringComparison.Ordinal))
-                ?? throw new SceneMakerDocumentException(
-                    $"{label} names activation group '{activation.Group}', which the Scene does not declare.");
-            if (!Enum.IsDefined(activation.Inactive))
-                throw new SceneMakerDocumentException($"{label} requires a supported inactive.");
-            if (activation.ActiveIn is null || activation.ActiveIn.Count == 0)
-            {
-                throw new SceneMakerDocumentException(
-                    $"{label} requires at least one state in active_in; a body active in none of them is a body nobody can see.");
-            }
-            HashSet<string> seen = new(StringComparer.Ordinal);
-            foreach (var state in activation.ActiveIn)
-            {
-                if (!group.States.Contains(state, StringComparer.Ordinal))
-                {
-                    throw new SceneMakerDocumentException(
-                        $"{label} is active in '{state}', which is not a state of group '{group.Group}'.");
-                }
-                if (!seen.Add(state))
-                    throw new SceneMakerDocumentException($"{label} lists state '{state}' twice.");
-            }
+            throw new SceneMakerDocumentException(
+                $"{label} names switch '{name}', which the Scene does not declare.");
         }
 
         if (body.Junctions is null)

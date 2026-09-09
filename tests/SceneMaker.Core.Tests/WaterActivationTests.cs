@@ -40,26 +40,16 @@ public sealed class WaterActivationTests
 
         return scene with
         {
-            ActivationGroups =
+            Switches =
             [
-                new ActivationGroupDocument
-                {
-                    Group = "fork_at_mill",
-                    States = ["dry", "flowing"],
-                    InitialState = "dry",
-                },
+                new SwitchDocument { Switch = "fork_at_mill", InitiallyOn = false },
             ],
             WaterBodies =
             [
                 scene.WaterBodies[0],
                 scene.WaterBodies[1] with
                 {
-                    Activation = new WaterActivationDocument
-                    {
-                        Group = "fork_at_mill",
-                        ActiveIn = ["flowing"],
-                        Inactive = WaterInactive.DryBed,
-                    },
+                    Switch = "fork_at_mill",
                     Junctions =
                     [
                         new WaterJunctionDocument
@@ -175,139 +165,54 @@ public sealed class WaterActivationTests
     }
 
     /// <summary>
-    /// The group is authored, so it belongs in the Scene block; the raster
-    /// repeats a body's own activation so that a consumer reading the derived
-    /// water need not join three arrays to learn whether to apply one of them.
+    /// The switch is authored, so it belongs in the Scene block; the raster
+    /// repeats a body's own switch so that a consumer reading the derived water
+    /// need not join two arrays to learn whether to apply one of them.
     /// </summary>
     [Fact]
-    public void AGroupIsAuthoredInTheSceneAndABodySaysWhichStatesItExistsIn()
+    public void ASwitchIsAuthoredInTheSceneAndABodyNamesTheOneItHangsOn()
     {
         using var workspace = TestWorkspace.Create();
         var root = Export(workspace, WithFork);
 
-        var group = Assert.Single(
-            root.GetProperty("scene").GetProperty("activation_groups").EnumerateArray());
+        var declared = Assert.Single(
+            root.GetProperty("scene").GetProperty("switches").EnumerateArray());
         Assert.Equal(
-            ["group", "states", "initial_state"],
-            group.EnumerateObject().Select(property => property.Name));
-        Assert.Equal("fork_at_mill", group.GetProperty("group").GetString());
-        Assert.Equal("dry", group.GetProperty("initial_state").GetString());
-        Assert.Equal(
-            ["dry", "flowing"],
-            group.GetProperty("states").EnumerateArray().Select(state => state.GetString()));
+            ["switch", "initially_on"],
+            declared.EnumerateObject().Select(property => property.Name));
+        Assert.Equal("fork_at_mill", declared.GetProperty("switch").GetString());
+        Assert.False(declared.GetProperty("initially_on").GetBoolean());
 
-        foreach (var activation in new[]
+        // Both halves carry it, so a consumer holding either one can answer the
+        // question without going back to the other.
+        foreach (var body in new[]
                  {
-                     root.GetProperty("scene").GetProperty("water_bodies")[1].GetProperty("activation"),
-                     root.GetProperty("water_raster")[1].GetProperty("activation"),
+                     root.GetProperty("scene").GetProperty("water_bodies")[1],
+                     root.GetProperty("water_raster")[1],
                  })
         {
-            Assert.Equal(
-                ["group", "active_in", "inactive"],
-                activation.EnumerateObject().Select(property => property.Name));
-            Assert.Equal("fork_at_mill", activation.GetProperty("group").GetString());
-            Assert.Equal("dry_bed", activation.GetProperty("inactive").GetString());
-            Assert.Equal(
-                ["flowing"],
-                activation.GetProperty("active_in").EnumerateArray().Select(state => state.GetString()));
+            Assert.Equal("fork_at_mill", body.GetProperty("switch").GetString());
         }
 
-        // The parent exists whatever the state, and says so by saying nothing.
+        // The parent is always there, and says so by saying nothing.
         Assert.Equal(
             JsonValueKind.Null,
-            root.GetProperty("water_raster")[0].GetProperty("activation").ValueKind);
+            root.GetProperty("water_raster")[0].GetProperty("switch").ValueKind);
     }
 
     /// <summary>
-    /// The hole the first draft of this design had: with two branches on one
-    /// stretch, one of them flows in more than one state. A single state per
-    /// body would force it to be authored twice with identical curves, which is
-    /// the duplication of geometry a per-body band exists to avoid.
+    /// A switch is one bit, so the only thing a body can get wrong about it is
+    /// naming one the Scene has not declared. Everything the old named states
+    /// could contradict went with them.
     /// </summary>
     [Fact]
-    public void ABodyMayBeActiveInMoreThanOneState()
+    public void ASwitchTheSceneDoesNotDeclareIsRefused()
     {
-        var scene = Fixture() with
-        {
-            ActivationGroups =
-            [
-                new ActivationGroupDocument
-                {
-                    Group = "two_forks",
-                    States = ["none", "first", "both"],
-                    InitialState = "none",
-                },
-            ],
-        };
-        scene = WithActivation(scene, "two_forks", ["first", "both"]);
-
-        DocumentValidation.Validate(scene);
-        Assert.Equal(["first", "both"], scene.WaterBodies[0].Activation!.ActiveIn);
-    }
-
-    [Fact]
-    public void AGroupTheSceneDoesNotDeclareIsRefused()
-    {
-        var scene = WithActivation(Fixture(), "no_such_group", ["flowing"]);
+        var scene = WithSwitch(Fixture(), "no_such_switch");
         var error = Assert.Throws<SceneMakerDocumentException>(() => DocumentValidation.Validate(scene));
-        Assert.Contains("no_such_group", error.Message, StringComparison.Ordinal);
-    }
+        Assert.Contains("no_such_switch", error.Message, StringComparison.Ordinal);
 
-    [Fact]
-    public void AStateThatIsNotTheGroupsIsRefused()
-    {
-        var scene = WithGroup(Fixture());
-        scene = WithActivation(scene, "fork_at_mill", ["flooded"]);
-        var error = Assert.Throws<SceneMakerDocumentException>(() => DocumentValidation.Validate(scene));
-        Assert.Contains("flooded", error.Message, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// A body active in no state is a body nobody can ever see. It is refused
-    /// rather than exported, because an empty list reads as "not switched" and
-    /// means the opposite.
-    /// </summary>
-    [Fact]
-    public void ABodyActiveInNoStateIsRefused()
-    {
-        var scene = WithActivation(WithGroup(Fixture()), "fork_at_mill", []);
-        Assert.Throws<SceneMakerDocumentException>(() => DocumentValidation.Validate(scene));
-    }
-
-    [Fact]
-    public void AGroupWithOneStateSwitchesNothingAndIsRefused()
-    {
-        var scene = Fixture() with
-        {
-            ActivationGroups =
-            [
-                new ActivationGroupDocument
-                {
-                    Group = "fork_at_mill",
-                    States = ["dry"],
-                    InitialState = "dry",
-                },
-            ],
-        };
-        Assert.Throws<SceneMakerDocumentException>(() => DocumentValidation.Validate(scene));
-    }
-
-    [Fact]
-    public void AnInitialStateOutsideTheGroupIsRefused()
-    {
-        var scene = Fixture() with
-        {
-            ActivationGroups =
-            [
-                new ActivationGroupDocument
-                {
-                    Group = "fork_at_mill",
-                    States = ["dry", "flowing"],
-                    InitialState = "flooded",
-                },
-            ],
-        };
-        Assert.Throws<SceneMakerDocumentException>(() => DocumentValidation.Validate(scene));
+        DocumentValidation.Validate(WithSwitch(WithDeclaredSwitch(Fixture()), "fork_at_mill"));
     }
 
     [Fact]
@@ -321,24 +226,16 @@ public sealed class WaterActivationTests
     }
 
     /// <summary>
-    /// A Template carries no water, so a group in one would be a name a
+    /// A Template carries no water, so a switch in one would be a name a
     /// consumer could bind a trigger to that switches nothing.
     /// </summary>
     [Fact]
-    public void ATemplateCannotOwnActivationGroups()
+    public void ATemplateCannotOwnSwitches()
     {
         using var workspace = TestWorkspace.Create();
         var template = TestScenes.Template(workspace, "grove", 1) with
         {
-            ActivationGroups =
-            [
-                new ActivationGroupDocument
-                {
-                    Group = "fork_at_mill",
-                    States = ["dry", "flowing"],
-                    InitialState = "dry",
-                },
-            ],
+            Switches = [new SwitchDocument { Switch = "fork_at_mill", InitiallyOn = false }],
         };
         Assert.Throws<SceneMakerDocumentException>(() => DocumentValidation.Validate(template));
     }
@@ -379,17 +276,17 @@ public sealed class WaterActivationTests
     }
 
     /// <summary>
-    /// The gap that let a branch quietly stop being switchable: the group stayed
-    /// declared, nothing was in it, and the file exported without a word.
+    /// The gap that let a branch quietly stop being switchable: the switch
+    /// stayed declared, nothing was on it, and the file exported without a word.
     /// </summary>
     [Fact]
-    public void AGroupNoBodyIsInIsReportedRatherThanExportedInSilence()
+    public void ASwitchNoBodyIsOnIsReportedRatherThanExportedInSilence()
     {
         using var workspace = TestWorkspace.Create();
         var warnings = Warnings(workspace, (scene, work) => WithFork(scene, work) with
         {
             WaterBodies = [.. WithFork(scene, work).WaterBodies.Select(
-                static body => body with { Activation = null, Junctions = [] })],
+                static body => body with { Switch = null, Junctions = [] })],
         });
 
         Assert.Contains(
@@ -427,36 +324,14 @@ public sealed class WaterActivationTests
             "river");
     }
 
-    private static SceneDocument WithGroup(SceneDocument scene) => scene with
+    private static SceneDocument WithDeclaredSwitch(SceneDocument scene) => scene with
     {
-        ActivationGroups =
-        [
-            new ActivationGroupDocument
-            {
-                Group = "fork_at_mill",
-                States = ["dry", "flowing"],
-                InitialState = "dry",
-            },
-        ],
+        Switches = [new SwitchDocument { Switch = "fork_at_mill", InitiallyOn = false }],
     };
 
-    private static SceneDocument WithActivation(
-        SceneDocument scene,
-        string group,
-        List<string> activeIn) => scene with
+    private static SceneDocument WithSwitch(SceneDocument scene, string name) => scene with
     {
-        WaterBodies =
-        [
-            scene.WaterBodies[0] with
-            {
-                Activation = new WaterActivationDocument
-                {
-                    Group = group,
-                    ActiveIn = activeIn,
-                    Inactive = WaterInactive.DryBed,
-                },
-            },
-        ],
+        WaterBodies = [scene.WaterBodies[0] with { Switch = name }],
     };
 
     private static SceneDocument WithJunction(SceneDocument scene, string partner) => scene with
@@ -472,45 +347,6 @@ public sealed class WaterActivationTests
             },
         ],
     };
-
-    /// <summary>
-    /// A body may be there in several positions of its switch. The document
-    /// always allowed it - <c>active_in</c> is a list - and until the Inspector
-    /// offered one tick box per position, writing it meant editing the file.
-    /// Being there in none stays refused: that is a body nobody can ever see.
-    /// </summary>
-    [Fact]
-    public void ABodyCanBeThereInSeveralPositionsOfItsSwitchButNeverInNone()
-    {
-        using var workspace = TestWorkspace.Create();
-        var scene = WithFork(TestScenes.Instance(workspace), workspace);
-        var both = WaterEditing.SetActivation(
-            scene,
-            "river_0002",
-            new WaterActivationDocument
-            {
-                Group = "fork_at_mill",
-                ActiveIn = ["dry", "flowing"],
-                Inactive = WaterInactive.DryBed,
-            });
-
-        var branch = both.WaterBodies[1];
-        Assert.True(WaterActivation.IsActive(both, branch));
-        Assert.True(WaterActivation.IsActive(
-            both,
-            branch,
-            new Dictionary<string, string> { ["fork_at_mill"] = "flowing" }));
-
-        Assert.Throws<SceneMakerDocumentException>(() => WaterEditing.SetActivation(
-            both,
-            "river_0002",
-            new WaterActivationDocument
-            {
-                Group = "fork_at_mill",
-                ActiveIn = [],
-                Inactive = WaterInactive.DryBed,
-            }));
-    }
 
     private static JsonElement Export(
         TestWorkspace workspace,

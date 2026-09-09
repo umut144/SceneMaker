@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 20,
+  "version": 21,
   "scene_id": "fork01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -3853,14 +3853,10 @@
   "props": [],
   "elevation_regions": [],
   "route_surfaces": [],
-  "activation_groups": [
+  "switches": [
     {
-      "group": "fork_gate",
-      "states": [
-        "shut",
-        "flowing"
-      ],
-      "initial_state": "shut"
+      "switch": "fork_gate",
+      "initially_on": false
     }
   ],
   "water_bodies": [
@@ -3868,7 +3864,7 @@
       "water_body_id": "river_0001",
       "water_kind": "river",
       "asset_key": "river",
-      "activation": null,
+      "switch": null,
       "junctions": [],
       "points": [
         {
@@ -3915,13 +3911,7 @@
       "water_body_id": "river_0002",
       "water_kind": "river",
       "asset_key": "river",
-      "activation": {
-        "group": "fork_gate",
-        "active_in": [
-          "flowing"
-        ],
-        "inactive": "dry_bed"
-      },
+      "switch": "fork_gate",
       "junctions": [
         {
           "end": "source",

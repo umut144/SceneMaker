@@ -36,16 +36,10 @@ public sealed class WaterActivationCascadeTests
         }
         scene = scene with
         {
-            ActivationGroups =
+            Switches =
             [
-                new ActivationGroupDocument
-                {
-                    Group = "lower_fork", States = ["shut", "flowing"], InitialState = "shut",
-                },
-                new ActivationGroupDocument
-                {
-                    Group = "upper_fork", States = ["shut", "flowing"], InitialState = "flowing",
-                },
+                new SwitchDocument { Switch = "lower_fork", InitiallyOn = false },
+                new SwitchDocument { Switch = "upper_fork", InitiallyOn = true },
             ],
         };
         scene = WaterEditing.SetJunctions(
@@ -54,18 +48,8 @@ public sealed class WaterActivationCascadeTests
         scene = WaterEditing.SetJunctions(
             scene, "river_0003",
             [new WaterJunctionDocument { End = WaterEnd.Source, WaterBodyId = "river_0002" }]);
-        scene = WaterEditing.SetActivation(
-            scene, "river_0002",
-            new WaterActivationDocument
-            {
-                Group = "upper_fork", ActiveIn = ["flowing"], Inactive = WaterInactive.DryBed,
-            });
-        return WaterEditing.SetActivation(
-            scene, "river_0003",
-            new WaterActivationDocument
-            {
-                Group = "lower_fork", ActiveIn = ["flowing"], Inactive = WaterInactive.DryBed,
-            });
+        scene = WaterEditing.SetSwitch(scene, "river_0002", "upper_fork");
+        return WaterEditing.SetSwitch(scene, "river_0003", "lower_fork");
     }
 
     [Fact]
@@ -75,22 +59,22 @@ public sealed class WaterActivationCascadeTests
         var scene = Tree(workspace);
         DocumentValidation.Validate(scene);
 
-        // As the Scene starts: upper_fork flowing, lower_fork shut.
+        // As the Scene starts: upper_fork on, lower_fork off.
         Assert.Equal(
             ["river_0001", "river_0002"],
             WaterActivation.ActiveBodies(scene).Select(static body => body.WaterBodyId));
 
-        // Its own group opened, and it is there because its feeder still is.
+        // Its own switch turned on, and it is there because its feeder still is.
         Assert.Equal(
             ["river_0001", "river_0002", "river_0003"],
             WaterActivation
-                .ActiveBodies(scene, new Dictionary<string, string> { ["lower_fork"] = "flowing" })
+                .ActiveBodies(scene, new Dictionary<string, bool> { ["lower_fork"] = true })
                 .Select(static body => body.WaterBodyId));
     }
 
     /// <summary>
     /// The point of the rule: a branch whose feeder is gone is gone, however
-    /// its own group stands. Nothing repeats the parent's states on the child.
+    /// its own switch stands. Nothing repeats the parent's switch on the child.
     /// </summary>
     [Fact]
     public void ShuttingABranchTakesEverythingUnderItWithIt()
@@ -98,16 +82,16 @@ public sealed class WaterActivationCascadeTests
         using var workspace = TestWorkspace.Create();
         var scene = Tree(workspace);
 
-        var states = new Dictionary<string, string>
+        var switches = new Dictionary<string, bool>
         {
-            ["upper_fork"] = "shut",
-            ["lower_fork"] = "flowing",
+            ["upper_fork"] = false,
+            ["lower_fork"] = true,
         };
 
         Assert.Equal(
             ["river_0001"],
-            WaterActivation.ActiveBodies(scene, states).Select(static body => body.WaterBodyId));
-        Assert.False(WaterActivation.IsActive(scene, scene.WaterBodies[2], states));
+            WaterActivation.ActiveBodies(scene, switches).Select(static body => body.WaterBodyId));
+        Assert.False(WaterActivation.IsActive(scene, scene.WaterBodies[2], switches));
     }
 
     /// <summary>
@@ -125,12 +109,12 @@ public sealed class WaterActivationCascadeTests
                 new WaterJunctionDocument { End = WaterEnd.Source, WaterBodyId = "river_0001" },
                 new WaterJunctionDocument { End = WaterEnd.Source, WaterBodyId = "river_0002" },
             ]);
-        scene = WaterEditing.SetActivation(scene, "river_0003", null);
+        scene = WaterEditing.SetSwitch(scene, "river_0003", null);
 
         Assert.True(WaterActivation.IsActive(
             scene,
             scene.WaterBodies[2],
-            new Dictionary<string, string> { ["upper_fork"] = "shut" }));
+            new Dictionary<string, bool> { ["upper_fork"] = false }));
     }
 
     [Fact]
@@ -155,11 +139,11 @@ public sealed class WaterActivationCascadeTests
     public void ABodyWithNoActivationStillFollowsItsFeeder()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = WaterEditing.SetActivation(Tree(workspace), "river_0003", null);
+        var scene = WaterEditing.SetSwitch(Tree(workspace), "river_0003", null);
 
         Assert.False(WaterActivation.IsActive(
             scene,
             scene.WaterBodies[2],
-            new Dictionary<string, string> { ["upper_fork"] = "shut" }));
+            new Dictionary<string, bool> { ["upper_fork"] = false }));
     }
 }

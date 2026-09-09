@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 20;
+    public const int SceneVersion = 21;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -260,63 +260,27 @@ public enum WaterEnd
 }
 
 /// <summary>
-/// What a body leaves behind while it is inactive.
+/// One named switch a Scene can stand on or off, and where it starts.
 ///
-/// <para><c>DryBed</c> keeps the cut in every state: switched off the body is
-/// its channel without the water. <c>Absent</c> keeps neither cut nor fill, so
-/// the Terrain stands as though the body had never been authored.</para>
+/// <para>The switch lives on the Scene rather than on a body because it relates
+/// several bodies to each other: a fork and the branches leaving it, agreeing
+/// about when each of them exists. Where the Scene starts belongs to the switch
+/// for the same reason - two bodies on one switch must not be able to disagree
+/// about it.</para>
 ///
-/// <para>These are two ordinary and completely different authored intentions -
-/// a river that falls dry, and a branch that carves itself when it opens - and
-/// neither can be read off the curve. That is why the field is required
-/// wherever <see cref="WaterActivationDocument"/> is and carries no default: a
-/// default would decide silently which of the two an author meant.</para>
+/// <para>What makes a switch flip is not authored here and never will be.
+/// SceneMaker says that something is switchable and what it is called; when it
+/// flips is the consumer's decision. Neither is whether a body that exists is
+/// carrying water: a dry bed is weather, the switch is existence, and only the
+/// second one is a fact about the map.</para>
 /// </summary>
-public enum WaterInactive
-{
-    DryBed,
-    Absent,
-}
-
-/// <summary>
-/// One named set of states a Scene can be in, of which exactly one is current.
-///
-/// <para>The group lives on the Scene rather than on a body because it relates
-/// several bodies to each other: a fork is two stretches and a branch agreeing
-/// about when each of them exists. The initial state is the group's for the
-/// same reason - two bodies of one group must not be able to disagree about
-/// where the Scene starts.</para>
-///
-/// <para>What causes a state to change is not authored here and never will be.
-/// SceneMaker says that something is switchable and what the states are called;
-/// when they change is the consumer's decision.</para>
-/// </summary>
-public sealed record ActivationGroupDocument
+public sealed record SwitchDocument
 {
     /// <summary>Author-given and unique in the Scene: a consumer binds triggers to it.</summary>
-    public required string Group { get; init; }
+    public required string Switch { get; init; }
 
-    /// <summary>At least two, in authored order, which need not begin with <see cref="InitialState"/>.</summary>
-    public required List<string> States { get; init; }
-
-    public required string InitialState { get; init; }
-}
-
-/// <summary>
-/// Which states of one group a water body exists in.
-///
-/// <para><see cref="ActiveIn"/> is a list rather than a single state, and that
-/// is not generality for its own sake: with two branches on one stretch and
-/// states <c>none | first | both</c>, the first branch flows in <c>first</c> and
-/// in <c>both</c>. One state per body would force it to be authored twice with
-/// identical curves - the same duplication of geometry that a per-body band was
-/// chosen to avoid. A one-element list is the common case.</para>
-/// </summary>
-public sealed record WaterActivationDocument
-{
-    public required string Group { get; init; }
-    public required List<string> ActiveIn { get; init; }
-    public required WaterInactive Inactive { get; init; }
+    /// <summary>Where the Scene stands before anything has flipped it.</summary>
+    public required bool InitiallyOn { get; init; }
 }
 
 /// <summary>
@@ -434,13 +398,13 @@ public sealed record WaterBodyDocument
     public required string AssetKey { get; init; }
 
     /// <summary>
-    /// Which states this body exists in, or null for a body that exists in all
-    /// of them. A stretch that is wide while a branch is shut and narrow while
-    /// it flows is two bodies whose lists never both hold the current state:
-    /// alternatives are bodies, because the band is per body and a second width
-    /// is therefore a second body.
+    /// The switch that decides whether this body exists, or null for a body
+    /// that is always there. A stretch that is wide while a branch is shut and
+    /// narrow while it flows is two bodies on two switches the consumer holds
+    /// opposite: alternatives are bodies, because the band is per body and a
+    /// second width is therefore a second body.
     /// </summary>
-    public required WaterActivationDocument? Activation { get; init; }
+    public required string? Switch { get; init; }
 
     /// <summary>
     /// The bodies this one's ends sit on, ordered by end and then by id. Empty
@@ -488,10 +452,10 @@ public sealed record SceneDocument
     public required List<RouteSurfaceDocument> RouteSurfaces { get; init; }
 
     /// <summary>
-    /// The states this Scene can be in, ordered by group. Empty for a Scene
-    /// nothing switches.
+    /// The switches this Scene has, ordered by name. Empty for a Scene nothing
+    /// switches.
     /// </summary>
-    public required List<ActivationGroupDocument> ActivationGroups { get; init; }
+    public required List<SwitchDocument> Switches { get; init; }
 
     /// <summary>
     /// The authored water of this Scene. Its raster is derived at export time,
@@ -583,7 +547,7 @@ public sealed record SceneDocument
         Props = [],
         ElevationRegions = [],
         RouteSurfaces = [],
-        ActivationGroups = [],
+        Switches = [],
         WaterBodies = [],
         Bridges = [],
         TemplateDefinition = templateDefinition,

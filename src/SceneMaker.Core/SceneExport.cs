@@ -13,7 +13,7 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 18;
+    public const int Version = 19;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
@@ -46,6 +46,19 @@ public static class SceneExport
     // cells are water; the band is the truth about where the water is seen.
     // The embedded Scene is unchanged again: both halves are derived, and
     // nothing an author writes moved.
+    // Export 19 makes a switchable body a switch and a name. `scene.switches`
+    // is a list of `{switch, initially_on}` and a body carries `switch` - one
+    // string, or null for a body that is always there. Named states, `active_in`
+    // and `inactive` are gone, and with them the rule that a `dry_bed` body
+    // contributes its cut in every state: a body that is off contributes
+    // nothing at all, and the Terrain stands as though it had never been
+    // authored. What went with them is not lost, it changed hands. Whether a
+    // body that exists is carrying water is weather, and weather is the
+    // consumer's: an active body ships `bed_meters`, `surface_meters` and
+    // `cut_top_meters` per cell, so a dry channel is that body drawn without
+    // its fill. Existence is authored, weather is not, and each now lives on
+    // the side that decides it.
+    //
     // Export 18 changes no field and one rule: a body is active when its own
     // activation says so AND the body it leaves is active. A branch is fed by
     // the river it comes off, so a branch of a river that is not there has
@@ -68,7 +81,7 @@ public static class SceneExport
     // body, and `station_meters` on every cell, which the corridor rule already
     // worked out and threw away. The embedded Scene moves to 16 for the two
     // authored fields; everything else is derived as before.
-    private const int EmbeddedSceneVersion = 16;
+    private const int EmbeddedSceneVersion = 17;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -216,20 +229,37 @@ public static class SceneExport
             }
         }
 
-        // A group nothing is in is a name a consumer can bind a trigger to that
-        // switches nothing. It is a warning rather than a refusal because
-        // authoring one comes before putting the first body in it, and this
+        // A switch nothing is on is a name a consumer can bind a trigger to
+        // that switches nothing. It is a warning rather than a refusal because
+        // declaring one comes before putting the first body on it, and this
         // runs on the way to a file rather than after every edit.
-        foreach (var group in scene.ActivationGroups)
+        foreach (var declared in scene.Switches)
         {
             if (scene.WaterBodies.Any(body =>
-                    body.Activation is { } activation
-                    && string.Equals(activation.Group, group.Group, StringComparison.Ordinal)))
+                    string.Equals(body.Switch, declared.Switch, StringComparison.Ordinal)))
             {
                 continue;
             }
+
             warnings.Add(
-                $"Activation group '{group.Group}' is declared but no water body is in it, so nothing switches with it.");
+                $"Switch '{declared.Switch}' is declared but no water body is on it, so nothing switches with it.");
+        }
+
+        // The other direction is a refusal, not a warning: a body naming a
+        // switch the Scene does not declare is a body no reader can resolve,
+        // and the consumer refuses it too. Validation catches it on the way in;
+        // this catches a file that was written some other way.
+        foreach (var body in scene.WaterBodies)
+        {
+            if (body.Switch is not { } named) continue;
+            if (scene.Switches.Any(candidate =>
+                    string.Equals(candidate.Switch, named, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            throw new SceneMakerDocumentException(
+                $"Water body '{body.WaterBodyId}' names switch '{named}', which the Scene does not declare.");
         }
 
         foreach (var body in scene.WaterBodies)
@@ -320,7 +350,7 @@ public static class SceneExport
                 WaterBodyId = body.WaterBodyId,
                 WaterKind = body.WaterKind,
                 AssetKey = body.AssetKey,
-                Activation = body.Activation,
+                Switch = body.Switch,
                 Junctions = junctions.TryGetValue(body.WaterBodyId, out var meetings)
                     ? meetings
                     : [],
@@ -575,7 +605,7 @@ public static class SceneExport
     {
         Schema = scene.Schema,
         Version = EmbeddedSceneVersion,
-        ActivationGroups = scene.ActivationGroups,
+        Switches = scene.Switches,
         SceneId = scene.SceneId,
         SceneKind = scene.SceneKind,
         CoordinateSpace = scene.CoordinateSpace,
@@ -717,11 +747,12 @@ public static class SceneExport
         public required List<PropDocument> Props { get; init; }
 
         /// <summary>
-        /// The states this Scene can be in. Authored, so it belongs here rather
-        /// than beside the derived water: a group relates several bodies to each
-        /// other, which is a statement an author made and not one worked out.
+        /// The switches this Scene has. Authored, so it belongs here rather
+        /// than beside the derived water: a switch relates several bodies to
+        /// each other, which is a statement an author made and not one worked
+        /// out.
         /// </summary>
-        public required List<ActivationGroupDocument> ActivationGroups { get; init; }
+        public required List<SwitchDocument> Switches { get; init; }
 
         public required List<WaterBodyDocument> WaterBodies { get; init; }
         public required List<ExportRouteSurfaceDocument> RouteSurfaces { get; init; }
@@ -954,12 +985,13 @@ public static class SceneExport
         public required string AssetKey { get; init; }
 
         /// <summary>
-        /// Which states this body exists in, or null for a body that exists in
-        /// all of them. It is repeated from the Scene block, which is where the
-        /// author wrote it, because a consumer reading the derived water should
-        /// not have to join three arrays to learn whether to apply one of them.
+        /// The switch that decides whether this body exists, or null for one
+        /// that is always there. It is repeated from the Scene block, which is
+        /// where the author wrote it, because a consumer reading the derived
+        /// water should not have to join two arrays to learn whether to apply
+        /// one of them.
         /// </summary>
-        public required WaterActivationDocument? Activation { get; init; }
+        public required string? Switch { get; init; }
 
         /// <summary>Where this body's ends meet another, on both sides.</summary>
         public required List<ExportWaterJunctionDocument> Junctions { get; init; }

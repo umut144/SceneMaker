@@ -1104,22 +1104,17 @@ public sealed class ToolInteraction
     }
 
     /// <summary>
-    /// The states a river is offered when a group is declared for it. They are
-    /// the river's words and not the model's - <c>ActivationEditing</c> has no
-    /// opinion about what a state is called - and they are what world01 binds
-    /// its triggers to, so an author types the group's name and gets these.
+    /// Declares a switch and puts the selected body on it, in one edit. Two
+    /// operations in one undo step because they are one intention: a switch
+    /// with nothing on it is a name that switches nothing, and this is the only
+    /// way to make a drawn branch switchable without writing the document by
+    /// hand.
+    ///
+    /// <para>It starts off. A branch an author has just drawn is the branch a
+    /// trigger opens later, so the map opens without it - and the Outliner is
+    /// where the switch gets flipped to look at the other half.</para>
     /// </summary>
-    public const string WaterShutState = "dry";
-    public const string WaterFlowingState = "flowing";
-
-    /// <summary>
-    /// Declares a group and puts the selected body in its flowing state, in one
-    /// edit. Two operations in one undo step because they are one intention:
-    /// a group with nobody in it is a name that switches nothing, and this is
-    /// the only way to make a drawn branch switchable without writing the
-    /// document by hand.
-    /// </summary>
-    public ToolOutcome MakeSelectedWaterSwitchable(ToolContext context, string group)
+    public ToolOutcome MakeSelectedWaterSwitchable(ToolContext context, string name)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (Mode != EditorMode.River || ActiveTool != EditorTool.SelectRiver
@@ -1127,54 +1122,46 @@ public sealed class ToolInteraction
         {
             return ToolOutcome.Idle.Instance;
         }
-        if (string.IsNullOrWhiteSpace(group))
-            return new ToolOutcome.Message("River: a group needs a name before anything can be switched by it.");
 
-        var named = group.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            return new ToolOutcome.Message("River: a switch needs a name before anything can hang on it.");
+
+        var named = name.Trim();
         return new ToolOutcome.Edit(
-            "Declare Activation Group",
-            document => WaterEditing.SetActivation(
-                ActivationEditing.AddGroup(
-                    document, named, [WaterShutState, WaterFlowingState], WaterShutState),
+            "Declare Switch",
+            document => WaterEditing.SetSwitch(
+                SwitchEditing.AddSwitch(document, named, initiallyOn: false),
                 bodyId,
-                new WaterActivationDocument
-                {
-                    Group = named,
-                    ActiveIn = [WaterFlowingState],
-                    Inactive = WaterInactive.DryBed,
-                }),
+                named),
             Describe: (_, _) =>
-                $"'{bodyId}' is now switched by '{named}': there in {WaterFlowingState}, "
-                + $"a dry bed in {WaterShutState}, and the Scene starts {WaterShutState}.");
+                $"'{bodyId}' hangs on switch '{named}', which starts off.");
     }
 
     /// <summary>
-    /// Takes away the group the selected body is in, and with it the activation
-    /// of everything else in it - which is what removing a group means, and why
+    /// Takes away the switch the selected body is on, and with it the switch of
+    /// everything else on it - which is what removing a switch means, and why
     /// the status line says how many bodies it touched.
     /// </summary>
-    public ToolOutcome RemoveSelectedWaterActivationGroup(ToolContext context)
+    public ToolOutcome RemoveSelectedWaterSwitch(ToolContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (Mode != EditorMode.River || ActiveTool != EditorTool.SelectRiver
-            || SelectedWaterBody(context)?.Activation is not { } activation)
+            || SelectedWaterBody(context)?.Switch is not { } name)
         {
             return ToolOutcome.Idle.Instance;
         }
-        var group = activation.Group;
-        var members = ActivationEditing.Members(context.Scene, group).Count;
+
+        var members = SwitchEditing.Members(context.Scene, name).Count;
         return new ToolOutcome.Edit(
-            "Remove Activation Group",
-            document => ActivationEditing.RemoveGroup(document, group),
+            "Remove Switch",
+            document => SwitchEditing.RemoveSwitch(document, name),
             Describe: (_, _) => members == 1
-                ? $"'{group}' is gone; the one body in it is now there in every state."
-                : $"'{group}' is gone; its {members} bodies are now there in every state.");
+                ? $"'{name}' is gone; the one body on it is now always there."
+                : $"'{name}' is gone; its {members} bodies are now always there.");
     }
 
-    /// <summary>Puts the selected body into an activation group, or takes it out.</summary>
-    public ToolOutcome SetSelectedWaterActivation(
-        ToolContext context,
-        WaterActivationDocument? activation)
+    /// <summary>Puts the selected body on a switch, or takes it off.</summary>
+    public ToolOutcome SetSelectedWaterSwitch(ToolContext context, string? name)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (Mode != EditorMode.River || ActiveTool != EditorTool.SelectRiver
@@ -1182,21 +1169,37 @@ public sealed class ToolInteraction
         {
             return ToolOutcome.Idle.Instance;
         }
+
         return new ToolOutcome.Edit(
-            "Set River Activation",
-            document => WaterEditing.SetActivation(document, bodyId, activation),
-            Describe: (_, after) => activation is null
-                ? $"Set River Activation: '{bodyId}' exists in every state."
-                : $"Set River Activation: '{bodyId}' is active in "
-                    + $"{string.Join(", ", activation.ActiveIn)} of '{activation.Group}', "
-                    + $"{ActivationInactiveText(activation.Inactive)} otherwise.");
+            "Set River Switch",
+            document => WaterEditing.SetSwitch(document, bodyId, name),
+            Describe: (_, _) => name is null
+                ? $"Set River Switch: '{bodyId}' is always there."
+                : $"Set River Switch: '{bodyId}' is there while '{name}' is on.");
     }
 
-    private static string ActivationInactiveText(WaterInactive inactive) => inactive switch
+    /// <summary>
+    /// Where the Scene stands before anything has flipped it. It belongs to the
+    /// switch and not to the selected body, so it changes for every body on it
+    /// at once - which is why the status line says how many that is.
+    /// </summary>
+    public ToolOutcome SetSelectedWaterSwitchInitiallyOn(ToolContext context, bool initiallyOn)
     {
-        WaterInactive.DryBed => "a dry bed",
-        _ => "no trace",
-    };
+        ArgumentNullException.ThrowIfNull(context);
+        if (Mode != EditorMode.River || ActiveTool != EditorTool.SelectRiver
+            || SelectedWaterBody(context)?.Switch is not { } name)
+        {
+            return ToolOutcome.Idle.Instance;
+        }
+
+        var members = SwitchEditing.Members(context.Scene, name).Count;
+        return new ToolOutcome.Edit(
+            "Set Switch Start",
+            document => SwitchEditing.SetInitiallyOn(document, name, initiallyOn),
+            Describe: (_, _) => initiallyOn
+                ? $"'{name}' starts on, so its {members} body(s) are there when the map opens."
+                : $"'{name}' starts off, so its {members} body(s) are missing when the map opens.");
+    }
 
     /// <summary>
     /// What a body is, in one line: what it is made of, how long it runs, what
@@ -1207,14 +1210,14 @@ public sealed class ToolInteraction
         var meets = body.Junctions.Count == 0
             ? string.Empty
             : $" Meets {string.Join(", ", body.Junctions.Select(claim => $"'{claim.WaterBodyId}'"))}.";
-        var states = body.Activation is { } activation
-            ? $" Active in {string.Join(", ", activation.ActiveIn)} of '{activation.Group}'."
+        var switched = body.Switch is { } name
+            ? $" There while '{name}' is on."
             : " Always there.";
         var length = WaterGeometry.LengthMeters(context.Metrics, body);
         return FormattableString.Invariant(
             $"Selected '{body.WaterBodyId}': {body.Points.Count} points, {length:0.##} m long.")
             + meets
-            + states;
+            + switched;
     }
 
     private static string WaterPointText(WaterBodyDocument body, int index)

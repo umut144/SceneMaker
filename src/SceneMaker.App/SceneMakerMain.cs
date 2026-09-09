@@ -59,8 +59,6 @@ public sealed partial class SceneMakerMain : Control
     private const float ViewToggleOverlayWidth = 152f;
     private const float ViewToggleOverlayHeight = 42f;
     private const float ViewToggleOverlayMargin = 8f;
-    private const int RiverInactiveDryBed = 1;
-    private const int RiverInactiveAbsent = 2;
     private const int PathGradeDownFifty = 1;
     private const int PathGradeDownTwentyFive = 2;
     private const int PathGradeLevel = 3;
@@ -75,12 +73,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _riverWidthEdit = new();
     private readonly Label _riverSwitchLabel = new();
     private readonly OptionButton _riverSwitchEdit = new();
-    private readonly Label _riverInactiveLabel = new();
-    private readonly OptionButton _riverInactiveEdit = new();
-    private readonly Label _riverStatesLabel = new();
-    private readonly HBoxContainer _riverStatesRow = new();
-    private readonly Dictionary<string, CheckBox> _riverStateBoxes = [];
-    private string? _riverStatesGroup;
+    private readonly CheckBox _riverInitiallyOnToggle = new();
     private readonly Label _riverNewSwitchLabel = new();
     private readonly LineEdit _riverNewSwitchEdit = new();
     private readonly Button _riverRemoveSwitch = new();
@@ -575,7 +568,7 @@ public sealed partial class SceneMakerMain : Control
         // flattened list of "group: state" pairs. Two entries of one switch
         // then read as two switches, which is exactly how it was read.
         _riverSwitchLabel.Name = "RiverSwitchLabel";
-        _riverSwitchLabel.Text = "Switch";
+        _riverSwitchLabel.Text = "Exists when";
         _riverSwitchLabel.VerticalAlignment = VerticalAlignment.Center;
         _riverSwitchEdit.Name = "RiverSwitch";
         _riverSwitchEdit.TooltipText =
@@ -583,30 +576,19 @@ public sealed partial class SceneMakerMain : Control
             + "switch is there in every state of the Scene.";
         _riverSwitchEdit.ItemSelected += SetRiverSwitch;
 
-        _riverStatesLabel.Name = "RiverStatesLabel";
-        _riverStatesLabel.Text = "On in";
-        _riverStatesLabel.VerticalAlignment = VerticalAlignment.Center;
-        _riverStatesRow.Name = "RiverStates";
-        _riverStatesRow.AddThemeConstantOverride("separation", 8);
-        _riverStatesRow.TooltipText =
-            "The positions of that switch this body is there in. At least one, "
-            + "because a body there in none is a body nobody can ever see.";
+        // Where the Scene stands before anything has flipped it. It belongs to
+        // the switch and not to this body, so it moves every river on that
+        // switch at once, and the status line says how many.
+        _riverInitiallyOnToggle.Name = "RiverInitiallyOn";
+        _riverInitiallyOnToggle.Text = "Initially on?";
+        _riverInitiallyOnToggle.TooltipText =
+            "Whether this switch is on when the map opens. It belongs to the "
+            + "switch, so it moves every river on it at once.";
+        _riverInitiallyOnToggle.Toggled += SetRiverInitiallyOn;
 
-        _riverInactiveLabel.Name = "RiverInactiveLabel";
-        _riverInactiveLabel.Text = "When off";
-        _riverInactiveLabel.VerticalAlignment = VerticalAlignment.Center;
-        _riverInactiveEdit.Name = "RiverInactive";
-        _riverInactiveEdit.AddItem("Dry bed", RiverInactiveDryBed);
-        _riverInactiveEdit.AddItem("No trace", RiverInactiveAbsent);
-        _riverInactiveEdit.TooltipText =
-            "What is left where this body is while it is switched off. A dry bed "
-            + "keeps its channel cut out of the Terrain; no trace leaves the "
-            + "ground as though it had never been authored.";
-        _riverInactiveEdit.ItemSelected += SetRiverInactive;
-
-        // Shown only while the selected river is in no group: naming one is how
-        // a drawn branch becomes switchable, and until today that meant writing
-        // the document by hand.
+        // Shown only while the selected river is on no switch: naming one is
+        // how a drawn branch becomes switchable, and until recently that meant
+        // writing the document by hand.
         _riverNewSwitchLabel.Name = "RiverNewSwitchLabel";
         _riverNewSwitchLabel.Text = "New switch";
         _riverNewSwitchLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -989,8 +971,7 @@ public sealed partial class SceneMakerMain : Control
         AddInspectorRow(_waterClearanceLabel, _waterClearanceEdit);
         AddInspectorRow(_waterDerivedSpanLabel);
         AddInspectorRow(_riverSwitchLabel, _riverSwitchEdit);
-        AddInspectorRow(_riverStatesLabel, _riverStatesRow);
-        AddInspectorRow(_riverInactiveLabel, _riverInactiveEdit);
+        AddInspectorRow(_riverInitiallyOnToggle);
         AddInspectorRow(_riverNewSwitchLabel, _riverNewSwitchEdit);
         AddInspectorRow(_riverRemoveSwitch);
         AddInspectorRow(_pathWidthLabel, _pathWidthEdit);
@@ -2936,12 +2917,8 @@ public sealed partial class SceneMakerMain : Control
                 _interaction.State.SetWaterChannelDepth(point.ChannelDepthMeters);
                 _interaction.State.SetWaterClearanceAbove(point.ClearanceAboveMeters);
             }
-            SelectRiverSwitchItem(body.Activation);
-            SelectOptionItem(
-                _riverInactiveEdit,
-                body.Activation?.Inactive == WaterInactive.Absent
-                    ? RiverInactiveAbsent
-                    : RiverInactiveDryBed);
+            SelectRiverSwitchItem(body.Switch);
+            _riverInitiallyOnToggle.SetPressedNoSignal(InitiallyOn(body.Switch));
         }
         finally
         {
@@ -2963,122 +2940,35 @@ public sealed partial class SceneMakerMain : Control
         _riverSwitchEdit.AddItem("Every state", 0);
         var document = _controller.Document;
         if (document is null) return;
-        foreach (var group in document.ActivationGroups)
+        foreach (var declared in document.Switches)
         {
-            _riverSwitchEdit.AddItem(group.Group, _riverSwitchChoices.Count);
-            _riverSwitchChoices.Add(group.Group);
+            _riverSwitchEdit.AddItem(declared.Switch, _riverSwitchChoices.Count);
+            _riverSwitchChoices.Add(declared.Switch);
         }
     }
 
-    private void SelectRiverSwitchItem(WaterActivationDocument? activation)
+    private void SelectRiverSwitchItem(string? name)
     {
         var wanted = 0;
-        if (activation is not null)
+        if (name is not null)
         {
             for (var index = 1; index < _riverSwitchChoices.Count; index++)
             {
-                if (!string.Equals(
-                    _riverSwitchChoices[index], activation.Group, StringComparison.Ordinal))
-                {
+                if (!string.Equals(_riverSwitchChoices[index], name, StringComparison.Ordinal))
                     continue;
-                }
-
                 wanted = index;
                 break;
             }
         }
 
         SelectOptionItem(_riverSwitchEdit, wanted);
-        ShowRiverStates(activation);
     }
 
-    /// <summary>
-    /// One box per position of the chosen switch, ticked where the body is
-    /// there. The boxes are rebuilt only when the switch itself changes, never
-    /// when one of them is ticked - rebuilding inside a tick would free the box
-    /// that is emitting it.
-    /// </summary>
-    private void ShowRiverStates(WaterActivationDocument? activation)
-    {
-        IReadOnlyList<string> states = [];
-        if (activation is not null && _controller.Document is { } document)
-        {
-            states = document.ActivationGroups
-                .FirstOrDefault(group => string.Equals(
-                    group.Group, activation.Group, StringComparison.Ordinal))
-                ?.States ?? [];
-        }
-
-        if (!string.Equals(_riverStatesGroup, activation?.Group, StringComparison.Ordinal)
-            || _riverStateBoxes.Count != states.Count)
-        {
-            _riverStatesGroup = activation?.Group;
-            _riverStateBoxes.Clear();
-            foreach (var child in _riverStatesRow.GetChildren())
-            {
-                _riverStatesRow.RemoveChild(child);
-                child.QueueFree();
-            }
-
-            foreach (var state in states)
-            {
-                var named = state;
-                var box = new CheckBox { Text = state };
-                box.Toggled += on => ToggleRiverState(named, on);
-                _riverStatesRow.AddChild(box);
-                _riverStateBoxes[state] = box;
-            }
-        }
-
-        foreach (var (state, box) in _riverStateBoxes)
-        {
-            box.SetPressedNoSignal(
-                activation is not null
-                && activation.ActiveIn.Contains(state, StringComparer.Ordinal));
-        }
-    }
-
-    private void ToggleRiverState(string state, bool on)
-    {
-        if (_loadingRiverNumbers) return;
-        if (_canvas.SelectedWaterBody?.Activation is not { } activation) return;
-
-        List<string> wanted = [];
-        foreach (var (name, box) in _riverStateBoxes)
-        {
-            if (box.ButtonPressed) wanted.Add(name);
-        }
-
-        if (wanted.Count == 0)
-        {
-            // Refused rather than stored. A body there in no position of its
-            // switch is a body nobody can ever see, and taking it off the
-            // switch is what was meant.
-            _riverStateBoxes[state].SetPressedNoSignal(true);
-            SetStatus(
-                "A river has to be there in at least one position of its switch. "
-                + "Remove switch takes it off the switch instead.");
-            return;
-        }
-
-        HandleToolOutcome(_canvas.SetSelectedWaterActivation(
-            activation with { ActiveIn = InDeclaredOrder(activation.Group, wanted) }));
-    }
-
-    /// <summary>
-    /// The ticked positions in the order the switch declares them, so that the
-    /// document reads the same whichever box was clicked last.
-    /// </summary>
-    private List<string> InDeclaredOrder(string group, IReadOnlyCollection<string> states)
-    {
-        var declared = _controller.Document?.ActivationGroups
-            .FirstOrDefault(candidate => string.Equals(
-                candidate.Group, group, StringComparison.Ordinal))
-            ?.States;
-        return declared is null
-            ? [.. states]
-            : declared.Where(state => states.Contains(state, StringComparer.Ordinal)).ToList();
-    }
+    private bool InitiallyOn(string? name) =>
+        name is not null
+        && _controller.Document?.Switches.FirstOrDefault(candidate =>
+            string.Equals(candidate.Switch, name, StringComparison.Ordinal))
+            is { InitiallyOn: true };
 
     private static void SelectOptionItem(OptionButton button, int itemId)
     {
@@ -3095,40 +2985,13 @@ public sealed partial class SceneMakerMain : Control
         if (_loadingRiverNumbers) return;
         var id = _riverSwitchEdit.GetItemId((int)item);
         if (id < 0 || id >= _riverSwitchChoices.Count) return;
-        if (_riverSwitchChoices[id] is not { } group)
-        {
-            HandleToolOutcome(_canvas.SetSelectedWaterActivation(null));
-            return;
-        }
-
-        var declared = _controller.Document?.ActivationGroups
-            .FirstOrDefault(candidate => string.Equals(
-                candidate.Group, group, StringComparison.Ordinal));
-        if (declared is null) return;
-
-        // Moving to a switch it is already on keeps the positions. Coming from
-        // no switch at all, it starts where the Scene starts - which is the
-        // state the author is looking at on the Canvas.
-        var current = _canvas.SelectedWaterBody?.Activation;
-        List<string> states =
-            current is not null
-            && string.Equals(current.Group, group, StringComparison.Ordinal)
-                ? [.. current.ActiveIn]
-                : [declared.InitialState];
-        HandleToolOutcome(_canvas.SetSelectedWaterActivation(new WaterActivationDocument
-        {
-            Group = group,
-            ActiveIn = states,
-            Inactive = CurrentRiverInactive(),
-        }));
+        HandleToolOutcome(_canvas.SetSelectedWaterSwitch(_riverSwitchChoices[id]));
     }
 
-    private void SetRiverInactive(long item)
+    private void SetRiverInitiallyOn(bool initiallyOn)
     {
         if (_loadingRiverNumbers) return;
-        if (_canvas.SelectedWaterBody?.Activation is not { } activation) return;
-        HandleToolOutcome(_canvas.SetSelectedWaterActivation(
-            activation with { Inactive = CurrentRiverInactive() }));
+        HandleToolOutcome(_canvas.SetSelectedWaterSwitchInitiallyOn(initiallyOn));
     }
 
     private void DeclareRiverSwitch(string text)
@@ -3139,12 +3002,7 @@ public sealed partial class SceneMakerMain : Control
     }
 
     private void RemoveRiverSwitch() =>
-        HandleToolOutcome(_canvas.RemoveSelectedWaterActivationGroup());
-
-    private WaterInactive CurrentRiverInactive() =>
-        _riverInactiveEdit.GetItemId(_riverInactiveEdit.Selected) == RiverInactiveAbsent
-            ? WaterInactive.Absent
-            : WaterInactive.DryBed;
+        HandleToolOutcome(_canvas.RemoveSelectedWaterSwitch());
 
     private void SetPathWidth(double value)
     {
@@ -3348,15 +3206,12 @@ public sealed partial class SceneMakerMain : Control
         _riverWidthEdit.Visible = riverActive;
         _riverSwitchLabel.Visible = selectedRiverBody is not null;
         _riverSwitchEdit.Visible = selectedRiverBody is not null;
-        _riverInactiveLabel.Visible = selectedRiverBody?.Activation is not null;
-        _riverInactiveEdit.Visible = selectedRiverBody?.Activation is not null;
-        _riverStatesLabel.Visible = selectedRiverBody?.Activation is not null;
-        _riverStatesRow.Visible = selectedRiverBody?.Activation is not null;
+        _riverInitiallyOnToggle.Visible = selectedRiverBody?.Switch is not null;
         // One of the two at a time: name a group while the river is in none,
         // take it away while it is in one.
-        _riverNewSwitchLabel.Visible = selectedRiverBody is { Activation: null };
-        _riverNewSwitchEdit.Visible = selectedRiverBody is { Activation: null };
-        _riverRemoveSwitch.Visible = selectedRiverBody?.Activation is not null;
+        _riverNewSwitchLabel.Visible = selectedRiverBody is { Switch: null };
+        _riverNewSwitchEdit.Visible = selectedRiverBody is { Switch: null };
+        _riverRemoveSwitch.Visible = selectedRiverBody?.Switch is not null;
         _pathWidthLabel.Visible = pathActive;
         _pathWidthEdit.Visible = pathActive;
         _bridgePlankCountLabel.Visible = bridgeActive;

@@ -360,18 +360,26 @@ public sealed partial class SceneCanvas : Control
         return outcome;
     }
 
-    public ToolOutcome RemoveSelectedWaterActivationGroup()
+    public ToolOutcome RemoveSelectedWaterSwitch()
     {
         if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
-        var outcome = _interaction.RemoveSelectedWaterActivationGroup(context);
+        var outcome = _interaction.RemoveSelectedWaterSwitch(context);
         QueueRedraw();
         return outcome;
     }
 
-    public ToolOutcome SetSelectedWaterActivation(WaterActivationDocument? activation)
+    public ToolOutcome SetSelectedWaterSwitch(string? name)
     {
         if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
-        var outcome = _interaction.SetSelectedWaterActivation(context, activation);
+        var outcome = _interaction.SetSelectedWaterSwitch(context, name);
+        QueueRedraw();
+        return outcome;
+    }
+
+    public ToolOutcome SetSelectedWaterSwitchInitiallyOn(bool initiallyOn)
+    {
+        if (CurrentContext() is not { } context) return ToolOutcome.Idle.Instance;
+        var outcome = _interaction.SetSelectedWaterSwitchInitiallyOn(context, initiallyOn);
         QueueRedraw();
         return outcome;
     }

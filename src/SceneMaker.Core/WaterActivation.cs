@@ -1,45 +1,48 @@
 namespace SceneMaker.Core;
 
 /// <summary>
-/// Which water bodies a Scene has while it stands in one state.
+/// Which water bodies a Scene has while its switches stand a certain way.
 ///
-/// <para>A body says which states of its group it exists in. That alone is not
-/// the whole answer, because a branch is fed by the body it leaves: a branch of
-/// a river that is not there has nothing running through it. So activation
-/// runs down the junctions - a body is there when its own activation says so
-/// <em>and</em> the body it leaves is there - and switching a river off takes
-/// everything hanging under it with it.</para>
+/// <para>A body names the switch that decides whether it exists. That alone is
+/// not the whole answer, because a branch is fed by the body it leaves: a
+/// branch of a river that is not there has nothing running through it. So
+/// existence runs down the junctions - a body is there when its own switch is
+/// on <em>and</em> the body it leaves is there - and switching a river off
+/// takes everything hanging under it with it.</para>
 ///
 /// <para>Nothing about that is authored. The tree is the junctions, which are
 /// derived from the curves, and this rule reads it; a document that repeated a
-/// parent's states on every child would be a document where the two could
+/// parent's switch on every child would be a document where the two could
 /// disagree.</para>
+///
+/// <para>Whether a body that exists is carrying water is a different question
+/// and not one this file answers. A dry bed is weather; the switch is
+/// existence.</para>
 /// </summary>
 public static class WaterActivation
 {
     /// <summary>
-    /// Whether <paramref name="body"/> is there while each named group stands
-    /// in the given state. A group the caller says nothing about stands in its
-    /// <c>initial_state</c>, so passing nothing asks about the Scene as it
-    /// starts.
+    /// Whether <paramref name="body"/> is there while the named switches stand
+    /// as given. A switch the caller says nothing about stands where the Scene
+    /// starts it, so passing nothing asks about the Scene as it opens.
     /// </summary>
     public static bool IsActive(
         SceneDocument scene,
         WaterBodyDocument body,
-        IReadOnlyDictionary<string, string>? states = null)
+        IReadOnlyDictionary<string, bool>? switches = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(body);
-        return IsActive(scene, body, states, []);
+        return IsActive(scene, body, switches, []);
     }
 
-    /// <summary>Every body the Scene has in that state, in document order.</summary>
+    /// <summary>Every body the Scene has that way, in document order.</summary>
     public static IReadOnlyList<WaterBodyDocument> ActiveBodies(
         SceneDocument scene,
-        IReadOnlyDictionary<string, string>? states = null)
+        IReadOnlyDictionary<string, bool>? switches = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        return scene.WaterBodies.Where(body => IsActive(scene, body, states)).ToList();
+        return scene.WaterBodies.Where(body => IsActive(scene, body, switches)).ToList();
     }
 
     /// <summary>
@@ -64,10 +67,10 @@ public static class WaterActivation
     private static bool IsActive(
         SceneDocument scene,
         WaterBodyDocument body,
-        IReadOnlyDictionary<string, string>? states,
+        IReadOnlyDictionary<string, bool>? switches,
         HashSet<string> walking)
     {
-        if (!SwitchedOn(scene, body, states)) return false;
+        if (!SwitchedOn(scene, body, switches)) return false;
 
         var feeders = Feeders(scene, body);
         if (feeders.Count == 0) return true;
@@ -77,7 +80,7 @@ public static class WaterActivation
         if (!walking.Add(body.WaterBodyId)) return false;
         try
         {
-            return feeders.Any(feeder => IsActive(scene, feeder, states, walking));
+            return feeders.Any(feeder => IsActive(scene, feeder, switches, walking));
         }
         finally
         {
@@ -89,16 +92,14 @@ public static class WaterActivation
     private static bool SwitchedOn(
         SceneDocument scene,
         WaterBodyDocument body,
-        IReadOnlyDictionary<string, string>? states)
+        IReadOnlyDictionary<string, bool>? switches)
     {
-        if (body.Activation is not { } activation) return true;
-        var group = scene.ActivationGroups.FirstOrDefault(candidate =>
-            string.Equals(candidate.Group, activation.Group, StringComparison.Ordinal));
-        if (group is null) return false;
-
-        var current = states is not null && states.TryGetValue(group.Group, out var chosen)
-            ? chosen
-            : group.InitialState;
-        return activation.ActiveIn.Contains(current, StringComparer.Ordinal);
+        if (body.Switch is not { } name) return true;
+        var declared = scene.Switches.FirstOrDefault(candidate =>
+            string.Equals(candidate.Switch, name, StringComparison.Ordinal));
+        if (declared is null) return false;
+        return switches is not null && switches.TryGetValue(name, out var on)
+            ? on
+            : declared.InitiallyOn;
     }
 }

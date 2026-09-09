@@ -71,10 +71,10 @@ public static class WaterEditing
             WaterBodyId = NextWaterBodyId(scene, WaterKind.River),
             WaterKind = WaterKind.River,
             AssetKey = assetKey,
-            // A drawn river exists in every state and meets nothing. Both are
-            // changed by their own operations rather than by drawing, so that
-            // the tool that authors geometry authors only geometry.
-            Activation = null,
+            // A drawn river is always there and meets nothing. Both are changed
+            // by their own operations rather than by drawing, so that the tool
+            // that authors geometry authors only geometry.
+            Switch = null,
             Junctions = [],
             Points = [.. points],
         };
@@ -116,39 +116,25 @@ public static class WaterEditing
     }
 
     /// <summary>
-    /// Puts a body into an activation group, or takes it out of every group
-    /// with null. What the states mean and when they change is not decided
-    /// here and never will be; this only records which of them the body exists
-    /// in.
+    /// Puts a body on a switch, or takes it off every switch with null. When
+    /// the switch flips is not decided here and never will be; this only
+    /// records which switch decides whether the body exists.
     /// </summary>
-    public static SceneDocument SetActivation(
+    public static SceneDocument SetSwitch(
         SceneDocument scene,
         string waterBodyId,
-        WaterActivationDocument? activation)
+        string? name)
     {
         ArgumentNullException.ThrowIfNull(scene);
         var body = Require(scene, waterBodyId);
-        if (activation is not null)
+        if (name is not null
+            && !scene.Switches.Any(candidate =>
+                string.Equals(candidate.Switch, name, StringComparison.Ordinal)))
         {
-            var group = scene.ActivationGroups.FirstOrDefault(candidate =>
-                string.Equals(candidate.Group, activation.Group, StringComparison.Ordinal))
-                ?? throw new SceneMakerDocumentException(
-                    $"The Scene declares no activation group '{activation.Group}'.");
-            if (activation.ActiveIn.Count == 0)
-            {
-                throw new SceneMakerDocumentException(
-                    "A body has to be active in at least one state; one active in none is a body nobody can see.");
-            }
-            foreach (var state in activation.ActiveIn)
-            {
-                if (!group.States.Contains(state, StringComparer.Ordinal))
-                {
-                    throw new SceneMakerDocumentException(
-                        $"Activation group '{group.Group}' has no state '{state}'.");
-                }
-            }
+            throw new SceneMakerDocumentException($"The Scene declares no switch '{name}'.");
         }
-        return Replace(scene, body with { Activation = activation });
+
+        return Replace(scene, body with { Switch = name });
     }
 
     /// <summary>
