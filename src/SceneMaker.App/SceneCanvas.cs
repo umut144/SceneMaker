@@ -49,6 +49,10 @@ public sealed partial class SceneCanvas : Control
     private static readonly Color TemplateAnchorText = Color.FromHtml("#252A31");
     private static readonly Color TemplatePreviewOutline = Color.FromHtml("#FFFFFF");
     private static readonly Color WaterCurveColor = Color.FromHtml("#FFD866");
+    // The river `Re-Attach` is holding. Violet because yellow already means
+    // "a press would take this", and during the middle phases of Re-Attach the
+    // chosen river is the one thing a press cannot take.
+    private static readonly Color ReAttachChosenColor = Color.FromHtml("#B47CFF");
     private static readonly Color WaterHandleColor = Color.FromHtml("#8FE3FF");
 
     /// <summary>
@@ -1734,9 +1738,15 @@ public sealed partial class SceneCanvas : Control
             return;
         }
 
-        if (ActiveTool is EditorTool.InsertRiverPoint or EditorTool.ReAttachRiver)
+        if (ActiveTool == EditorTool.InsertRiverPoint)
         {
             DrawWaterInsertPreview(pan, zoom, sceneHeightAuthoringPixels);
+            return;
+        }
+
+        if (ActiveTool == EditorTool.ReAttachRiver)
+        {
+            DrawWaterReAttachPreview(pan, zoom, sceneHeightAuthoringPixels);
             return;
         }
 
@@ -1789,17 +1799,6 @@ public sealed partial class SceneCanvas : Control
     }
 
     /// <summary>
-    /// The selected river: the cells it claims, its centerline, and its
-    /// authored points as something grabbable. While a point or the whole curve
-    /// is being dragged this draws the candidate rather than what is stored, so
-    /// the author sees where releasing would put it.
-    ///
-    /// <para>A stated fork the curve no longer supports turns the selection
-    /// red. That is a warning and not a refusal - the move is taken either way
-    /// - but it is the one thing an author must not first read in an export.
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// The river under an `Insert Point` pointer: its curve, its authored
     /// points, and a ring where the new one would land. A river's curve is
     /// invisible unless something is selected, and this is the one tool whose
@@ -1842,28 +1841,108 @@ public sealed partial class SceneCanvas : Control
             DrawArc(landing, 6.5f, 0f, Mathf.Tau, 24, SelectionColor, 2.0f);
         }
 
-        // `Re-Attach` between its two presses: the end it is carrying, and the
-        // straight run it would leave behind. Drawn because that run is the
-        // thing the author has to bend back afterwards, and seeing it before
-        // the press is what makes the second press a decision.
-        if (_interaction.ReAttachEnd is not { } carrying) return;
-        if (context.Scene.WaterBodies.FirstOrDefault(candidate => string.Equals(
-                candidate.WaterBodyId, carrying.WaterBodyId, StringComparison.Ordinal))
-            is not { } carried)
+    }
+
+    /// <summary>
+    /// The three phases of `Re-Attach`, each drawing only what its own press can
+    /// take.
+    ///
+    /// <para>Phase one lights the river under the pointer yellow, which is what
+    /// "a press would take this" means everywhere else here. Phase two holds
+    /// that river in violet with its authored points showing and rings the end
+    /// a press would carry - no other body can answer, so the ring is a
+    /// promise. Phase three draws the straight run the carried end would leave
+    /// behind and the place on another river it would land.</para>
+    ///
+    /// <para>That straight run is usually wrong, and it is drawn before the
+    /// press rather than after it so that bending it back with `Insert Point`
+    /// is a decision the author has already made.</para>
+    /// </summary>
+    private void DrawWaterReAttachPreview(Vector2 pan, float zoom, int sceneHeightAuthoringPixels)
+    {
+        if (CurrentContext() is not { } context) return;
+        var preview = _interaction.WaterReAttach(context);
+
+        Vector2 Screen(double authoringX, double authoringY) => pan + new Vector2(
+            (float)authoringX * zoom,
+            (sceneHeightAuthoringPixels - (float)authoringY) * zoom);
+
+        void Curve(IReadOnlyList<ChainPoint> centerline, Color color)
         {
+            if (centerline.Count < 2) return;
+            var line = new Vector2[centerline.Count];
+            for (var index = 0; index < centerline.Count; index++)
+                line[index] = Screen(centerline[index].X, centerline[index].Y);
+            DrawPolyline(line, color, 3.0f);
+        }
+
+        if (preview.Chosen is not { } chosen)
+        {
+            if (preview.Hovered is null) return;
+            Curve(preview.HoveredLine, SelectionColor);
             return;
         }
 
-        var carriedPoint = carrying.End == WaterEnd.Source
-            ? carried.Points[0]
-            : carried.Points[^1];
-        var from = Screen(
-            carriedPoint.PositionAuthoringPx.X, carriedPoint.PositionAuthoringPx.Y);
+        Curve(preview.ChosenLine, ReAttachChosenColor);
+        for (var index = 0; index < chosen.Points.Count; index++)
+        {
+            var point = chosen.Points[index];
+            var centre = Screen(point.PositionAuthoringPx.X, point.PositionAuthoringPx.Y);
+            var isEnd = index == 0 || index == chosen.Points.Count - 1;
+            DrawCircle(centre, isEnd ? 5.5f : 3.5f, ReAttachChosenColor);
+        }
+
+        if (preview.EndIndex is { } endIndex)
+        {
+            var aimed = chosen.Points[endIndex];
+            DrawArc(
+                Screen(aimed.PositionAuthoringPx.X, aimed.PositionAuthoringPx.Y),
+                8.0f,
+                0f,
+                Mathf.Tau,
+                24,
+                SelectionColor,
+                2.0f);
+            return;
+        }
+
+        if (_interaction.ReAttachEnd is not { } carrying) return;
+        var carried = carrying.End == WaterEnd.Source ? chosen.Points[0] : chosen.Points[^1];
+        var from = Screen(carried.PositionAuthoringPx.X, carried.PositionAuthoringPx.Y);
         DrawCircle(from, 6.5f, SelectionColor);
-        if (_interaction.PointerAuthoring is not { } pointer) return;
-        DrawLine(from, Screen(pointer.X, pointer.Y), SelectionColor, 2.0f);
+
+        if (preview.Target is { } target)
+        {
+            var landing = Screen(target.PositionAuthoringPx.X, target.PositionAuthoringPx.Y);
+            DrawLine(from, landing, SelectionColor, 2.0f);
+            DrawArc(landing, 7.0f, 0f, Mathf.Tau, 24, SelectionColor, 2.0f);
+            return;
+        }
+
+        // Off every other river: the run is drawn in the colour of a press that
+        // would be refused rather than not drawn at all, because where the
+        // pointer is is still the question being asked.
+        if (_interaction.PointerAuthoring is { } pointer)
+        {
+            DrawLine(
+                from,
+                Screen(pointer.X, pointer.Y),
+                new Color(InvalidPreviewColor.R, InvalidPreviewColor.G, InvalidPreviewColor.B, 0.8f),
+                2.0f);
+        }
     }
 
+    /// <summary>
+    /// The selected river: the cells it claims, its centerline, and its
+    /// authored points as something grabbable. While a point or the whole curve
+    /// is being dragged this draws the candidate rather than what is stored, so
+    /// the author sees where releasing would put it.
+    ///
+    /// <para>A stated fork the curve no longer supports turns the selection
+    /// red. That is a warning and not a refusal - the move is taken either way
+    /// - but it is the one thing an author must not first read in an export.
+    /// </para>
+    /// </summary>
     private void DrawWaterSelectionPreview(
         SceneDocument document,
         Vector2 pan,

@@ -367,27 +367,40 @@ rot. Bis hierher gab es nur einen Weg, eine Verbindung zu **knüpfen**: einen
 neuen Ast mit `Create Branch` zeichnen. Zerreißen ging durch Ziehen, Knüpfen
 nicht — ein abgehängter Ast mit zwanzig Punkten war nur noch löschbar.
 
-`Re-Attach` schließt das, **in zwei Drücken**:
+`Re-Attach` schließt das, **in drei Phasen**. Jede Phase verengt, was die
+nächste überhaupt treffen kann:
 
-1. **Auf ein Ende drücken** — Quelle oder Mündung, denn nur dort kann eine
-   Junction sitzen. Ein Punkt dazwischen sagt das und wird nicht genommen.
-2. **Auf den Fluss drücken**, den dieses Ende treffen soll, nahe seiner
-   Mittellinie. Das Ende springt auf den Anker, übernimmt die Oberflächenhöhe
-   des anderen Körpers dort — das ist es, was die beiden zum selben Wasser macht
-   — und die Behauptung wird neu gesetzt.
+1. **Einen Fluss wählen.** Der Körper unter dem Zeiger leuchtet ganz gelb; ein
+   Druck nimmt ihn. Danach ist er violett gezeichnet, mit seinen authorierten
+   Punkten, und alle anderen Flüsse sind gesperrt.
+2. **In Ruhe ein Ende wählen** — Quelle oder Mündung, denn nur dort kann eine
+   Junction sitzen. In dieser Phase antwortet nur der gewählte Fluss, also kann
+   nichts anderes den Druck wegschnappen. Ein Punkt dazwischen sagt das und wird
+   nicht genommen.
+3. **Den Fluss wählen**, den dieses Ende treffen soll, nahe seiner Mittellinie.
+   Das Ende springt auf den Anker, übernimmt die Oberflächenhöhe des anderen
+   Körpers dort — das ist es, was die beiden zum selben Wasser macht — und die
+   Behauptung wird neu gesetzt. Der getragene Fluss selbst ist aus der Suche
+   genommen: seine eigene Linie läuft durch die Stelle, auf die der Autor zielt,
+   und ein Kandidat, der nur falsch sein kann, sollte kein Kandidat sein.
 
-Der erste Druck sieht **nur Enden an**, und von denen das nächste. Das ist der
-Grund, aus dem es sich vorher unruhig anfühlte: an einer Gabelung liegt die
-Quelle des Astes auf der Mittellinie des Elternflusses, und solange beide
-Kandidatenarten antworten durften, wechselte der Gewinner bei jeder kleinen
-Bewegung des Zeigers — eine Mittellinie ist hunderte Pixel lang, ein
-authorierter Punkt ist eine Stelle. Der Ring auf der Linie wird in dieser Phase
-gar nicht erst gezeichnet; sichtbar ist der Ring um das Ende, das ein Druck
-nähme.
+Die Phasen gibt es wegen der Stelle, an der eine Junction sitzt. Die Quelle
+eines Astes liegt auf der Mittellinie seines Elternflusses — genau dort, wo der
+Autor am ehesten zugreifen will, liegen also zwei Körper und zwei Arten von
+Kandidat übereinander. Solange beide antworten durften, wechselte der Gewinner
+bei jeder kleinen Bewegung des Zeigers: eine Mittellinie ist hunderte Pixel
+lang, ein authorierter Punkt ist eine Stelle. Vorher von Hand zu verengen ist
+stumpfer als kluges Auswählen und funktioniert immer.
 
-`Escape` gibt das getragene Ende zurück. Zwischen den beiden Drücken zeichnet
-der Canvas das getragene Ende und die Gerade zum Zeiger: die Luftlinie, die
-entstehen wird, ist die Sache, die der Autor danach wieder gerade biegt.
+`Escape` springt **eine Phase zurück**, nicht aus der ganzen Geste heraus: erst
+gibt es das getragene Ende zurück (der Fluss bleibt gewählt), dann den Fluss.
+Wer das falsche Ende erwischt hat, behält den Fluss, aus dem er es genommen hat.
+
+Der Canvas zeigt in jeder Phase genau das, was ihr Druck nehmen kann: gelb den
+Fluss unter dem Zeiger, violett den gewählten mit seinen Punkten, einen Ring um
+das Ende, das ein Druck trüge, und schließlich die Gerade vom getragenen Ende
+zum Landepunkt — rot, solange der Zeiger auf keinem anderen Fluss liegt. Diese
+Luftlinie ist die Sache, die der Autor danach wieder gerade biegt.
 
 Der bewegte Punkt **verliert seine Handles**. Sie waren relativ zu einer Stelle
 gezogen, an der der Punkt nicht mehr ist, und beschrieben nach einem Sprung über

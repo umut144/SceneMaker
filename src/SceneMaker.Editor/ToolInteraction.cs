@@ -213,6 +213,17 @@ public sealed class ToolInteraction
                 ? null
                 : $"The unfinished hill contour of {placed} point{Plural(placed)} was discarded.";
         }
+        if (Mode == EditorMode.River && ActiveTool == EditorTool.ReAttachRiver)
+        {
+            if (_reAttachEnd is { } carried)
+            {
+                return $"The {carried.End.ToString().ToLowerInvariant()} of "
+                    + $"'{carried.WaterBodyId}' was put back.";
+            }
+
+            return _reAttachBodyId is { } held ? $"'{held}' was let go." : null;
+        }
+
         if (Mode == EditorMode.River
             && ActiveTool is EditorTool.DrawRiver or EditorTool.CreateBranch)
         {
@@ -353,6 +364,10 @@ public sealed class ToolInteraction
         EditorMode.Bridge when ActiveTool == EditorTool.DrawBridge => _bridgeStart is not null,
         EditorMode.Props when ActiveTool == EditorTool.Line =>
             _propLineStart is not null || _propLineEnd is not null,
+        // A chosen river or a carried end is unfinished work in the same sense:
+        // the author has begun something and a later press finishes it.
+        EditorMode.River when ActiveTool == EditorTool.ReAttachRiver =>
+            _reAttachBodyId is not null || _reAttachEnd is not null,
         _ => false,
     };
 
@@ -570,7 +585,8 @@ public sealed class ToolInteraction
         if (Mode == EditorMode.River && ActiveTool == EditorTool.ReAttachRiver)
         {
             // Nothing for Enter to finish: the second press already does.
-            if (key == ToolKey.Enter || _reAttachEnd is null) return ToolOutcome.Idle.Instance;
+            if (key == ToolKey.Enter) return ToolOutcome.Idle.Instance;
+            if (_reAttachBodyId is null && _reAttachEnd is null) return ToolOutcome.Idle.Instance;
             return CancelRiverPoint();
         }
 
@@ -867,26 +883,34 @@ public sealed class ToolInteraction
     /// at that station, and the bend stays where it was - inserting a point is
     /// making somewhere to take hold, not changing the river.</para>
     /// </summary>
-    /// <summary>
-    /// Which end `Re-Attach` is carrying, if the first press has happened.
-    /// </summary>
+    /// <summary>The river `Re-Attach` is working on, once it has been chosen.</summary>
+    public string? ReAttachBodyId => _reAttachBodyId;
+
+    /// <summary>Which end of it the tool is carrying, once one has been picked.</summary>
     public (string WaterBodyId, WaterEnd End)? ReAttachEnd => _reAttachEnd;
 
+    private string? _reAttachBodyId;
     private (string WaterBodyId, WaterEnd End)? _reAttachEnd;
 
-    private void ClearReAttach() => _reAttachEnd = null;
+    private void ClearReAttach()
+    {
+        _reAttachBodyId = null;
+        _reAttachEnd = null;
+    }
 
     /// <summary>
-    /// Two presses. The first picks an end of a river - a source or a mouth,
-    /// because those are the only places a junction can be. The second says
-    /// which body that end now sits on, and the end moves there.
+    /// Three presses, each of which narrows what the next one can hit.
     ///
-    /// <para>It is a tool and not a button beside the selection because it is
-    /// not repair. Hanging a healthy branch somewhere else is an ordinary thing
-    /// to author, and it starts with the end nowhere near its new parent - a
-    /// control that only appears once the two already touch could never be used
-    /// for it. Its sibling is `Create Branch`, which authors the same claim
-    /// while drawing; this one authors it on a curve that exists.</para>
+    /// <para>Choose a river, and every other river is out of reach. Choose one
+    /// of its two ends, with nothing else in the Scene able to answer. Choose
+    /// the river that end should meet, from the ones that are left. Escape
+    /// steps back one phase at a time.</para>
+    ///
+    /// <para>The phases exist because of where a junction sits. A branch's
+    /// source lies on its parent's centerline, so at the one place an author
+    /// most wants to grab, two bodies and two kinds of candidate - an authored
+    /// point and a line - are under the pointer at once. Narrowing by hand
+    /// beforehand is duller than clever picking and it always works.</para>
     ///
     /// <para>What comes out is a straight run from the moved end to its
     /// neighbour, which is usually wrong and always visible. Bending it back is
@@ -895,23 +919,76 @@ public sealed class ToolInteraction
     /// </summary>
     private ToolOutcome ReAttachStep(ToolContext context, AuthoringPoint point)
     {
-        if (_reAttachEnd is not { } carrying) return ChooseReAttachEnd(context, point);
+        if (_reAttachEnd is { } carrying) return AttachCarriedEnd(context, point, carrying);
+        if (_reAttachBodyId is { } chosen) return CarryEndOf(context, point, chosen);
+        return ChooseReAttachBody(context, point);
+    }
 
+    private ToolOutcome ChooseReAttachBody(ToolContext context, AuthoringPoint point)
+    {
+        if (WaterEditing.FindAt(Pickable(context.Scene), context.Metrics, point.X, point.Y)
+            is not { } body)
+        {
+            return new ToolOutcome.Message("Re-Attach: press the river whose end should move.");
+        }
+
+        _reAttachBodyId = body.WaterBodyId;
+        return new ToolOutcome.Message(
+            $"Re-Attach: '{body.WaterBodyId}' is the river. Press its source or its mouth.");
+    }
+
+    /// <summary>
+    /// Only the chosen river answers here, so an end that shares a place with
+    /// another body's line can be hit without contest.
+    /// </summary>
+    private ToolOutcome CarryEndOf(ToolContext context, AuthoringPoint point, string bodyId)
+    {
+        if (context.Scene.WaterBodies.FirstOrDefault(candidate =>
+                string.Equals(candidate.WaterBodyId, bodyId, StringComparison.Ordinal))
+            is not { } body)
+        {
+            ClearReAttach();
+            return new ToolOutcome.Message($"Re-Attach: '{bodyId}' is no longer in the Scene.");
+        }
+
+        if (WaterEditing.FindPointAt(
+                body, point.X, point.Y, context.PointerHitRadiusAuthoringPixels) is not { } index)
+        {
+            return new ToolOutcome.Message(
+                $"Re-Attach: press the source or the mouth of '{bodyId}'. Escape gives it back.");
+        }
+
+        if (index != 0 && index != body.Points.Count - 1)
+        {
+            return new ToolOutcome.Message(
+                "Re-Attach: only a source or a mouth meets another river; that is a point in between.");
+        }
+
+        var end = index == 0 ? WaterEnd.Source : WaterEnd.Mouth;
+        _reAttachEnd = (bodyId, end);
+        return new ToolOutcome.Message(
+            $"Re-Attach: carrying the {end.ToString().ToLowerInvariant()} of '{bodyId}'. "
+            + "Press the river it should meet.");
+    }
+
+    private ToolOutcome AttachCarriedEnd(
+        ToolContext context,
+        AuthoringPoint point,
+        (string WaterBodyId, WaterEnd End) carrying)
+    {
+        // The carried body is taken out of the search rather than refused after
+        // the fact: its own line runs through the place the author is aiming at,
+        // and a candidate that can only ever be wrong should not be a candidate.
+        var others = WaterEditing.Remove(Pickable(context.Scene), carrying.WaterBodyId);
         if (WaterGeometry.NearestCenterlineAnchor(
-                context.Scene,
+                others,
                 context.Metrics,
                 point.X,
                 point.Y,
                 context.Metrics.AuthoringPixelsPerWaterCell * 2.0) is not { } anchor)
         {
             return new ToolOutcome.Message(
-                "Re-Attach: press on the river this end should meet, near the line running down it.");
-        }
-
-        if (string.Equals(anchor.WaterBodyId, carrying.WaterBodyId, StringComparison.Ordinal))
-        {
-            return new ToolOutcome.Message(
-                $"Re-Attach: '{carrying.WaterBodyId}' cannot meet itself. Escape gives the end back.");
+                "Re-Attach: press the river this end should meet, near the line running down it.");
         }
 
         if (WaterEditing.WouldFeedItself(
@@ -937,33 +1014,6 @@ public sealed class ToolInteraction
                     + $"{end.ToString().ToLowerInvariant()}, {said}"
                     + JunctionComplaint(after, context.Metrics);
             });
-    }
-
-    private ToolOutcome ChooseReAttachEnd(ToolContext context, AuthoringPoint point)
-    {
-        foreach (var body in Pickable(context.Scene).WaterBodies)
-        {
-            if (WaterEditing.FindPointAt(
-                    body, point.X, point.Y, context.PointerHitRadiusAuthoringPixels)
-                is not { } index)
-            {
-                continue;
-            }
-
-            if (index != 0 && index != body.Points.Count - 1)
-            {
-                return new ToolOutcome.Message(
-                    "Re-Attach: only a source or a mouth meets another river; that is a point in between.");
-            }
-
-            var end = index == 0 ? WaterEnd.Source : WaterEnd.Mouth;
-            _reAttachEnd = (body.WaterBodyId, end);
-            return new ToolOutcome.Message(
-                $"Re-Attach: carrying the {end.ToString().ToLowerInvariant()} of '{body.WaterBodyId}'. "
-                + "Press the river it should meet.");
-        }
-
-        return new ToolOutcome.Message("Re-Attach: press the source or the mouth of a river.");
     }
 
     private ToolOutcome InsertWaterPoint(ToolContext context, AuthoringPoint point)
@@ -1508,6 +1558,20 @@ public sealed class ToolInteraction
         ArgumentNullException.ThrowIfNull(context);
         return ToolPreviewBuilder.BuildWaterInsert(
             context.Scene, context.Metrics, ActiveTool, PointerAuthoring);
+    }
+
+    /// <summary>What the Canvas draws in whichever phase `Re-Attach` is in.</summary>
+    public WaterReAttachPreview WaterReAttach(ToolContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return ToolPreviewBuilder.BuildWaterReAttach(
+            Pickable(context.Scene),
+            context.Metrics,
+            ActiveTool,
+            PointerAuthoring,
+            _reAttachBodyId,
+            _reAttachEnd,
+            context.PointerHitRadiusAuthoringPixels);
     }
 
     /// <summary>What the Canvas draws for the selected river, dragged or not.</summary>
@@ -2381,12 +2445,19 @@ public sealed class ToolInteraction
     /// </summary>
     private ToolOutcome CancelRiverPoint()
     {
+        // One phase at a time, back to nothing chosen.
         if (_reAttachEnd is { } carrying)
         {
-            ClearReAttach();
+            _reAttachEnd = null;
             return new ToolOutcome.Message(
                 $"Re-Attach: the {carrying.End.ToString().ToLowerInvariant()} of "
-                + $"'{carrying.WaterBodyId}' stays where it is.");
+                + $"'{carrying.WaterBodyId}' stays where it is. Press an end of it, or Escape again.");
+        }
+
+        if (_reAttachBodyId is { } chosen)
+        {
+            _reAttachBodyId = null;
+            return new ToolOutcome.Message($"Re-Attach: '{chosen}' let go. Press a river.");
         }
 
         if (_riverPending is not null)

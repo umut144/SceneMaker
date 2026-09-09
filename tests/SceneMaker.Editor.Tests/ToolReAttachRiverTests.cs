@@ -8,20 +8,26 @@ namespace SceneMaker.Editor.Tests;
 /// <summary>
 /// `River:Re-Attach`. A junction could be torn by dragging a point and made
 /// only by drawing a new branch, so a body that came off its river could be
-/// deleted and redrawn and nothing else. This is the other half: two presses,
-/// an end and the river it should meet.
+/// deleted and redrawn and nothing else. This is the other half: three presses,
+/// each of which narrows what the next one can hit - a river, then one of its
+/// two ends, then the river that end should meet.
 /// </summary>
 public sealed class ToolReAttachRiverTests
 {
     [Fact]
-    public void TwoPressesMoveTheEndAndAuthorTheClaim()
+    public void ThreePressesMoveTheEndAndAuthorTheClaim()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Loose(workspace);
         var interaction = ReAttaching();
         var context = Context(workspace, scene);
 
-        // The end it carries, then the river that end should meet.
+        // The river, then the end it carries, then the river that end meets.
+        Assert.IsType<ToolOutcome.Message>(
+            interaction.PointerPressed(context, Point(96, 470), Cell(3, 14)));
+        Assert.Equal("river_0002", interaction.ReAttachBodyId);
+        Assert.Null(interaction.ReAttachEnd);
+
         Assert.IsType<ToolOutcome.Message>(
             interaction.PointerPressed(context, Point(96, 400), Cell(3, 12)));
         Assert.Equal(("river_0002", WaterEnd.Source), interaction.ReAttachEnd);
@@ -47,40 +53,48 @@ public sealed class ToolReAttachRiverTests
         Assert.Empty(WaterEditing.BrokenJunctions(after, workspace.Metrics));
         Assert.True(WaterAttachment.IsAttached(after, workspace.Metrics, branch));
         DocumentValidation.ValidateGrid(after, workspace.Metrics);
+
+        // The tool is back at its first phase, ready for another river.
+        Assert.Null(interaction.ReAttachBodyId);
         Assert.Null(interaction.ReAttachEnd);
     }
 
     /// <summary>
     /// At a fork the branch's source sits on its parent's centerline, so both a
-    /// point and a line are under the pointer at once. Choosing an end looks at
-    /// ends only, and at the nearest of them - a line runs for hundreds of
-    /// pixels and a point is one place, so letting both answer made the winner
-    /// change with every small move.
+    /// point and a line are under the pointer at once. Choosing the river first
+    /// takes the other body out of the question entirely: the same press means
+    /// the branch's source or nothing at all, depending only on what the author
+    /// already chose.
     /// </summary>
     [Fact]
-    public void AtAForkTheEndIsChosenByDistanceAndNeverByALine()
+    public void OnceARiverIsChosenNothingElseCanAnswer()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Forked(workspace);
         var context = Context(workspace, scene);
 
-        // Right on the branch's source, which is also the parent's centerline.
-        var atSource = ReAttaching();
-        atSource.PointerPressed(context, Point(96, 32), Cell(3, 1));
-        Assert.Equal(("river_0002", WaterEnd.Source), atSource.ReAttachEnd);
+        // The branch chosen well away from the fork, then its source pressed at
+        // the fork, where its parent's line runs through the same place.
+        var branch = ReAttaching();
+        branch.PointerPressed(context, Point(96, 160), Cell(3, 5));
+        Assert.Equal("river_0002", branch.ReAttachBodyId);
+        branch.PointerPressed(context, Point(96, 32), Cell(3, 1));
+        Assert.Equal(("river_0002", WaterEnd.Source), branch.ReAttachEnd);
 
-        // A little along the parent's line, away from every end: nothing, and
-        // the message says what a press wants rather than taking a line.
-        var alongTheLine = ReAttaching();
+        // The parent chosen instead, and the very same press: it holds no end
+        // there, so nothing is carried and the message says what is wanted.
+        var parent = ReAttaching();
+        parent.PointerPressed(context, Point(224, 32), Cell(7, 1));
+        Assert.Equal("river_0001", parent.ReAttachBodyId);
         var said = Assert.IsType<ToolOutcome.Message>(
-            alongTheLine.PointerPressed(context, Point(192, 32), Cell(6, 1)));
-        Assert.Null(alongTheLine.ReAttachEnd);
+            parent.PointerPressed(context, Point(96, 32), Cell(3, 1)));
+        Assert.Null(parent.ReAttachEnd);
         Assert.Contains("source or the mouth", said.Text, StringComparison.Ordinal);
 
-        // Nearer the parent's own mouth than the branch's source: the parent.
-        var atMouth = ReAttaching();
-        atMouth.PointerPressed(context, Point(286, 32), Cell(8, 1));
-        Assert.Equal(("river_0001", WaterEnd.Mouth), atMouth.ReAttachEnd);
+        // Its own mouth still answers, because that is an end of the river the
+        // author chose.
+        parent.PointerPressed(context, Point(286, 32), Cell(8, 1));
+        Assert.Equal(("river_0001", WaterEnd.Mouth), parent.ReAttachEnd);
     }
 
     /// <summary>A river along y = 32 and a branch leaving it at x = 96.</summary>
@@ -117,6 +131,9 @@ public sealed class ToolReAttachRiverTests
         var interaction = ReAttaching();
         var context = Context(workspace, scene);
 
+        interaction.PointerPressed(context, Point(96, 440), Cell(3, 13));
+        Assert.Equal("river_0002", interaction.ReAttachBodyId);
+
         var middle = Assert.IsType<ToolOutcome.Message>(
             interaction.PointerPressed(context, Point(96, 480), Cell(3, 15)));
         Assert.Contains("in between", middle.Text, StringComparison.Ordinal);
@@ -144,6 +161,7 @@ public sealed class ToolReAttachRiverTests
         var interaction = ReAttaching();
         var context = Context(workspace, scene);
 
+        interaction.PointerPressed(context, Point(96, 470), Cell(3, 14));
         interaction.PointerPressed(context, Point(96, 400), Cell(3, 12));
         var refused = Assert.IsType<ToolOutcome.Message>(
             interaction.PointerPressed(context, Point(160, 40), Cell(5, 1)));
@@ -153,20 +171,35 @@ public sealed class ToolReAttachRiverTests
         Assert.Equal(("river_0002", WaterEnd.Source), interaction.ReAttachEnd);
     }
 
+    /// <summary>
+    /// Escape undoes one decision, not the whole gesture: the end goes back
+    /// first and the river second, so an author who took the wrong end keeps
+    /// the river they took it from.
+    /// </summary>
     [Fact]
-    public void EscapeGivesTheCarriedEndBack()
+    public void EscapeStepsBackOnePhaseAtATime()
     {
         using var workspace = TestWorkspace.Create();
         var scene = Loose(workspace);
         var interaction = ReAttaching();
         var context = Context(workspace, scene);
 
+        interaction.PointerPressed(context, Point(96, 470), Cell(3, 14));
         interaction.PointerPressed(context, Point(96, 400), Cell(3, 12));
-        var back = Assert.IsType<ToolOutcome.Message>(
-            interaction.KeyPressed(context, ToolKey.Escape));
 
-        Assert.Contains("stays where it is", back.Text, StringComparison.Ordinal);
+        var endBack = Assert.IsType<ToolOutcome.Message>(
+            interaction.KeyPressed(context, ToolKey.Escape));
+        Assert.Contains("stays where it is", endBack.Text, StringComparison.Ordinal);
         Assert.Null(interaction.ReAttachEnd);
+        Assert.Equal("river_0002", interaction.ReAttachBodyId);
+
+        var riverBack = Assert.IsType<ToolOutcome.Message>(
+            interaction.KeyPressed(context, ToolKey.Escape));
+        Assert.Contains("let go", riverBack.Text, StringComparison.Ordinal);
+        Assert.Null(interaction.ReAttachBodyId);
+
+        // Nothing held, nothing to take back.
+        Assert.IsType<ToolOutcome.Idle>(interaction.KeyPressed(context, ToolKey.Escape));
     }
 
     private static ToolInteraction ReAttaching()

@@ -76,20 +76,29 @@ public sealed record WaterSelectionPreview(
 /// a point is the one operation whose whole purpose is to put a handle on that
 /// curve.</para>
 /// </summary>
-/// <param name="Anchor">Where a press would land on a centerline, or null.</param>
-/// <param name="EndIndex">
-/// Which end of <paramref name="Body"/> a press would carry, or null. It is
-/// never set at the same time as <paramref name="Anchor"/>: a phase that picks
-/// an authored point has no business drawing a ring on a line, and showing both
-/// is what made the pointer look as though it kept changing its mind.
-/// </param>
 public sealed record WaterInsertPreview(
     WaterBodyDocument? Body,
     IReadOnlyList<ChainPoint> Centerline,
-    WaterCenterlineAnchor? Anchor,
-    int? EndIndex = null)
+    WaterCenterlineAnchor? Anchor)
 {
     public static WaterInsertPreview Empty { get; } = new(null, [], null);
+}
+
+/// <summary>
+/// What `River:Re-Attach` is about to do, in whichever of its three phases it
+/// stands. Each phase fills a different part, and never two at once: the tool
+/// narrows what a press can hit, and the picture has to narrow with it or the
+/// author is steering by something that is not true any more.
+/// </summary>
+public sealed record WaterReAttachPreview(
+    WaterBodyDocument? Hovered,
+    IReadOnlyList<ChainPoint> HoveredLine,
+    WaterBodyDocument? Chosen,
+    IReadOnlyList<ChainPoint> ChosenLine,
+    int? EndIndex,
+    WaterCenterlineAnchor? Target)
+{
+    public static WaterReAttachPreview Empty { get; } = new(null, [], null, [], null, null);
 }
 
 /// <summary>
@@ -426,29 +435,12 @@ public static class ToolPreviewBuilder
         SceneDocument scene,
         WorkspaceMetrics metrics,
         EditorTool tool,
-        AuthoringPoint? pointer,
-        bool choosingEnd = false,
-        double pointerHitRadiusAuthoringPixels = 8.0)
+        AuthoringPoint? pointer)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
-        if (tool is not (EditorTool.InsertRiverPoint or EditorTool.ReAttachRiver)
-            || pointer is not { } at)
-        {
+        if (tool != EditorTool.InsertRiverPoint || pointer is not { } at)
             return WaterInsertPreview.Empty;
-        }
-
-        // Choosing an end looks only at ends. Mixing the two candidate kinds is
-        // what made this feel unsteady: a centerline runs for hundreds of pixels
-        // and an authored point is one place, so whichever happened to be nearer
-        // flipped with every small move of the pointer.
-        if (choosingEnd)
-        {
-            return NearestEnd(scene, at, pointerHitRadiusAuthoringPixels) is not
-                { Body: { } chosen, Index: var index }
-                ? WaterInsertPreview.Empty
-                : new WaterInsertPreview(chosen, Line(chosen), null, index);
-        }
 
         var anchor = WaterGeometry.NearestCenterlineAnchor(
             scene, metrics, at.X, at.Y, metrics.AuthoringPixelsPerWaterCell * 2.0);
@@ -475,34 +467,64 @@ public static class ToolPreviewBuilder
     }
 
     /// <summary>
-    /// The source or mouth nearest the pointer, across every body. Nearest
-    /// rather than the first body that has one in reach, so that two ends close
-    /// together resolve by distance instead of by document order.
+    /// The three phases of `Re-Attach`, each drawing only what its own press can
+    /// take: a river under the pointer, then the chosen river's ends, then the
+    /// rivers that are left.
     /// </summary>
-    internal static (WaterBodyDocument? Body, int Index) NearestEnd(
+    public static WaterReAttachPreview BuildWaterReAttach(
         SceneDocument scene,
-        AuthoringPoint at,
-        double radiusAuthoringPixels)
+        WorkspaceMetrics metrics,
+        EditorTool tool,
+        AuthoringPoint? pointer,
+        string? chosenWaterBodyId,
+        (string WaterBodyId, WaterEnd End)? carrying,
+        double pointerHitRadiusAuthoringPixels)
     {
-        WaterBodyDocument? found = null;
-        var foundIndex = 0;
-        var best = radiusAuthoringPixels * radiusAuthoringPixels;
-        foreach (var body in scene.WaterBodies)
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
+        if (tool != EditorTool.ReAttachRiver) return WaterReAttachPreview.Empty;
+
+        if (chosenWaterBodyId is not { } chosenId)
         {
-            foreach (var index in new[] { 0, body.Points.Count - 1 })
-            {
-                var position = body.Points[index].PositionAuthoringPx;
-                var dx = (double)(position.X - at.X);
-                var dy = (double)(position.Y - at.Y);
-                var distance = (dx * dx) + (dy * dy);
-                if (distance > best) continue;
-                best = distance;
-                found = body;
-                foundIndex = index;
-            }
+            var hovered = pointer is { } over
+                ? WaterEditing.FindAt(scene, metrics, over.X, over.Y)
+                : null;
+            return hovered is null
+                ? WaterReAttachPreview.Empty
+                : new WaterReAttachPreview(hovered, Line(hovered), null, [], null, null);
         }
 
-        return (found, foundIndex);
+        if (scene.WaterBodies.FirstOrDefault(candidate =>
+                string.Equals(candidate.WaterBodyId, chosenId, StringComparison.Ordinal))
+            is not { } chosen)
+        {
+            return WaterReAttachPreview.Empty;
+        }
+
+        var line = Line(chosen);
+        if (carrying is null)
+        {
+            int? end = pointer is { } aiming
+                && WaterEditing.FindPointAt(
+                    chosen, aiming.X, aiming.Y, pointerHitRadiusAuthoringPixels) is { } index
+                && (index == 0 || index == chosen.Points.Count - 1)
+                    ? index
+                    : null;
+            return new WaterReAttachPreview(null, [], chosen, line, end, null);
+        }
+
+        // The carried body is out of the search: its own line runs through the
+        // place the author is aiming at, and a candidate that can only ever be
+        // wrong should not be a candidate.
+        var target = pointer is { } onto
+            ? WaterGeometry.NearestCenterlineAnchor(
+                WaterEditing.Remove(scene, chosenId),
+                metrics,
+                onto.X,
+                onto.Y,
+                metrics.AuthoringPixelsPerWaterCell * 2.0)
+            : null;
+        return new WaterReAttachPreview(null, [], chosen, line, null, target);
     }
 
     private static SceneDocument Replaced(SceneDocument scene, WaterBodyDocument body) => scene with
