@@ -6,6 +6,56 @@ project_directory=$(dirname -- "$script_directory")
 test_root=$(mktemp -d)
 trap 'rm -rf -- "$test_root"' EXIT
 
+# The sync gate hard-codes three numbers that also live in Core, where the
+# readers enforce them - and a shell constant cannot be compiled against a C#
+# one. That is not a hypothetical drift: the workspace catalog went to 15 with
+# `minimum_channel_depth_meters` while the gate still demanded 14, so a sync of
+# a correct world was refused with a message about the version. Compared here
+# rather than in either file, because only a test can fail for both.
+config_version_source="$project_directory/src/SceneMaker.Core/WorkspaceConfiguration.cs"
+polytools_source="$project_directory/src/SceneMaker.Core/PolyToolsCatalog.cs"
+sync_script="$project_directory/scripts/sync_polytools_world.sh"
+
+csharp_constant() {
+  value=$(sed -n "s/.*public const int $2 = \([0-9][0-9]*\);.*/\1/p" "$1" | head -1)
+  if [ -z "$value" ]; then
+    printf 'ERROR: no `public const int %s` in %s\n' "$2" "$1" >&2
+    exit 1
+  fi
+  printf '%s' "$value"
+}
+
+shell_constant() {
+  value=$(sed -n "s/^$2=\([0-9][0-9]*\)$/\1/p" "$1" | head -1)
+  if [ -z "$value" ]; then
+    printf 'ERROR: no `%s=` in %s\n' "$2" "$1" >&2
+    exit 1
+  fi
+  printf '%s' "$value"
+}
+
+expect_same_number() {
+  if [ "$2" != "$3" ]; then
+    printf 'ERROR: %s\n' "$1" >&2
+    printf '       Core says %s, scripts/sync_polytools_world.sh says %s.\n' "$2" "$3" >&2
+    printf '%s\n' \
+      '       Whichever moved, the other has to move with it - a sync that asks for' \
+      '       the wrong version refuses a catalog that is correct, and says the' \
+      '       opposite of what is wrong. Update the fixture below in the same breath.' >&2
+    exit 1
+  fi
+}
+
+expected_config_version=$(csharp_constant "$config_version_source" "Version")
+expect_same_number "the Workspace catalog version" \
+  "$expected_config_version" "$(shell_constant "$sync_script" current_config_version)"
+expect_same_number "the PolyTools catalog schema" \
+  "$(csharp_constant "$polytools_source" CatalogSchemaVersion)" \
+  "$(shell_constant "$sync_script" current_catalog_schema)"
+expect_same_number "the PolyTools manifest schema" \
+  "$(csharp_constant "$polytools_source" ManifestSchemaVersion)" \
+  "$(shell_constant "$sync_script" current_manifest_schema)"
+
 source_world="$test_root/source/world01"
 workspace="$test_root/workspace/world01"
 mkdir -p \
@@ -167,6 +217,19 @@ cat >"$source_world/PolyToolsRuntimeExports/leaf/manifest.json" <<'JSON'
   "regions": []
 }
 JSON
+
+# The fixture is the one catalog this test proves the gate accepts, so it has
+# to be the version the gate is asking about. A version bump usually brings a
+# new required field, and a fixture left behind would pass for the wrong reason.
+fixture_version=$(jq -r '.version' "$workspace/config.json")
+if [ "$fixture_version" != "$expected_config_version" ]; then
+  printf 'ERROR: the fixture workspace catalog is version %s, but Core is at %s.\n' \
+    "$fixture_version" "$expected_config_version" >&2
+  printf '%s\n' \
+    '       Bring tests/test_sync_polytools_world.sh up to the current shape -' \
+    '       the version alone is not enough if the new version added a field.' >&2
+  exit 1
+fi
 
 full_config="$test_root/full-config.json"
 cp "$workspace/config.json" "$full_config"
