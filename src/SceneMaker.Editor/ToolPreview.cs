@@ -76,10 +76,18 @@ public sealed record WaterSelectionPreview(
 /// a point is the one operation whose whole purpose is to put a handle on that
 /// curve.</para>
 /// </summary>
+/// <param name="Anchor">Where a press would land on a centerline, or null.</param>
+/// <param name="EndIndex">
+/// Which end of <paramref name="Body"/> a press would carry, or null. It is
+/// never set at the same time as <paramref name="Anchor"/>: a phase that picks
+/// an authored point has no business drawing a ring on a line, and showing both
+/// is what made the pointer look as though it kept changing its mind.
+/// </param>
 public sealed record WaterInsertPreview(
     WaterBodyDocument? Body,
     IReadOnlyList<ChainPoint> Centerline,
-    WaterCenterlineAnchor? Anchor)
+    WaterCenterlineAnchor? Anchor,
+    int? EndIndex = null)
 {
     public static WaterInsertPreview Empty { get; } = new(null, [], null);
 }
@@ -418,7 +426,9 @@ public static class ToolPreviewBuilder
         SceneDocument scene,
         WorkspaceMetrics metrics,
         EditorTool tool,
-        AuthoringPoint? pointer)
+        AuthoringPoint? pointer,
+        bool choosingEnd = false,
+        double pointerHitRadiusAuthoringPixels = 8.0)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
@@ -426,6 +436,18 @@ public static class ToolPreviewBuilder
             || pointer is not { } at)
         {
             return WaterInsertPreview.Empty;
+        }
+
+        // Choosing an end looks only at ends. Mixing the two candidate kinds is
+        // what made this feel unsteady: a centerline runs for hundreds of pixels
+        // and an authored point is one place, so whichever happened to be nearer
+        // flipped with every small move of the pointer.
+        if (choosingEnd)
+        {
+            return NearestEnd(scene, at, pointerHitRadiusAuthoringPixels) is not
+                { Body: { } chosen, Index: var index }
+                ? WaterInsertPreview.Empty
+                : new WaterInsertPreview(chosen, Line(chosen), null, index);
         }
 
         var anchor = WaterGeometry.NearestCenterlineAnchor(
@@ -436,14 +458,51 @@ public static class ToolPreviewBuilder
             : WaterEditing.FindAt(scene, metrics, at.X, at.Y);
         if (body is null) return WaterInsertPreview.Empty;
 
+        return new WaterInsertPreview(body, Line(body), anchor);
+    }
+
+    private static IReadOnlyList<ChainPoint> Line(WaterBodyDocument body)
+    {
         try
         {
-            return new WaterInsertPreview(body, WaterGeometry.Centerline(body.Points), anchor);
+            return WaterGeometry.Centerline(body.Points);
         }
         catch (SceneMakerDocumentException)
         {
-            return new WaterInsertPreview(body, [], anchor);
+            // A curve that is momentarily not a curve is a drag passing through.
+            return [];
         }
+    }
+
+    /// <summary>
+    /// The source or mouth nearest the pointer, across every body. Nearest
+    /// rather than the first body that has one in reach, so that two ends close
+    /// together resolve by distance instead of by document order.
+    /// </summary>
+    internal static (WaterBodyDocument? Body, int Index) NearestEnd(
+        SceneDocument scene,
+        AuthoringPoint at,
+        double radiusAuthoringPixels)
+    {
+        WaterBodyDocument? found = null;
+        var foundIndex = 0;
+        var best = radiusAuthoringPixels * radiusAuthoringPixels;
+        foreach (var body in scene.WaterBodies)
+        {
+            foreach (var index in new[] { 0, body.Points.Count - 1 })
+            {
+                var position = body.Points[index].PositionAuthoringPx;
+                var dx = (double)(position.X - at.X);
+                var dy = (double)(position.Y - at.Y);
+                var distance = (dx * dx) + (dy * dy);
+                if (distance > best) continue;
+                best = distance;
+                found = body;
+                foundIndex = index;
+            }
+        }
+
+        return (found, foundIndex);
     }
 
     private static SceneDocument Replaced(SceneDocument scene, WaterBodyDocument body) => scene with

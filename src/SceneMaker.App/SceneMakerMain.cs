@@ -3543,7 +3543,15 @@ public sealed partial class SceneMakerMain : Control
             _canvas.UpdateScene(scene);
             _autosaveTimer.Start();
             UpdateDocumentStatus();
+            // The same three the tools run after an edit. An undo changes the
+            // document as thoroughly as any edit does, and leaving the panels
+            // showing the state before it is worse than not showing it: the
+            // Outliner would keep a hierarchy the document no longer has.
+            if (_interaction.ActiveTool == EditorTool.SelectBridge) ShowSelectedBridgeNumbers();
+            if (_interaction.ActiveTool == EditorTool.SelectRiver) ShowSelectedRiverNumbers();
+            UpdateToolContextLabel();
         }
+
         SetStatus(report.Message);
     }
 

@@ -376,6 +376,15 @@ nicht — ein abgehängter Ast mit zwanzig Punkten war nur noch löschbar.
    des anderen Körpers dort — das ist es, was die beiden zum selben Wasser macht
    — und die Behauptung wird neu gesetzt.
 
+Der erste Druck sieht **nur Enden an**, und von denen das nächste. Das ist der
+Grund, aus dem es sich vorher unruhig anfühlte: an einer Gabelung liegt die
+Quelle des Astes auf der Mittellinie des Elternflusses, und solange beide
+Kandidatenarten antworten durften, wechselte der Gewinner bei jeder kleinen
+Bewegung des Zeigers — eine Mittellinie ist hunderte Pixel lang, ein
+authorierter Punkt ist eine Stelle. Der Ring auf der Linie wird in dieser Phase
+gar nicht erst gezeichnet; sichtbar ist der Ring um das Ende, das ein Druck
+nähme.
+
 `Escape` gibt das getragene Ende zurück. Zwischen den beiden Drücken zeichnet
 der Canvas das getragene Ende und die Gerade zum Zeiger: die Luftlinie, die
 entstehen wird, ist die Sache, die der Autor danach wieder gerade biegt.

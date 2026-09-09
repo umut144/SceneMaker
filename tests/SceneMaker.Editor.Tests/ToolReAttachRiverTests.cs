@@ -50,6 +50,64 @@ public sealed class ToolReAttachRiverTests
         Assert.Null(interaction.ReAttachEnd);
     }
 
+    /// <summary>
+    /// At a fork the branch's source sits on its parent's centerline, so both a
+    /// point and a line are under the pointer at once. Choosing an end looks at
+    /// ends only, and at the nearest of them - a line runs for hundreds of
+    /// pixels and a point is one place, so letting both answer made the winner
+    /// change with every small move.
+    /// </summary>
+    [Fact]
+    public void AtAForkTheEndIsChosenByDistanceAndNeverByALine()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = Forked(workspace);
+        var context = Context(workspace, scene);
+
+        // Right on the branch's source, which is also the parent's centerline.
+        var atSource = ReAttaching();
+        atSource.PointerPressed(context, Point(96, 32), Cell(3, 1));
+        Assert.Equal(("river_0002", WaterEnd.Source), atSource.ReAttachEnd);
+
+        // A little along the parent's line, away from every end: nothing, and
+        // the message says what a press wants rather than taking a line.
+        var alongTheLine = ReAttaching();
+        var said = Assert.IsType<ToolOutcome.Message>(
+            alongTheLine.PointerPressed(context, Point(192, 32), Cell(6, 1)));
+        Assert.Null(alongTheLine.ReAttachEnd);
+        Assert.Contains("source or the mouth", said.Text, StringComparison.Ordinal);
+
+        // Nearer the parent's own mouth than the branch's source: the parent.
+        var atMouth = ReAttaching();
+        atMouth.PointerPressed(context, Point(286, 32), Cell(8, 1));
+        Assert.Equal(("river_0001", WaterEnd.Mouth), atMouth.ReAttachEnd);
+    }
+
+    /// <summary>A river along y = 32 and a branch leaving it at x = 96.</summary>
+    private static SceneDocument Forked(TestWorkspace workspace)
+    {
+        var scene = WaterEditing.PlaceRiver(
+            TestScenes.Instance(workspace, sizeCells: 40),
+            workspace.Terrain,
+            [
+                WaterEditing.Point(32, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 2.0m),
+                WaterEditing.Point(288, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 2.0m),
+            ],
+            "river");
+        scene = WaterEditing.PlaceRiver(
+            scene,
+            workspace.Terrain,
+            [
+                WaterEditing.Point(96, 32, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 2.0m),
+                WaterEditing.Point(96, 224, WaterPointMode.Linear, 2.0m, 0.5m, 5.0m, 2.0m),
+            ],
+            "river");
+        return WaterEditing.SetJunctions(
+            scene,
+            "river_0002",
+            [new WaterJunctionDocument { End = WaterEnd.Source, WaterBodyId = "river_0001" }]);
+    }
+
     [Fact]
     public void OnlyASourceOrAMouthCanBeCarried()
     {
