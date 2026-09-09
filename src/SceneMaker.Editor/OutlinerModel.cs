@@ -21,12 +21,19 @@ namespace SceneMaker.Editor;
 /// list says the same thing in words, because the reason it is red is a
 /// relationship and the list is where relationships are visible.
 /// </param>
+/// <param name="Absent">
+/// Not there as the Scene opens - its own switch starts off, or something it
+/// hangs on does. A fault is red; this is not a fault, so the line is dimmed.
+/// It is the only place in the editor where the cascade can be seen at all:
+/// the Canvas still draws every body whatever its switch says (`OUTLINE-02`).
+/// </param>
 public sealed record OutlinerEntry(
     string ObjectId,
     string Label,
     int Depth,
     string? Note = null,
-    bool Loose = false);
+    bool Loose = false,
+    bool Absent = false);
 
 /// <summary>
 /// What the Outliner shows for the mode being worked in. Pure
@@ -117,7 +124,8 @@ public static class OutlinerModel
                 body.WaterBodyId,
                 depth,
                 Switches(body),
-                !WaterAttachment.IsAttached(scene, metrics, body)));
+                !WaterAttachment.IsAttached(scene, metrics, body),
+                !WaterActivation.IsActive(scene, body)));
             if (!children.TryGetValue(body.WaterBodyId, out var siblings)) return;
             foreach (var child in siblings) Walk(child, depth + 1);
         }

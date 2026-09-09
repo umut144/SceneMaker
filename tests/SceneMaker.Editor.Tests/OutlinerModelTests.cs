@@ -76,6 +76,37 @@ public sealed class OutlinerModelTests
     }
 
     /// <summary>
+    /// A switch that starts off dims its body and everything hanging under it,
+    /// including bodies that carry no switch of their own. Until the Canvas
+    /// draws by switch (`OUTLINE-02`) this list is the only place the cascade
+    /// is visible at all.
+    /// </summary>
+    [Fact]
+    public void ASwitchThatStartsOffDimsItsBodyAndEverythingUnderIt()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = SwitchEditing.AddSwitch(Chained(workspace), "sluice", initiallyOn: false);
+        scene = WaterEditing.SetSwitch(scene, "river_0002", "sluice");
+
+        var closed = OutlinerModel.Build(scene, workspace.Metrics, EditorMode.River);
+        Assert.Equal(
+            [("river_0001", false), ("river_0002", true), ("river_0003", true)],
+            closed.Select(entry => (entry.ObjectId, entry.Absent)));
+        Assert.All(closed, entry => Assert.False(entry.Loose));
+
+        // The same map with the switch started on: nothing is dimmed, and the
+        // list did not change shape - only what it says about the same bodies.
+        var open = OutlinerModel.Build(
+            SwitchEditing.SetInitiallyOn(scene, "sluice", initiallyOn: true),
+            workspace.Metrics,
+            EditorMode.River);
+        Assert.All(open, entry => Assert.False(entry.Absent));
+        Assert.Equal(
+            closed.Select(entry => (entry.ObjectId, entry.Depth)),
+            open.Select(entry => (entry.ObjectId, entry.Depth)));
+    }
+
+    /// <summary>
     /// Every other kind is a flat list. The panel is generic over modes on
     /// purpose: only water has a relationship to draw.
     /// </summary>

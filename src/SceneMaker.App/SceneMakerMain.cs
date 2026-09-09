@@ -1055,12 +1055,19 @@ public sealed partial class SceneMakerMain : Control
             ClipText = true,
             TooltipText = entry.Loose
                 ? $"'{objectId}' no longer hangs on anything: what fed it is gone."
-                : entry.Note ?? objectId,
+                : entry.Absent
+                    ? $"'{objectId}' is not there as the Scene opens: its switch, "
+                        + "or a switch above it, starts off."
+                    : entry.Note ?? objectId,
         };
         StyleToggleButton(name);
         // Red for the same reason the Canvas paints it red, said in words: the
         // list is where a relationship is visible, and being loose is one.
+        // Dimmed is not a fault - it is a body the map opens without, and the
+        // list is the only place that shows it while the Canvas draws every
+        // body whatever its switch says.
         if (entry.Loose) name.AddThemeColorOverride("font_color", LooseInk);
+        else if (entry.Absent) name.AddThemeColorOverride("font_color", AbsentInk);
         name.Pressed += () => HandleToolOutcome(_canvas.SelectObject(objectId));
         row.AddChild(name);
         _outlinerNames[objectId] = name;
@@ -1372,6 +1379,7 @@ public sealed partial class SceneMakerMain : Control
     private static readonly Color ToggleOnEdge = Color.FromHtml("#E7B936");
     private static readonly Color ToggleOnInk = Color.FromHtml("#161B24");
     private static readonly Color LooseInk = Color.FromHtml("#FF5C5C");
+    private static readonly Color AbsentInk = Color.FromHtml("#6B7686");
 
     private static readonly string[] ToggleOnInkStates =
     [

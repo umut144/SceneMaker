@@ -741,8 +741,15 @@ Jede Zeile trägt drei Dinge:
   Nennen, und nur so erreicht man etwas, das unter einem anderen liegt oder zu
   klein zum Treffen ist. Ein **abgehängter** Fluss steht rot da, aus demselben
   Grund, aus dem er auf dem Canvas rot ist.
-- eine **Notiz** rechts, gedämpft: bei Wasser die Aktivierungsgruppe und die
-  Zustände, in denen der Körper da ist.
+- eine **Notiz** rechts, gedämpft: bei Wasser der Schalter, an dem er hängt.
+
+Ein Körper, den die Karte beim Öffnen **nicht** hat — weil sein eigener
+Schalter aus startet oder einer über ihm —, steht gedämpft da. Das ist kein
+Fehler, deshalb gedämpft und nicht rot, und es ist bis auf Weiteres die
+**einzige** Stelle im Editor, an der die Kaskade überhaupt sichtbar ist: der
+Canvas zeichnet weiterhin jeden Körper, egal was sein Schalter sagt
+(`OUTLINE-02`). `Initially on?` umzulegen dämpft deshalb sofort den Körper und
+alles, was unter ihm hängt.
 
 ## Inspector
 
