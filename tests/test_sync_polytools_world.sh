@@ -54,14 +54,15 @@ JSON
 cat >"$workspace/config.json" <<'JSON'
 {
   "format": "scene_maker_workspace",
-  "version": 14,
+  "version": 15,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,
     "authoring_pixels_per_meter": 32.0,
     "game_pixels_per_meter": 192.0,
     "water_cell_meters": 0.5,
-    "elevation_quantum_meters": 0.125
+    "elevation_quantum_meters": 0.125,
+    "minimum_channel_depth_meters": 0.25
   },
   "assets": [
     {

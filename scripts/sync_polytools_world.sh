@@ -10,7 +10,7 @@ import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
 current_manifest_schema=21
 current_catalog_schema=3
-current_config_version=14
+current_config_version=15
 
 cleanup() {
   local status=$?
@@ -80,6 +80,7 @@ if ! jq -e --arg world "$world_key" --argjson version "$current_config_version" 
   and (.grid.game_pixels_per_meter | type == "number" and . > 0)
   and (.grid.water_cell_meters | type == "number" and . > 0)
   and (.grid.elevation_quantum_meters | type == "number" and . > 0)
+  and (.grid.minimum_channel_depth_meters | type == "number" and . > 0)
   and (.assets | type == "array")
   and all(.assets[];
     (.asset_key | type == "string" and length > 0)
