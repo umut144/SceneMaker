@@ -60672,6 +60672,10 @@
     {
       "switch": "branch_between_bridges",
       "initially_on": false
+    },
+    {
+      "switch": "upper_valley",
+      "initially_on": true
     }
   ],
   "water_bodies": [
@@ -60764,7 +60768,7 @@
       "water_body_id": "river_0002",
       "water_kind": "river",
       "asset_key": "river",
-      "switch": null,
+      "switch": "upper_valley",
       "junctions": [
         {
           "end": "source",
