@@ -20,6 +20,14 @@
       "polytools_asset_id": "asset_17"
     },
     {
+      "asset_key": "cobblestone",
+      "display_name": "Cobblestone",
+      "role": "terrain",
+      "color": "#9BA0A6",
+      "surface": "stone",
+      "authoring": "cells"
+    },
+    {
       "asset_key": "grass",
       "display_name": "Grass",
       "role": "terrain",
