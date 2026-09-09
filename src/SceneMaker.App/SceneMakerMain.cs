@@ -56,7 +56,7 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     private const int CurvePointModeLinear = 1;
     private const int CurvePointModeAligned = 2;
-    private const float ViewToggleOverlayWidth = 90f;
+    private const float ViewToggleOverlayWidth = 152f;
     private const float ViewToggleOverlayHeight = 42f;
     private const float ViewToggleOverlayMargin = 8f;
     private const int RiverInactiveDryBed = 1;
@@ -144,6 +144,15 @@ public sealed partial class SceneMakerMain : Control
     private readonly HBoxContainer _viewOptionsBar = new();
     private readonly HBoxContainer _viewToggleOverlay = new();
 
+    private readonly PanelContainer _outlinerPanel = new();
+    private readonly VBoxContainer _outlinerColumn = new();
+    private readonly Label _outlinerHeaderLabel = new();
+    private readonly Label _outlinerEmptyLabel = new();
+    private readonly Button _outlinerToggle = new();
+    private readonly Dictionary<string, Button> _outlinerNames = [];
+    private readonly Dictionary<string, CheckBox> _outlinerEyes = [];
+    private SceneDocument? _outlinerDocument;
+    private EditorMode? _outlinerMode;
     private readonly VBoxContainer _inspectorColumn = new();
     private readonly Label _inspectorHeaderLabel = new();
     private readonly Label _inspectorEmptyLabel = new();
@@ -823,6 +832,21 @@ public sealed partial class SceneMakerMain : Control
         StyleToggleButton(_sectionToggle);
         _viewToggleOverlay.AddChild(_sectionToggle);
 
+        // A separator, because a panel is not a way of looking: the two on the
+        // left change what the Canvas shows, this one changes what is beside
+        // it.
+        _viewToggleOverlay.AddChild(new VSeparator());
+        _outlinerToggle.Name = "OutlinerToggle";
+        _outlinerToggle.Text = "\u2261";
+        _outlinerToggle.Alignment = HorizontalAlignment.Center;
+        _outlinerToggle.ToggleMode = true;
+        _outlinerToggle.ButtonPressed = true;
+        _outlinerToggle.TooltipText = "Show the Outliner above the Inspector";
+        _outlinerToggle.CustomMinimumSize = new Vector2(42f, 42f);
+        _outlinerToggle.Toggled += SetOutlinerVisible;
+        StyleToggleButton(_outlinerToggle);
+        _viewToggleOverlay.AddChild(_outlinerToggle);
+
         // A second context bar, mirroring the one above the Canvas but living
         // below it, and reaching only as wide as the Canvas itself: it sits
         // between the ToolBar and the Inspector rather than spanning the full
@@ -841,13 +865,61 @@ public sealed partial class SceneMakerMain : Control
         // to an object lives here and nowhere else, which is what stops the bar
         // above the Canvas from meaning one thing while drawing and another
         // while selecting.
-        var inspectorPanel = new PanelContainer
+        // Two halves of one question: which objects are there, and what the
+        // chosen one has. They are read one after the other in a single breath
+        // - pick a body, change its numbers - so they are both on screen, and a
+        // draggable divider decides how much each gets rather than a tab
+        // deciding that one of them is gone.
+        var rightColumn = new VSplitContainer
         {
-            Name = "Inspector",
+            Name = "RightColumn",
             CustomMinimumSize = new Vector2(296f, 0f),
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        canvasRow.AddChild(inspectorPanel);
+        canvasRow.AddChild(rightColumn);
+
+        _outlinerPanel.Name = "Outliner";
+        _outlinerPanel.CustomMinimumSize = new Vector2(0f, 96f);
+        _outlinerPanel.SizeFlagsVertical = SizeFlags.ExpandFill;
+        _outlinerPanel.SizeFlagsStretchRatio = 1.0f;
+        rightColumn.AddChild(_outlinerPanel);
+        var outlinerMargin = new MarginContainer();
+        outlinerMargin.AddThemeConstantOverride("margin_left", 10);
+        outlinerMargin.AddThemeConstantOverride("margin_top", 8);
+        outlinerMargin.AddThemeConstantOverride("margin_right", 10);
+        outlinerMargin.AddThemeConstantOverride("margin_bottom", 8);
+        _outlinerPanel.AddChild(outlinerMargin);
+        var outlinerBody = new VBoxContainer { Name = "OutlinerBody" };
+        outlinerBody.AddThemeConstantOverride("separation", 6);
+        outlinerBody.AddThemeFontSizeOverride("font_size", 14);
+        outlinerMargin.AddChild(outlinerBody);
+        _outlinerHeaderLabel.Name = "OutlinerHeader";
+        outlinerBody.AddChild(_outlinerHeaderLabel);
+        outlinerBody.AddChild(new HSeparator());
+        _outlinerEmptyLabel.Name = "OutlinerEmpty";
+        _outlinerEmptyLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _outlinerEmptyLabel.Text = "Nothing of this kind in the Scene yet.";
+        outlinerBody.AddChild(_outlinerEmptyLabel);
+        var outlinerScroll = new ScrollContainer
+        {
+            Name = "OutlinerScroll",
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        outlinerBody.AddChild(outlinerScroll);
+        _outlinerColumn.Name = "OutlinerColumn";
+        _outlinerColumn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _outlinerColumn.AddThemeConstantOverride("separation", 2);
+        outlinerScroll.AddChild(_outlinerColumn);
+
+        var inspectorPanel = new PanelContainer
+        {
+            Name = "Inspector",
+            CustomMinimumSize = new Vector2(0f, 96f),
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            SizeFlagsStretchRatio = 1.6f,
+        };
+        rightColumn.AddChild(inspectorPanel);
         var inspectorMargin = new MarginContainer();
         inspectorMargin.AddThemeConstantOverride("margin_left", 10);
         inspectorMargin.AddThemeConstantOverride("margin_top", 8);
@@ -916,6 +988,142 @@ public sealed partial class SceneMakerMain : Control
         AddInspectorRow(_bridgeElevationLabel, _bridgeElevationEdit);
         AddInspectorRow(_bridgePlankCountLabel, _bridgePlankCountEdit);
         AddInspectorRow(_bridgePlankGapLabel, _bridgePlankGapEdit);
+    }
+
+    /// <summary>
+    /// Rebuilds the lines when the Scene or the mode changes. Selection and
+    /// visibility are deliberately not in that condition: both are answered by
+    /// <see cref="SyncOutlinerState"/> on the lines that are already there, so
+    /// clicking a line never frees the very button that is emitting the click.
+    /// </summary>
+    private void RebuildOutliner()
+    {
+        var document = _controller.Document;
+        var mode = _interaction.Mode;
+        if (ReferenceEquals(_outlinerDocument, document) && _outlinerMode == mode)
+        {
+            SyncOutlinerState();
+            return;
+        }
+
+        _outlinerDocument = document;
+        _outlinerMode = mode;
+        _outlinerNames.Clear();
+        _outlinerEyes.Clear();
+        foreach (var child in _outlinerColumn.GetChildren())
+        {
+            _outlinerColumn.RemoveChild(child);
+            child.QueueFree();
+        }
+
+        _outlinerHeaderLabel.Text = EditorToolRegistry.ModeDisplayName(mode);
+        var entries = document is null || _controller.Session is null
+            ? []
+            : OutlinerModel.Build(document, _controller.Session.Metrics, mode);
+        foreach (var entry in entries) AddOutlinerRow(entry);
+        _outlinerEmptyLabel.Visible = entries.Count == 0;
+        SyncOutlinerState();
+    }
+
+    private void AddOutlinerRow(OutlinerEntry entry)
+    {
+        var row = new HBoxContainer
+        {
+            Name = $"Outline{_outlinerNames.Count}",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        row.AddThemeConstantOverride("separation", 4);
+
+        var objectId = entry.ObjectId;
+        var eye = new CheckBox
+        {
+            TooltipText = "Show this on the Canvas. Hiding is a way of looking; "
+                + "the Scene keeps the object and so does the export.",
+        };
+        eye.SetPressedNoSignal(!_interaction.State.IsHidden(objectId));
+        eye.Toggled += visible => SetObjectVisible(objectId, visible);
+        row.AddChild(eye);
+        _outlinerEyes[objectId] = eye;
+
+        // A branch hangs under the body it leaves, and the indent is the whole
+        // of what says so.
+        if (entry.Depth > 0)
+            row.AddChild(new Control { CustomMinimumSize = new Vector2(entry.Depth * 12f, 0f) });
+
+        var name = new Button
+        {
+            Text = entry.Label,
+            ToggleMode = true,
+            Alignment = HorizontalAlignment.Left,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            ClipText = true,
+            TooltipText = entry.Loose
+                ? $"'{objectId}' no longer hangs on anything: what fed it is gone."
+                : entry.Note ?? objectId,
+        };
+        StyleToggleButton(name);
+        // Red for the same reason the Canvas paints it red, said in words: the
+        // list is where a relationship is visible, and being loose is one.
+        if (entry.Loose) name.AddThemeColorOverride("font_color", LooseInk);
+        name.Pressed += () => HandleToolOutcome(_canvas.SelectObject(objectId));
+        row.AddChild(name);
+        _outlinerNames[objectId] = name;
+
+        if (entry.Note is { } note)
+        {
+            var label = new Label
+            {
+                Text = note.Length > 16 ? note[..15] + "\u2026" : note,
+                TooltipText = note,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            label.AddThemeFontSizeOverride("font_size", 11);
+            row.AddChild(label);
+        }
+
+        _outlinerColumn.AddChild(row);
+    }
+
+    /// <summary>
+    /// Marks the selected line and matches every eye to the set, without
+    /// touching the lines themselves.
+    /// </summary>
+    private void SyncOutlinerState()
+    {
+        var selected = SelectedObjectId();
+        foreach (var (objectId, button) in _outlinerNames)
+        {
+            button.ButtonPressed =
+                string.Equals(objectId, selected, StringComparison.Ordinal);
+        }
+
+        foreach (var (objectId, eye) in _outlinerEyes)
+            eye.SetPressedNoSignal(!_interaction.State.IsHidden(objectId));
+    }
+
+    /// <summary>What the mode's selection currently holds, by document id.</summary>
+    private string? SelectedObjectId() => _interaction.Mode switch
+    {
+        EditorMode.River => _canvas.SelectedWaterBody?.WaterBodyId,
+        EditorMode.ElevationRegion => _canvas.SelectedElevationRegionId,
+        EditorMode.Bridge => _canvas.SelectedBridge?.BridgeId,
+        EditorMode.Props => _canvas.SelectedPropInstanceId,
+        EditorMode.Templates => _canvas.SelectedTemplateAnchorId,
+        _ => null,
+    };
+
+    private void SetObjectVisible(string objectId, bool visible)
+    {
+        _canvas.SetObjectVisible(objectId, visible);
+        SetStatus(visible
+            ? $"'{objectId}' is on the Canvas again."
+            : $"'{objectId}' is hidden while you work. The Scene and the export keep it.");
+    }
+
+    private void SetOutlinerVisible(bool visible)
+    {
+        _outlinerPanel.Visible = visible;
+        SetStatus(visible ? "Outliner shown." : "Outliner hidden.");
     }
 
     /// <summary>A control that carries its own caption and takes the full width.</summary>
@@ -1167,6 +1375,7 @@ public sealed partial class SceneMakerMain : Control
     private static readonly Color ToggleOnHoverFill = Color.FromHtml("#FFE083");
     private static readonly Color ToggleOnEdge = Color.FromHtml("#E7B936");
     private static readonly Color ToggleOnInk = Color.FromHtml("#161B24");
+    private static readonly Color LooseInk = Color.FromHtml("#FF5C5C");
 
     private static readonly string[] ToggleOnInkStates =
     [
@@ -3081,6 +3290,7 @@ public sealed partial class SceneMakerMain : Control
         _elevationEdit.TooltipText = elevationRegionHeightEditing
             ? "The selected Hill's absolute top elevation."
             : "The height the drawing tools author at.";
+        RebuildOutliner();
         _inspectorHeaderLabel.Text = InspectorHeader(
             selectedRiverBody,
             riverSelecting,

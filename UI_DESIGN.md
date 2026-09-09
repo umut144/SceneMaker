@@ -24,12 +24,13 @@ rechts daneben der vertikale `Inspector`.
 │ Workspace / Scene information                                │
 ├──────────────┬───────────────────────────────────────────────┤
 │              │ ContextMenu                                   │
-│ ToolBar      ├───────────────────────────────────┬───────────┤
-│              │ Canvas                    [m] [S] │           │
-│ ─────────    │                                   │ Inspector │
-│ Eraser       ├───────────────────────────────────┤           │
-│              │ ViewOptions                       │           │
-├──────────────┴───────────────────────────────────┴───────────┤
+│ ToolBar      ├───────────────────────────────┬───────────────┤
+│              │ Canvas          [m] [S] │ [≡] │ Outliner      │
+│ ─────────    │                               ├═══════════════┤
+│ Eraser       │                               │ Inspector     │
+│              ├───────────────────────────────┤               │
+│              │ ViewOptions                   │               │
+├──────────────┴───────────────────────────────┴───────────────┤
 │ Status                                                       │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -43,7 +44,9 @@ Vier Orte, vier Fragen — und jeder Wert steht an genau einem davon:
 - `ContextMenu` über dem Canvas: **was tut die laufende Geste?** Nur was man
   mitten im Zeichnen umlegt — der Punktmodus des *nächsten* Punktes, `Snap`,
   der Abstand einer Placement-Linie.
-- `Inspector` rechts: **was hat das Objekt, an dem ich arbeite?** Der
+- `Outliner` rechts oben: **welche Objekte gibt es?** Die Liste des aktiven
+  Modus, bei Wasser als Baum.
+- `Inspector` rechts unten: **was hat das Objekt, an dem ich arbeite?** Der
   ausgewählte Körper, oder der, den der nächste Zug erzeugt. Seine Kopfzeile
   sagt, welcher von beiden — `River river_0002 · point 3` oder `New river`.
 - Overlay oben rechts auf dem Canvas und die `ViewOptions` darunter: **wie
@@ -699,9 +702,39 @@ Der Toggle bleibt auch bei Werkzeugen sichtbar, für die er keine Wirkung hat,
 beispielsweise `Selector` oder Template-Werkzeuge. Die Leiste bleibt dadurch
 statisch und vorhersehbar.
 
+## Outliner
+
+Der `Outliner` sitzt über dem `Inspector` in derselben rechten Spalte, getrennt
+durch einen ziehbaren Teiler; beide haben ihren eigenen Scrollbereich. Sie sind
+zwei Hälften einer Frage — welche Objekte gibt es, und was hat der gewählte —
+und die läuft man in einem Atemzug ab: im Outliner suchen, anklicken, im
+Inspector ändern. Deshalb sind beide gleichzeitig sichtbar und nicht zwei Tabs;
+wer den Outliner gerade nicht braucht, zieht den Teiler nach oben oder schaltet
+ihn mit `≡` neben `m` und `S` ganz weg.
+
+Der Outliner listet die Objekte des **aktiven Modus**. Nur Wasser hat eine
+Beziehung zu zeigen: ein Ast steht eingerückt unter dem Körper, auf dem seine
+Quelle sitzt. Alles andere — Hügel, Paths, Brücken, Placements, Anker — ist eine
+flache Liste, und Terrain hat keine Objekte.
+
+Jede Zeile trägt drei Dinge:
+
+- ein **Häkchen**, das das Objekt vom Canvas nimmt. Das ist eine Sichtweise wie
+  Höhen- und Schnittansicht: es erreicht weder das Dokument noch den Export und
+  ist beim Schließen der Scene vergessen. Es gilt aber für **Zeichnen und
+  Anfassen zugleich** — was nicht zu sehen ist, kann auch kein Druck greifen,
+  sonst hielte man plötzlich etwas Unsichtbares in der Hand.
+- den **Namen**. Ein Klick wählt das Objekt aus und legt dabei das Auswahl-
+  werkzeug des Modus an; der Zeiger wählt durch Treffen, der Outliner durch
+  Nennen, und nur so erreicht man etwas, das unter einem anderen liegt oder zu
+  klein zum Treffen ist. Ein **abgehängter** Fluss steht rot da, aus demselben
+  Grund, aus dem er auf dem Canvas rot ist.
+- eine **Notiz** rechts, gedämpft: bei Wasser die Aktivierungsgruppe und die
+  Zustände, in denen der Körper da ist.
+
 ## Inspector
 
-Der `Inspector` ist die feste Spalte rechts neben dem Canvas. Er zeigt das
+Der `Inspector` ist die feste Spalte rechts unten neben dem Canvas. Er zeigt das
 Objekt, an dem gerade gearbeitet wird, und trägt in seiner Kopfzeile dessen
 Namen: `River river_0002`, mit `· point 3` sobald ein Punkt gefangen ist,
 `Hill hill_0001`, sonst `New river`, `New path`, `New bridge`, `New hill` — der

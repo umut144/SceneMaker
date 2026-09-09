@@ -255,6 +255,75 @@ public sealed class ToolInteraction
         SelectedElevationRegionPointIndex = null;
         SelectedBridgeId = null;
         ClearBridgeDrag();
+        // Hiding is keyed by document id, and the next Scene's ids mean other
+        // objects. Carrying the set across would hide strangers.
+        State.ShowEverything();
+    }
+
+    /// <summary>
+    /// The Scene as the author can see it. Only lookups ask this one; every
+    /// edit is applied to the document the controller holds, so hiding an
+    /// object can never remove it.
+    /// </summary>
+    private SceneDocument Pickable(SceneDocument scene) =>
+        SceneVisibility.Without(scene, State.HiddenObjectIds);
+
+    /// <summary>
+    /// Selects an object by name, which is what the Outliner does. The pointer
+    /// selects by hitting something; naming it is the only way to reach an
+    /// object that is under another one, or off screen, or too small to hit.
+    ///
+    /// <para>It arms the mode's selection tool as it goes. Clicking a line
+    /// means the author wants to work on that object, and leaving them with a
+    /// drawing tool armed and an invisible selection behind it would be the
+    /// same trap the context bar used to set.</para>
+    /// </summary>
+    public ToolOutcome SelectObject(string objectId)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(objectId);
+        var what = EditorToolRegistry.ModeDisplayName(Mode);
+        switch (Mode)
+        {
+            case EditorMode.River:
+                Arm(EditorTool.SelectRiver);
+                SelectedWaterBodyId = objectId;
+                SelectedWaterPointIndex = null;
+                break;
+            case EditorMode.ElevationRegion:
+                Arm(EditorTool.SelectElevationRegion);
+                SelectedElevationRegionId = objectId;
+                SelectedElevationRegionPointIndex = null;
+                break;
+            case EditorMode.Bridge:
+                Arm(EditorTool.SelectBridge);
+                SelectedBridgeId = objectId;
+                break;
+            case EditorMode.Props:
+                Arm(EditorTool.Selector);
+                SelectedPropInstanceId = objectId;
+                break;
+            case EditorMode.Templates:
+                Arm(EditorTool.AnchorMove);
+                SelectedTemplateAnchorId = objectId;
+                break;
+            default:
+                return new ToolOutcome.Message($"{what} has nothing to select.");
+        }
+
+        // Arming a selection tool abandons whatever half-drawn curve the
+        // previous tool was holding, exactly as clicking that tool would.
+        ResetTransient();
+        return new ToolOutcome.Message($"Selected {what} '{objectId}'.");
+    }
+
+    /// <summary>
+    /// Arms a tool the mode may not have. Templates and Placements gained their
+    /// selection tools at different times, and a panel that threw because one
+    /// mode was behind would be worse than a panel that only selects.
+    /// </summary>
+    private void Arm(EditorTool tool)
+    {
+        if (EditorToolRegistry.Supports(Mode, tool)) SelectTool(tool);
     }
 
     public void PointerMoved(AuthoringPoint authoring, TerrainCellCoordinate cell)
@@ -710,7 +779,7 @@ public sealed class ToolInteraction
             return ToolOutcome.Idle.Instance;
         }
 
-        var found = BridgeEditing.FindAt(context.Scene, context.Metrics, point.X, point.Y);
+        var found = BridgeEditing.FindAt(Pickable(context.Scene), context.Metrics, point.X, point.Y);
         if (found is null)
         {
             if (SelectedBridgeId is null) return ToolOutcome.Idle.Instance;
@@ -755,7 +824,7 @@ public sealed class ToolInteraction
             return new ToolOutcome.Message(WaterPointText(selected, grabbed));
         }
 
-        var found = WaterEditing.FindAt(context.Scene, context.Metrics, point.X, point.Y);
+        var found = WaterEditing.FindAt(Pickable(context.Scene), context.Metrics, point.X, point.Y);
         if (found is null)
         {
             if (SelectedWaterBodyId is null) return ToolOutcome.Idle.Instance;
@@ -1368,10 +1437,10 @@ public sealed class ToolInteraction
     /// Erases the whole bridge under the pointer, posts included. There is no
     /// way to erase a post on its own, because there is no post on its own.
     /// </summary>
-    private static ToolOutcome EraseBridge(ToolContext context, AuthoringPoint point)
+    private ToolOutcome EraseBridge(ToolContext context, AuthoringPoint point)
     {
         var bridge = BridgeEditing.FindAt(
-            context.Scene,
+            Pickable(context.Scene),
             context.Metrics,
             point.X,
             point.Y);
@@ -1521,7 +1590,7 @@ public sealed class ToolInteraction
                 $"Selected '{pointHit.Body.ElevationRegionId}' · point {pointHit.PointIndex + 1}; drag to move it.");
         }
 
-        var body = ElevationRegionEditing.FindAtCell(context.Scene, context.Metrics, cell);
+        var body = ElevationRegionEditing.FindAtCell(Pickable(context.Scene), context.Metrics, cell);
         SelectedElevationRegionId = body?.ElevationRegionId;
         SelectedElevationRegionPointIndex = null;
         ClearElevationRegionPointDrag();
@@ -1852,9 +1921,9 @@ public sealed class ToolInteraction
     /// body covers and what it is holding up are two different sets, and only
     /// the second one changes height when it goes.
     /// </summary>
-    private static ToolOutcome EraseElevationRegion(ToolContext context, TerrainCellCoordinate cell)
+    private ToolOutcome EraseElevationRegion(ToolContext context, TerrainCellCoordinate cell)
     {
-        var body = ElevationRegionEditing.FindAtCell(context.Scene, context.Metrics, cell);
+        var body = ElevationRegionEditing.FindAtCell(Pickable(context.Scene), context.Metrics, cell);
         if (body is null) return new ToolOutcome.Message("Hill Eraser: no hill here.");
         var bodyId = body.ElevationRegionId;
         return new ToolOutcome.Edit(
@@ -1869,7 +1938,7 @@ public sealed class ToolInteraction
         switch (ActiveTool)
         {
             case EditorTool.Selector:
-                var found = PropEditing.FindAt(context.Scene, context.PropAssets, point.X, point.Y);
+                var found = PropEditing.FindAt(Pickable(context.Scene), context.PropAssets, point.X, point.Y);
                 SelectedPropInstanceId = found?.InstanceId;
                 return new ToolOutcome.Message(found is null
                     ? "No Placement selected."
@@ -2405,10 +2474,10 @@ public sealed class ToolInteraction
             : $"Path: {_pathDraft.Count} point{Plural(_pathDraft.Count)} left.");
     }
 
-    private static ToolOutcome ErasePath(ToolContext context, AuthoringPoint point)
+    private ToolOutcome ErasePath(ToolContext context, AuthoringPoint point)
     {
         var route = RouteSurfaceEditing.FindAt(
-            context.Scene,
+            Pickable(context.Scene),
             context.Metrics,
             point.X,
             point.Y);
@@ -2425,9 +2494,9 @@ public sealed class ToolInteraction
     /// on purpose: they are derived from the curve, so rubbing one out would be
     /// undone by the next time the corridor is worked out.
     /// </summary>
-    private static ToolOutcome EraseWaterBody(ToolContext context, AuthoringPoint point)
+    private ToolOutcome EraseWaterBody(ToolContext context, AuthoringPoint point)
     {
-        var body = WaterEditing.FindAt(context.Scene, context.Metrics, point.X, point.Y);
+        var body = WaterEditing.FindAt(Pickable(context.Scene), context.Metrics, point.X, point.Y);
         if (body is null) return new ToolOutcome.Message("River Eraser: no water here.");
         var bodyId = body.WaterBodyId;
         return new ToolOutcome.Edit(

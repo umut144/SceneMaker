@@ -100,6 +100,9 @@ public sealed partial class SceneCanvas : Control
     // not change between frames. The cache is keyed by the document itself, so
     // it renews on an edit, an undo and a Template preview alike without anyone
     // having to remember to invalidate it.
+    private SceneDocument? _visibleSource;
+    private SceneDocument? _visibleDocument;
+    private int _visibleRevision = -1;
     private SceneDocument? _waterOverlayDocument;
     private IReadOnlyList<WaterOverlay> _waterOverlays = [];
     private SceneDocument? _routeOverlayDocument;
@@ -307,6 +310,28 @@ public sealed partial class SceneCanvas : Control
 
     /// <summary>Which authored point of it is selected, if any.</summary>
     public int? SelectedWaterPointIndex => _interaction.SelectedWaterPointIndex;
+
+    /// <summary>The Placement the Selector currently holds, if any.</summary>
+    public string? SelectedPropInstanceId => _interaction.SelectedPropInstanceId;
+
+    /// <summary>Selects an object by name, the way the Outliner does.</summary>
+    public ToolOutcome SelectObject(string objectId)
+    {
+        var outcome = _interaction.SelectObject(objectId);
+        QueueRedraw();
+        return outcome;
+    }
+
+    /// <summary>
+    /// Takes an object off the Canvas, or puts it back. It is a way of looking:
+    /// the document is untouched, and the same filtered Scene decides both what
+    /// is drawn and what a press can take hold of.
+    /// </summary>
+    public void SetObjectVisible(string objectId, bool visible)
+    {
+        _interaction.State.SetHidden(objectId, !visible);
+        QueueRedraw();
+    }
 
     /// <summary>
     /// Applies the context bar's water numbers to the selection - one point, or
@@ -618,7 +643,7 @@ public sealed partial class SceneCanvas : Control
         DrawRect(new Rect2(Vector2.Zero, Size), CanvasBackground);
         if (_scene is null || _metrics is null) return;
 
-        var document = _templatePreview ?? _scene.Document;
+        var document = AsSeen(_templatePreview ?? _scene.Document);
         var zoom = (float)ViewState.Zoom;
         var pan = new Vector2((float)ViewState.PanX, (float)ViewState.PanY);
         var widthAuthoringPixels = _metrics.SceneWidthAuthoringPixels(document);
@@ -1098,6 +1123,33 @@ public sealed partial class SceneCanvas : Control
                 DrawRect(rectangle, color);
             }
         }
+    }
+
+    /// <summary>
+    /// The Scene without what the Outliner has hidden. Worked out once per
+    /// change rather than once per frame: everything below caches on the
+    /// document it was built from, and a fresh instance every frame would throw
+    /// all of that away.
+    ///
+    /// <para>One call, at the top of the draw, is the whole of it. Terrain,
+    /// water, routes, bridges and placements all read the document handed to
+    /// them, so hiding a body takes its cut out of the section view too - which
+    /// is what an author asking to see the map without that river means.</para>
+    /// </summary>
+    private SceneDocument AsSeen(SceneDocument document)
+    {
+        var revision = _interaction.State.VisibilityRevision;
+        if (_visibleDocument is not null
+            && ReferenceEquals(_visibleSource, document)
+            && _visibleRevision == revision)
+        {
+            return _visibleDocument;
+        }
+
+        _visibleSource = document;
+        _visibleRevision = revision;
+        _visibleDocument = SceneVisibility.Without(document, _interaction.State.HiddenObjectIds);
+        return _visibleDocument;
     }
 
     private IReadOnlyList<WaterOverlay> WaterOverlays(SceneDocument document)

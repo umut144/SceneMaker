@@ -465,4 +465,35 @@ public sealed class EditorInteractionState
     }
 
     public void SetSnapWaterToTerrain(bool enabled) => SnapWaterToTerrain = enabled;
+
+    /// <summary>
+    /// The objects the author has taken off the Canvas while working. A way of
+    /// looking and not a fact about the Scene: nothing here reaches the
+    /// document or the export, and closing the Scene forgets all of it.
+    /// </summary>
+    public IReadOnlyCollection<string> HiddenObjectIds => _hiddenObjectIds;
+
+    /// <summary>
+    /// Bumped whenever the set changes, so a Canvas that caches what it drew
+    /// can tell that the answer moved without comparing the sets.
+    /// </summary>
+    public int VisibilityRevision { get; private set; }
+
+    public bool IsHidden(string objectId) => _hiddenObjectIds.Contains(objectId);
+
+    public void SetHidden(string objectId, bool hidden)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(objectId);
+        var changed = hidden ? _hiddenObjectIds.Add(objectId) : _hiddenObjectIds.Remove(objectId);
+        if (changed) VisibilityRevision++;
+    }
+
+    public void ShowEverything()
+    {
+        if (_hiddenObjectIds.Count == 0) return;
+        _hiddenObjectIds.Clear();
+        VisibilityRevision++;
+    }
+
+    private readonly HashSet<string> _hiddenObjectIds = new(StringComparer.Ordinal);
 }

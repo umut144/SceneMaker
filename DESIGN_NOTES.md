@@ -739,6 +739,47 @@ What this does not buy is confidence. The App layer still has no automated
 tests, so every visibility rule the panel inherited is only as good as a manual
 pass (`APP-02`).
 
+## The list and the panel are one question asked twice
+
+The Inspector answers what the chosen object has. It cannot answer which
+objects there are, and for water that second question is the one with a shape:
+a branch hangs on the body it leaves, and nothing on the Canvas draws that
+relationship. The Outliner draws it as an indent.
+
+They sit in one column, split by a draggable divider, rather than behind two
+tabs. The loop an author actually runs is *find it, click it, change it* - the
+list and the values are read one after the other in a single breath - and tabs
+would put a click between every step of that, with half the answer always
+hidden. The divider makes the same trade adjustable instead of fixed: pull it
+up and the Outliner is effectively closed, and `≡` beside the view toggles
+closes it outright. If the state grid of `WATER-11` later needs real width, the
+answer is still not tabs but the undocked window the author first asked for.
+
+### Hiding has to reach picking, or it is a trap
+
+Editor visibility is a way of looking, like the height and section views: it
+never reaches the document or the export, and closing the Scene forgets it. But
+a hidden object that a press could still take hold of would be worse than no
+hiding at all - the author would be holding something that is not on screen and
+editing it by accident. So one filtered Scene, `SceneVisibility.Without`,
+answers both questions, and the unfiltered document is what every edit is
+applied to. That is also why the Canvas filters once at the top of its draw:
+terrain, water, routes, bridges and placements all read the document handed to
+them, so hiding a river takes its cut out of the section view too, which is what
+"show me the map without that river" means.
+
+### Selecting by name arms the tool
+
+A click on a line selects the object and switches to the mode's selection tool.
+The pointer selects by hitting something; naming it is the only way to reach an
+object that is under another one or too small to hit. Leaving a drawing tool
+armed with an invisible selection behind it would be the same trap the context
+bar used to set, one paragraph up.
+
+The lines are rebuilt only when the Scene or the mode changes. Selection and
+visibility are answered on the lines that already exist, because rebuilding
+inside a click would free the very button that is emitting it.
+
 ## How deep a bed has to be is the World's statement
 
 `src/SceneMaker.Core/WorkspaceConfiguration.cs`, `MinimumChannelDepthMeters`
