@@ -444,6 +444,7 @@ public sealed partial class SceneMakerMain : Control
         _eraserToggle.CustomMinimumSize = new Vector2(42f, 42f);
         _eraserToggle.AddThemeConstantOverride("icon_max_width", 24);
         _eraserToggle.Toggled += SetEraserEnabled;
+        StyleToggleButton(_eraserToggle);
         toolColumn.AddChild(_eraserToggle);
 
         _contextMenuBar.Name = "ContextMenu";
@@ -809,6 +810,7 @@ public sealed partial class SceneMakerMain : Control
             "Show Terrain, Placements and Water by height instead of by Asset";
         _heatmapToggle.CustomMinimumSize = new Vector2(42f, 42f);
         _heatmapToggle.Toggled += SetHeatmapEnabled;
+        StyleToggleButton(_heatmapToggle);
         _viewToggleOverlay.AddChild(_heatmapToggle);
         _sectionToggle.Name = "SectionToggle";
         _sectionToggle.Text = "S";
@@ -818,6 +820,7 @@ public sealed partial class SceneMakerMain : Control
             "Show the highest remaining surface after clipping the Scene at one elevation";
         _sectionToggle.CustomMinimumSize = new Vector2(42f, 42f);
         _sectionToggle.Toggled += SetSectionEnabled;
+        StyleToggleButton(_sectionToggle);
         _viewToggleOverlay.AddChild(_sectionToggle);
 
         // A second context bar, mirroring the one above the Canvas but living
@@ -1019,6 +1022,7 @@ public sealed partial class SceneMakerMain : Control
             Disabled = true,
         };
         button.AddThemeConstantOverride("icon_max_width", 24);
+        StyleToggleButton(button);
         button.Pressed += () => SelectDrawingTool(definition.Tool);
         button.ButtonPressed = definition.Tool == _interaction.ActiveTool;
         _drawingToolControlsByTool.Add(definition.Tool, button);
@@ -1159,6 +1163,62 @@ public sealed partial class SceneMakerMain : Control
     /// turned the one Asset the author had chosen into the one Asset whose
     /// colour they could no longer see.
     /// </summary>
+    private static readonly Color ToggleOnFill = Color.FromHtml("#F2C94C");
+    private static readonly Color ToggleOnHoverFill = Color.FromHtml("#FFE083");
+    private static readonly Color ToggleOnEdge = Color.FromHtml("#E7B936");
+    private static readonly Color ToggleOnInk = Color.FromHtml("#161B24");
+
+    private static readonly string[] ToggleOnInkStates =
+    [
+        "font_pressed_color",
+        "font_hover_pressed_color",
+        "icon_pressed_color",
+        "icon_hover_pressed_color",
+    ];
+
+    /// <summary>
+    /// Yellow while a toggle is on. The default theme marks a held-down button
+    /// and a toggle that stays on with nearly the same shade, and an Eraser or
+    /// a Section view left on silently changes what every later stroke and
+    /// every later glance mean. The ink turns dark with the fill, because a
+    /// pale glyph on yellow is no more readable than no highlight at all.
+    ///
+    /// Asset chips are deliberately not styled this way: their colour is the
+    /// Asset, and a second meaning for the same fill would take that away.
+    /// </summary>
+    private static void StyleToggleButton(Button button)
+    {
+        button.AddThemeStyleboxOverride("pressed", ToggleBox(ToggleOnFill, ToggleOnEdge));
+        button.AddThemeStyleboxOverride(
+            "hover_pressed", ToggleBox(ToggleOnHoverFill, ToggleOnEdge));
+        // Off and hovered: a hint of what the press would turn it into.
+        button.AddThemeStyleboxOverride(
+            "hover",
+            ToggleBox(new Color(ToggleOnFill.R, ToggleOnFill.G, ToggleOnFill.B, 0.16f), null));
+        foreach (var state in ToggleOnInkStates)
+            button.AddThemeColorOverride(state, ToggleOnInk);
+    }
+
+    private static StyleBoxFlat ToggleBox(Color fill, Color? edge)
+    {
+        var box = new StyleBoxFlat
+        {
+            BgColor = fill,
+            ContentMarginLeft = 10f,
+            ContentMarginRight = 10f,
+            ContentMarginTop = 4f,
+            ContentMarginBottom = 4f,
+        };
+        if (edge is { } border)
+        {
+            box.BorderColor = border;
+            box.SetBorderWidthAll(1);
+        }
+
+        box.SetCornerRadiusAll(4);
+        return box;
+    }
+
     private static void StyleAssetButton(Button button, Color color)
     {
         foreach (var state in AssetButtonFontStates)
@@ -1729,6 +1789,7 @@ public sealed partial class SceneMakerMain : Control
             TooltipText = tooltip,
             CustomMinimumSize = new Vector2(110f, 0f),
         };
+        StyleToggleButton(button);
         button.Pressed += () => SelectPerspective(mode, name);
         bar.AddChild(button);
         controls.Add(mode, button);

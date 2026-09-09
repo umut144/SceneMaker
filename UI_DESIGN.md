@@ -57,6 +57,30 @@ Körper ausgewählt war, und die Statuszeile trotzdem Erfolg meldete. Ein Feld,
 das zwei Dinge bedeuten kann, wird früher oder später als das falsche von
 beiden gelesen — auch von dem, der es geschrieben hat.
 
+### Ein Schalter, der an ist, sieht aus wie an
+
+Jeder Toggle-Knopf — die Werkzeuge, die Bereichsknöpfe, der `Eraser`, `m` und
+`S` — ist gelb gefüllt, solange er an ist: `#f2c94c`, unter dem Zeiger
+`#ffe083`, beide mit `#e7b936` als Rand. Schrift und Icon werden dabei dunkel,
+weil ein helles Glyph auf Gelb so unlesbar ist wie gar keine Hervorhebung. Ein
+ausgeschalteter Knopf zeigt unter dem Zeiger eine schwache gelbe Ahnung dessen,
+was ein Druck aus ihm machen würde.
+
+Der Grund ist nicht Geschmack. Ein `Eraser`, der unbemerkt an ist, ändert die
+Bedeutung jedes weiteren Zuges; eine Schnittansicht, die unbemerkt an ist, die
+Bedeutung jedes weiteren Blicks. Das Standardtheme unterscheidet „gedrückt
+gehalten" und „bleibt an" nur um eine Nuance.
+
+Ausgenommen bleiben die Asset-Chips — ihre Farbe *ist* das Asset, und eine
+zweite Bedeutung derselben Fläche nähme ihnen das — sowie die beiden Checkboxen
+`Snap` und `Auto start`, deren Häkchen schon deutlich ist.
+
+Für „auf einen bereits aktiven Knopf drücken" zeichnet Godot keinen eigenen
+Zustand: solange die Maus gedrückt darauf steht, zeigt der Knopf den normalen
+Stil, weil er vorführt, was das Loslassen aus ihm macht. `#e7b936` sitzt
+deshalb auf dem Rand beider aktiven Zustände statt auf einer Fläche, die nie
+erschiene.
+
 ## Werkzeugmodell
 
 Die Werkzeugauswahl besteht aus drei unabhängigen Dimensionen:
