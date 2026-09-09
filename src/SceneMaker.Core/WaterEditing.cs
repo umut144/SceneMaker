@@ -138,6 +138,83 @@ public static class WaterEditing
     }
 
     /// <summary>
+    /// Moves one end of a body onto another body and says so, in one operation.
+    ///
+    /// <para>The three parts belong together. Putting the point there without
+    /// the claim is two rivers that happen to touch; the claim without the point
+    /// is a fork the export refuses; and the height has to be the other body's
+    /// surface at that place, because that is what makes the two the same water
+    /// where they meet. Doing them separately would leave the document wrong
+    /// between the steps and give the author three ways to stop halfway.</para>
+    ///
+    /// <para>The moved point loses its handles. They were pulled relative to
+    /// where the point used to be, and after a jump across the map they describe
+    /// a bend nobody authored. Its neighbour keeps its own - only the point that
+    /// was moved changes.</para>
+    /// </summary>
+    public static SceneDocument ReAttach(
+        SceneDocument scene,
+        string waterBodyId,
+        WaterEnd end,
+        WaterCenterlineAnchor anchor)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        var body = Require(scene, waterBodyId);
+        if (string.Equals(anchor.WaterBodyId, waterBodyId, StringComparison.Ordinal))
+            throw new SceneMakerDocumentException($"Water body '{waterBodyId}' cannot meet itself.");
+        _ = Require(scene, anchor.WaterBodyId);
+
+        var index = end == WaterEnd.Source ? 0 : body.Points.Count - 1;
+        var points = body.Points.ToList();
+        points[index] = points[index] with
+        {
+            PositionAuthoringPx = anchor.PositionAuthoringPx,
+            ElevationMeters = anchor.SurfaceMeters,
+            HandleInAuthoringPx = AuthoringPixelOffset.Zero,
+            HandleOutAuthoringPx = AuthoringPixelOffset.Zero,
+        };
+
+        var claims = body.Junctions
+            .Where(claim => claim.End != end)
+            .Append(new WaterJunctionDocument { End = end, WaterBodyId = anchor.WaterBodyId })
+            .ToList();
+        return SetJunctions(Reshape(scene, waterBodyId, points), waterBodyId, claims);
+    }
+
+    /// <summary>
+    /// Whether attaching this end to that body would make a ring: a body fed,
+    /// around the junctions, by itself. The export refuses one and every walk
+    /// here guards against one, so it is refused at the gesture instead of
+    /// stored and complained about later - unlike a fork pulled apart, a ring is
+    /// not a step on the way to anything.
+    /// </summary>
+    public static bool WouldFeedItself(
+        SceneDocument scene,
+        string waterBodyId,
+        WaterEnd end,
+        string partnerWaterBodyId)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        if (end != WaterEnd.Source) return false;
+        HashSet<string> walking = new(StringComparer.Ordinal);
+        var at = partnerWaterBodyId;
+        while (true)
+        {
+            if (string.Equals(at, waterBodyId, StringComparison.Ordinal)) return true;
+            if (!walking.Add(at)) return false;
+            var body = scene.WaterBodies.FirstOrDefault(candidate =>
+                string.Equals(candidate.WaterBodyId, at, StringComparison.Ordinal));
+            if (body?.Junctions.FirstOrDefault(claim => claim.End == WaterEnd.Source)
+                is not { } source)
+            {
+                return false;
+            }
+
+            at = source.WaterBodyId;
+        }
+    }
+
+    /// <summary>
     /// Records which bodies this one's ends sit on, in the canonical order the
     /// document keeps them in. Only the partner is stated here; where exactly
     /// the two meet is worked out from the curves whenever anybody asks.

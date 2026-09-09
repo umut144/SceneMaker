@@ -567,6 +567,13 @@ public sealed class ToolInteraction
         }
         if (Mode == EditorMode.ElevationRegion && ActiveTool == EditorTool.DrawElevationRegion)
             return key == ToolKey.Enter ? FinishElevationRegion(context) : CancelElevationRegionPoint();
+        if (Mode == EditorMode.River && ActiveTool == EditorTool.ReAttachRiver)
+        {
+            // Nothing for Enter to finish: the second press already does.
+            if (key == ToolKey.Enter || _reAttachEnd is null) return ToolOutcome.Idle.Instance;
+            return CancelRiverPoint();
+        }
+
         if (Mode == EditorMode.River && ActiveTool == EditorTool.SelectRiver)
         {
             if (key == ToolKey.Enter) return ToolOutcome.Idle.Instance;
@@ -669,6 +676,7 @@ public sealed class ToolInteraction
         EditorTool.InsertRiverPoint => InsertWaterPoint(context, authoring),
         EditorTool.SelectRiver when EraserEnabled => EraseWaterPointOrBody(context, authoring),
         EditorTool.SelectRiver => SelectOrGrabWaterBody(context, authoring),
+        EditorTool.ReAttachRiver => ReAttachStep(context, authoring),
         _ => ToolOutcome.Idle.Instance,
     };
 
@@ -859,6 +867,105 @@ public sealed class ToolInteraction
     /// at that station, and the bend stays where it was - inserting a point is
     /// making somewhere to take hold, not changing the river.</para>
     /// </summary>
+    /// <summary>
+    /// Which end `Re-Attach` is carrying, if the first press has happened.
+    /// </summary>
+    public (string WaterBodyId, WaterEnd End)? ReAttachEnd => _reAttachEnd;
+
+    private (string WaterBodyId, WaterEnd End)? _reAttachEnd;
+
+    private void ClearReAttach() => _reAttachEnd = null;
+
+    /// <summary>
+    /// Two presses. The first picks an end of a river - a source or a mouth,
+    /// because those are the only places a junction can be. The second says
+    /// which body that end now sits on, and the end moves there.
+    ///
+    /// <para>It is a tool and not a button beside the selection because it is
+    /// not repair. Hanging a healthy branch somewhere else is an ordinary thing
+    /// to author, and it starts with the end nowhere near its new parent - a
+    /// control that only appears once the two already touch could never be used
+    /// for it. Its sibling is `Create Branch`, which authors the same claim
+    /// while drawing; this one authors it on a curve that exists.</para>
+    ///
+    /// <para>What comes out is a straight run from the moved end to its
+    /// neighbour, which is usually wrong and always visible. Bending it back is
+    /// `Insert Point` and dragging, and that is the author's work rather than a
+    /// guess of ours about where the river should now run.</para>
+    /// </summary>
+    private ToolOutcome ReAttachStep(ToolContext context, AuthoringPoint point)
+    {
+        if (_reAttachEnd is not { } carrying) return ChooseReAttachEnd(context, point);
+
+        if (WaterGeometry.NearestCenterlineAnchor(
+                context.Scene,
+                context.Metrics,
+                point.X,
+                point.Y,
+                context.Metrics.AuthoringPixelsPerWaterCell * 2.0) is not { } anchor)
+        {
+            return new ToolOutcome.Message(
+                "Re-Attach: press on the river this end should meet, near the line running down it.");
+        }
+
+        if (string.Equals(anchor.WaterBodyId, carrying.WaterBodyId, StringComparison.Ordinal))
+        {
+            return new ToolOutcome.Message(
+                $"Re-Attach: '{carrying.WaterBodyId}' cannot meet itself. Escape gives the end back.");
+        }
+
+        if (WaterEditing.WouldFeedItself(
+                context.Scene, carrying.WaterBodyId, carrying.End, anchor.WaterBodyId))
+        {
+            return new ToolOutcome.Message(
+                $"Re-Attach: '{anchor.WaterBodyId}' is fed by '{carrying.WaterBodyId}', so this would "
+                + "be a river feeding itself. Escape gives the end back.");
+        }
+
+        var bodyId = carrying.WaterBodyId;
+        var end = carrying.End;
+        var partner = anchor.WaterBodyId;
+        ClearReAttach();
+        return new ToolOutcome.Edit(
+            "Re-Attach River",
+            document => WaterEditing.ReAttach(document, bodyId, end, anchor),
+            Describe: (_, after) =>
+            {
+                var said = FormattableString.Invariant(
+                    $"station {anchor.StationMeters:0.##} m, surface {anchor.SurfaceMeters:0.###} m.");
+                return $"'{bodyId}' now meets '{partner}' at its "
+                    + $"{end.ToString().ToLowerInvariant()}, {said}"
+                    + JunctionComplaint(after, context.Metrics);
+            });
+    }
+
+    private ToolOutcome ChooseReAttachEnd(ToolContext context, AuthoringPoint point)
+    {
+        foreach (var body in Pickable(context.Scene).WaterBodies)
+        {
+            if (WaterEditing.FindPointAt(
+                    body, point.X, point.Y, context.PointerHitRadiusAuthoringPixels)
+                is not { } index)
+            {
+                continue;
+            }
+
+            if (index != 0 && index != body.Points.Count - 1)
+            {
+                return new ToolOutcome.Message(
+                    "Re-Attach: only a source or a mouth meets another river; that is a point in between.");
+            }
+
+            var end = index == 0 ? WaterEnd.Source : WaterEnd.Mouth;
+            _reAttachEnd = (body.WaterBodyId, end);
+            return new ToolOutcome.Message(
+                $"Re-Attach: carrying the {end.ToString().ToLowerInvariant()} of '{body.WaterBodyId}'. "
+                + "Press the river it should meet.");
+        }
+
+        return new ToolOutcome.Message("Re-Attach: press the source or the mouth of a river.");
+    }
+
     private ToolOutcome InsertWaterPoint(ToolContext context, AuthoringPoint point)
     {
         if (WaterGeometry.NearestCenterlineAnchor(
@@ -2274,6 +2381,14 @@ public sealed class ToolInteraction
     /// </summary>
     private ToolOutcome CancelRiverPoint()
     {
+        if (_reAttachEnd is { } carrying)
+        {
+            ClearReAttach();
+            return new ToolOutcome.Message(
+                $"Re-Attach: the {carrying.End.ToString().ToLowerInvariant()} of "
+                + $"'{carrying.WaterBodyId}' stays where it is.");
+        }
+
         if (_riverPending is not null)
         {
             _riverPending = null;
@@ -2739,6 +2854,7 @@ public sealed class ToolInteraction
         ClearElevationRegionDraft();
         ClearBridgeDrag();
         ClearWaterDrag();
+        ClearReAttach();
         _bridgeStart = null;
     }
 

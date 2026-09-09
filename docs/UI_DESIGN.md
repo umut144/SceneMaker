@@ -357,6 +357,47 @@ Umbenennen fehlt noch (`WATER-11`). Es betrifft alle Körper an einem Schalter
 gleichzeitig und gehört deshalb zum Outliner, nicht in eine Zeile, die einen
 Körper beschreibt.
 
+### River:Re-Attach
+
+Eine Junction ist **authoriert**, nicht aus Nähe abgeleitet: im Dokument steht
+am Ast, auf welchem Körper sein Ende sitzt, und dieser Satz ändert sich nur,
+wenn ihn jemand ändert. Einen Punkt zu ziehen ändert die Lage und nicht die
+Behauptung — deshalb bleibt ein Ast, den man an einen anderen Fluss heranzieht,
+rot. Bis hierher gab es nur einen Weg, eine Verbindung zu **knüpfen**: einen
+neuen Ast mit `Create Branch` zeichnen. Zerreißen ging durch Ziehen, Knüpfen
+nicht — ein abgehängter Ast mit zwanzig Punkten war nur noch löschbar.
+
+`Re-Attach` schließt das, **in zwei Drücken**:
+
+1. **Auf ein Ende drücken** — Quelle oder Mündung, denn nur dort kann eine
+   Junction sitzen. Ein Punkt dazwischen sagt das und wird nicht genommen.
+2. **Auf den Fluss drücken**, den dieses Ende treffen soll, nahe seiner
+   Mittellinie. Das Ende springt auf den Anker, übernimmt die Oberflächenhöhe
+   des anderen Körpers dort — das ist es, was die beiden zum selben Wasser macht
+   — und die Behauptung wird neu gesetzt.
+
+`Escape` gibt das getragene Ende zurück. Zwischen den beiden Drücken zeichnet
+der Canvas das getragene Ende und die Gerade zum Zeiger: die Luftlinie, die
+entstehen wird, ist die Sache, die der Autor danach wieder gerade biegt.
+
+Der bewegte Punkt **verliert seine Handles**. Sie waren relativ zu einer Stelle
+gezogen, an der der Punkt nicht mehr ist, und beschrieben nach einem Sprung über
+die Karte eine Biegung, die niemand authoriert hat. Sein Nachbar behält seine —
+nur der angefasste Punkt ändert sich. Was dabei herauskommt, ist eine lange
+Gerade; sie wieder in einen Flusslauf zu verwandeln ist `Insert Point` und
+Punkte ziehen, und das ist Autorenarbeit und keine Vermutung von uns.
+
+Es ist ein Werkzeug und kein Knopf neben der Auswahl, weil es **keine Reparatur
+ist**. Einen gesunden Ast woanders hinzuhängen ist ein gewöhnlicher Zug, und der
+beginnt damit, dass das Ende weit weg von seinem neuen Elternfluss liegt — ein
+Bedienelement, das erst erscheint, wenn die beiden sich schon berühren, wäre
+dafür nie zu gebrauchen.
+
+**Ein Ring wird abgelehnt**, nicht gespeichert und beklagt: ein Fluss, der sich
+selbst speist, ist kein Zwischenschritt auf dem Weg irgendwohin, anders als eine
+Gabelung, die man beim Ziehen kurz auseinanderzieht. Das getragene Ende bleibt
+dabei getragen, damit man gleich woanders hin zielen kann.
+
 ### River:Create Branch
 
 `Create Branch` zeichnet einen Fluss wie `Draw River`, mit einem Unterschied:

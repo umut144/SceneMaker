@@ -422,8 +422,11 @@ public static class ToolPreviewBuilder
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(metrics);
-        if (tool != EditorTool.InsertRiverPoint || pointer is not { } at)
+        if (tool is not (EditorTool.InsertRiverPoint or EditorTool.ReAttachRiver)
+            || pointer is not { } at)
+        {
             return WaterInsertPreview.Empty;
+        }
 
         var anchor = WaterGeometry.NearestCenterlineAnchor(
             scene, metrics, at.X, at.Y, metrics.AuthoringPixelsPerWaterCell * 2.0);

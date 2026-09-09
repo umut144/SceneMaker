@@ -1734,7 +1734,7 @@ public sealed partial class SceneCanvas : Control
             return;
         }
 
-        if (ActiveTool == EditorTool.InsertRiverPoint)
+        if (ActiveTool is EditorTool.InsertRiverPoint or EditorTool.ReAttachRiver)
         {
             DrawWaterInsertPreview(pan, zoom, sceneHeightAuthoringPixels);
             return;
@@ -1836,9 +1836,32 @@ public sealed partial class SceneCanvas : Control
 
         // Hollow, because it is not there yet. Absent while the pointer is off
         // the line, which is also the answer to whether a press would take.
-        if (preview.Anchor is not { } anchor) return;
-        var landing = Screen(anchor.PositionAuthoringPx.X, anchor.PositionAuthoringPx.Y);
-        DrawArc(landing, 6.5f, 0f, Mathf.Tau, 24, SelectionColor, 2.0f);
+        if (preview.Anchor is { } anchor)
+        {
+            var landing = Screen(anchor.PositionAuthoringPx.X, anchor.PositionAuthoringPx.Y);
+            DrawArc(landing, 6.5f, 0f, Mathf.Tau, 24, SelectionColor, 2.0f);
+        }
+
+        // `Re-Attach` between its two presses: the end it is carrying, and the
+        // straight run it would leave behind. Drawn because that run is the
+        // thing the author has to bend back afterwards, and seeing it before
+        // the press is what makes the second press a decision.
+        if (_interaction.ReAttachEnd is not { } carrying) return;
+        if (context.Scene.WaterBodies.FirstOrDefault(candidate => string.Equals(
+                candidate.WaterBodyId, carrying.WaterBodyId, StringComparison.Ordinal))
+            is not { } carried)
+        {
+            return;
+        }
+
+        var carriedPoint = carrying.End == WaterEnd.Source
+            ? carried.Points[0]
+            : carried.Points[^1];
+        var from = Screen(
+            carriedPoint.PositionAuthoringPx.X, carriedPoint.PositionAuthoringPx.Y);
+        DrawCircle(from, 6.5f, SelectionColor);
+        if (_interaction.PointerAuthoring is not { } pointer) return;
+        DrawLine(from, Screen(pointer.X, pointer.Y), SelectionColor, 2.0f);
     }
 
     private void DrawWaterSelectionPreview(
