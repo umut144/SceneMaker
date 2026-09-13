@@ -715,8 +715,8 @@ public sealed class SceneExportContractTests
         if (extend is not null) document = extend(document, workspace);
         var session = WorkspaceSession.Load(workspace.RootPath);
         var scene = new LoadedScene(
-            Path.Combine(session.Workspace.ScenesDirectoryPath, "base.scene.json"),
+            Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json"),
             document);
-        return File.ReadAllText(SceneExport.Write(session, scene).Path);
+        return File.ReadAllText(SceneExport.Write(session, workspace.Game, scene).Path);
     }
 }

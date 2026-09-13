@@ -92,12 +92,12 @@ public static class SceneExport
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
     };
 
-    /// <summary>Exports <paramref name="scene"/> out of its open Workspace.</summary>
-    public static SceneExportResult Write(WorkspaceSession session, LoadedScene scene)
+    /// <summary>Exports <paramref name="scene"/> out of its open Game.</summary>
+    public static SceneExportResult Write(WorkspaceSession session, LoadedGame game, LoadedScene scene)
     {
         ArgumentNullException.ThrowIfNull(session);
         return Write(
-            session.Workspace,
+            game,
             scene,
             session.Configuration,
             session.TerrainAssets,
@@ -105,13 +105,13 @@ public static class SceneExport
     }
 
     public static SceneExportResult Write(
-        LoadedWorkspace workspace,
+        LoadedGame game,
         LoadedScene scene,
         WorkspaceConfiguration configuration,
         TerrainDisplayCatalog terrainAssets,
         PropDisplayCatalog propAssets)
     {
-        ArgumentNullException.ThrowIfNull(workspace);
+        ArgumentNullException.ThrowIfNull(game);
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(configuration);
         Validate(scene.Document, configuration, terrainAssets, propAssets);
@@ -139,40 +139,41 @@ public static class SceneExport
                 scene.Document, configuration.Metrics, propAssets),
             Scene = ExportScene(scene.Document, configuration.Metrics),
         };
-        var directory = Path.Combine(workspace.DirectoryPath, DirectoryName);
+        var directory = Path.Combine(game.DirectoryPath, DirectoryName);
         var path = Path.Combine(directory, scene.Document.SceneId + FileSuffix);
         AtomicTextFile.Write(path, JsonSerializer.Serialize(document, JsonOptions) + "\n");
         return new SceneExportResult(path, Warnings(scene.Document, configuration.Metrics));
     }
 
     /// <summary>
-    /// Exports every Scene of the Workspace, Instances and Templates alike.
+    /// Exports every Scene of the Game, Instances and Templates alike.
     /// Templates ship as their own files so that one of them can be replaced
     /// between seasons without rewriting the map that uses it.
     /// </summary>
-    public static IReadOnlyList<SceneExportResult> WriteWorkspace(WorkspaceSession session)
+    public static IReadOnlyList<SceneExportResult> WriteGame(WorkspaceSession session, LoadedGame game)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(game);
         var scenes = SceneStore
-            .EnumeratePaths(session.Workspace)
-            .Select(path => SceneStore.Load(session.Workspace, path))
+            .EnumeratePaths(game)
+            .Select(path => SceneStore.Load(game, path))
             .ToList();
 
         // Exports are named by Scene id in one flat directory, so two Scenes
         // sharing an id would silently overwrite one another and a consumer
-        // would load a Workspace with a map missing. Creating such a pair is
-        // already refused; this catches a Workspace edited by hand.
+        // would load a Game with a map missing. Creating such a pair is
+        // already refused; this catches a Game edited by hand.
         var duplicate = scenes
             .GroupBy(static scene => scene.Document.SceneId, StringComparer.Ordinal)
             .FirstOrDefault(static group => group.Count() > 1);
         if (duplicate is not null)
         {
             throw new SceneMakerDocumentException(
-                $"Scene id '{duplicate.Key}' names {duplicate.Count()} Scenes in this Workspace; ids must be unique before exporting.");
+                $"Scene id '{duplicate.Key}' names {duplicate.Count()} Scenes in this Game; ids must be unique before exporting.");
         }
 
-        // A Workspace export is one operation. Refuse every Scene before the
-        // first output is replaced, otherwise one late invalid Scene leaves a
+        // A Game export is one operation. Refuse every Scene before the first
+        // output is replaced, otherwise one late invalid Scene leaves a
         // mixture of new and stale files in the exports directory.
         foreach (var scene in scenes)
         {
@@ -183,7 +184,7 @@ public static class SceneExport
                 session.PropAssets);
         }
 
-        return scenes.Select(scene => Write(session, scene)).ToList();
+        return scenes.Select(scene => Write(session, game, scene)).ToList();
     }
 
     /// <summary>

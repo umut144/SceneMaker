@@ -1,3 +1,4 @@
+using System.Linq;
 using SceneMaker.Core;
 
 namespace SceneMaker.Editor;
@@ -46,6 +47,14 @@ public sealed class EditorController
 
     /// <summary>The open Workspace, or null when none is open.</summary>
     public WorkspaceSession? Session { get; private set; }
+
+    /// <summary>
+    /// The open Game inside the open Workspace, or null when none is open.
+    /// Every Scene/Template operation requires this in addition to
+    /// <see cref="Session"/>: a Workspace can be open with no Game chosen yet,
+    /// the same way it can be open with no Scene chosen yet.
+    /// </summary>
+    public LoadedGame? Game { get; private set; }
 
     /// <summary>The open Scene, or null when none is open.</summary>
     public LoadedScene? Scene { get; private set; }
@@ -126,10 +135,26 @@ public sealed class EditorController
         {
             var session = WorkspaceSession.Load(workspaceDirectory);
             Session = session;
+            Game = null;
             RestoredCanvasView = null;
             LastWorkspaceDirectory = session.DirectoryPath;
-            return EditorReport.Ok(
-                $"Loaded Workspace '{session.WorkspaceKey}'. Load a Scene to start editing.");
+
+            // No Load Game dialog exists yet: when the Workspace holds exactly
+            // one Game, open it so the single-Game workflow keeps working
+            // unattended. Ambiguity between several Games is left for the
+            // caller to resolve once that dialog exists.
+            var gameKeys = GameStore.EnumerateGameKeys(session.Workspace).ToList();
+            if (gameKeys.Count == 1)
+            {
+                Game = GameStore.Load(session.Workspace, gameKeys[0]);
+                return EditorReport.Ok(
+                    $"Loaded Workspace '{session.WorkspaceKey}' and Game '{Game.GameKey}'. "
+                    + "Load a Scene to start editing.");
+            }
+
+            return EditorReport.Ok(gameKeys.Count == 0
+                ? $"Loaded Workspace '{session.WorkspaceKey}'. Create a Game before creating a Scene."
+                : $"Loaded Workspace '{session.WorkspaceKey}'. Open a Game before creating a Scene.");
         }
         catch (Exception exception) when (IsDocumentFailure(exception))
         {
@@ -164,6 +189,73 @@ public sealed class EditorController
     }
 
     /// <summary>
+    /// Opens the Game named <paramref name="gameKey"/> inside the open
+    /// Workspace. Closes whatever Scene was open, the same way opening a
+    /// different Workspace does.
+    /// </summary>
+    public EditorReport OpenGame(string gameKey)
+    {
+        if (Session is not { } session) return EditorReport.Failed("No Workspace is open.");
+        try
+        {
+            Game = GameStore.Load(session.Workspace, gameKey);
+            CloseScene();
+            return EditorReport.Ok($"Loaded Game '{Game.GameKey}'. Load a Scene to start editing.");
+        }
+        catch (Exception exception) when (IsDocumentFailure(exception))
+        {
+            return EditorReport.Failed(exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Opens the Game at <paramref name="absoluteDirectory"/>, a direct child
+    /// of the open Workspace's directory - the interim way to reach a
+    /// specific Game before a two-step Load Workspace/Load Game dialog
+    /// exists.
+    /// </summary>
+    public EditorReport OpenGameAt(string absoluteDirectory)
+    {
+        if (Session is not { } session) return EditorReport.Failed("No Workspace is open.");
+        try
+        {
+            Game = GameStore.LoadAt(session.Workspace, absoluteDirectory);
+            CloseScene();
+            return EditorReport.Ok($"Loaded Game '{Game.GameKey}'. Load a Scene to start editing.");
+        }
+        catch (Exception exception) when (IsDocumentFailure(exception))
+        {
+            return EditorReport.Failed(exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Creates a Game in the open Workspace but does not open it, the same way
+    /// <see cref="CreateWorkspace"/> leaves a fresh Workspace closed.
+    /// </summary>
+    public EditorReport CreateGame(string gameKey)
+    {
+        if (Session is not { } session) return EditorReport.Failed("No Workspace is open.");
+        try
+        {
+            var created = GameStore.Create(session.Workspace, gameKey);
+            return EditorReport.Ok($"Created Game '{created.GameKey}'. Load it to start editing.");
+        }
+        catch (Exception exception)
+            when (IsDocumentFailure(exception) || exception is ArgumentException)
+        {
+            return EditorReport.Failed(exception.Message);
+        }
+    }
+
+    /// <summary>Closes the open Game and Scene without touching anything on disk.</summary>
+    public void CloseGame()
+    {
+        Game = null;
+        CloseScene();
+    }
+
+    /// <summary>
     /// Persists a new set of Asset profiles. The candidate session is built and
     /// checked against the open Scene in full before anything is
     /// written, so a profile set that would invalidate the open Scene changes
@@ -194,12 +286,12 @@ public sealed class EditorController
         }
     }
 
-    /// <summary>Closes the open Workspace and Scene without touching anything on disk.</summary>
+    /// <summary>Closes the open Workspace, Game and Scene without touching anything on disk.</summary>
     public void CloseWorkspace()
     {
         Session = null;
         RestoredCanvasView = null;
-        CloseScene();
+        CloseGame();
     }
 
     /// <summary>Drops the open Scene. Unsaved edits are lost; save first.</summary>
@@ -213,7 +305,7 @@ public sealed class EditorController
     /// <summary>Throws the transient Template Preview away.</summary>
     public void ClearTemplatePreview() => TemplatePreview = null;
 
-    /// <summary>Creates a Scene Instance in the open Workspace and opens it.</summary>
+    /// <summary>Creates a Scene Instance in the open Game and opens it.</summary>
     public EditorReport CreateInstance(
         string sceneId,
         int widthCells,
@@ -221,14 +313,14 @@ public sealed class EditorController
         decimal defaultElevationMeters = SceneDocument.GroundElevationMeters) =>
         CreateScene(
             "Scene Instance",
-            session => SceneStore.CreateInstance(
-                session.Workspace,
+            (session, game) => SceneStore.CreateInstance(
+                game,
                 sceneId,
                 widthCells,
                 heightCells,
                 session.Metrics.SnapElevation(defaultElevationMeters)));
 
-    /// <summary>Creates a Scene Template in the open Workspace and opens it.</summary>
+    /// <summary>Creates a Scene Template in the open Game and opens it.</summary>
     public EditorReport CreateTemplate(
         string sceneId,
         int widthCells,
@@ -239,8 +331,8 @@ public sealed class EditorController
         decimal defaultElevationMeters = SceneDocument.GroundElevationMeters) =>
         CreateScene(
             "Scene Template",
-            session => SceneStore.CreateTemplate(
-                session.Workspace,
+            (session, game) => SceneStore.CreateTemplate(
+                game,
                 sceneId,
                 widthCells,
                 heightCells,
@@ -250,17 +342,18 @@ public sealed class EditorController
                 session.Metrics.SnapElevation(defaultElevationMeters)));
 
     /// <summary>
-    /// Opens a Scene out of the current Workspace, after checking that it still
+    /// Opens a Scene out of the current Game, after checking that it still
     /// fits the Workspace grid and that every Asset it names is enabled.
     /// </summary>
     public EditorReport OpenScene(string absolutePath)
     {
         if (Session is not { } session) return EditorReport.Failed("No Workspace is open.");
+        if (Game is not { } game) return EditorReport.Failed("No Game is open.");
         var pending = SaveScene();
         if (!pending.Succeeded) return pending;
         try
         {
-            var loaded = SceneStore.Load(session.Workspace, absolutePath);
+            var loaded = SceneStore.Load(game, absolutePath);
             DocumentValidation.ValidateGrid(loaded.Document, session.Metrics);
             TerrainEditing.ValidateAssetReferences(loaded.Document, session.TerrainAssets);
             PropEditing.ValidateAssetReferences(loaded.Document, session.PropAssets);
@@ -275,17 +368,17 @@ public sealed class EditorController
     }
 
     /// <summary>
-    /// Writes the Scene to its Workspace if it differs from the stored copy.
-    /// Safe to call at any time; it says nothing when there is nothing to write.
+    /// Writes the Scene to its Game if it differs from the stored copy. Safe
+    /// to call at any time; it says nothing when there is nothing to write.
     /// </summary>
     public EditorReport SaveScene()
     {
-        if (Session is not { } session || Scene is not { } scene || _history is null)
+        if (Game is not { } game || Scene is not { } scene || _history is null)
             return EditorReport.Silent;
         if (!_history.IsDirty) return EditorReport.Silent;
         try
         {
-            SceneStore.Save(session.Workspace, scene);
+            SceneStore.Save(game, scene);
             _history.MarkSaved();
             return EditorReport.Silent;
         }
@@ -405,8 +498,11 @@ public sealed class EditorController
                 return EditorReport.Ok($"Restored Workspace '{session.WorkspaceKey}'.");
             }
 
+            var gameKey = recent.SceneRelativePath
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+            Game = GameStore.Load(session.Workspace, gameKey);
             var loaded = SceneStore.Load(
-                session.Workspace,
+                Game,
                 Path.Combine(session.DirectoryPath, recent.SceneRelativePath));
             DocumentValidation.ValidateGrid(loaded.Document, session.Metrics);
             TerrainEditing.ValidateAssetReferences(loaded.Document, session.TerrainAssets);
@@ -425,14 +521,15 @@ public sealed class EditorController
         }
     }
 
-    private EditorReport CreateScene(string kind, Func<WorkspaceSession, LoadedScene> create)
+    private EditorReport CreateScene(string kind, Func<WorkspaceSession, LoadedGame, LoadedScene> create)
     {
         if (Session is not { } session) return EditorReport.Failed("No Workspace is open.");
+        if (Game is not { } game) return EditorReport.Failed("No Game is open.");
         var pending = SaveScene();
         if (!pending.Succeeded) return pending;
         try
         {
-            var created = create(session);
+            var created = create(session, game);
             Open(created);
             return EditorReport.Ok($"Created {kind} '{created.Document.SceneId}'.");
         }
@@ -459,13 +556,14 @@ public sealed class EditorController
     {
         if (Session is not { } session || Document is not { SceneKind: SceneKind.Instance } instance)
             return EditorReport.Failed("Template Previews need an open Scene Instance.");
+        if (Game is not { } game) return EditorReport.Failed("No Game is open.");
         var pending = SaveScene();
         if (!pending.Succeeded) return pending;
         try
         {
             var scenes = SceneStore
-                .EnumeratePaths(session.Workspace)
-                .Select(path => SceneStore.Load(session.Workspace, path).Document)
+                .EnumeratePaths(game)
+                .Select(path => SceneStore.Load(game, path).Document)
                 .ToList();
             var preview = TemplateComposition.Compose(
                 instance,
@@ -496,13 +594,14 @@ public sealed class EditorController
     {
         _templates.Clear();
         if (Session is not { } session) return EditorReport.Silent;
+        if (Game is not { } game) return EditorReport.Silent;
         var pending = SaveScene();
         if (!pending.Succeeded) return pending;
         try
         {
             _templates.AddRange(SceneStore
-                .EnumeratePaths(session.Workspace)
-                .Select(path => SceneStore.Load(session.Workspace, path))
+                .EnumeratePaths(game)
+                .Select(path => SceneStore.Load(game, path))
                 .Where(static scene => scene.Document.SceneKind == SceneKind.Template));
             return EditorReport.Silent;
         }
@@ -521,15 +620,16 @@ public sealed class EditorController
     public EditorReport SetTemplateGroup(string filePath, int groupNumber)
     {
         if (Session is not { } session) return EditorReport.Failed("No Workspace is open.");
+        if (Game is not { } game) return EditorReport.Failed("No Game is open.");
         var pending = SaveScene();
         if (!pending.Succeeded) return pending;
         try
         {
-            var loaded = SceneStore.Load(session.Workspace, filePath);
+            var loaded = SceneStore.Load(game, filePath);
             var updated = new LoadedScene(
                 loaded.FilePath,
                 TemplateEditing.SetTemplateGroup(loaded.Document, groupNumber));
-            SceneStore.Save(session.Workspace, updated);
+            SceneStore.Save(game, updated);
             var cached = _templates.FindIndex(
                 entry => string.Equals(entry.FilePath, updated.FilePath, StringComparison.Ordinal));
             if (cached >= 0) _templates[cached] = updated;
@@ -549,17 +649,18 @@ public sealed class EditorController
     /// Scene Templates included. A consumer needs both: an Anchor is worthless
     /// without a Template of its group to put there.
     /// </summary>
-    public EditorReport ExportWorkspace()
+    public EditorReport ExportGame()
     {
         var pending = SaveScene();
         if (!pending.Succeeded) return pending;
         if (Session is not { } session) return EditorReport.Failed("No Workspace is open.");
+        if (Game is not { } game) return EditorReport.Failed("No Game is open.");
         try
         {
-            var written = SceneExport.WriteWorkspace(session);
-            if (written.Count == 0) return EditorReport.Failed("This Workspace has no Scene to export.");
+            var written = SceneExport.WriteGame(session, game);
+            if (written.Count == 0) return EditorReport.Failed("This Game has no Scene to export.");
             var message =
-                $"Exported {written.Count} Scene{(written.Count == 1 ? string.Empty : "s")} to '{Path.Combine(session.DirectoryPath, SceneExport.DirectoryName)}'.";
+                $"Exported {written.Count} Scene{(written.Count == 1 ? string.Empty : "s")} to '{Path.Combine(game.DirectoryPath, SceneExport.DirectoryName)}'.";
             // The export succeeded either way; a warning says what to look at,
             // not that something has to be fixed before exporting again.
             var warnings = written.SelectMany(static result => result.Warnings).ToList();

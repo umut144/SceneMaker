@@ -556,10 +556,23 @@ public sealed record SceneDocument
     };
 }
 
-public sealed record LoadedWorkspace(string DirectoryPath, string WorkspaceKey)
+public sealed record LoadedWorkspace(string DirectoryPath, string WorkspaceKey);
+
+/// <summary>
+/// One named map set inside a Workspace - the World's `config.json` and
+/// `imports/polytools/` are shared by every Game built from it, but each
+/// Game keeps its own `scenes/`, `templates/` and `exports/`. A Game is a
+/// plain directory and nothing else: no file of its own, no schema, no
+/// version. A Scene finds out which Game it belongs to from the path it was
+/// opened at, the same way it finds out which Workspace it belongs to today -
+/// never from a field stored inside the document, which would be a second
+/// place that answer could live and disagree with the first.
+/// </summary>
+public sealed record LoadedGame(LoadedWorkspace Workspace, string GameKey)
 {
-    public string ScenesDirectoryPath => Path.Combine(DirectoryPath, WorkspaceStore.ScenesDirectoryName);
-    public string TemplatesDirectoryPath => Path.Combine(DirectoryPath, WorkspaceStore.TemplatesDirectoryName);
+    public string DirectoryPath => Path.Combine(Workspace.DirectoryPath, GameKey);
+    public string ScenesDirectoryPath => Path.Combine(DirectoryPath, GameStore.ScenesDirectoryName);
+    public string TemplatesDirectoryPath => Path.Combine(DirectoryPath, GameStore.TemplatesDirectoryName);
 }
 
 public sealed record LoadedScene(string FilePath, SceneDocument Document);

@@ -188,12 +188,24 @@ public sealed class WorkspaceSessionTests
     }
 
     [Fact]
-    public void LoadingReportsAWorkspaceWithoutItsScenesDirectory()
+    public void LoadingAWorkspaceDoesNotRequireAnyGame()
     {
         using var workspace = TestWorkspace.Create();
-        Directory.Delete(Path.Combine(workspace.RootPath, WorkspaceStore.ScenesDirectoryName));
+        Directory.Delete(workspace.Game.DirectoryPath, recursive: true);
 
-        Assert.Throws<SceneMakerDocumentException>(() => WorkspaceSession.Load(workspace.RootPath));
+        // A World is ordinary with no Game yet - loading it is not an error.
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        Assert.Equal("test_world", session.WorkspaceKey);
+    }
+
+    [Fact]
+    public void LoadingAGameReportsItsMissingScenesDirectory()
+    {
+        using var workspace = TestWorkspace.Create();
+        Directory.Delete(Path.Combine(workspace.Game.DirectoryPath, GameStore.ScenesDirectoryName));
+
+        Assert.Throws<SceneMakerDocumentException>(
+            () => GameStore.Load(workspace.Workspace, TestWorkspace.DefaultGameKey));
     }
 
     [Fact]

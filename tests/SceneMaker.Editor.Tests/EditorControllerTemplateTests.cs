@@ -40,7 +40,7 @@ public sealed class EditorControllerTemplateTests
         Assert.True(report.Succeeded);
         Assert.Equal("Assigned Scene Template 'grove' to group 7.", report.Message);
         Assert.Equal(7, controller.Templates.Single().Document.TemplateDefinition?.GroupNumber);
-        var stored = SceneStore.Load(controller.Session!.Workspace, path);
+        var stored = SceneStore.Load(controller.Game!, path);
         Assert.Equal(7, stored.Document.TemplateDefinition?.GroupNumber);
     }
 
@@ -123,11 +123,11 @@ public sealed class EditorControllerTemplateTests
         controller.CreateInstance("base", 1, 1);
         controller.Apply(Paint(workspace));
 
-        var report = controller.ExportWorkspace();
+        var report = controller.ExportGame();
 
         Assert.True(report.Succeeded);
         Assert.Contains("Exported 2 Scenes", report.Message, StringComparison.Ordinal);
-        var exports = Path.Combine(workspace.RootPath, SceneExport.DirectoryName);
+        var exports = Path.Combine(workspace.Game.DirectoryPath, SceneExport.DirectoryName);
         Assert.True(File.Exists(Path.Combine(exports, "base" + SceneExport.FileSuffix)));
         Assert.True(File.Exists(Path.Combine(exports, "grove" + SceneExport.FileSuffix)));
         // Exporting writes the open Scene out first, so the two never disagree.
@@ -140,10 +140,10 @@ public sealed class EditorControllerTemplateTests
         using var workspace = TestWorkspace.Create();
         var controller = Opened(workspace);
 
-        var report = controller.ExportWorkspace();
+        var report = controller.ExportGame();
 
         Assert.False(report.Succeeded);
-        Assert.Equal("This Workspace has no Scene to export.", report.Message);
+        Assert.Equal("This Game has no Scene to export.", report.Message);
     }
 
     /// <summary>
@@ -160,11 +160,11 @@ public sealed class EditorControllerTemplateTests
             "Place",
             document => PropEditing.Place(document, workspace.Props, 0, 0, "stone")));
 
-        var report = controller.ExportWorkspace();
+        var report = controller.ExportGame();
 
         Assert.True(report.Succeeded, report.Message);
         Assert.True(File.Exists(Path.Combine(
-            workspace.RootPath, SceneExport.DirectoryName, "base" + SceneExport.FileSuffix)));
+            workspace.Game.DirectoryPath, SceneExport.DirectoryName, "base" + SceneExport.FileSuffix)));
     }
 
     private static EditorController Opened(TestWorkspace workspace)

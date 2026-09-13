@@ -552,16 +552,20 @@ seasons without rewriting the map. A consumer collects Templates by the group
 number each one carries and places them at Anchors of that group. Because a
 missing group would leave an Anchor silently empty, an Instance export also
 lists `required_template_groups`: the groups its own Anchors ask for, so the
-consumer can check its set on load. Exporting from the editor always writes the
-whole Workspace; the CLI can export a single Scene by id for a surgical swap.
+consumer can check its set on load. Exporting from the editor always writes
+every Scene of the open Game; the CLI can export a single Scene by id for a
+surgical swap.
 
 For the included workspace, run `scripts/sync_polytools_world.sh` after a
 successful PolyTools Runtime Export. Run `scripts/export_scene.sh` to validate
-and export every Scene of `world01`; the default output goes to
-`world01/exports/`. The Workspace currently holds two Scene Instances -
+and export every Scene of `world01`'s `sandbox` Game; the default output goes
+to `world01/sandbox/exports/`. That Game currently holds two Scene Instances -
 `overworld01`, a 100 x 100 Grass map, and `cave01` - plus two Scene Templates.
+`world01` also holds a second Game, `moba`, sharing the same `config.json` and
+PolyTools import.
 
-The Workspace key `world01` and the Scene id `overworld01` are different names
-for different things: the key is bound to the PolyTools world it imports from
-and must equal the directory it lives in, while a Scene id names one map inside
-that Workspace.
+The Workspace key `world01`, the Game key `sandbox`, and the Scene id
+`overworld01` are three different names for three different things: the
+Workspace key is bound to the PolyTools world it imports from and must equal
+the directory it lives in; a Game key names one subdirectory of maps built
+from that World's Assets; and a Scene id names one map inside that Game.

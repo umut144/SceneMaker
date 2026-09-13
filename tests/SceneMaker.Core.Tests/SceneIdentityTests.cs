@@ -15,10 +15,10 @@ public sealed class SceneIdentityTests
     {
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
-        SceneStore.CreateInstance(session.Workspace, "grove", 4, 4);
+        SceneStore.CreateInstance(workspace.Game, "grove", 4, 4);
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
-            SceneStore.CreateTemplate(session.Workspace, "grove", 2, 2, 1, 0, 0));
+            SceneStore.CreateTemplate(workspace.Game, "grove", 2, 2, 1, 0, 0));
 
         Assert.Contains("already exists", exception.Message, StringComparison.Ordinal);
     }
@@ -28,10 +28,10 @@ public sealed class SceneIdentityTests
     {
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
-        SceneStore.CreateTemplate(session.Workspace, "grove", 2, 2, 1, 0, 0);
+        SceneStore.CreateTemplate(workspace.Game, "grove", 2, 2, 1, 0, 0);
 
         Assert.Throws<SceneMakerDocumentException>(() =>
-            SceneStore.CreateInstance(session.Workspace, "grove", 4, 4));
+            SceneStore.CreateInstance(workspace.Game, "grove", 4, 4));
     }
 
     [Fact]
@@ -39,10 +39,10 @@ public sealed class SceneIdentityTests
     {
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
-        SceneStore.CreateInstance(session.Workspace, "grove", 4, 4);
+        SceneStore.CreateInstance(workspace.Game, "grove", 4, 4);
 
         Assert.Throws<SceneMakerDocumentException>(() =>
-            SceneStore.CreateInstance(session.Workspace, "grove", 4, 4));
+            SceneStore.CreateInstance(workspace.Game, "grove", 4, 4));
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public sealed class SceneIdentityTests
     {
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
-        SceneStore.CreateInstance(session.Workspace, "grove", 4, 4);
+        SceneStore.CreateInstance(workspace.Game, "grove", 4, 4);
         // Both files are individually valid - an Instance in scenes/ and a
         // Template in templates/, each matching its directory. Only their
         // shared id is the problem, and it is invisible until the export names
@@ -58,16 +58,16 @@ public sealed class SceneIdentityTests
         // refused, so a hand-edited Workspace is the only way in.
         File.WriteAllText(
             Path.Combine(
-                session.Workspace.TemplatesDirectoryPath,
+                workspace.Game.TemplatesDirectoryPath,
                 "grove" + SceneStore.FileSuffix),
             DocumentJson.Serialize(SceneDocument.CreateTemplate("grove", 2, 2, 1, 0, 0)));
 
         var exception = Assert.Throws<SceneMakerDocumentException>(
-            () => SceneExport.WriteWorkspace(session));
+            () => SceneExport.WriteGame(session, workspace.Game));
 
         Assert.Contains("names 2 Scenes", exception.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(
-            Path.Combine(workspace.RootPath, SceneExport.DirectoryName)));
+            Path.Combine(workspace.Game.DirectoryPath, SceneExport.DirectoryName)));
     }
 
     [Fact]
@@ -75,8 +75,8 @@ public sealed class SceneIdentityTests
     {
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
-        _ = SceneStore.CreateInstance(session.Workspace, "a", 4, 4);
-        var second = SceneStore.CreateInstance(session.Workspace, "b", 4, 4);
+        _ = SceneStore.CreateInstance(workspace.Game, "a", 4, 4);
+        var second = SceneStore.CreateInstance(workspace.Game, "b", 4, 4);
 
         // A curve-authored Asset painted as a cell. The document shape is
         // valid, so it saves; only the export, which knows the catalog, can
@@ -94,14 +94,14 @@ public sealed class SceneIdentityTests
                 },
             ],
         };
-        SceneStore.Save(session.Workspace, second with { Document = invalid });
-        var exportDirectory = Path.Combine(workspace.RootPath, SceneExport.DirectoryName);
+        SceneStore.Save(workspace.Game, second with { Document = invalid });
+        var exportDirectory = Path.Combine(workspace.Game.DirectoryPath, SceneExport.DirectoryName);
         Directory.CreateDirectory(exportDirectory);
         var firstExport = Path.Combine(exportDirectory, "a" + SceneExport.FileSuffix);
         File.WriteAllText(firstExport, "previous export");
 
         var exception = Assert.Throws<SceneMakerDocumentException>(
-            () => SceneExport.WriteWorkspace(session));
+            () => SceneExport.WriteGame(session, workspace.Game));
 
         Assert.Contains(
             "authored as a curve", exception.Message, StringComparison.Ordinal);
@@ -114,16 +114,16 @@ public sealed class SceneIdentityTests
     {
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
-        SceneStore.CreateInstance(session.Workspace, "map", 4, 4);
-        SceneStore.CreateTemplate(session.Workspace, "grove", 2, 2, 1, 0, 0);
+        SceneStore.CreateInstance(workspace.Game, "map", 4, 4);
+        SceneStore.CreateTemplate(workspace.Game, "grove", 2, 2, 1, 0, 0);
 
         Assert.EndsWith(
             Path.Combine("scenes", "map" + SceneStore.FileSuffix),
-            SceneStore.ResolvePath(session.Workspace, "map"),
+            SceneStore.ResolvePath(workspace.Game, "map"),
             StringComparison.Ordinal);
         Assert.EndsWith(
             Path.Combine("templates", "grove" + SceneStore.FileSuffix),
-            SceneStore.ResolvePath(session.Workspace, "grove"),
+            SceneStore.ResolvePath(workspace.Game, "grove"),
             StringComparison.Ordinal);
     }
 }

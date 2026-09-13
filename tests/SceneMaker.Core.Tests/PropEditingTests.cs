@@ -167,8 +167,9 @@ public sealed class PropEditingTests
         var session = WorkspaceSession.Load(workspace.RootPath);
         return SceneExport.Write(
             session,
+            workspace.Game,
             new LoadedScene(
-                Path.Combine(session.Workspace.ScenesDirectoryPath, "base.scene.json"),
+                Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json"),
                 scene));
     }
 

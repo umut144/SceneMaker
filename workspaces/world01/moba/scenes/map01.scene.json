@@ -1,0 +1,21 @@
+{
+  "schema": "srt.scene_maker_scene",
+  "version": 21,
+  "scene_id": "map01",
+  "scene_kind": "instance",
+  "coordinate_space": "scene_local_bottom_left_y_up",
+  "size_cells": {
+    "width": 105,
+    "height": 55
+  },
+  "terrain_cells": [],
+  "props": [],
+  "elevation_regions": [],
+  "route_surfaces": [],
+  "switches": [],
+  "water_bodies": [],
+  "bridges": [],
+  "template_definition": null,
+  "template_anchors": [],
+  "default_elevation_meters": 1.000
+}

@@ -2076,6 +2076,11 @@ public sealed partial class SceneMakerMain : Control
                     ShowError("Create or load a Workspace before creating a Scene.");
                     return;
                 }
+                if (_controller.Game is null)
+                {
+                    ShowError("Create or load a Game before creating a Scene.");
+                    return;
+                }
                 _sceneIdEdit.Clear();
                 _sceneKindEdit.Select(0);
                 _templateGroupEdit.Value = 1;
@@ -2092,7 +2097,12 @@ public sealed partial class SceneMakerMain : Control
                     ShowError("Create or load a Workspace before loading a Scene.");
                     return;
                 }
-                _sceneFileDialog.CurrentDir = _controller.Session.DirectoryPath;
+                if (_controller.Game is null)
+                {
+                    ShowError("Create or load a Game before loading a Scene.");
+                    return;
+                }
+                _sceneFileDialog.CurrentDir = _controller.Game.DirectoryPath;
                 _sceneFileDialog.PopupCenteredRatio(0.75f);
                 break;
             case SettingsMenuItem.ExportWorkspace:
@@ -2136,7 +2146,7 @@ public sealed partial class SceneMakerMain : Control
     private void ExportWorkspace()
     {
         _autosaveTimer.Stop();
-        var report = _controller.ExportWorkspace();
+        var report = _controller.ExportGame();
         UpdateDocumentState();
         if (report.Succeeded) SetStatus(report.Message);
         else ShowError(report.Message);
@@ -3656,11 +3666,12 @@ public sealed partial class SceneMakerMain : Control
             : $"Scene: {_controller.Document!.SceneId}  ·  {(_controller.Document!.SceneKind == SceneKind.Instance ? "Instance" : "Template")}  ·  {_controller.Document!.SizeCells.Width} × {_controller.Document!.SizeCells.Height} cells";
 
         var sceneActionsAvailable = _controller.Session is not null;
+        var gameActionsAvailable = _controller.Game is not null;
         SetElevationInputsEditable(sceneActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.WorkspaceAssets, !sceneActionsAvailable);
-        SetSettingsItemDisabled(SettingsMenuItem.CreateScene, !sceneActionsAvailable);
-        SetSettingsItemDisabled(SettingsMenuItem.LoadScene, !sceneActionsAvailable);
-        SetSettingsItemDisabled(SettingsMenuItem.ExportWorkspace, _controller.Session is null);
+        SetSettingsItemDisabled(SettingsMenuItem.CreateScene, !gameActionsAvailable);
+        SetSettingsItemDisabled(SettingsMenuItem.LoadScene, !gameActionsAvailable);
+        SetSettingsItemDisabled(SettingsMenuItem.ExportWorkspace, !gameActionsAvailable);
         UpdateDrawingToolAvailability();
         UpdateWaterHeatmapAvailability();
         UpdateTemplateControls();

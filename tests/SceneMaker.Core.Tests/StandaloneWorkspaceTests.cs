@@ -339,16 +339,29 @@ public sealed class StandaloneWorkspaceTests
 
         var workspace = WorkspaceStore.Create(parent.Path, "game04b", 0.125m);
 
-        Assert.True(Directory.Exists(
-            Path.Combine(workspace.DirectoryPath, WorkspaceStore.ScenesDirectoryName)));
-        Assert.True(Directory.Exists(
-            Path.Combine(workspace.DirectoryPath, WorkspaceStore.TemplatesDirectoryName)));
+        // A fresh World has no Game yet - GameStore.Create is the separate,
+        // later step that adds one.
+        Assert.False(Directory.Exists(Path.Combine(workspace.DirectoryPath, "sandbox")));
         Assert.True(Directory.Exists(Path.Combine(
             workspace.DirectoryPath,
             PolyToolsCatalogImporter.ImportDirectoryName,
             PolyToolsCatalogImporter.PolyToolsDirectoryName)));
         Assert.True(File.Exists(
             Path.Combine(workspace.DirectoryPath, WorkspaceConfigurationStore.FileName)));
+    }
+
+    [Fact]
+    public void CreatingAGameWritesItsScenesAndTemplatesDirectories()
+    {
+        using var parent = TemporaryDirectory.Create();
+        var workspace = WorkspaceStore.Create(parent.Path, "game04d", 0.125m);
+
+        var game = GameStore.Create(workspace, "sandbox");
+
+        Assert.True(Directory.Exists(
+            Path.Combine(game.DirectoryPath, GameStore.ScenesDirectoryName)));
+        Assert.True(Directory.Exists(
+            Path.Combine(game.DirectoryPath, GameStore.TemplatesDirectoryName)));
     }
 
     [Fact]
@@ -379,9 +392,14 @@ public sealed class StandaloneWorkspaceTests
         var props = PropDisplayCatalogLoader.Load(catalog, configuration);
         var scene = TerrainEditing.Paint(
             SceneDocument.CreateInstance("field", 1, 1), terrain, 0, 0, "grass");
-        var workspace = new LoadedWorkspace(directory.Path, "game05");
+        // A plain LoadedGame whose DirectoryPath resolves back to directory.Path,
+        // without going through GameStore - this fixture writes its own
+        // scenes/ directly and never claims to be a Game GameStore would load.
+        var game = new LoadedGame(
+            new LoadedWorkspace(Path.GetDirectoryName(directory.Path)!, "game05"),
+            Path.GetFileName(directory.Path));
         var written = SceneExport.Write(
-            workspace,
+            game,
             new LoadedScene(Path.Combine(directory.Path, "scenes", "field.scene.json"), scene),
             configuration,
             terrain,

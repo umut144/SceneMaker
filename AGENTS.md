@@ -7,22 +7,32 @@ Runtime Export and copy it into a Workspace-local import boundary.
 
 ## Data ownership
 
-- A workspace represents one PolyTools World/game. Its `config.json` is the
-  closed source of SceneMaker Assets and owns each stable `asset_key`, display
-  name, SceneMaker role, editor color and Terrain semantics as well as the grid
-  metrics. None of that authoring identity is inferred from PolyTools.
-- A Workspace-local `imports/polytools/` boundary may contribute visible bounds
-  and pivots/anchors to SceneMaker Assets whose role is `placement`, joined by
-  the `polytools_asset_id` the Asset names — the id PolyTools keeps stable, not
-  a key either project may rename. It is required on a Placement, which without
-  PolyTools geometry has no meaning, and optional on Terrain, which SceneMaker
-  may author without PolyTools ever hearing of it. The boundary's catalog and
-  referenced Manifests are synchronized copies, never live sibling reads. Only
-  configured Placement roots and their transitive geometry references belong
-  there; Terrain Assets require no PolyTools package, and a Workspace without
+- A Workspace represents one PolyTools World. Its `config.json` is the closed
+  source of SceneMaker Assets and owns each stable `asset_key`, display name,
+  SceneMaker role, editor color and Terrain semantics as well as the grid
+  metrics. None of that authoring identity is inferred from PolyTools. A
+  Workspace's directory is named after its `workspace_key`.
+- A Game is a named subdirectory of a Workspace - a plain directory with no
+  schema or file of its own, holding its own `scenes/` and `templates/`
+  (`GameStore`). It is the sub-unit a set of maps built from the World's
+  shared Assets and PolyTools import belongs to: `workspaces/world01/sandbox`
+  and `workspaces/world01/moba` are two Games sharing the one `world01`
+  World. A Scene's Game membership is derived from its file path and is
+  never stored in the document - see `docs/DESIGN_NOTES.md` under "A
+  Workspace becomes a World; a Game sits between it and Scenes" for why.
+- A Workspace-local `imports/polytools/` boundary, shared by every Game in the
+  Workspace, may contribute visible bounds and pivots/anchors to SceneMaker
+  Assets whose role is `placement`, joined by the `polytools_asset_id` the
+  Asset names — the id PolyTools keeps stable, not a key either project may
+  rename. It is required on a Placement, which without PolyTools geometry has
+  no meaning, and optional on Terrain, which SceneMaker may author without
+  PolyTools ever hearing of it. The boundary's catalog and referenced
+  Manifests are synchronized copies, never live sibling reads. Only configured
+  Placement roots and their transitive geometry references belong there;
+  Terrain Assets require no PolyTools package, and a Workspace without
   Placements needs no import.
-- Scenes and templates are workspace data. Their documents use `asset_key`s,
-  never numeric IDs.
+- Scenes and templates are Game data, one level under the Workspace they
+  belong to. Their documents use `asset_key`s, never numeric IDs.
 - No hidden metric defaults, directory-discovered Assets, or game-specific
   export format may be introduced.
 
@@ -58,15 +68,17 @@ Four rules follow from this and are worth stating outright:
   `WorkspaceSession?`, never a set of correlated nullable fields, so a failed
   load cannot leave a half-opened Workspace behind. Opening a Workspace is not
   an editor concern, which is why it sits in Core and the headless exporter
-  uses the same path.
+  uses the same path. A Workspace carries no Game by itself: opening a Game
+  (`LoadedGame`, `GameStore`) is a separate, later step, and creating a
+  Workspace does not create one.
 - Lifecycle decisions live in `EditorController`, not in the Godot node. It
-  owns the open Workspace, the open Scene, the edit history, the Template
-  listing and the transient Template Preview. Commands take plain paths, change
-  state only when they succeed, and answer with an `EditorReport` instead of
-  touching the interface; whether a failure belongs in the status line or in a
-  dialog is the caller's decision. `SceneMakerMain` reads the controller and
-  never keeps its own copy of any of it - what stays there is drawing, layout,
-  dialogs and the autosave timer.
+  owns the open Workspace, the open Game, the open Scene, the edit history, the
+  Template listing and the transient Template Preview. Commands take plain
+  paths, change state only when they succeed, and answer with an
+  `EditorReport` instead of touching the interface; whether a failure belongs
+  in the status line or in a dialog is the caller's decision. `SceneMakerMain`
+  reads the controller and never keeps its own copy of any of it - what stays
+  there is drawing, layout, dialogs and the autosave timer.
 
 ## Schema versions
 
