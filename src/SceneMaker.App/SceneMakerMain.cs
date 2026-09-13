@@ -21,8 +21,11 @@ public sealed partial class SceneMakerMain : Control
         CreateWorkspace = 1,
         LoadWorkspace,
         WorkspaceAssets,
+        CreateGame,
+        LoadGame,
         CreateScene,
         LoadScene,
+        LoadTemplate,
         ExportWorkspace,
         ChunkHelper,
     }
@@ -31,6 +34,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly ToolInteraction _interaction = new();
     private readonly SceneCanvas _canvas = new();
     private readonly Label _workspaceLabel = new();
+    private readonly Label _gameLabel = new();
     private readonly Label _sceneLabel = new();
     private readonly Label _toolContextLabel = new();
     private readonly VSeparator _toolContextSeparator = new();
@@ -199,8 +203,11 @@ public sealed partial class SceneMakerMain : Control
 
     private readonly FileDialog _workspaceDirectoryDialog = new();
     private readonly FileDialog _workspaceDirectoryLoadDialog = new();
+    private readonly FileDialog _gameDirectoryLoadDialog = new();
     private readonly FileDialog _sceneFileDialog = new();
+    private readonly FileDialog _templateFileDialog = new();
     private readonly ConfirmationDialog _createWorkspaceDialog = new();
+    private readonly ConfirmationDialog _createGameDialog = new();
     private readonly ConfirmationDialog _createSceneDialog = new();
     private readonly AcceptDialog _errorDialog = new();
     private readonly ConfirmationDialog _workspaceAssetsDialog = new();
@@ -208,6 +215,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly Dictionary<string, WorkspaceAssetEditorRow> _workspaceAssetEditorRows = [];
     private readonly LineEdit _workspaceIdEdit = new();
     private readonly SpinBox _workspaceMinimumChannelDepthEdit = new();
+    private readonly LineEdit _gameKeyEdit = new();
     private readonly LineEdit _sceneIdEdit = new();
     private readonly SpinBox _sceneWidthEdit = new();
     private readonly SpinBox _sceneHeightEdit = new();
@@ -391,8 +399,10 @@ public sealed partial class SceneMakerMain : Control
         documentBar.AddThemeFontSizeOverride("font_size", 14);
         root.AddChild(documentBar);
         _workspaceLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _gameLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _sceneLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         documentBar.AddChild(_workspaceLabel);
+        documentBar.AddChild(_gameLabel);
         documentBar.AddChild(_sceneLabel);
         _documentStateLabel.Name = "DocumentState";
         _documentStateLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -1710,10 +1720,14 @@ public sealed partial class SceneMakerMain : Control
         AddSettingsItem(menu, "Create Workspace", SettingsMenuItem.CreateWorkspace);
         AddSettingsItem(menu, "Load Workspace", SettingsMenuItem.LoadWorkspace);
         AddSettingsItem(menu, "Workspace Assets", SettingsMenuItem.WorkspaceAssets);
+        menu.AddSeparator("Games");
+        AddSettingsItem(menu, "Create Game", SettingsMenuItem.CreateGame);
+        AddSettingsItem(menu, "Load Game", SettingsMenuItem.LoadGame);
         menu.AddSeparator("Scenes");
         AddSettingsItem(menu, "Create Scene", SettingsMenuItem.CreateScene);
         AddSettingsItem(menu, "Load Scene", SettingsMenuItem.LoadScene);
-        AddSettingsItem(menu, "Export Workspace", SettingsMenuItem.ExportWorkspace);
+        AddSettingsItem(menu, "Load Template", SettingsMenuItem.LoadTemplate);
+        AddSettingsItem(menu, "Export Game", SettingsMenuItem.ExportWorkspace);
         menu.AddSeparator("Canvas Helpers");
         AddSettingsItem(menu, "Chunk Helper: not applicable", SettingsMenuItem.ChunkHelper);
         SetSettingsItemDisabled(SettingsMenuItem.ChunkHelper, true);
@@ -1751,6 +1765,16 @@ public sealed partial class SceneMakerMain : Control
         _workspaceDirectoryLoadDialog.DirSelected += LoadWorkspaceSelection;
         AddChild(_workspaceDirectoryLoadDialog);
 
+        _gameDirectoryLoadDialog.Title = "Load Game Folder";
+        _gameDirectoryLoadDialog.Access = FileDialog.AccessEnum.Filesystem;
+        _gameDirectoryLoadDialog.FileMode = FileDialog.FileModeEnum.OpenDir;
+        _gameDirectoryLoadDialog.UseNativeDialog = true;
+        _gameDirectoryLoadDialog.DirSelected += LoadGameSelection;
+        AddChild(_gameDirectoryLoadDialog);
+
+        // Starts inside the open Game's scenes/ folder (set right before the
+        // popup), so it naturally offers only Scene Instances - templates/
+        // never appears alongside it.
         _sceneFileDialog.Title = "Load Scene";
         _sceneFileDialog.Access = FileDialog.AccessEnum.Filesystem;
         _sceneFileDialog.FileMode = FileDialog.FileModeEnum.OpenFile;
@@ -1758,6 +1782,16 @@ public sealed partial class SceneMakerMain : Control
         _sceneFileDialog.UseNativeDialog = true;
         _sceneFileDialog.FileSelected += LoadScene;
         AddChild(_sceneFileDialog);
+
+        // Same handler as Load Scene - starting inside templates/ instead of
+        // scenes/ is what makes this dialog about Scene Templates.
+        _templateFileDialog.Title = "Load Template";
+        _templateFileDialog.Access = FileDialog.AccessEnum.Filesystem;
+        _templateFileDialog.FileMode = FileDialog.FileModeEnum.OpenFile;
+        _templateFileDialog.Filters = ["*.scene.json ; SceneMaker Scene"];
+        _templateFileDialog.UseNativeDialog = true;
+        _templateFileDialog.FileSelected += LoadScene;
+        AddChild(_templateFileDialog);
 
         _workspaceAssetsDialog.Title = "Workspace Assets";
         _workspaceAssetsDialog.OkButtonText = "Save";
@@ -1787,6 +1821,16 @@ public sealed partial class SceneMakerMain : Control
         _createWorkspaceDialog.AddChild(workspaceFields);
         _createWorkspaceDialog.Confirmed += CreateWorkspace;
         AddChild(_createWorkspaceDialog);
+
+        _createGameDialog.Title = "Create Game";
+        _createGameDialog.OkButtonText = "Create";
+        var gameFields = new VBoxContainer();
+        gameFields.AddChild(new Label { Text = "Stable game ID" });
+        _gameKeyEdit.PlaceholderText = "sandbox";
+        gameFields.AddChild(_gameKeyEdit);
+        _createGameDialog.AddChild(gameFields);
+        _createGameDialog.Confirmed += CreateGame;
+        AddChild(_createGameDialog);
 
         _createSceneDialog.Title = "Create Scene";
         _createSceneDialog.OkButtonText = "Create";
@@ -2070,6 +2114,23 @@ public sealed partial class SceneMakerMain : Control
             case SettingsMenuItem.WorkspaceAssets:
                 ShowWorkspaceAssetsDialog();
                 break;
+            case SettingsMenuItem.CreateGame:
+                if (_controller.Session is null)
+                {
+                    ShowError("Create or load a Workspace before creating a Game.");
+                    return;
+                }
+                _gameKeyEdit.Clear();
+                _createGameDialog.PopupCentered(new Vector2I(420, 160));
+                break;
+            case SettingsMenuItem.LoadGame:
+                if (_controller.Session is null)
+                {
+                    ShowError("Create or load a Workspace before loading a Game.");
+                    return;
+                }
+                OpenGameFinder();
+                break;
             case SettingsMenuItem.CreateScene:
                 if (_controller.Session is null)
                 {
@@ -2102,8 +2163,22 @@ public sealed partial class SceneMakerMain : Control
                     ShowError("Create or load a Game before loading a Scene.");
                     return;
                 }
-                _sceneFileDialog.CurrentDir = _controller.Game.DirectoryPath;
+                _sceneFileDialog.CurrentDir = _controller.Game.ScenesDirectoryPath;
                 _sceneFileDialog.PopupCenteredRatio(0.75f);
+                break;
+            case SettingsMenuItem.LoadTemplate:
+                if (_controller.Session is null)
+                {
+                    ShowError("Create or load a Workspace before loading a Template.");
+                    return;
+                }
+                if (_controller.Game is null)
+                {
+                    ShowError("Create or load a Game before loading a Template.");
+                    return;
+                }
+                _templateFileDialog.CurrentDir = _controller.Game.TemplatesDirectoryPath;
+                _templateFileDialog.PopupCenteredRatio(0.75f);
                 break;
             case SettingsMenuItem.ExportWorkspace:
                 ExportWorkspace();
@@ -2141,6 +2216,57 @@ public sealed partial class SceneMakerMain : Control
             return;
         }
         LoadWorkspaceSelection(paths[0]);
+    }
+
+    /// <summary>
+    /// A Game has no PolyTools counterpart and no file of its own - it is a
+    /// plain directory choice, one level under the open Workspace. The picker
+    /// starts there, not at the last Workspace's parent.
+    /// </summary>
+    private void OpenGameFinder()
+    {
+        if (_controller.Session is not { } session) return;
+        if (DisplayServer.HasFeature(DisplayServer.Feature.NativeDialogFile))
+        {
+            DisplayServer.FileDialogShow(
+                "Load Game",
+                session.DirectoryPath,
+                "",
+                false,
+                DisplayServer.FileDialogMode.OpenDir,
+                [],
+                Callable.From<bool, Variant, int>(HandleGameFinderResult));
+            return;
+        }
+
+        _gameDirectoryLoadDialog.CurrentDir = session.DirectoryPath;
+        _gameDirectoryLoadDialog.PopupCenteredRatio(0.75f);
+    }
+
+    private void HandleGameFinderResult(bool accepted, Variant selectedPaths, int _)
+    {
+        if (!accepted) return;
+        var paths = selectedPaths.AsStringArray();
+        if (paths.Length == 0)
+        {
+            SetStatus("Game load blocked: the file chooser returned no selection.");
+            return;
+        }
+        LoadGameSelection(paths[0]);
+    }
+
+    private void LoadGameSelection(string selectedPath)
+    {
+        var report = _controller.OpenGameAt(ResolveFileSystemPath(selectedPath));
+        if (!report.Succeeded)
+        {
+            SetStatus(report.Message);
+            return;
+        }
+        CloseOpenScene();
+        SaveRecentSession();
+        UpdateDocumentStatus();
+        SetStatus(report.Message);
     }
 
     private void ExportWorkspace()
@@ -2402,6 +2528,18 @@ public sealed partial class SceneMakerMain : Control
         ShowSession();
         CloseOpenScene();
         SaveRecentSession();
+        UpdateDocumentStatus();
+        SetStatus(report.Message);
+    }
+
+    private void CreateGame()
+    {
+        var report = _controller.CreateGame(_gameKeyEdit.Text.Trim());
+        if (!report.Succeeded)
+        {
+            ShowError(report.Message);
+            return;
+        }
         UpdateDocumentStatus();
         SetStatus(report.Message);
     }
@@ -3661,6 +3799,9 @@ public sealed partial class SceneMakerMain : Control
         _workspaceLabel.Text = _controller.Session is null
             ? "Workspace: none"
             : $"Workspace: {_controller.Session.WorkspaceKey}";
+        _gameLabel.Text = _controller.Game is null
+            ? "Game: none"
+            : $"Game: {_controller.Game.GameKey}";
         _sceneLabel.Text = _controller.Scene is null
             ? "Scene: none"
             : $"Scene: {_controller.Document!.SceneId}  ·  {(_controller.Document!.SceneKind == SceneKind.Instance ? "Instance" : "Template")}  ·  {_controller.Document!.SizeCells.Width} × {_controller.Document!.SizeCells.Height} cells";
@@ -3669,8 +3810,11 @@ public sealed partial class SceneMakerMain : Control
         var gameActionsAvailable = _controller.Game is not null;
         SetElevationInputsEditable(sceneActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.WorkspaceAssets, !sceneActionsAvailable);
+        SetSettingsItemDisabled(SettingsMenuItem.CreateGame, !sceneActionsAvailable);
+        SetSettingsItemDisabled(SettingsMenuItem.LoadGame, !sceneActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.CreateScene, !gameActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.LoadScene, !gameActionsAvailable);
+        SetSettingsItemDisabled(SettingsMenuItem.LoadTemplate, !gameActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.ExportWorkspace, !gameActionsAvailable);
         UpdateDrawingToolAvailability();
         UpdateWaterHeatmapAvailability();
