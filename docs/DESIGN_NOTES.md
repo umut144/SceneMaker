@@ -1241,6 +1241,76 @@ Y-Z. Its purpose is to inspect stacked tunnels, floors, ceilings, clearance,
 ramps and water spans that a top-down section cannot disambiguate. It is not
 part of the first horizontal Section slice.
 
+## A Workspace becomes a World; a Game sits between it and Scenes
+
+`docs/TASKS.md#WORLD-01`
+
+Cobblestone and Grass were missing from `world01_moba`'s Terrain palette
+because they were never authored there. That is unremarkable on its own -
+Assets are workspace-owned, and a new Workspace starts with none - but the
+question behind it was not: why does `world01_moba` exist as a Workspace at
+all? PolyTools has exactly one World, `worlds/world01`. `world01_moba` and
+`world02` do not correspond to a second and third PolyTools World; they were
+created as if a Workspace could stand for a different kind of map inside the
+same World - a MOBA arena set, say - and the framework had no place for that
+distinction except "make another Workspace" and re-author its config from
+nothing. `AGENTS.md` and `AI_CONTEXT.md` say a Workspace is one World *or*
+game in the same breath, and this is exactly the case where those two things
+are not the same: one World, several games.
+
+The fix is not "share the Asset list somehow" - it is to stop conflating the
+two things AGENTS.md conflated. A Workspace becomes what it already is on
+disk one level up: the World. What used to be direct children of the
+Workspace - `scenes/`, `templates/`, `exports/` - move one level down, into a
+named Game (`sandbox`, `moba`, ...), because a game mode's maps are what
+actually differ between `world01`'s sandbox and its MOBA arenas. `config.json`
+and `imports/polytools/` stay exactly where they are, at the Workspace root:
+both describe the World - its Assets, its grid, its synchronized PolyTools
+catalog - and a World has exactly one of each regardless of how many games are
+built from it. After migration `world01/` holds `config.json`, `imports/`,
+`sandbox/{scenes,templates,exports}` and `moba/{scenes,templates,exports}`.
+
+A Game is not a new persisted concept. It is a named directory and nothing
+else - no `game.json`, no schema, no version. A Scene finds out which Game it
+belongs to the same way it finds out which Workspace it belongs to today: from
+the path it was opened at (`<workspace>/<game>/scenes/<id>.scene.json`), not
+from a field carried inside the document. Storing the Game on the document
+would be a second place that answer could live, and the two would disagree the
+moment a file moved without its field being updated by hand - the same failure
+shape `AGENTS.md`'s "no hidden metric defaults" line exists to rule out
+elsewhere. Moving a Scene's file between Games *is* re-assigning it; nothing
+else needs to change.
+
+This changes the open/create flow by one level. `Load Workspace` still opens
+the World: its config, its PolyTools catalog, its grid metrics - exactly what
+`WorkspaceSession` bundles today, unchanged. `Load Game` comes next and is new:
+its folder picker starts inside the open Workspace's directory, listing Game
+folders (there is no PolyTools counterpart to a Game, so nothing is
+synchronized here - it is a plain directory choice). Only once a Game is open
+do `Load Scene` and `Load Template` make sense as two separate dialogs instead
+of one generic file picker - today both Instances and Templates are opened
+through the same `Load Scene` dialog starting at the Workspace root, which is
+also new territory this touches. Each starts inside the open Game's own
+`scenes/` or `templates/` folder. `RecentSessionStore` has to remember a Game
+alongside a Workspace, or "recent" reopens one level too shallow after this
+change.
+
+`world02` gets an empty `sandbox` Game as part of the migration, for
+consistency, but nothing is planned for it - it may be deleted outright
+instead, at the developer's discretion.
+
+What this does not change: `WorkspaceGridConfiguration`, the Asset list, the
+PolyTools import boundary, and every existing schema version - none of them
+move or gain a field. What it does touch, because `scenes/`, `templates/` and
+`exports/` stop being direct Workspace children: `WorkspaceStore.Create`/`Load`
+and every path built from a Workspace directory in Core, the Godot dialogs for
+creating and loading a Workspace/Game/Scene/Template, the CLI's headless
+export, and the reader in `BevyProjects/world01` that reads
+`workspaces/<workspace>/exports/<scene>.scene_export.json` today and will need
+the Game segment inserted into that path. `AGENTS.md`'s and
+`AI_CONTEXT.md`'s "a Workspace is one World/game" lines are rewritten as part
+of this, not left to go stale.
+
 ## Settled decisions
 
 Decisions that are closed rather than pending. They are kept because a later
