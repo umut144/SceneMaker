@@ -130,7 +130,7 @@ public sealed class EditorControllerWorkspaceTests
         using var parent = TestWorkspace.Create();
         var controller = new EditorController();
 
-        var report = controller.CreateWorkspace(parent.RootPath, "fresh_world");
+        var report = controller.CreateWorkspace(parent.RootPath, "fresh_world", 0.125m);
 
         Assert.True(report.Succeeded);
         Assert.Contains("Synchronize its PolyTools import", report.Message, StringComparison.Ordinal);
@@ -151,7 +151,7 @@ public sealed class EditorControllerWorkspaceTests
         var opened = controller.Session;
 
         var report = controller.CreateWorkspace(
-            Path.GetDirectoryName(workspace.RootPath)!, "test_world");
+            Path.GetDirectoryName(workspace.RootPath)!, "test_world", 0.125m);
 
         Assert.False(report.Succeeded);
         Assert.Same(opened, controller.Session);

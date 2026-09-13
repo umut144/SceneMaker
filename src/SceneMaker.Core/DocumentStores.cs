@@ -13,7 +13,10 @@ public static class WorkspaceStore
     /// directory is removed again, because a half-built Workspace would only
     /// fail to load later without saying why.
     /// </summary>
-    public static LoadedWorkspace Create(string parentDirectoryPath, string workspaceId)
+    public static LoadedWorkspace Create(
+        string parentDirectoryPath,
+        string workspaceId,
+        decimal minimumChannelDepthMeters)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(parentDirectoryPath);
         DocumentValidation.ValidateStableId("workspace_key", workspaceId);
@@ -37,7 +40,7 @@ public static class WorkspaceStore
                 fullDirectory,
                 PolyToolsCatalogImporter.ImportDirectoryName,
                 PolyToolsCatalogImporter.PolyToolsDirectoryName));
-            WorkspaceConfigurationStore.CreateDefault(fullDirectory, workspaceId);
+            WorkspaceConfigurationStore.CreateDefault(fullDirectory, workspaceId, minimumChannelDepthMeters);
             complete = true;
             return new LoadedWorkspace(fullDirectory, workspaceId);
         }

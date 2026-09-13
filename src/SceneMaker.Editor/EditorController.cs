@@ -143,11 +143,14 @@ public sealed class EditorController
     /// editor stays closed until the import is synchronized and the Workspace
     /// is loaded.
     /// </summary>
-    public EditorReport CreateWorkspace(string parentDirectory, string workspaceId)
+    public EditorReport CreateWorkspace(
+        string parentDirectory,
+        string workspaceId,
+        decimal minimumChannelDepthMeters)
     {
         try
         {
-            var created = WorkspaceStore.Create(parentDirectory, workspaceId);
+            var created = WorkspaceStore.Create(parentDirectory, workspaceId, minimumChannelDepthMeters);
             Session = null;
             LastWorkspaceDirectory = created.DirectoryPath;
             return EditorReport.Ok(

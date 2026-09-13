@@ -226,10 +226,25 @@ public static class WorkspaceConfigurationStore
         AtomicTextFile.Write(path, JsonSerializer.Serialize(document, JsonOptions) + "\n");
     }
 
-    public static void CreateDefault(string workspaceDirectory, string workspaceKey)
+    /// <summary>
+    /// Writes a Workspace's first configuration. Every other grid metric is a
+    /// fixed authoring convention, but <paramref name="minimumChannelDepthMeters"/>
+    /// is a fact about the World this Workspace belongs to (see
+    /// <see cref="WorkspaceGridConfiguration.MinimumChannelDepthMeters"/>), so it
+    /// is never defaulted here - the caller must have asked for it and it must
+    /// already be positive, or a Workspace would be created only to fail the
+    /// load its own config requires.
+    /// </summary>
+    public static void CreateDefault(
+        string workspaceDirectory,
+        string workspaceKey,
+        decimal minimumChannelDepthMeters)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceKey);
+        if (minimumChannelDepthMeters <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(minimumChannelDepthMeters), "minimum_channel_depth_meters must be positive.");
         var path = Path.Combine(Path.GetFullPath(workspaceDirectory), FileName);
         if (File.Exists(path))
             throw new SceneMakerDocumentException($"Workspace config '{path}' already exists.");
@@ -243,7 +258,8 @@ public static class WorkspaceConfigurationStore
             "authoring_pixels_per_meter": 32,
             "game_pixels_per_meter": 192,
             "water_cell_meters": 0.5,
-            "elevation_quantum_meters": 0.125
+            "elevation_quantum_meters": 0.125,
+            "minimum_channel_depth_meters": {{minimumChannelDepthMeters.ToString(System.Globalization.CultureInfo.InvariantCulture)}}
           },
           "assets": []
         }

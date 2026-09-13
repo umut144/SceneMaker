@@ -205,6 +205,7 @@ public sealed partial class SceneMakerMain : Control
     private readonly VBoxContainer _workspaceAssetRows = new();
     private readonly Dictionary<string, WorkspaceAssetEditorRow> _workspaceAssetEditorRows = [];
     private readonly LineEdit _workspaceIdEdit = new();
+    private readonly SpinBox _workspaceMinimumChannelDepthEdit = new();
     private readonly LineEdit _sceneIdEdit = new();
     private readonly SpinBox _sceneWidthEdit = new();
     private readonly SpinBox _sceneHeightEdit = new();
@@ -1728,7 +1729,8 @@ public sealed partial class SceneMakerMain : Control
         {
             _pendingWorkspaceParentDirectory = ResolveFileSystemPath(directory);
             _workspaceIdEdit.Clear();
-            _createWorkspaceDialog.PopupCentered(new Vector2I(460, 180));
+            _workspaceMinimumChannelDepthEdit.Value = 0.125;
+            _createWorkspaceDialog.PopupCentered(new Vector2I(460, 220));
         };
         AddChild(_workspaceDirectoryDialog);
 
@@ -1766,6 +1768,12 @@ public sealed partial class SceneMakerMain : Control
         workspaceFields.AddChild(new Label { Text = "Stable workspace ID" });
         _workspaceIdEdit.PlaceholderText = "my_workspace";
         workspaceFields.AddChild(_workspaceIdEdit);
+        workspaceFields.AddChild(new Label { Text = "Minimum channel depth" });
+        ConfigureWaterSpanInput(_workspaceMinimumChannelDepthEdit, 0.001, 0.125m);
+        _workspaceMinimumChannelDepthEdit.TooltipText =
+            "How deep a river bed must be in this World - a fact this Workspace "
+            + "holds the author to and never assumes.";
+        workspaceFields.AddChild(_workspaceMinimumChannelDepthEdit);
         _createWorkspaceDialog.AddChild(workspaceFields);
         _createWorkspaceDialog.Confirmed += CreateWorkspace;
         AddChild(_createWorkspaceDialog);
@@ -2351,7 +2359,8 @@ public sealed partial class SceneMakerMain : Control
 
         var report = _controller.CreateWorkspace(
             _pendingWorkspaceParentDirectory,
-            _workspaceIdEdit.Text.Trim());
+            _workspaceIdEdit.Text.Trim(),
+            DecimalOf(_workspaceMinimumChannelDepthEdit.Value));
         if (!report.Succeeded)
         {
             ShowError(report.Message);

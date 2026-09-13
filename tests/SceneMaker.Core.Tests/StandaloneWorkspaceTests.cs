@@ -262,7 +262,7 @@ public sealed class StandaloneWorkspaceTests
     public void WorkspaceLoadRequiresSynchronizedPolyToolsImport()
     {
         using var parent = TemporaryDirectory.Create();
-        var workspace = WorkspaceStore.Create(parent.Path, "game04");
+        var workspace = WorkspaceStore.Create(parent.Path, "game04", 0.125m);
 
         var exception = Assert.Throws<SceneMakerDocumentException>(() =>
             PolyToolsCatalogImporter.Load(workspace.DirectoryPath));
@@ -337,7 +337,7 @@ public sealed class StandaloneWorkspaceTests
     {
         using var parent = TemporaryDirectory.Create();
 
-        var workspace = WorkspaceStore.Create(parent.Path, "game04b");
+        var workspace = WorkspaceStore.Create(parent.Path, "game04b", 0.125m);
 
         Assert.True(Directory.Exists(
             Path.Combine(workspace.DirectoryPath, WorkspaceStore.ScenesDirectoryName)));
@@ -359,7 +359,7 @@ public sealed class StandaloneWorkspaceTests
         File.WriteAllText(occupied, "not a Workspace");
 
         Assert.Throws<SceneMakerDocumentException>(() =>
-            WorkspaceStore.Create(parent.Path, "game04c"));
+            WorkspaceStore.Create(parent.Path, "game04c", 0.125m));
 
         Assert.Equal("not a Workspace", File.ReadAllText(occupied));
     }
