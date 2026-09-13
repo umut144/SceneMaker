@@ -2124,12 +2124,18 @@ public sealed partial class SceneMakerMain : Control
                 _createGameDialog.PopupCentered(new Vector2I(420, 160));
                 break;
             case SettingsMenuItem.LoadGame:
-                if (_controller.Session is null)
+                if (_controller.Session is not { } gameSession)
                 {
                     ShowError("Create or load a Workspace before loading a Game.");
                     return;
                 }
-                OpenGameFinder();
+                // A Game is always a directory, never a file - unlike Load
+                // Workspace, which also accepts a config.json, this needs no
+                // OpenAny bypass and can use the FileDialog node's own native
+                // delegation directly, exactly like Create Workspace's folder
+                // picker does.
+                _gameDirectoryLoadDialog.CurrentDir = gameSession.DirectoryPath;
+                _gameDirectoryLoadDialog.PopupCenteredRatio(0.75f);
                 break;
             case SettingsMenuItem.CreateScene:
                 if (_controller.Session is null)
@@ -2216,43 +2222,6 @@ public sealed partial class SceneMakerMain : Control
             return;
         }
         LoadWorkspaceSelection(paths[0]);
-    }
-
-    /// <summary>
-    /// A Game has no PolyTools counterpart and no file of its own - it is a
-    /// plain directory choice, one level under the open Workspace. The picker
-    /// starts there, not at the last Workspace's parent.
-    /// </summary>
-    private void OpenGameFinder()
-    {
-        if (_controller.Session is not { } session) return;
-        if (DisplayServer.HasFeature(DisplayServer.Feature.NativeDialogFile))
-        {
-            DisplayServer.FileDialogShow(
-                "Load Game",
-                session.DirectoryPath,
-                "",
-                false,
-                DisplayServer.FileDialogMode.OpenDir,
-                [],
-                Callable.From<bool, Variant, int>(HandleGameFinderResult));
-            return;
-        }
-
-        _gameDirectoryLoadDialog.CurrentDir = session.DirectoryPath;
-        _gameDirectoryLoadDialog.PopupCenteredRatio(0.75f);
-    }
-
-    private void HandleGameFinderResult(bool accepted, Variant selectedPaths, int _)
-    {
-        if (!accepted) return;
-        var paths = selectedPaths.AsStringArray();
-        if (paths.Length == 0)
-        {
-            SetStatus("Game load blocked: the file chooser returned no selection.");
-            return;
-        }
-        LoadGameSelection(paths[0]);
     }
 
     private void LoadGameSelection(string selectedPath)
