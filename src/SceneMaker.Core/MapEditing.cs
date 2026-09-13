@@ -1,42 +1,65 @@
 namespace SceneMaker.Core;
 
 /// <summary>
-/// Changes one Scene edge at a time. North and East only add Cells past the
-/// far edge, so every existing local coordinate is already inside the larger
-/// bounds and nothing has to move.
+/// Grows or shrinks one Scene edge at a time. North and East only move the far
+/// edge, so an Extend there only ever relaxes bounds and a Shrink there only
+/// ever tightens them without moving anything already inside the new bounds.
 ///
-/// <para>West and South add Cells at the near edge instead. The origin sits at
-/// the Scene's south-west corner (<see cref="SceneMakerSchemas.CoordinateSpace"/>),
-/// so growing that edge moves the origin away from the ground it used to mark;
+/// <para>West and South move the near edge instead. The origin sits at the
+/// Scene's south-west corner (<see cref="SceneMakerSchemas.CoordinateSpace"/>),
+/// so growing that edge moves the origin away from the ground it used to mark,
+/// and shrinking it moves the origin onto ground that used to be further in;
 /// every authored position is shifted by the same Cell count so what it
 /// describes does not move with it. <see cref="DocumentValidation.Validate"/>
 /// only bounds Terrain cells against <c>size_cells</c> and would pass a West or
-/// South extension that grew the Scene without shifting anything - every
-/// authoring-pixel position is still non-negative and now further from the far
-/// edge than before - while silently sliding every authored Placement, water
-/// body, route, bridge and Anchor toward the wrong corner.</para>
+/// South resize that changed the Scene without shifting anything - every
+/// authoring-pixel position is still non-negative and simply sits at a
+/// different distance from the far edge - while silently sliding every
+/// authored Placement, water body, route, bridge and Anchor toward the wrong
+/// corner.</para>
+///
+/// <para>A Shrink that would cut into anything already authored in the
+/// removed strip is refused rather than silently dropping it:
+/// <see cref="DocumentValidation.ValidateGrid"/> - used for every direction,
+/// not only the two that shift - rejects a result with a Terrain cell, an
+/// Elevation Region point, a Route, a Bridge, a Water Body or a Template
+/// Anchor outside the smaller bounds.</para>
 /// </summary>
 public static class MapEditing
 {
-    public static SceneDocument ExtendNorth(SceneDocument scene, int cells) =>
-        Grow(scene, widthCells: 0, heightCells: cells);
+    public static SceneDocument ExtendNorth(SceneDocument scene, int cells, WorkspaceMetrics metrics) =>
+        Grow(scene, widthCells: 0, heightCells: RequirePositive(cells), metrics);
 
-    public static SceneDocument ExtendEast(SceneDocument scene, int cells) =>
-        Grow(scene, widthCells: cells, heightCells: 0);
+    public static SceneDocument ExtendEast(SceneDocument scene, int cells, WorkspaceMetrics metrics) =>
+        Grow(scene, widthCells: RequirePositive(cells), heightCells: 0, metrics);
 
     public static SceneDocument ExtendWest(SceneDocument scene, int cells, WorkspaceMetrics metrics) =>
-        Shift(scene, widthCells: cells, heightCells: 0, metrics);
+        Shift(scene, widthCells: RequirePositive(cells), heightCells: 0, metrics);
 
     public static SceneDocument ExtendSouth(SceneDocument scene, int cells, WorkspaceMetrics metrics) =>
-        Shift(scene, widthCells: 0, heightCells: cells, metrics);
+        Shift(scene, widthCells: 0, heightCells: RequirePositive(cells), metrics);
 
-    private static SceneDocument Grow(SceneDocument scene, int widthCells, int heightCells)
+    public static SceneDocument ShrinkNorth(SceneDocument scene, int cells, WorkspaceMetrics metrics) =>
+        Grow(scene, widthCells: 0, heightCells: -RequirePositive(cells), metrics);
+
+    public static SceneDocument ShrinkEast(SceneDocument scene, int cells, WorkspaceMetrics metrics) =>
+        Grow(scene, widthCells: -RequirePositive(cells), heightCells: 0, metrics);
+
+    public static SceneDocument ShrinkWest(SceneDocument scene, int cells, WorkspaceMetrics metrics) =>
+        Shift(scene, widthCells: -RequirePositive(cells), heightCells: 0, metrics);
+
+    public static SceneDocument ShrinkSouth(SceneDocument scene, int cells, WorkspaceMetrics metrics) =>
+        Shift(scene, widthCells: 0, heightCells: -RequirePositive(cells), metrics);
+
+    private static SceneDocument Grow(
+        SceneDocument scene, int widthCells, int heightCells, WorkspaceMetrics metrics)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(metrics);
         RequireOneEdge(widthCells, heightCells);
         try
         {
-            var expanded = scene with
+            var resized = scene with
             {
                 SizeCells = new SceneSizeCells
                 {
@@ -44,13 +67,13 @@ public static class MapEditing
                     Height = checked(scene.SizeCells.Height + heightCells),
                 },
             };
-            DocumentValidation.Validate(expanded);
-            return expanded;
+            DocumentValidation.ValidateGrid(resized, metrics);
+            return resized;
         }
         catch (OverflowException exception)
         {
             throw new SceneMakerDocumentException(
-                "Map extension exceeds the integer authoring coordinate range.", exception);
+                "Map resize exceeds the integer authoring coordinate range.", exception);
         }
     }
 
@@ -146,7 +169,7 @@ public static class MapEditing
         catch (OverflowException exception)
         {
             throw new SceneMakerDocumentException(
-                "Map extension exceeds the integer authoring coordinate range.", exception);
+                "Map resize exceeds the integer authoring coordinate range.", exception);
         }
     }
 
@@ -157,12 +180,22 @@ public static class MapEditing
         Y = checked(position.Y + offsetY),
     };
 
+    private static int RequirePositive(int cells)
+    {
+        if (cells <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(cells), "Map resize requires a positive Cell count.");
+        }
+        return cells;
+    }
+
     private static void RequireOneEdge(int widthCells, int heightCells)
     {
-        if (widthCells < 0 || heightCells < 0 || widthCells == 0 && heightCells == 0)
+        if (widthCells == 0 && heightCells == 0)
         {
             throw new ArgumentOutOfRangeException(nameof(widthCells),
-                "Map extension requires a positive Cell count on exactly one edge.");
+                "Map resize requires a non-zero Cell count on exactly one edge.");
         }
     }
 }

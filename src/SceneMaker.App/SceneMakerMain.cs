@@ -183,13 +183,9 @@ public sealed partial class SceneMakerMain : Control
     // showing a bridge's numbers cannot be mistaken for editing them.
     private bool _loadingBridgeNumbers;
     private bool _loadingRiverNumbers;
-    private readonly Label _mapDimensionsLabel = new();
     private readonly SpinBox _mapExtensionCellsEdit = new();
     private readonly Label _mapExtensionMetricsLabel = new();
-    private readonly Button _extendNorthButton = new();
-    private readonly Button _extendEastButton = new();
-    private readonly Button _extendSouthButton = new();
-    private readonly Button _extendWestButton = new();
+    private readonly MenuButton _mapResizeButton = new();
     private readonly Button _placeTemplateAnchorButton = new();
     private readonly Button _templatesButton = new();
     private readonly Button _regeneratePreviewButton = new();
@@ -1582,39 +1578,40 @@ public sealed partial class SceneMakerMain : Control
     private void BuildMapBar()
     {
         _mapBar.AddChild(new Label { Text = "Map  ›" });
-        _mapDimensionsLabel.CustomMinimumSize = new Vector2(260f, 0f);
-        _mapDimensionsLabel.VerticalAlignment = VerticalAlignment.Center;
-        _mapBar.AddChild(_mapDimensionsLabel);
-        _mapBar.AddChild(new Label { Text = "Extend" });
+        _mapBar.AddChild(new Label { Text = "Cells" });
         _mapExtensionCellsEdit.MinValue = 1;
         _mapExtensionCellsEdit.MaxValue = int.MaxValue;
         _mapExtensionCellsEdit.Step = 1;
         _mapExtensionCellsEdit.Value = 1;
         _mapExtensionCellsEdit.CustomMinimumSize = new Vector2(100f, 0f);
-        _mapExtensionCellsEdit.TooltipText = "WorldGrid Cells to add to the selected map edge.";
+        _mapExtensionCellsEdit.TooltipText = "WorldGrid Cells to add to or remove from the selected map edge.";
         _mapExtensionCellsEdit.ValueChanged += _ => UpdateMapControls();
         _mapBar.AddChild(_mapExtensionCellsEdit);
         _mapExtensionMetricsLabel.CustomMinimumSize = new Vector2(150f, 0f);
         _mapExtensionMetricsLabel.VerticalAlignment = VerticalAlignment.Center;
         _mapBar.AddChild(_mapExtensionMetricsLabel);
-        _extendNorthButton.Text = "North ↑";
-        _extendNorthButton.TooltipText = "Add Cells above the existing map without moving authored data.";
-        _extendNorthButton.Pressed += () => ExtendMap(MapEdge.North);
-        _mapBar.AddChild(_extendNorthButton);
-        _extendEastButton.Text = "East →";
-        _extendEastButton.TooltipText = "Add Cells right of the existing map without moving authored data.";
-        _extendEastButton.Pressed += () => ExtendMap(MapEdge.East);
-        _mapBar.AddChild(_extendEastButton);
-        _extendSouthButton.Text = "South ↓";
-        _extendSouthButton.TooltipText = "Add Cells below the existing map without moving authored data.";
-        _extendSouthButton.Pressed += () => ExtendMap(MapEdge.South);
-        _mapBar.AddChild(_extendSouthButton);
-        _extendWestButton.Text = "West ←";
-        _extendWestButton.TooltipText = "Add Cells left of the existing map without moving authored data.";
-        _extendWestButton.Pressed += () => ExtendMap(MapEdge.West);
-        _mapBar.AddChild(_extendWestButton);
+        _mapResizeButton.Text = "Resize Map";
+        _mapResizeButton.TooltipText = "Extend or shrink the map by the Cells above, on one edge.";
+        BuildMapResizeMenu();
+        _mapBar.AddChild(_mapResizeButton);
         _mapBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
         UpdateMapControls();
+    }
+
+    private void BuildMapResizeMenu()
+    {
+        var menu = _mapResizeButton.GetPopup();
+        menu.AddSeparator("Extend");
+        menu.AddItem("North ↑", (int)MapResizeOperation.ExtendNorth);
+        menu.AddItem("East →", (int)MapResizeOperation.ExtendEast);
+        menu.AddItem("South ↓", (int)MapResizeOperation.ExtendSouth);
+        menu.AddItem("West ←", (int)MapResizeOperation.ExtendWest);
+        menu.AddSeparator("Shrink");
+        menu.AddItem("North ↑", (int)MapResizeOperation.ShrinkNorth);
+        menu.AddItem("East →", (int)MapResizeOperation.ShrinkEast);
+        menu.AddItem("South ↓", (int)MapResizeOperation.ShrinkSouth);
+        menu.AddItem("West ←", (int)MapResizeOperation.ShrinkWest);
+        menu.IdPressed += id => ResizeMap((MapResizeOperation)id);
     }
 
     private void ShowTemplatesPopup()
@@ -2655,44 +2652,56 @@ public sealed partial class SceneMakerMain : Control
     }
 
     /// <summary>
-    /// The edge Map Extend grows. North and East only push the far edge out;
-    /// South and West move the origin, so <see cref="ExtendMap"/> passes the
-    /// open Workspace's metrics to the two operations that need to shift
-    /// authored positions along with it.
+    /// The Map Resize dropdown's operations. North and East only push or pull
+    /// the far edge; South and West move the origin, so <see cref="ResizeMap"/>
+    /// passes the open Workspace's metrics to every operation, since
+    /// <see cref="MapEditing"/> now validates every edge against it.
     /// </summary>
-    private enum MapEdge
+    private enum MapResizeOperation
     {
-        North,
-        East,
-        South,
-        West,
+        ExtendNorth,
+        ExtendEast,
+        ExtendSouth,
+        ExtendWest,
+        ShrinkNorth,
+        ShrinkEast,
+        ShrinkSouth,
+        ShrinkWest,
     }
 
-    private void ExtendMap(MapEdge edge)
+    private void ResizeMap(MapResizeOperation operation)
     {
         if (_controller.Scene is null || _controller.Session is null) return;
         var cells = checked((int)_mapExtensionCellsEdit.Value);
         var metrics = _controller.Session.Metrics;
-        var direction = edge switch
+        var (verb, direction) = operation switch
         {
-            MapEdge.North => "north",
-            MapEdge.East => "east",
-            MapEdge.South => "south",
-            MapEdge.West => "west",
-            _ => throw new ArgumentOutOfRangeException(nameof(edge)),
+            MapResizeOperation.ExtendNorth => ("Extended", "north"),
+            MapResizeOperation.ExtendEast => ("Extended", "east"),
+            MapResizeOperation.ExtendSouth => ("Extended", "south"),
+            MapResizeOperation.ExtendWest => ("Extended", "west"),
+            MapResizeOperation.ShrinkNorth => ("Shrank", "north"),
+            MapResizeOperation.ShrinkEast => ("Shrank", "east"),
+            MapResizeOperation.ShrinkSouth => ("Shrank", "south"),
+            MapResizeOperation.ShrinkWest => ("Shrank", "west"),
+            _ => throw new ArgumentOutOfRangeException(nameof(operation)),
         };
         ExecuteSceneCommand(new ToolOutcome.Edit(
-            "Extend Map",
-            document => edge switch
+            "Resize Map",
+            document => operation switch
             {
-                MapEdge.North => MapEditing.ExtendNorth(document, cells),
-                MapEdge.East => MapEditing.ExtendEast(document, cells),
-                MapEdge.South => MapEditing.ExtendSouth(document, cells, metrics),
-                MapEdge.West => MapEditing.ExtendWest(document, cells, metrics),
-                _ => throw new ArgumentOutOfRangeException(nameof(edge)),
+                MapResizeOperation.ExtendNorth => MapEditing.ExtendNorth(document, cells, metrics),
+                MapResizeOperation.ExtendEast => MapEditing.ExtendEast(document, cells, metrics),
+                MapResizeOperation.ExtendSouth => MapEditing.ExtendSouth(document, cells, metrics),
+                MapResizeOperation.ExtendWest => MapEditing.ExtendWest(document, cells, metrics),
+                MapResizeOperation.ShrinkNorth => MapEditing.ShrinkNorth(document, cells, metrics),
+                MapResizeOperation.ShrinkEast => MapEditing.ShrinkEast(document, cells, metrics),
+                MapResizeOperation.ShrinkSouth => MapEditing.ShrinkSouth(document, cells, metrics),
+                MapResizeOperation.ShrinkWest => MapEditing.ShrinkWest(document, cells, metrics),
+                _ => throw new ArgumentOutOfRangeException(nameof(operation)),
             },
             Describe: (_, _) =>
-                $"Extended Map {direction} by {cells} Cells without moving authored data."));
+                $"{verb} Map {direction} by {cells} Cells without moving other authored data."));
         UpdateDocumentStatus();
     }
 
@@ -3800,23 +3809,15 @@ public sealed partial class SceneMakerMain : Control
         var enabled = scene is not null;
         _mapNavigationButton.Disabled = !enabled;
         _mapExtensionCellsEdit.Editable = enabled;
-        _extendNorthButton.Disabled = !enabled;
-        _extendEastButton.Disabled = !enabled;
-        _extendSouthButton.Disabled = !enabled;
-        _extendWestButton.Disabled = !enabled;
+        _mapResizeButton.Disabled = !enabled;
         if (scene is null)
         {
-            _mapDimensionsLabel.Text = "No Scene loaded";
             _mapExtensionMetricsLabel.Text = string.Empty;
             return;
         }
 
         // A Scene can only be open while a session is open.
         var metrics = _controller.Session!.Metrics;
-        _mapDimensionsLabel.Text =
-            $"{scene.SizeCells.Width} × {scene.SizeCells.Height} Cells  ·  "
-            + $"{scene.SizeCells.Width * metrics.TerrainCellMeters:0.###} × {scene.SizeCells.Height * metrics.TerrainCellMeters:0.###} m  ·  "
-            + $"{metrics.SceneWidthAuthoringPixels(scene)} × {metrics.SceneHeightAuthoringPixels(scene)} px";
         var extensionCells = checked((int)_mapExtensionCellsEdit.Value);
         _mapExtensionMetricsLabel.Text =
             $"= {extensionCells * metrics.TerrainCellMeters:0.###} m · {extensionCells * metrics.AuthoringPixelsPerTerrainCell} px";

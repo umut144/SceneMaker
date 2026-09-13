@@ -4,12 +4,14 @@ using Xunit;
 namespace SceneMaker.Core.Tests;
 
 /// <summary>
-/// North and East only grow the far edge, so nothing existing has to move.
-/// West and South grow the near edge instead, which moves the origin - these
-/// tests exist because that difference is easy to miss: a West/South
-/// implementation that only touched size_cells would validate cleanly while
-/// silently sliding every authored Placement, water body, route, bridge and
-/// Anchor toward the wrong corner.
+/// North and East only grow or shrink the far edge, so nothing existing has to
+/// move. West and South grow or shrink the near edge instead, which moves the
+/// origin - these tests exist because that difference is easy to miss: a
+/// West/South implementation that only touched size_cells would validate
+/// cleanly while silently sliding every authored Placement, water body,
+/// route, bridge and Anchor toward the wrong corner. A Shrink additionally has
+/// to refuse cutting into anything authored in the strip it would remove
+/// rather than dropping it silently.
 /// </summary>
 public sealed class MapEditingTests
 {
@@ -19,7 +21,7 @@ public sealed class MapEditingTests
         using var workspace = TestWorkspace.Create();
         var scene = BuildScene(workspace);
 
-        var north = MapEditing.ExtendNorth(scene, 2);
+        var north = MapEditing.ExtendNorth(scene, 2, workspace.Metrics);
         Assert.Equal(scene.SizeCells.Width, north.SizeCells.Width);
         Assert.Equal(scene.SizeCells.Height + 2, north.SizeCells.Height);
         Assert.Equal(scene.TerrainCells, north.TerrainCells);
@@ -27,7 +29,7 @@ public sealed class MapEditingTests
         Assert.Equal(scene.Bridges, north.Bridges);
         Assert.Equal(scene.WaterBodies, north.WaterBodies);
 
-        var east = MapEditing.ExtendEast(scene, 3);
+        var east = MapEditing.ExtendEast(scene, 3, workspace.Metrics);
         Assert.Equal(scene.SizeCells.Width + 3, east.SizeCells.Width);
         Assert.Equal(scene.SizeCells.Height, east.SizeCells.Height);
         Assert.Equal(scene.TerrainCells, east.TerrainCells);
@@ -149,28 +151,102 @@ public sealed class MapEditingTests
         }
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    public void ExtendWestAndSouthRejectANonPositiveCellCount(int cells)
+    [Fact]
+    public void ShrinkNorthAndEastShrinkSizeAndTouchNothingElseWhenTheEdgeIsClear()
     {
         using var workspace = TestWorkspace.Create();
-        var scene = TestScenes.Instance(workspace);
+        // 8 Cells of margin past where BuildScene's authored content reaches
+        // (max 160 px = Cell 5 of 6), and no full Terrain paint, so shrinking
+        // the far edge by 2 Cells removes only empty ground.
+        var scene = BuildSparseScene(workspace, sizeCells: 8);
 
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => MapEditing.ExtendWest(scene, cells, workspace.Metrics));
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => MapEditing.ExtendSouth(scene, cells, workspace.Metrics));
+        var north = MapEditing.ShrinkNorth(scene, 2, workspace.Metrics);
+        Assert.Equal(scene.SizeCells.Width, north.SizeCells.Width);
+        Assert.Equal(scene.SizeCells.Height - 2, north.SizeCells.Height);
+        Assert.Equal(scene.Props, north.Props);
+        Assert.Equal(scene.Bridges, north.Bridges);
+        Assert.Equal(scene.WaterBodies, north.WaterBodies);
+
+        var east = MapEditing.ShrinkEast(scene, 2, workspace.Metrics);
+        Assert.Equal(scene.SizeCells.Width - 2, east.SizeCells.Width);
+        Assert.Equal(scene.SizeCells.Height, east.SizeCells.Height);
+        Assert.Equal(scene.Props, east.Props);
     }
 
     [Fact]
-    public void ExtendWestAndSouthRequireMetrics()
+    public void ShrinkWestAndSouthShrinkSizeAndShiftEveryAuthoredPositionOnItsOwnAxisWhenTheEdgeIsClear()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = BuildSparseScene(workspace, sizeCells: 8);
+        // PlaceAuthoredContent's nearest authored position to the origin is
+        // (32, 32) px - exactly 1 Cell in - so West/South can only shrink by
+        // 1 Cell before it would cut into that content.
+        const int cells = 1;
+        var offset = cells * TestWorkspace.AuthoringPixelsPerCell;
+
+        var west = MapEditing.ShrinkWest(scene, cells, workspace.Metrics);
+        Assert.Equal(scene.SizeCells.Width - cells, west.SizeCells.Width);
+        Assert.Equal(scene.SizeCells.Height, west.SizeCells.Height);
+        var prop = Assert.Single(west.Props);
+        var originalProp = Assert.Single(scene.Props);
+        Assert.Equal(originalProp.PositionAuthoringPx.X - offset, prop.PositionAuthoringPx.X);
+        Assert.Equal(originalProp.PositionAuthoringPx.Y, prop.PositionAuthoringPx.Y);
+
+        var south = MapEditing.ShrinkSouth(scene, cells, workspace.Metrics);
+        Assert.Equal(scene.SizeCells.Width, south.SizeCells.Width);
+        Assert.Equal(scene.SizeCells.Height - cells, south.SizeCells.Height);
+        var shiftedProp = Assert.Single(south.Props);
+        Assert.Equal(originalProp.PositionAuthoringPx.X, shiftedProp.PositionAuthoringPx.X);
+        Assert.Equal(originalProp.PositionAuthoringPx.Y - offset, shiftedProp.PositionAuthoringPx.Y);
+    }
+
+    [Fact]
+    public void ShrinkRefusesToCutIntoAuthoredContentInTheRemovedStrip()
+    {
+        using var workspace = TestWorkspace.Create();
+        // BuildScene fully paints its 6 x 6 grid, so every edge has painted
+        // Terrain right up to the boundary - there is no clear strip any
+        // Shrink could remove without cutting into it.
+        var scene = BuildScene(workspace);
+
+        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkNorth(scene, 1, workspace.Metrics));
+        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkEast(scene, 1, workspace.Metrics));
+        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkWest(scene, 1, workspace.Metrics));
+        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkSouth(scene, 1, workspace.Metrics));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ExtendAndShrinkRejectANonPositiveCellCountOnEveryEdge(int cells)
     {
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
 
+        Assert.Throws<ArgumentOutOfRangeException>(() => MapEditing.ExtendNorth(scene, cells, workspace.Metrics));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MapEditing.ExtendEast(scene, cells, workspace.Metrics));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MapEditing.ExtendWest(scene, cells, workspace.Metrics));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MapEditing.ExtendSouth(scene, cells, workspace.Metrics));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MapEditing.ShrinkNorth(scene, cells, workspace.Metrics));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MapEditing.ShrinkEast(scene, cells, workspace.Metrics));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MapEditing.ShrinkWest(scene, cells, workspace.Metrics));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MapEditing.ShrinkSouth(scene, cells, workspace.Metrics));
+    }
+
+    [Fact]
+    public void ExtendAndShrinkRequireMetricsOnEveryEdge()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+
+        Assert.Throws<ArgumentNullException>(() => MapEditing.ExtendNorth(scene, 1, null!));
+        Assert.Throws<ArgumentNullException>(() => MapEditing.ExtendEast(scene, 1, null!));
         Assert.Throws<ArgumentNullException>(() => MapEditing.ExtendWest(scene, 1, null!));
         Assert.Throws<ArgumentNullException>(() => MapEditing.ExtendSouth(scene, 1, null!));
+        Assert.Throws<ArgumentNullException>(() => MapEditing.ShrinkNorth(scene, 1, null!));
+        Assert.Throws<ArgumentNullException>(() => MapEditing.ShrinkEast(scene, 1, null!));
+        Assert.Throws<ArgumentNullException>(() => MapEditing.ShrinkWest(scene, 1, null!));
+        Assert.Throws<ArgumentNullException>(() => MapEditing.ShrinkSouth(scene, 1, null!));
     }
 
     /// <summary>
@@ -181,6 +257,24 @@ public sealed class MapEditingTests
     private static SceneDocument BuildScene(TestWorkspace workspace)
     {
         var scene = TestScenes.Instance(workspace);
+        return PlaceAuthoredContent(scene, workspace);
+    }
+
+    /// <summary>
+    /// The same authored content as <see cref="BuildScene"/>, on a
+    /// <paramref name="sizeCells"/> square Instance with no Terrain painted at
+    /// all, so a Shrink test can remove a Cell margin without cutting into
+    /// anything - <see cref="BuildScene"/>'s full Terrain paint would refuse
+    /// every Shrink, which is a separate case its own test covers.
+    /// </summary>
+    private static SceneDocument BuildSparseScene(TestWorkspace workspace, int sizeCells)
+    {
+        var scene = SceneDocument.CreateInstance("base", sizeCells, sizeCells);
+        return PlaceAuthoredContent(scene, workspace);
+    }
+
+    private static SceneDocument PlaceAuthoredContent(SceneDocument scene, TestWorkspace workspace)
+    {
         scene = PropEditing.Place(scene, workspace.Props, 64, 64, "stone");
         scene = TemplateEditing.PlaceAnchor(scene, workspace.Metrics, 96, 96, groupNumber: 1);
         scene = BridgeEditing.Place(
