@@ -184,6 +184,8 @@ public sealed partial class SceneMakerMain : Control
     private readonly Label _mapExtensionMetricsLabel = new();
     private readonly Button _extendNorthButton = new();
     private readonly Button _extendEastButton = new();
+    private readonly Button _extendSouthButton = new();
+    private readonly Button _extendWestButton = new();
     private readonly Button _placeTemplateAnchorButton = new();
     private readonly Button _templatesButton = new();
     private readonly Button _regeneratePreviewButton = new();
@@ -1587,12 +1589,20 @@ public sealed partial class SceneMakerMain : Control
         _mapBar.AddChild(_mapExtensionMetricsLabel);
         _extendNorthButton.Text = "North ↑";
         _extendNorthButton.TooltipText = "Add Cells above the existing map without moving authored data.";
-        _extendNorthButton.Pressed += () => ExtendMap(north: true);
+        _extendNorthButton.Pressed += () => ExtendMap(MapEdge.North);
         _mapBar.AddChild(_extendNorthButton);
         _extendEastButton.Text = "East →";
         _extendEastButton.TooltipText = "Add Cells right of the existing map without moving authored data.";
-        _extendEastButton.Pressed += () => ExtendMap(north: false);
+        _extendEastButton.Pressed += () => ExtendMap(MapEdge.East);
         _mapBar.AddChild(_extendEastButton);
+        _extendSouthButton.Text = "South ↓";
+        _extendSouthButton.TooltipText = "Add Cells below the existing map without moving authored data.";
+        _extendSouthButton.Pressed += () => ExtendMap(MapEdge.South);
+        _mapBar.AddChild(_extendSouthButton);
+        _extendWestButton.Text = "West ←";
+        _extendWestButton.TooltipText = "Add Cells left of the existing map without moving authored data.";
+        _extendWestButton.Pressed += () => ExtendMap(MapEdge.West);
+        _mapBar.AddChild(_extendWestButton);
         _mapBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
         UpdateMapControls();
     }
@@ -2527,16 +2537,43 @@ public sealed partial class SceneMakerMain : Control
         SetStatus("Navigation overview.");
     }
 
-    private void ExtendMap(bool north)
+    /// <summary>
+    /// The edge Map Extend grows. North and East only push the far edge out;
+    /// South and West move the origin, so <see cref="ExtendMap"/> passes the
+    /// open Workspace's metrics to the two operations that need to shift
+    /// authored positions along with it.
+    /// </summary>
+    private enum MapEdge
+    {
+        North,
+        East,
+        South,
+        West,
+    }
+
+    private void ExtendMap(MapEdge edge)
     {
         if (_controller.Scene is null || _controller.Session is null) return;
         var cells = checked((int)_mapExtensionCellsEdit.Value);
-        var direction = north ? "north" : "east";
+        var metrics = _controller.Session.Metrics;
+        var direction = edge switch
+        {
+            MapEdge.North => "north",
+            MapEdge.East => "east",
+            MapEdge.South => "south",
+            MapEdge.West => "west",
+            _ => throw new ArgumentOutOfRangeException(nameof(edge)),
+        };
         ExecuteSceneCommand(new ToolOutcome.Edit(
             "Extend Map",
-            document => north
-                ? MapEditing.ExtendNorth(document, cells)
-                : MapEditing.ExtendEast(document, cells),
+            document => edge switch
+            {
+                MapEdge.North => MapEditing.ExtendNorth(document, cells),
+                MapEdge.East => MapEditing.ExtendEast(document, cells),
+                MapEdge.South => MapEditing.ExtendSouth(document, cells, metrics),
+                MapEdge.West => MapEditing.ExtendWest(document, cells, metrics),
+                _ => throw new ArgumentOutOfRangeException(nameof(edge)),
+            },
             Describe: (_, _) =>
                 $"Extended Map {direction} by {cells} Cells without moving authored data."));
         UpdateDocumentStatus();
@@ -3641,6 +3678,8 @@ public sealed partial class SceneMakerMain : Control
         _mapExtensionCellsEdit.Editable = enabled;
         _extendNorthButton.Disabled = !enabled;
         _extendEastButton.Disabled = !enabled;
+        _extendSouthButton.Disabled = !enabled;
+        _extendWestButton.Disabled = !enabled;
         if (scene is null)
         {
             _mapDimensionsLabel.Text = "No Scene loaded";
