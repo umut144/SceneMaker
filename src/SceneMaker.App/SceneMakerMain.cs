@@ -2679,6 +2679,7 @@ public sealed partial class SceneMakerMain : Control
         var inLandscape = _landscapeAreaControls.ContainsKey(mode);
         if (inLandscape) _landscapeArea = mode;
         _landscapeBar.Visible = inLandscape;
+        _canvas.LandscapeContextActive = inLandscape;
         foreach (var (area, control) in _landscapeAreaControls)
             control.ButtonPressed = inLandscape && area == mode;
     }
@@ -2720,6 +2721,7 @@ public sealed partial class SceneMakerMain : Control
     private void SelectMapContext()
     {
         _canvas.MapContextActive = true;
+        _canvas.LandscapeContextActive = false;
         _overviewNavigationBar.Visible = false;
         _contextNavigationBar.Visible = true;
         _landscapeBar.Visible = false;
@@ -2735,6 +2737,7 @@ public sealed partial class SceneMakerMain : Control
     private void ShowNavigationOverview()
     {
         _canvas.MapContextActive = false;
+        _canvas.LandscapeContextActive = false;
         _overviewNavigationBar.Visible = true;
         _contextNavigationBar.Visible = false;
         UpdateDrawingToolAvailability();

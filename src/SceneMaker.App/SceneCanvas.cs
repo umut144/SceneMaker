@@ -92,6 +92,7 @@ public sealed partial class SceneCanvas : Control
     // where the fold above depends on the whole document.
     private readonly ElevationRegionOutlineCache _elevationRegionOutlines = new();
     private bool _mapContextActive;
+    private bool _landscapeContextActive;
     private IReadOnlyDictionary<string, Color> _terrainColors = new Dictionary<string, Color>();
     private TerrainDisplayCatalog? _terrainAssets;
     private BridgeKitResolution? _bridgeKit;
@@ -160,6 +161,22 @@ public sealed partial class SceneCanvas : Control
         set
         {
             _mapContextActive = value;
+            QueueRedraw();
+        }
+    }
+
+    /// <summary>
+    /// Whether Landscape is open, on any of its areas - River, Path or Hill.
+    /// Landscape is one authoring context split three ways, so entering any
+    /// area of it brings all three into view together instead of leaving the
+    /// other two dim while the author works one of them.
+    /// </summary>
+    public bool LandscapeContextActive
+    {
+        get => _landscapeContextActive;
+        set
+        {
+            _landscapeContextActive = value;
             QueueRedraw();
         }
     }
@@ -695,14 +712,15 @@ public sealed partial class SceneCanvas : Control
                 pan,
                 zoom,
                 elevationRange,
-                highlighted: Mode is EditorMode.Terrain or EditorMode.River);
+                highlighted: Mode is EditorMode.Terrain or EditorMode.River
+                    || LandscapeContextActive);
             DrawRouteSurfaces(
                 document,
                 pan,
                 zoom,
                 heightAuthoringPixels,
                 elevationRange,
-                highlighted: Mode == EditorMode.Path);
+                highlighted: Mode == EditorMode.Path || LandscapeContextActive);
             DrawBridges(
                 document,
                 pan,
@@ -719,8 +737,11 @@ public sealed partial class SceneCanvas : Control
             // Full where a hill is authored, and full in Terrain too: with
             // no other mark on the cells, the contour is the only thing that
             // says an authored body lies there. The Map overview is structural
-            // rather than an area, so it keeps them as well.
-            highlighted: Mode is EditorMode.Terrain or EditorMode.ElevationRegion || MapContextActive);
+            // rather than an area, so it keeps them as well, and so does
+            // Landscape as a whole - River, Path and Hill all read clearly
+            // together while any one of them is open.
+            highlighted: Mode is EditorMode.Terrain or EditorMode.ElevationRegion
+                || MapContextActive || LandscapeContextActive);
         // Placements are not column-resolved yet. Hiding them in Section is
         // more truthful than painting them over a clipped roof with invented
         // occlusion. Their active tool preview remains below, so the view does
