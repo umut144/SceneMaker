@@ -43,7 +43,8 @@ Vier Orte, vier Fragen — und jeder Wert steht an genau einem davon:
   `Eraser`: dieselbe Aktion, die wegnimmt statt hinzuzufügen.
 - `ContextMenu` über dem Canvas: **was tut die laufende Geste?** Nur was man
   mitten im Zeichnen umlegt — der Punktmodus des *nächsten* Punktes, `Snap`,
-  der Abstand einer Placement-Linie.
+  der Abstand einer Placement-Linie, die Pinselbreite von Terrain `Pencil` und
+  `Line`.
 - `Outliner` rechts oben: **welche Objekte gibt es?** Die Liste des aktiven
   Modus, bei Wasser als Baum.
 - `Inspector` rechts unten: **was hat das Objekt, an dem ich arbeite?** Der
@@ -855,9 +856,21 @@ abgeleitete Zeile `Bed · Cut`), der Schalter des Körpers (`Switch`,
 Path-Werte und die Bridge-Werte.
 
 Im `ContextMenu` über dem Canvas bleibt nur, was zur laufenden Geste gehört:
-der Punktmodus des *nächsten* Punktes, `Snap` und der Abstand einer
-Placement-Linie. `River:Select River` behält davon nichts — dessen Leiste trägt
-nur noch den Werkzeugnamen.
+der Punktmodus des *nächsten* Punktes, `Snap`, der Abstand einer
+Placement-Linie und die Pinselbreite (`Brush`) von Terrain `Pencil` und
+`Line`. `River:Select River` behält davon nichts — dessen Leiste trägt nur
+noch den Werkzeugnamen.
+
+`Brush` ist ein Beispiel dafür, wie die Regel eine Verwechslung ausschließt,
+die sonst nahegelegen hätte: eine Pinselbreite ist keine Eigenschaft eines
+Terrain-Cells oder eines Assets — sie steht nirgends im Dokument — sondern nur
+eine Einstellung dafür, *wie* der nächste Strich gezeichnet wird. Sie gehört
+deshalb ins `ContextMenu`, nicht in den `Inspector`: dort stehen nur Werte, die
+tatsächlich am authored Objekt hängen, wie `Surface` und `Height` es tun. Ein
+Wert wie `Brush`, der nirgends im Dokument gespeichert wird, gehört nie in den
+`Inspector`, egal wie sehr er wie eine Zahl aussieht, die dort auch stehen
+könnte. `Fill` zeigt `Brush` nicht: eine Flächenfüllung breitet sich über den
+zusammenhängenden Bereich aus und kennt keine Pinselbreite.
 
 ## Statusleiste
 
