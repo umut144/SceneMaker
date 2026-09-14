@@ -137,7 +137,7 @@ JSON
 manifest="$source_world/PolyToolsRuntimeExports/tree/manifest.json"
 cat >"$manifest" <<'JSON'
 {
-  "schema_version": 21,
+  "schema_version": 22,
   "asset_key": "tree",
   "display_name": "Tree",
   "asset_type": "terrain",
@@ -192,7 +192,7 @@ JSON
 
 cat >"$source_world/PolyToolsRuntimeExports/leaf/manifest.json" <<'JSON'
 {
-  "schema_version": 21,
+  "schema_version": 22,
   "asset_key": "leaf",
   "display_name": "Referenced leaf",
   "asset_type": "items",
@@ -248,7 +248,7 @@ SCENEMAKER_WORKSPACE_DIR="$workspace" \
   "$project_directory/scripts/sync_polytools_world.sh"
 
 imported_manifest="$workspace/imports/polytools/PolyToolsRuntimeExports/tree/manifest.json"
-jq -e '.schema_version == 21 and (.regions | length == 2)' "$imported_manifest" >/dev/null
+jq -e '.schema_version == 22 and (.regions | length == 2)' "$imported_manifest" >/dev/null
 jq -e '.assets == [
   {
     "asset_key": "bog",

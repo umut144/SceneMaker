@@ -61,6 +61,30 @@
       "polytools_asset_id": "asset_19"
     },
     {
+      "asset_key": "totem_of_life",
+      "display_name": "Totem Of Life",
+      "role": "placement",
+      "color": "#4CAF50",
+      "polytools_asset_id": "asset_48",
+      "category": "totems"
+    },
+    {
+      "asset_key": "totem_of_mana",
+      "display_name": "Totem Of Mana",
+      "role": "placement",
+      "color": "#3B82F6",
+      "polytools_asset_id": "asset_49",
+      "category": "totems"
+    },
+    {
+      "asset_key": "totem_of_time",
+      "display_name": "Totem Of Time",
+      "role": "placement",
+      "color": "#9C6ADE",
+      "polytools_asset_id": "asset_50",
+      "category": "totems"
+    },
+    {
       "asset_key": "tree",
       "display_name": "Tree",
       "role": "placement",
