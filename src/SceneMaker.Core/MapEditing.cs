@@ -18,12 +18,16 @@ namespace SceneMaker.Core;
 /// authored Placement, water body, route, bridge and Anchor toward the wrong
 /// corner.</para>
 ///
-/// <para>A Shrink that would cut into anything already authored in the
-/// removed strip is refused rather than silently dropping it:
-/// <see cref="DocumentValidation.ValidateGrid"/> - used for every direction,
-/// not only the two that shift - rejects a result with a Terrain cell, an
-/// Elevation Region point, a Route, a Bridge, a Water Body or a Template
-/// Anchor outside the smaller bounds.</para>
+/// <para>A Shrink drops whatever Terrain and Placements no longer fit -
+/// that strip disappears along with the Cells it stood on, the same way it
+/// would if the author erased it first. Every other authored kind is left
+/// to refuse instead: <see cref="DocumentValidation.ValidateGrid"/> - used
+/// for every direction, not only the two that shift - rejects a result with
+/// an Elevation Region point, a Route, a Bridge, a Water Body or a Template
+/// Anchor outside the smaller bounds, because there is no single correct way
+/// to cut a multi-point shape or a two-ended span in half automatically; an
+/// author who wants that strip's Elevation Region gone erases it and shrinks
+/// again.</para>
 /// </summary>
 public static class MapEditing
 {
@@ -67,6 +71,7 @@ public static class MapEditing
                     Height = checked(scene.SizeCells.Height + heightCells),
                 },
             };
+            resized = DropTerrainAndPropsOutsideBounds(resized, metrics);
             DocumentValidation.ValidateGrid(resized, metrics);
             return resized;
         }
@@ -163,6 +168,7 @@ public static class MapEditing
                     })
                     .ToList(),
             };
+            shifted = DropTerrainAndPropsOutsideBounds(shifted, metrics);
             DocumentValidation.ValidateGrid(shifted, metrics);
             return shifted;
         }
@@ -179,6 +185,42 @@ public static class MapEditing
         X = checked(position.X + offsetX),
         Y = checked(position.Y + offsetY),
     };
+
+    /// <summary>
+    /// Drops Terrain cells and Placements that no longer fit
+    /// <paramref name="scene"/>'s own (already resized and, for West or
+    /// South, already shifted) bounds. A no-op on Extend, which only ever
+    /// relaxes bounds and so never finds anything outside them here.
+    ///
+    /// <para>Terrain and Placements are the two authored kinds a Shrink takes
+    /// back this way, chosen because both are simple - a Terrain cell is a
+    /// single grid cell, a Placement a single point - so "no longer fits"
+    /// has exactly one meaning for each. See the type doc for why every
+    /// other authored kind is left to <see cref="DocumentValidation.ValidateGrid"/>
+    /// instead.</para>
+    /// </summary>
+    private static SceneDocument DropTerrainAndPropsOutsideBounds(
+        SceneDocument scene, WorkspaceMetrics metrics)
+    {
+        var size = scene.SizeCells;
+        var widthPx = checked(size.Width * metrics.AuthoringPixelsPerTerrainCell);
+        var heightPx = checked(size.Height * metrics.AuthoringPixelsPerTerrainCell);
+        return scene with
+        {
+            TerrainCells = scene.TerrainCells
+                .Where(cell => cell.X >= 0 && cell.X < size.Width
+                    && cell.Y >= 0 && cell.Y < size.Height)
+                .ToList(),
+            // The same inclusive bound DocumentValidation.ValidateAuthoringPosition
+            // holds every other authoring-pixel position to: a Placement sitting
+            // exactly on the far edge still fits.
+            Props = scene.Props
+                .Where(prop =>
+                    prop.PositionAuthoringPx.X >= 0 && prop.PositionAuthoringPx.X <= widthPx
+                    && prop.PositionAuthoringPx.Y >= 0 && prop.PositionAuthoringPx.Y <= heightPx)
+                .ToList(),
+        };
+    }
 
     private static int RequirePositive(int cells)
     {

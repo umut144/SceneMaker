@@ -2765,6 +2765,8 @@ public sealed partial class SceneMakerMain : Control
         if (_controller.Scene is null || _controller.Session is null) return;
         var cells = checked((int)_mapExtensionCellsEdit.Value);
         var metrics = _controller.Session.Metrics;
+        var isShrink = operation is MapResizeOperation.ShrinkNorth or MapResizeOperation.ShrinkEast
+            or MapResizeOperation.ShrinkSouth or MapResizeOperation.ShrinkWest;
         var (verb, direction) = operation switch
         {
             MapResizeOperation.ExtendNorth => ("Extended", "north"),
@@ -2791,8 +2793,19 @@ public sealed partial class SceneMakerMain : Control
                 MapResizeOperation.ShrinkWest => MapEditing.ShrinkWest(document, cells, metrics),
                 _ => throw new ArgumentOutOfRangeException(nameof(operation)),
             },
-            Describe: (_, _) =>
-                $"{verb} Map {direction} by {cells} Cells without moving other authored data."));
+            Describe: (before, after) =>
+            {
+                var message = $"{verb} Map {direction} by {cells} Cells without moving other authored data.";
+                if (!isShrink) return message;
+                // Terrain and Placements the removed strip carried are gone
+                // rather than refused - the only two authored kinds a Shrink
+                // ever takes back this way (see MapEditing).
+                var droppedTerrain = before.TerrainCells.Count - after.TerrainCells.Count;
+                var droppedProps = before.Props.Count - after.Props.Count;
+                return droppedTerrain == 0 && droppedProps == 0
+                    ? message
+                    : message + $" Dropped {droppedTerrain} Terrain Cell(s) and {droppedProps} Placement(s) that no longer fit.";
+            }));
         UpdateDocumentStatus();
     }
 

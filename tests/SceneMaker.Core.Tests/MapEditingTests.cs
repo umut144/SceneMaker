@@ -9,9 +9,10 @@ namespace SceneMaker.Core.Tests;
 /// origin - these tests exist because that difference is easy to miss: a
 /// West/South implementation that only touched size_cells would validate
 /// cleanly while silently sliding every authored Placement, water body,
-/// route, bridge and Anchor toward the wrong corner. A Shrink additionally has
-/// to refuse cutting into anything authored in the strip it would remove
-/// rather than dropping it silently.
+/// route, bridge and Anchor toward the wrong corner. A Shrink drops whatever
+/// Terrain and Placements the removed strip carried, but still refuses to cut
+/// into an Elevation Region, a Route, a Bridge, a Water Body or a Template
+/// Anchor.
 /// </summary>
 public sealed class MapEditingTests
 {
@@ -201,18 +202,75 @@ public sealed class MapEditingTests
     }
 
     [Fact]
-    public void ShrinkRefusesToCutIntoAuthoredContentInTheRemovedStrip()
+    public void ShrinkDropsTerrainAndPropsInTheRemovedStripInsteadOfRefusing()
     {
         using var workspace = TestWorkspace.Create();
-        // BuildScene fully paints its 6 x 6 grid, so every edge has painted
-        // Terrain right up to the boundary - there is no clear strip any
-        // Shrink could remove without cutting into it.
+        // A 5 x 5 Instance, fully painted, with one 1 x 1 Cell Placement
+        // sitting 2 Cells from each edge along the axis a 2-Cell Shrink on
+        // that edge removes, and comfortably clear of the other three edges
+        // - including of the near edge, which West and South also shift
+        // every Placement toward - so shrinking any one edge by 2 Cells drops
+        // exactly the Placement it reaches and leaves the other three be.
+        var scene = SceneDocument.CreateInstance("base", 5, 5);
+        for (var x = 0; x < 5; x++)
+        {
+            for (var y = 0; y < 5; y++)
+            {
+                scene = TerrainEditing.Paint(scene, workspace.Terrain, x, y, "grass");
+            }
+        }
+        scene = PropEditing.Place(scene, workspace.Props, 80, 116, "stone"); // reaches the north edge
+        scene = PropEditing.Place(scene, workspace.Props, 116, 80, "stone"); // reaches the east edge
+        scene = PropEditing.Place(scene, workspace.Props, 8, 80, "stone"); // reaches the west edge
+        scene = PropEditing.Place(scene, workspace.Props, 80, 8, "stone"); // reaches the south edge
+        Assert.Equal(25, scene.TerrainCells.Count);
+        Assert.Equal(4, scene.Props.Count);
+
+        var north = MapEditing.ShrinkNorth(scene, 2, workspace.Metrics);
+        Assert.Equal(3, north.SizeCells.Height);
+        Assert.Equal(15, north.TerrainCells.Count);
+        Assert.DoesNotContain(north.TerrainCells, cell => cell.Y >= 3);
+        Assert.Equal(3, north.Props.Count);
+        Assert.DoesNotContain(north.Props, prop => prop.PositionAuthoringPx.Y > 96);
+
+        var east = MapEditing.ShrinkEast(scene, 2, workspace.Metrics);
+        Assert.Equal(3, east.SizeCells.Width);
+        Assert.Equal(15, east.TerrainCells.Count);
+        Assert.DoesNotContain(east.TerrainCells, cell => cell.X >= 3);
+        Assert.Equal(3, east.Props.Count);
+        Assert.DoesNotContain(east.Props, prop => prop.PositionAuthoringPx.X > 96);
+
+        // West and South shift what survives, so the dropped Placement is the
+        // one that would have landed past the origin rather than past the far
+        // edge.
+        var west = MapEditing.ShrinkWest(scene, 2, workspace.Metrics);
+        Assert.Equal(3, west.SizeCells.Width);
+        Assert.Equal(15, west.TerrainCells.Count);
+        Assert.Equal(3, west.Props.Count);
+        Assert.DoesNotContain(west.Props, prop => prop.PositionAuthoringPx.X < 0);
+
+        var south = MapEditing.ShrinkSouth(scene, 2, workspace.Metrics);
+        Assert.Equal(3, south.SizeCells.Height);
+        Assert.Equal(15, south.TerrainCells.Count);
+        Assert.Equal(3, south.Props.Count);
+        Assert.DoesNotContain(south.Props, prop => prop.PositionAuthoringPx.Y < 0);
+    }
+
+    [Fact]
+    public void ShrinkStillRefusesToCutIntoAnElevationRegionRouteBridgeOrWaterBody()
+    {
+        using var workspace = TestWorkspace.Create();
+        // BuildScene's Terrain paint no longer matters to a Shrink - only
+        // these five kinds still refuse it. 2 Cells reaches every one of
+        // them from BuildScene's 6 x 6 grid: North cuts the Route (y = 160),
+        // East cuts the Bridge's end (x = 160), and West and South both cut
+        // the Elevation Region, checked before the rest.
         var scene = BuildScene(workspace);
 
-        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkNorth(scene, 1, workspace.Metrics));
-        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkEast(scene, 1, workspace.Metrics));
-        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkWest(scene, 1, workspace.Metrics));
-        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkSouth(scene, 1, workspace.Metrics));
+        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkNorth(scene, 2, workspace.Metrics));
+        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkEast(scene, 2, workspace.Metrics));
+        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkWest(scene, 2, workspace.Metrics));
+        Assert.Throws<SceneMakerDocumentException>(() => MapEditing.ShrinkSouth(scene, 2, workspace.Metrics));
     }
 
     [Theory]
