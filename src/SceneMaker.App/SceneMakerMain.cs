@@ -482,6 +482,17 @@ public sealed partial class SceneMakerMain : Control
         _contextMenuBar.AddChild(_toolContextLabel);
         _toolContextSeparator.Name = "ToolContextSeparator";
         _contextMenuBar.AddChild(_toolContextSeparator);
+        _terrainBrushWidthLabel.Name = "TerrainBrushWidthLabel";
+        _terrainBrushWidthLabel.Text = "Brush";
+        _terrainBrushWidthLabel.VerticalAlignment = VerticalAlignment.Center;
+        _contextMenuBar.AddChild(_terrainBrushWidthLabel);
+        _terrainBrushWidthEdit.Name = "TerrainBrushWidth";
+        ConfigureTerrainBrushWidthInput(_terrainBrushWidthEdit);
+        _terrainBrushWidthEdit.TooltipText =
+            "How many Terrain cells wide Pencil and Line paint or erase, "
+            + "centred on the cell under the pointer.";
+        _terrainBrushWidthEdit.ValueChanged += SetTerrainBrushWidth;
+        _contextMenuBar.AddChild(_terrainBrushWidthEdit);
         _sectionCutEdit.Name = "SectionCut";
         _sectionCutEdit.AddItem("Cut at", SectionCutAtItem);
         _sectionCutEdit.AddItem("Cut between", SectionCutBetweenItem);
@@ -728,15 +739,6 @@ public sealed partial class SceneMakerMain : Control
         ConfigureElevationInput(_elevationEdit);
         _elevationEdit.TooltipText = "The height the drawing tools author at.";
         _elevationEdit.ValueChanged += SetAuthoringElevation;
-        _terrainBrushWidthLabel.Name = "TerrainBrushWidthLabel";
-        _terrainBrushWidthLabel.Text = "Brush";
-        _terrainBrushWidthLabel.VerticalAlignment = VerticalAlignment.Center;
-        _terrainBrushWidthEdit.Name = "TerrainBrushWidth";
-        ConfigureTerrainBrushWidthInput(_terrainBrushWidthEdit);
-        _terrainBrushWidthEdit.TooltipText =
-            "How many Terrain cells wide Pencil and Line paint or erase, "
-            + "centred on the cell under the pointer.";
-        _terrainBrushWidthEdit.ValueChanged += SetTerrainBrushWidth;
         _snapWaterToggle.Name = "SnapWaterToTerrain";
         _snapWaterToggle.Text = "Snap";
         _snapWaterToggle.ButtonPressed = true;
@@ -1004,7 +1006,6 @@ public sealed partial class SceneMakerMain : Control
     {
         AddInspectorRow(_surfaceLabel, _surfaceEdit);
         AddInspectorRow(_elevationLabel, _elevationEdit);
-        AddInspectorRow(_terrainBrushWidthLabel, _terrainBrushWidthEdit);
         AddInspectorRow(_selectedPointModeLabel, _selectedPointModeEdit);
         AddInspectorRow(_riverWidthLabel, _riverWidthEdit);
         AddInspectorRow(_waterElevationLabel, _waterElevationEdit);
@@ -3490,9 +3491,16 @@ public sealed partial class SceneMakerMain : Control
         // sitting there meaning something it cannot do.
         var curveActive = (riverActive && !riverSelecting) || pathActive
             || elevationRegionDrawing;
+        // Only the two strokes a brush actually widens. Fill spreads over a
+        // connected region regardless of brush width, and the Eraser under
+        // Fill is the same region eraser, so neither shows this field.
+        var terrainBrushActive = _interaction.Mode == EditorMode.Terrain
+            && _interaction.ActiveTool is EditorTool.Pencil or EditorTool.Line;
         var sectionActive = _canvas.PresentationMode == CanvasPresentationMode.Section;
         var heatmapActive = _canvas.PresentationMode == CanvasPresentationMode.Heightmap;
-        _toolContextSeparator.Visible = propLineActive || curveActive;
+        _toolContextSeparator.Visible = propLineActive || curveActive || terrainBrushActive;
+        _terrainBrushWidthLabel.Visible = terrainBrushActive;
+        _terrainBrushWidthEdit.Visible = terrainBrushActive;
         _viewOptionsBar.Visible = sectionActive || heatmapActive;
         var sectionBetween = _canvas.SectionCutKind == SectionCutKind.Between;
         _sectionCutEdit.Visible = sectionActive;
@@ -3604,13 +3612,6 @@ public sealed partial class SceneMakerMain : Control
         _elevationEdit.TooltipText = elevationRegionHeightEditing
             ? "The selected Hill's absolute top elevation."
             : "The height the drawing tools author at.";
-        // Only the two strokes a brush actually widens. Fill spreads over a
-        // connected region regardless of brush width, and the Eraser under
-        // Fill is the same region eraser, so neither reads this field.
-        var terrainBrushActive = _interaction.Mode == EditorMode.Terrain
-            && _interaction.ActiveTool is EditorTool.Pencil or EditorTool.Line;
-        _terrainBrushWidthLabel.Visible = terrainBrushActive;
-        _terrainBrushWidthEdit.Visible = terrainBrushActive;
         RebuildOutliner();
         _inspectorHeaderLabel.Text = InspectorHeader(
             selectedRiverBody,
