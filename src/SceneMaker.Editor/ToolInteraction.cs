@@ -45,6 +45,13 @@ public sealed class ToolInteraction
     private string? _draggedAnchorId;
     private AuthoringPoint? _draggedAnchorPosition;
 
+    // What a Placement drag is holding: the id of the Placement being carried
+    // and where it currently sits while the drag is in progress. The document
+    // still holds its old position until the drag is released, exactly like
+    // every other drag here.
+    private string? _draggedPropInstanceId;
+    private AuthoringPoint? _draggedPropPosition;
+
     // What a river drag is holding. A point drag moves one authored point, a
     // body drag carries the whole curve by one offset - the same distinction a
     // bridge drag makes, against a point list instead of two ends.
@@ -149,6 +156,10 @@ public sealed class ToolInteraction
 
     public string? DraggedAnchorId => _draggedAnchorId;
     public AuthoringPoint? DraggedAnchorPosition => _draggedAnchorPosition;
+
+    /// <summary>Set only while a Placement is actually being dragged.</summary>
+    public string? DraggedPropInstanceId => _draggedPropInstanceId;
+    public AuthoringPoint? DraggedPropPosition => _draggedPropPosition;
 
     /// <summary>
     /// Switches mode and drops whatever the old tool was still holding. What was
@@ -448,6 +459,7 @@ public sealed class ToolInteraction
             SelectedWaterPointIndex = null;
         }
         if (_draggedWaterPointIndex is not null || _waterBodyDragOrigin is not null) ClearWaterDrag();
+        if (_draggedPropInstanceId is not null) ClearPropDrag();
         if (_draggedAnchorId is not null) ClearAnchorDrag();
         if (_draggedElevationRegionPointIndex is not null) ClearElevationRegionPointDrag();
         if (_draggedElevationRegionHandleSide is not null) ClearElevationRegionHandleDrag();
@@ -522,6 +534,10 @@ public sealed class ToolInteraction
                 return ToolOutcome.Idle.Instance;
             case EditorMode.Props when ActiveTool == EditorTool.Pencil && EraserEnabled:
                 return EraseProp(context, authoring, PropEraseStroke);
+            case EditorMode.Props when ActiveTool == EditorTool.Selector
+                                       && _draggedPropInstanceId is not null:
+                _draggedPropPosition = authoring;
+                return ToolOutcome.Idle.Instance;
             case EditorMode.Templates when ActiveTool == EditorTool.AnchorMove
                                            && _draggedAnchorId is not null:
                 _draggedAnchorPosition = SnapToGrid(context, authoring);
@@ -554,6 +570,8 @@ public sealed class ToolInteraction
         if (_waterBodyDragOrigin is not null) return FinishWaterBodyMove(context);
 
         if (_bridgeDragPointerOrigin is not null) return FinishBridgeDrag(context);
+
+        if (_draggedPropInstanceId is not null) return FinishPropDrag(context);
 
         if (_draggedAnchorId is { } anchorId && _draggedAnchorPosition is { } position)
         {
@@ -2120,11 +2138,7 @@ public sealed class ToolInteraction
         switch (ActiveTool)
         {
             case EditorTool.Selector:
-                var found = PropEditing.FindAt(Pickable(context.Scene), context.PropAssets, point.X, point.Y);
-                SelectedPropInstanceId = found?.InstanceId;
-                return new ToolOutcome.Message(found is null
-                    ? "No Placement selected."
-                    : $"Selected '{found.InstanceId}' · anchor ({found.PositionAuthoringPx.X}, {found.PositionAuthoringPx.Y}).");
+                return SelectOrGrabProp(context, point);
 
             case EditorTool.Pencil when EraserEnabled:
                 return EraseProp(context, point, strokeKey: null);
@@ -2148,6 +2162,71 @@ public sealed class ToolInteraction
             default:
                 return ToolOutcome.Idle.Instance;
         }
+    }
+
+    /// <summary>
+    /// One press does both: grabbing the selected Placement to carry it
+    /// somewhere else, or choosing a different one. Pressing already-selected
+    /// ground begins the drag rather than reselecting, so a second click is
+    /// what turns a selection into a move - the same two-step every other
+    /// selection tool here uses. Pressing empty ground clears the selection.
+    /// </summary>
+    private ToolOutcome SelectOrGrabProp(ToolContext context, AuthoringPoint point)
+    {
+        var found = PropEditing.FindAt(Pickable(context.Scene), context.PropAssets, point.X, point.Y);
+
+        if (found is not null
+            && string.Equals(found.InstanceId, SelectedPropInstanceId, StringComparison.Ordinal))
+        {
+            _draggedPropInstanceId = found.InstanceId;
+            _draggedPropPosition = point;
+            return new ToolOutcome.Message($"Moving '{found.InstanceId}'.");
+        }
+
+        SelectedPropInstanceId = found?.InstanceId;
+        return new ToolOutcome.Message(found is null
+            ? "No Placement selected."
+            : $"Selected '{found.InstanceId}' · anchor ({found.PositionAuthoringPx.X}, {found.PositionAuthoringPx.Y}).");
+    }
+
+    private void ClearPropDrag()
+    {
+        _draggedPropInstanceId = null;
+        _draggedPropPosition = null;
+    }
+
+    /// <summary>
+    /// Commits what the drag was showing, or says why it cannot be taken. A
+    /// drag that moved nothing is not an edit and leaves no undo step behind.
+    /// </summary>
+    private ToolOutcome FinishPropDrag(ToolContext context)
+    {
+        var instanceId = _draggedPropInstanceId;
+        var position = _draggedPropPosition;
+        ClearPropDrag();
+        if (instanceId is null || position is not { } destination) return ToolOutcome.Idle.Instance;
+
+        var stored = context.Scene.Props.FirstOrDefault(prop =>
+            string.Equals(prop.InstanceId, instanceId, StringComparison.Ordinal));
+        if (stored is null)
+        {
+            SelectedPropInstanceId = null;
+            return new ToolOutcome.Message("The selected Placement no longer exists.");
+        }
+        if (stored.PositionAuthoringPx.X == destination.X && stored.PositionAuthoringPx.Y == destination.Y)
+            return ToolOutcome.Idle.Instance;
+
+        var validation = PropEditing.ValidateMove(
+            context.Scene, context.PropAssets, instanceId, destination.X, destination.Y);
+        if (!validation.IsValid)
+            return new ToolOutcome.Message($"Move Placement: {validation.Reason}");
+
+        return new ToolOutcome.Edit(
+            "Move Placement",
+            document => PropEditing.Move(
+                document, context.PropAssets, instanceId, destination.X, destination.Y),
+            Describe: (_, _) =>
+                $"Moved '{instanceId}' to ({destination.X}, {destination.Y}) authoring px.");
     }
 
     private ToolOutcome TemplatePressed(ToolContext context, AuthoringPoint point)
@@ -2925,6 +3004,7 @@ public sealed class ToolInteraction
         ClearElevationRegionDraft();
         ClearBridgeDrag();
         ClearWaterDrag();
+        ClearPropDrag();
         ClearReAttach();
         _bridgeStart = null;
     }

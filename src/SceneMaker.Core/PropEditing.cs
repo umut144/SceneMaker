@@ -63,6 +63,61 @@ public static class PropEditing
     }
 
     /// <summary>
+    /// Whether the given Placement may be carried to a new anchor. The same
+    /// question <see cref="ValidateCandidate"/> asks for a fresh Placement,
+    /// asked with the Placement's own current footprint left out of the
+    /// collision check - it is the thing being moved, not an obstacle to it.
+    /// </summary>
+    public static PropValidationResult ValidateMove(
+        SceneDocument scene,
+        PropDisplayCatalog propAssets,
+        string instanceId,
+        int anchorX,
+        int anchorY)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(propAssets);
+        var existing = scene.Props.FirstOrDefault(prop =>
+            string.Equals(prop.InstanceId, instanceId, StringComparison.Ordinal));
+        if (existing is null)
+            return new PropValidationResult(false, $"Unknown Placement '{instanceId}'.");
+        return ValidateCandidate(
+            scene, propAssets, anchorX, anchorY, existing.AssetKey, excludeInstanceId: instanceId);
+    }
+
+    /// <summary>
+    /// Carries an already-placed Placement to a new anchor. It keeps every
+    /// other field - its Asset, its elevation, its instance id - exactly as
+    /// they were, because a move is not a re-placement: nothing about what
+    /// the Placement is changes, only where it stands.
+    /// </summary>
+    public static SceneDocument Move(
+        SceneDocument scene,
+        PropDisplayCatalog propAssets,
+        string instanceId,
+        int anchorX,
+        int anchorY)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(propAssets);
+        var validation = ValidateMove(scene, propAssets, instanceId, anchorX, anchorY);
+        if (!validation.IsValid)
+            throw new SceneMakerDocumentException(validation.Reason!);
+
+        return scene with
+        {
+            Props = scene.Props
+                .Select(prop => string.Equals(prop.InstanceId, instanceId, StringComparison.Ordinal)
+                    ? prop with
+                    {
+                        PositionAuthoringPx = new AuthoringPixelPosition { X = anchorX, Y = anchorY },
+                    }
+                    : prop)
+                .ToList(),
+        };
+    }
+
+    /// <summary>
     /// The whole of what makes a Prop placeable: a representable footprint,
     /// inside the Scene, meeting no other Prop. Terrain underneath is
     /// deliberately not asked about — Props hold an absolute height and may
@@ -73,7 +128,8 @@ public static class PropEditing
         PropDisplayCatalog propAssets,
         int anchorX,
         int anchorY,
-        string assetKey)
+        string assetKey,
+        string? excludeInstanceId = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(propAssets);
@@ -100,6 +156,14 @@ public static class PropEditing
             return PropValidationResult.Valid;
         foreach (var existing in scene.Props)
         {
+            // A Placement being moved is not compared against its own,
+            // about-to-be-replaced footprint - that would refuse every move
+            // that overlaps where the Placement already stands.
+            if (excludeInstanceId is not null
+                && string.Equals(existing.InstanceId, excludeInstanceId, StringComparison.Ordinal))
+            {
+                continue;
+            }
             var existingAsset = propAssets.Resolve(existing.AssetKey);
             if (CollisionBoundsFor(
                     existingAsset,

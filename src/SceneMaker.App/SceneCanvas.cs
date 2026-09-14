@@ -2343,10 +2343,14 @@ public sealed partial class SceneCanvas : Control
         foreach (var prop in document.Props)
         {
             var asset = _propAssets.Resolve(prop.AssetKey);
-            var bounds = PropEditing.BoundsFor(
-                asset,
-                prop.PositionAuthoringPx.X,
-                prop.PositionAuthoringPx.Y);
+            // A Placement being dragged is drawn where the drag currently
+            // holds it, not where the document still says it is - the
+            // document only catches up once the drag is released.
+            var (anchorX, anchorY) = prop.InstanceId == _interaction.DraggedPropInstanceId
+                                      && _interaction.DraggedPropPosition is { } dragged
+                ? (dragged.X, dragged.Y)
+                : (prop.PositionAuthoringPx.X, prop.PositionAuthoringPx.Y);
+            var bounds = PropEditing.BoundsFor(asset, anchorX, anchorY);
             var rectangle = CanvasRectangle(
                 bounds,
                 pan,
@@ -2373,18 +2377,15 @@ public sealed partial class SceneCanvas : Control
             if (highlighted)
             {
                 DrawCollisionOutline(
-                    PropEditing.CollisionBoundsFor(
-                        asset,
-                        prop.PositionAuthoringPx.X,
-                        prop.PositionAuthoringPx.Y),
+                    PropEditing.CollisionBoundsFor(asset, anchorX, anchorY),
                     pan,
                     zoom,
                     sceneHeightAuthoringPixels,
                     selected ? SelectionColor : outline);
             }
             DrawAnchor(
-                prop.PositionAuthoringPx.X,
-                prop.PositionAuthoringPx.Y,
+                anchorX,
+                anchorY,
                 pan,
                 zoom,
                 sceneHeightAuthoringPixels,
