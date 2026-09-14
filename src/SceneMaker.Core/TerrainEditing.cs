@@ -48,7 +48,8 @@ public static class TerrainEditing
         int cellX,
         int cellY,
         string assetKey,
-        decimal? elevationMeters = null)
+        decimal? elevationMeters = null,
+        int brushWidthCells = 1)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
@@ -56,9 +57,14 @@ public static class TerrainEditing
         RequireInsideScene(scene, cellX, cellY);
         var elevation = elevationMeters ?? scene.DefaultElevationMeters;
 
-        var cells = new List<TerrainCellDocument>(scene.TerrainCells.Count + 1);
+        var brush = BrushCells(cellX, cellY, brushWidthCells);
+        var cells = new List<TerrainCellDocument>(scene.TerrainCells.Count + brush.Count);
         cells.AddRange(scene.TerrainCells);
-        SetCell(cells, cellX, cellY, assetKey, elevation);
+        foreach (var cell in brush)
+        {
+            if (!IsInsideScene(scene, cell.X, cell.Y)) continue;
+            SetCell(cells, cell.X, cell.Y, assetKey, elevation);
+        }
         return scene with { TerrainCells = cells };
     }
 
@@ -70,7 +76,8 @@ public static class TerrainEditing
         int endCellX,
         int endCellY,
         string assetKey,
-        decimal? elevationMeters = null)
+        decimal? elevationMeters = null,
+        int brushWidthCells = 1)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(terrainAssets);
@@ -80,12 +87,17 @@ public static class TerrainEditing
         var elevation = elevationMeters ?? scene.DefaultElevationMeters;
 
         // A straight line between two cells inside the Scene rectangle stays
-        // inside it, so the individual cells need no further bounds check.
+        // inside it, but a brush around it does not - a wide stroke near an
+        // edge is meant to be clipped, not refused.
         var line = LineCells(startCellX, startCellY, endCellX, endCellY);
-        var cells = new List<TerrainCellDocument>(scene.TerrainCells.Count + line.Count);
+        var painted = BrushAlongLine(line, brushWidthCells);
+        var cells = new List<TerrainCellDocument>(scene.TerrainCells.Count + painted.Count);
         cells.AddRange(scene.TerrainCells);
-        foreach (var cell in line)
+        foreach (var cell in painted)
+        {
+            if (!IsInsideScene(scene, cell.X, cell.Y)) continue;
             SetCell(cells, cell.X, cell.Y, assetKey, elevation);
+        }
         return scene with { TerrainCells = cells };
     }
 
@@ -94,19 +106,67 @@ public static class TerrainEditing
         int startCellX,
         int startCellY,
         int endCellX,
-        int endCellY)
+        int endCellY,
+        int brushWidthCells = 1)
     {
         ArgumentNullException.ThrowIfNull(scene);
         RequireInsideScene(scene, startCellX, startCellY);
         RequireInsideScene(scene, endCellX, endCellY);
 
-        var line = LineCells(startCellX, startCellY, endCellX, endCellY).ToHashSet();
+        var line = LineCells(startCellX, startCellY, endCellX, endCellY);
+        var erased = BrushAlongLine(line, brushWidthCells).ToHashSet();
         var cells = scene.TerrainCells
-            .Where(cell => !line.Contains(new TerrainCellCoordinate(cell.X, cell.Y)))
+            .Where(cell => !erased.Contains(new TerrainCellCoordinate(cell.X, cell.Y)))
             .ToList();
         return cells.Count == scene.TerrainCells.Count
             ? scene
             : scene with { TerrainCells = cells };
+    }
+
+    /// <summary>
+    /// The square of cells a brush of the given width covers, centred on the
+    /// cell the author is pointing at. A width of 1 is the original single
+    /// cell exactly, so every caller that never asks for a brush behaves as
+    /// it always did. An even width has no true centre, so it keeps one more
+    /// cell after the centre than before it rather than favouring a
+    /// direction the author never chose.
+    /// </summary>
+    public static IReadOnlyList<TerrainCellCoordinate> BrushCells(
+        int centerX, int centerY, int widthCells)
+    {
+        if (widthCells < 1)
+        {
+            throw new SceneMakerDocumentException(
+                $"Terrain brush width must be at least 1 cell, was {widthCells}.");
+        }
+        if (widthCells == 1) return [new TerrainCellCoordinate(centerX, centerY)];
+
+        var before = (widthCells - 1) / 2;
+        var after = widthCells - 1 - before;
+        List<TerrainCellCoordinate> cells = new(widthCells * widthCells);
+        for (var y = centerY - before; y <= centerY + after; y++)
+            for (var x = centerX - before; x <= centerX + after; x++)
+                cells.Add(new TerrainCellCoordinate(x, y));
+        return cells;
+    }
+
+    /// <summary>
+    /// The cells a brushed stroke covers along an already-built centreline:
+    /// the union of a brush at every point on it, so a thick line has no gap
+    /// or seam where the brush pattern would otherwise repeat. A width of 1
+    /// is the centreline itself, unchanged.
+    /// </summary>
+    private static IReadOnlyList<TerrainCellCoordinate> BrushAlongLine(
+        IReadOnlyList<TerrainCellCoordinate> centerline, int widthCells)
+    {
+        if (widthCells == 1) return centerline;
+        HashSet<TerrainCellCoordinate> covered = [];
+        foreach (var point in centerline)
+        {
+            foreach (var cell in BrushCells(point.X, point.Y, widthCells))
+                covered.Add(cell);
+        }
+        return covered.ToList();
     }
 
     public static IReadOnlyList<TerrainCellCoordinate> LineCells(
@@ -144,16 +204,28 @@ public static class TerrainEditing
         return cells;
     }
 
-    public static SceneDocument Erase(SceneDocument scene, int cellX, int cellY)
+    public static SceneDocument Erase(
+        SceneDocument scene, int cellX, int cellY, int brushWidthCells = 1)
     {
         ArgumentNullException.ThrowIfNull(scene);
         RequireInsideScene(scene, cellX, cellY);
 
-        var index = FindCell(scene.TerrainCells, cellX, cellY);
-        if (index < 0) return scene;
-        var cells = new List<TerrainCellDocument>(scene.TerrainCells);
-        cells.RemoveAt(index);
-        return scene with { TerrainCells = cells };
+        if (brushWidthCells == 1)
+        {
+            var index = FindCell(scene.TerrainCells, cellX, cellY);
+            if (index < 0) return scene;
+            var single = new List<TerrainCellDocument>(scene.TerrainCells);
+            single.RemoveAt(index);
+            return scene with { TerrainCells = single };
+        }
+
+        var brush = BrushCells(cellX, cellY, brushWidthCells).ToHashSet();
+        var cells = scene.TerrainCells
+            .Where(cell => !brush.Contains(new TerrainCellCoordinate(cell.X, cell.Y)))
+            .ToList();
+        return cells.Count == scene.TerrainCells.Count
+            ? scene
+            : scene with { TerrainCells = cells };
     }
 
     public static SceneDocument Fill(

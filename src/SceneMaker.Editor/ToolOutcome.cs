@@ -23,6 +23,14 @@ public sealed record ToolContext(
     string? SelectedPropAssetKey,
     int TemplateAnchorGroupNumber,
     decimal ElevationMeters,
+
+    /// <summary>
+    /// How many Terrain cells wide the Pencil and Line strokes paint or
+    /// erase, centred on the cell the author is pointing at. 1 is a single
+    /// cell, exactly what every stroke always painted before a brush width
+    /// existed.
+    /// </summary>
+    int TerrainBrushWidthCells = 1,
     double PointerHitRadiusAuthoringPixels = 8.0,
 
     /// <summary>

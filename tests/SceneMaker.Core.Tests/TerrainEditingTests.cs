@@ -127,6 +127,129 @@ public sealed class TerrainEditingTests
     }
 
     [Fact]
+    public void BrushCellsIsASingleCellWhenWidthIsOne()
+    {
+        Assert.Equal(
+            new[] { (5, 5) },
+            TerrainEditing.BrushCells(5, 5, 1).Select(static c => (c.X, c.Y)).ToArray());
+    }
+
+    [Fact]
+    public void BrushCellsCentersAnOddWidthAndBiasesAnEvenWidthAfterTheCenter()
+    {
+        // Odd: one cell before the center, one after, on both axes.
+        Assert.Equal(
+            new[] { (2, 2), (3, 2), (4, 2), (2, 3), (3, 3), (4, 3), (2, 4), (3, 4), (4, 4) },
+            TerrainEditing.BrushCells(3, 3, 3).Select(static c => (c.X, c.Y)).ToArray());
+
+        // Even: no true center, so the extra cell falls after it rather than
+        // favouring a direction the author never chose.
+        Assert.Equal(
+            new[] { (3, 3), (4, 3), (3, 4), (4, 4) },
+            TerrainEditing.BrushCells(3, 3, 2).Select(static c => (c.X, c.Y)).ToArray());
+    }
+
+    [Fact]
+    public void BrushCellsRejectsAWidthBelowOne()
+    {
+        Assert.Throws<SceneMakerDocumentException>(() => TerrainEditing.BrushCells(0, 0, 0));
+    }
+
+    [Fact]
+    public void PaintWithABrushCoversTheSquareAroundTheCell()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TerrainEditing.Paint(
+            TestScenes.EmptyInstance(sizeCells: 6),
+            workspace.Terrain,
+            3,
+            3,
+            "grass",
+            brushWidthCells: 3);
+
+        Assert.Equal(9, scene.TerrainCells.Count);
+        for (var y = 2; y <= 4; y++)
+            for (var x = 2; x <= 4; x++)
+                Assert.Contains(scene.TerrainCells, cell => cell.X == x && cell.Y == y);
+    }
+
+    [Fact]
+    public void PaintWithABrushClipsAtTheSceneBoundsInsteadOfRefusing()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TerrainEditing.Paint(
+            TestScenes.EmptyInstance(sizeCells: 6),
+            workspace.Terrain,
+            0,
+            0,
+            "grass",
+            brushWidthCells: 3);
+
+        // Centered on (0, 0), a width-3 brush reaches to (-1, -1); only the
+        // quadrant that lies inside the Scene is painted.
+        Assert.Equal(
+            new[] { (0, 0), (1, 0), (0, 1), (1, 1) },
+            scene.TerrainCells.Select(static c => (c.X, c.Y)).OrderBy(static c => c.Item2)
+                .ThenBy(static c => c.Item1).ToArray());
+    }
+
+    [Fact]
+    public void EraseWithABrushRemovesTheSquareAroundTheCell()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.EmptyInstance(sizeCells: 6);
+        for (var y = 0; y < 6; y++)
+            for (var x = 0; x < 6; x++)
+                scene = TerrainEditing.Paint(scene, workspace.Terrain, x, y, "grass");
+
+        var erased = TerrainEditing.Erase(scene, 3, 3, brushWidthCells: 3);
+
+        Assert.Equal(27, erased.TerrainCells.Count);
+        for (var y = 2; y <= 4; y++)
+            for (var x = 2; x <= 4; x++)
+                Assert.DoesNotContain(erased.TerrainCells, cell => cell.X == x && cell.Y == y);
+    }
+
+    [Fact]
+    public void PaintLineWithABrushThickensTheWholeStrokeWithoutGaps()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TerrainEditing.PaintLine(
+            TestScenes.EmptyInstance(sizeCells: 6),
+            workspace.Terrain,
+            2,
+            1,
+            2,
+            4,
+            "grass",
+            brushWidthCells: 3);
+
+        // A width-3 brush walked down a vertical centreline from y=1 to y=4
+        // sweeps the unbroken rectangle x:[1,3], y:[0,5].
+        Assert.Equal(18, scene.TerrainCells.Count);
+        for (var y = 0; y <= 5; y++)
+            for (var x = 1; x <= 3; x++)
+                Assert.Contains(scene.TerrainCells, cell => cell.X == x && cell.Y == y);
+    }
+
+    [Fact]
+    public void EraseLineWithABrushRemovesTheWholeThickenedStroke()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.EmptyInstance(sizeCells: 6);
+        for (var y = 0; y < 6; y++)
+            for (var x = 0; x < 6; x++)
+                scene = TerrainEditing.Paint(scene, workspace.Terrain, x, y, "grass");
+
+        var erased = TerrainEditing.EraseLine(scene, 2, 1, 2, 4, brushWidthCells: 3);
+
+        Assert.Equal(18, erased.TerrainCells.Count);
+        for (var y = 0; y <= 5; y++)
+            for (var x = 1; x <= 3; x++)
+                Assert.DoesNotContain(erased.TerrainCells, cell => cell.X == x && cell.Y == y);
+    }
+
+    [Fact]
     public void FillSpreadsOverCardinalNeighboursButNotDiagonals()
     {
         using var workspace = TestWorkspace.Create();

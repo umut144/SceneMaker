@@ -193,6 +193,13 @@ public sealed partial class SceneCanvas : Control
     /// </summary>
     public decimal ElevationMeters { get; set; } = SceneDocument.GroundElevationMeters;
 
+    /// <summary>
+    /// How many Terrain cells wide the Pencil and Line strokes paint or erase,
+    /// centred on the cell under the pointer. 1 is a single cell, the only
+    /// width a stroke ever had before this existed.
+    /// </summary>
+    public int TerrainBrushWidthCells { get; set; } = 1;
+
     /// <summary>The transient projection used to look at the authored Scene.</summary>
     public CanvasPresentationMode PresentationMode
     {
@@ -561,6 +568,7 @@ public sealed partial class SceneCanvas : Control
             SelectedPropAssetKey,
             TemplateAnchorGroupNumber,
             ElevationMeters,
+            TerrainBrushWidthCells,
             PointerHitRadiusAuthoringPixels: 8.0 / ViewState.Zoom,
             BridgeKit: _bridgeKit);
     }

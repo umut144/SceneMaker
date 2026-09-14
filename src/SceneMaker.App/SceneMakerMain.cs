@@ -222,6 +222,8 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _templateGroupEdit = new();
     private readonly SpinBox _sceneElevationEdit = new();
     private readonly Label _elevationLabel = new();
+    private readonly Label _terrainBrushWidthLabel = new();
+    private readonly SpinBox _terrainBrushWidthEdit = new();
     private readonly SpinBox _elevationEdit = new();
     private readonly SpinBox _templateInsertionXEdit = new();
     private readonly SpinBox _templateInsertionYEdit = new();
@@ -726,6 +728,15 @@ public sealed partial class SceneMakerMain : Control
         ConfigureElevationInput(_elevationEdit);
         _elevationEdit.TooltipText = "The height the drawing tools author at.";
         _elevationEdit.ValueChanged += SetAuthoringElevation;
+        _terrainBrushWidthLabel.Name = "TerrainBrushWidthLabel";
+        _terrainBrushWidthLabel.Text = "Brush";
+        _terrainBrushWidthLabel.VerticalAlignment = VerticalAlignment.Center;
+        _terrainBrushWidthEdit.Name = "TerrainBrushWidth";
+        ConfigureTerrainBrushWidthInput(_terrainBrushWidthEdit);
+        _terrainBrushWidthEdit.TooltipText =
+            "How many Terrain cells wide Pencil and Line paint or erase, "
+            + "centred on the cell under the pointer.";
+        _terrainBrushWidthEdit.ValueChanged += SetTerrainBrushWidth;
         _snapWaterToggle.Name = "SnapWaterToTerrain";
         _snapWaterToggle.Text = "Snap";
         _snapWaterToggle.ButtonPressed = true;
@@ -993,6 +1004,7 @@ public sealed partial class SceneMakerMain : Control
     {
         AddInspectorRow(_surfaceLabel, _surfaceEdit);
         AddInspectorRow(_elevationLabel, _elevationEdit);
+        AddInspectorRow(_terrainBrushWidthLabel, _terrainBrushWidthEdit);
         AddInspectorRow(_selectedPointModeLabel, _selectedPointModeEdit);
         AddInspectorRow(_riverWidthLabel, _riverWidthEdit);
         AddInspectorRow(_waterElevationLabel, _waterElevationEdit);
@@ -2030,6 +2042,22 @@ public sealed partial class SceneMakerMain : Control
         input.Value = initialValue;
     }
 
+    /// <summary>
+    /// Bounded well short of int.MaxValue on purpose: a brush is a square of
+    /// its width squared, and nothing an author is doing with a stroke needs
+    /// one thousands of cells across - it would just stall the Scene it was
+    /// asked to paint.
+    /// </summary>
+    private static void ConfigureTerrainBrushWidthInput(SpinBox input)
+    {
+        input.MinValue = 1;
+        input.MaxValue = 64;
+        input.Step = 1;
+        input.AllowGreater = false;
+        input.AllowLesser = false;
+        input.Value = 1;
+    }
+
     private static void ConfigureGridCoordinateInput(SpinBox input)
     {
         input.MinValue = 0;
@@ -2507,6 +2535,15 @@ public sealed partial class SceneMakerMain : Control
         }
         _canvas.ElevationMeters = elevation;
         SetStatus($"Drawing at {elevation:0.###} m.");
+    }
+
+    private void SetTerrainBrushWidth(double value)
+    {
+        var width = checked((int)value);
+        _canvas.TerrainBrushWidthCells = width;
+        SetStatus(width == 1
+            ? "Brush: single cell."
+            : $"Brush: {width}×{width} Terrain cells.");
     }
 
     private static LineEdit NewAssetField(string value, string placeholder) => new()
@@ -3567,6 +3604,13 @@ public sealed partial class SceneMakerMain : Control
         _elevationEdit.TooltipText = elevationRegionHeightEditing
             ? "The selected Hill's absolute top elevation."
             : "The height the drawing tools author at.";
+        // Only the two strokes a brush actually widens. Fill spreads over a
+        // connected region regardless of brush width, and the Eraser under
+        // Fill is the same region eraser, so neither reads this field.
+        var terrainBrushActive = _interaction.Mode == EditorMode.Terrain
+            && _interaction.ActiveTool is EditorTool.Pencil or EditorTool.Line;
+        _terrainBrushWidthLabel.Visible = terrainBrushActive;
+        _terrainBrushWidthEdit.Visible = terrainBrushActive;
         RebuildOutliner();
         _inspectorHeaderLabel.Text = InspectorHeader(
             selectedRiverBody,

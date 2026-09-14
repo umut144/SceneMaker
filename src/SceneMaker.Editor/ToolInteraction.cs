@@ -499,7 +499,7 @@ public sealed class ToolInteraction
                 _terrainLineEnd = cell;
                 return ToolOutcome.Idle.Instance;
             case EditorMode.Terrain when ActiveTool == EditorTool.Pencil && EraserEnabled:
-                return EraseTerrainCell(cell, TerrainEraseStroke);
+                return EraseTerrainCell(context, cell, TerrainEraseStroke);
             case EditorMode.Terrain when ActiveTool == EditorTool.Pencil
                                          && context.SelectedTerrainAssetKey is not null:
                 return PaintTerrainCell(context, cell, TerrainPaintStroke);
@@ -557,7 +557,9 @@ public sealed class ToolInteraction
             && (_pointerCell ?? _terrainLineEnd) is { } end)
         {
             ClearTerrainLine();
-            return EraserEnabled ? EraseTerrainLine(start, end) : PaintTerrainLine(context, start, end);
+            return EraserEnabled
+                ? EraseTerrainLine(context, start, end)
+                : PaintTerrainLine(context, start, end);
         }
 
         if (_riverPending is not null) return CommitRiverPoint();
@@ -688,7 +690,7 @@ public sealed class ToolInteraction
         AuthoringPoint authoring,
         TerrainCellCoordinate cell) => ActiveTool switch
     {
-        EditorTool.Pencil when EraserEnabled => EraseTerrainCell(cell, TerrainEraseStroke),
+        EditorTool.Pencil when EraserEnabled => EraseTerrainCell(context, cell, TerrainEraseStroke),
         EditorTool.Pencil when context.SelectedTerrainAssetKey is not null =>
             PaintTerrainCell(context, cell, TerrainPaintStroke),
         EditorTool.Fill when EraserEnabled => EraseTerrainRegion(cell, TerrainRegionEraseStroke),
@@ -2838,20 +2840,35 @@ public sealed class ToolInteraction
     {
         if (context.SelectedTerrainAssetKey is not { } assetKey) return ToolOutcome.Idle.Instance;
         var assetName = context.TerrainAssets.Resolve(assetKey).Name;
+        var width = context.TerrainBrushWidthCells;
         return new ToolOutcome.Edit(
             "Pencil Draw",
             document => TerrainEditing.Paint(
-                document, context.TerrainAssets, cell.X, cell.Y, assetKey, context.ElevationMeters),
+                document,
+                context.TerrainAssets,
+                cell.X,
+                cell.Y,
+                assetKey,
+                context.ElevationMeters,
+                width),
             strokeKey,
-            Describe: (_, _) => $"Painted {assetName} at Terrain cell ({cell.X}, {cell.Y}).");
+            Describe: (_, _) => width == 1
+                ? $"Painted {assetName} at Terrain cell ({cell.X}, {cell.Y})."
+                : $"Painted {assetName} at Terrain cell ({cell.X}, {cell.Y}), brush {width}×{width}.");
     }
 
-    private static ToolOutcome EraseTerrainCell(TerrainCellCoordinate cell, string strokeKey) =>
-        new ToolOutcome.Edit(
+    private static ToolOutcome EraseTerrainCell(
+        ToolContext context, TerrainCellCoordinate cell, string strokeKey)
+    {
+        var width = context.TerrainBrushWidthCells;
+        return new ToolOutcome.Edit(
             "Eraser",
-            document => TerrainEditing.Erase(document, cell.X, cell.Y),
+            document => TerrainEditing.Erase(document, cell.X, cell.Y, width),
             strokeKey,
-            Describe: (_, _) => $"Erased Terrain at cell ({cell.X}, {cell.Y}).");
+            Describe: (_, _) => width == 1
+                ? $"Erased Terrain at cell ({cell.X}, {cell.Y})."
+                : $"Erased Terrain at cell ({cell.X}, {cell.Y}), brush {width}×{width}.");
+    }
 
     private static ToolOutcome FillTerrainRegion(ToolContext context, TerrainCellCoordinate cell)
     {
@@ -2880,7 +2897,7 @@ public sealed class ToolInteraction
     {
         if (context.SelectedTerrainAssetKey is not { } assetKey) return ToolOutcome.Idle.Instance;
         var assetName = context.TerrainAssets.Resolve(assetKey).Name;
-        var count = TerrainEditing.LineCells(start.X, start.Y, end.X, end.Y).Count;
+        var width = context.TerrainBrushWidthCells;
         return new ToolOutcome.Edit(
             "Line Draw",
             document => TerrainEditing.PaintLine(
@@ -2891,14 +2908,23 @@ public sealed class ToolInteraction
                 end.X,
                 end.Y,
                 assetKey,
-                context.ElevationMeters),
-            Describe: (_, _) => $"Line Draw painted {count} Terrain cells with {assetName}.");
+                context.ElevationMeters,
+                width),
+            Describe: (before, after) =>
+            {
+                var painted = after.TerrainCells.Count - before.TerrainCells.Count;
+                return width == 1
+                    ? $"Line Draw painted Terrain with {assetName}."
+                    : $"Line Draw painted Terrain with {assetName}, brush {width}×{width}.";
+            });
     }
 
-    private static ToolOutcome EraseTerrainLine(TerrainCellCoordinate start, TerrainCellCoordinate end) =>
+    private static ToolOutcome EraseTerrainLine(
+        ToolContext context, TerrainCellCoordinate start, TerrainCellCoordinate end) =>
         new ToolOutcome.Edit(
             "Line Eraser",
-            document => TerrainEditing.EraseLine(document, start.X, start.Y, end.X, end.Y),
+            document => TerrainEditing.EraseLine(
+                document, start.X, start.Y, end.X, end.Y, context.TerrainBrushWidthCells),
             Describe: (before, after) =>
             {
                 var erased = before.TerrainCells.Count - after.TerrainCells.Count;

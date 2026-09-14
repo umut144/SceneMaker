@@ -62,6 +62,43 @@ public sealed class ToolInteractionTests
     }
 
     [Fact]
+    public void APencilWithABrushWidthPaintsTheSquareAroundTheCell()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.EmptyInstance();
+        var interaction = At(EditorMode.Terrain, EditorTool.Pencil);
+        var context = Context(workspace, scene, terrainBrushWidthCells: 3);
+
+        var outcome = interaction.PointerPressed(context, Point(64, 64), Cell(2, 2));
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(outcome);
+        var painted = edit.Apply(scene);
+        Assert.Equal(9, painted.TerrainCells.Count);
+        for (var y = 1; y <= 3; y++)
+            for (var x = 1; x <= 3; x++)
+                Assert.Contains(painted.TerrainCells, cell => cell.X == x && cell.Y == y);
+    }
+
+    [Fact]
+    public void ATerrainLineWithABrushWidthThickensTheWholeStroke()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.EmptyInstance(sizeCells: 8);
+        var interaction = At(EditorMode.Terrain, EditorTool.Line);
+        var context = Context(workspace, scene, terrainBrushWidthCells: 3);
+
+        interaction.PointerPressed(context, Point(64, 64), Cell(2, 2));
+        interaction.PointerDragged(context, Point(160, 64), Cell(5, 2));
+
+        var edit = Assert.IsType<ToolOutcome.Edit>(interaction.PointerReleased(context));
+        var painted = edit.Apply(scene);
+        Assert.Equal(18, painted.TerrainCells.Count);
+        for (var y = 1; y <= 3; y++)
+            for (var x = 1; x <= 6; x++)
+                Assert.Contains(painted.TerrainCells, cell => cell.X == x && cell.Y == y);
+    }
+
+    [Fact]
     public void APropLineFixesStartAndEndAndOnlyEnterAppliesIt()
     {
         using var workspace = TestWorkspace.Create();
@@ -301,7 +338,8 @@ public sealed class ToolInteractionTests
         return interaction;
     }
 
-    private static ToolContext Context(TestWorkspace workspace, SceneDocument scene) => new(
+    private static ToolContext Context(
+        TestWorkspace workspace, SceneDocument scene, int terrainBrushWidthCells = 1) => new(
         scene,
         workspace.Terrain,
         workspace.Props,
@@ -309,7 +347,8 @@ public sealed class ToolInteractionTests
         SelectedTerrainAssetKey: "grass",
         SelectedPropAssetKey: "stone",
         TemplateAnchorGroupNumber: 1,
-        ElevationMeters: scene.DefaultElevationMeters);
+        ElevationMeters: scene.DefaultElevationMeters,
+        TerrainBrushWidthCells: terrainBrushWidthCells);
 
     private static AuthoringPoint Point(int x, int y) => new(x, y);
 
