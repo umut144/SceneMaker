@@ -10,7 +10,7 @@ import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
 current_manifest_schema=21
 current_catalog_schema=3
-current_config_version=15
+current_config_version=16
 
 cleanup() {
   local status=$?
@@ -87,6 +87,7 @@ if ! jq -e --arg world "$world_key" --argjson version "$current_config_version" 
     and (.display_name | type == "string" and length > 0)
     and (.role == "terrain" or .role == "placement")
     and (.color | type == "string" and test("^#[0-9A-Fa-f]{6}$"))
+    and (.category == null or (.category | type == "string" and length > 0))
     and if .role == "terrain" then
       (.surface | type == "string" and length > 0)
       and (.authoring == "cells" or .authoring == "curve")

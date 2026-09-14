@@ -104,7 +104,7 @@ JSON
 cat >"$workspace/config.json" <<'JSON'
 {
   "format": "scene_maker_workspace",
-  "version": 15,
+  "version": 16,
   "workspace_key": "world01",
   "grid": {
     "terrain_cell_meters": 1.0,

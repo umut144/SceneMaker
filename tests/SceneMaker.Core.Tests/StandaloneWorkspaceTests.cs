@@ -259,6 +259,53 @@ public sealed class StandaloneWorkspaceTests
     }
 
     [Fact]
+    public void WorkspaceAssetsMayShareACategoryAndStandAloneWhenTheyDoNot()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game05");
+        var configuration = WorkspaceConfigurationStore.Create(
+            "game05",
+            new WorkspaceGridConfiguration(1m, 10m, 40m, 0.5m, 0.125m, 0.25m),
+            [
+                new WorkspaceAssetProfile(
+                    "tree", "Tree", WorkspaceAssetRole.Placement, "#2E7D32",
+                    PolyToolsAssetId: "asset_tree"),
+                new WorkspaceAssetProfile(
+                    "totem_of_life", "Totem Of Life", WorkspaceAssetRole.Placement,
+                    "#8E6CFF", PolyToolsAssetId: "asset_totem_of_life",
+                    Category: "totems"),
+                new WorkspaceAssetProfile(
+                    "totem_of_mana", "Totem Of Mana", WorkspaceAssetRole.Placement,
+                    "#4C8EDA", PolyToolsAssetId: "asset_totem_of_mana",
+                    Category: "totems"),
+            ]);
+
+        WorkspaceConfigurationStore.Save(directory.Path, configuration);
+        var json = File.ReadAllText(Path.Combine(directory.Path, "config.json"));
+        var restored = WorkspaceConfigurationStore.Load(directory.Path);
+
+        Assert.Null(restored.ResolveAssetProfile("tree").Category);
+        Assert.Equal("totems", restored.ResolveAssetProfile("totem_of_life").Category);
+        Assert.Equal("totems", restored.ResolveAssetProfile("totem_of_mana").Category);
+        Assert.Contains("\"category\": \"totems\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WorkspaceRejectsACategoryThatIsNotALowerSnakeCaseToken()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game06");
+        WriteConfig(directory.Path, "game06", 1m, 10m, 40m, """
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree", "category": "Totems" }
+        """);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            WorkspaceConfigurationStore.Load(directory.Path));
+
+        Assert.Contains("Category", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WorkspaceLoadRequiresSynchronizedPolyToolsImport()
     {
         using var parent = TemporaryDirectory.Create();

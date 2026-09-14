@@ -145,6 +145,15 @@ etwa Sand über das Grass des Hügelrückens. Jeder Bereich merkt sich sein zule
 gewähltes Asset getrennt, damit man den Pinsel dort wiederfindet, wo man ihn
 abgelegt hat.
 
+Die Placements-Assetleiste zeigt jedes aktivierte Placement als eigenen Knopf,
+außer der Workspace vergibt ihm eine `category` - dann teilt es sich mit jedem
+anderen Placement derselben Kategorie einen Dropdown ("Totems ▾" statt drei
+einzelne Knöpfe), damit viele Varianten einer Idee die Leiste nicht sprengen.
+Plank und Post - die beiden Assets des Bridge Kits - erscheinen dort nie: sie
+sind Workspace-Assets wie jedes andere, aber SceneMaker löst sie automatisch
+für jede Brücke auf und bietet sie deshalb nicht zum freihändigen Platzieren
+an (siehe `BridgeKit`).
+
 `Path` ist eine eigenständige Oberfläche über dem Terrain. Deshalb darf er
 jedes Terrain-Asset präsentieren, auch wenn dessen normale Authoring-Art
 `cells` oder `curve` ist. Sein offener Bezier-Entwurf speichert absolute Höhe

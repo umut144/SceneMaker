@@ -72,7 +72,16 @@ public sealed record WorkspaceAssetProfile(
     string Color,
     string? Surface = null,
     TerrainAuthoring? Authoring = null,
-    string? PolyToolsAssetId = null);
+    string? PolyToolsAssetId = null,
+
+    /// <summary>
+    /// An open grouping token, never read for meaning - only for whether two
+    /// Assets share it. Null Assets stand on their own in every Asset bar;
+    /// Assets that share a Category are offered together as one dropdown
+    /// instead of one button each, so a Workspace with many variants of one
+    /// idea - "totems", say - stays as compact as one with none.
+    /// </summary>
+    string? Category = null);
 
 public sealed class WorkspaceConfiguration
 {
@@ -120,7 +129,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 15;
+    public const int Version = 16;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -187,6 +196,7 @@ public static class WorkspaceConfigurationStore
                 Surface = profile.Surface,
                 Authoring = profile.Authoring,
                 PolyToolsAssetId = profile.PolyToolsAssetId,
+                Category = profile.Category,
             }).ToList(),
         };
         return Parse(document);
@@ -220,6 +230,7 @@ public static class WorkspaceConfigurationStore
                 Surface = profile.Surface,
                 Authoring = profile.Authoring,
                 PolyToolsAssetId = profile.PolyToolsAssetId,
+                Category = profile.Category,
             }).OrderBy(static entry => entry.AssetKey, StringComparer.Ordinal).ToList(),
         };
         var path = Path.Combine(Path.GetFullPath(workspaceDirectory), FileName);
@@ -333,6 +344,14 @@ public static class WorkspaceConfigurationStore
             throw new SceneMakerDocumentException(
                 $"Surface '{surface}' must be a lower_snake_case token such as 'land' or 'water'.");
         }
+        // Reuses the surface token shape rather than inventing a second one:
+        // both are open, unread-for-meaning identifiers, and a Category is
+        // shown to the author only as the label an Asset bar derives from it.
+        if (entry.Category is { } category && !IsSurfaceToken(category))
+        {
+            throw new SceneMakerDocumentException(
+                $"Category '{category}' must be a lower_snake_case token such as 'totems'.");
+        }
     }
 
     /// <summary>
@@ -384,7 +403,8 @@ public static class WorkspaceConfigurationStore
                 entry.Color,
                 entry.Surface,
                 entry.Authoring,
-                entry.PolyToolsAssetId);
+                entry.PolyToolsAssetId,
+                entry.Category);
             if (!profiles.TryAdd(entry.AssetKey, profile))
             {
                 throw new SceneMakerDocumentException(
@@ -447,5 +467,12 @@ public static class WorkspaceConfigurationStore
         /// </summary>
         [JsonPropertyName("polytools_asset_id")]
         public string? PolyToolsAssetId { get; init; }
+
+        /// <summary>
+        /// See <see cref="WorkspaceAssetProfile.Category"/>. Optional on every
+        /// role: Terrain could group by it as well as Placement, even though
+        /// only Placement has a reason to yet.
+        /// </summary>
+        public string? Category { get; init; }
     }
 }

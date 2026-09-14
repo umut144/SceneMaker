@@ -31,7 +31,13 @@ public sealed record PropDisplayAsset(
     int FootprintHeightAuthoringPixels,
     int AnchorXAuthoringPixels,
     int AnchorYAuthoringPixels,
-    PropCollisionBox? Collision);
+    PropCollisionBox? Collision,
+
+    /// <summary>
+    /// The Workspace's grouping token for this Asset, or null when it stands
+    /// on its own. See <see cref="WorkspaceAssetProfile.Category"/>.
+    /// </summary>
+    string? Category);
 
 public sealed class PropDisplayCatalog
 {
@@ -113,7 +119,8 @@ public static class PropDisplayCatalogLoader
             height,
             anchorX,
             anchorY,
-            collision);
+            collision,
+            profile.Category);
     }
 
     /// <summary>

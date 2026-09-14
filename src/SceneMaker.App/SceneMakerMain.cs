@@ -242,7 +242,16 @@ public sealed partial class SceneMakerMain : Control
         OptionButton Role,
         LineEdit Color,
         LineEdit Surface,
-        OptionButton Authoring);
+        OptionButton Authoring,
+        LineEdit Category,
+
+        /// <summary>
+        /// PolyTools' own id for this Asset, carried through unedited. Never a
+        /// field on the row: SceneMaker does not let an author retype what
+        /// PolyTools publishes, and a Save that dropped it here would silently
+        /// unbind every Placement and the bridge kit from their geometry.
+        /// </summary>
+        string? PolyToolsAssetId);
 
     public override void _Ready()
     {
@@ -1490,27 +1499,100 @@ public sealed partial class SceneMakerMain : Control
     private void BuildPropAssetBar()
     {
         _propAssetBar.AddChild(new Label { Text = "Placements  ›" });
-        foreach (var asset in _controller.Session?.PropAssets.Assets ?? [])
+        var session = _controller.Session;
+        var bridgeKitAssetKeys = BridgeKitAssetKeys(session);
+        // The bridge kit's plank and post are never offered here: nobody
+        // authors a bridge's Assets in SceneMaker (see BridgeKit), so a
+        // freestanding plank or post in this list would be a way to place one
+        // wrongly, not a feature.
+        var assets = (session?.PropAssets.Assets ?? [])
+            .Where(asset => !bridgeKitAssetKeys.Contains(asset.AssetKey))
+            .ToList();
+        foreach (var asset in assets.Where(static asset => asset.Category is null))
         {
-            var button = new Button
-            {
-                Text = asset.Name,
-                ToggleMode = true,
-                ButtonGroup = _propAssetButtons,
-                TooltipText = $"{asset.Name} · {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} authoring px · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels})",
-                CustomMinimumSize = new Vector2(160f, 0f),
-            };
-            StyleAssetButton(button, Color.FromHtml(asset.Color));
-            button.Pressed += () => SelectPropAsset(asset.AssetKey);
-            _propAssetBar.AddChild(button);
-            if (_canvas.SelectedPropAssetKey is null)
-            {
-                button.ButtonPressed = true;
-                SelectPropAsset(asset.AssetKey);
-            }
+            AddPropAssetButton(asset);
+        }
+        // Grouped after the standalone Assets rather than interleaved, so the
+        // dropdowns that keep many variants compact read as their own row
+        // instead of breaking up the individual buttons around them.
+        foreach (var group in assets
+            .Where(static asset => asset.Category is not null)
+            .GroupBy(static asset => asset.Category!, StringComparer.Ordinal)
+            .OrderBy(static group => group.Key, StringComparer.Ordinal))
+        {
+            AddPropAssetCategoryMenu(group.Key, [.. group]);
         }
         _propAssetBar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
     }
+
+    private static HashSet<string> BridgeKitAssetKeys(WorkspaceSession? session) =>
+        session?.BridgeKit is BridgeKitResolution.Resolved resolved
+            ? new HashSet<string>(StringComparer.Ordinal)
+                { resolved.Kit.PlankAssetKey, resolved.Kit.AnchorAssetKey }
+            : [];
+
+    private void AddPropAssetButton(PropDisplayAsset asset)
+    {
+        var button = new Button
+        {
+            Text = asset.Name,
+            ToggleMode = true,
+            ButtonGroup = _propAssetButtons,
+            TooltipText = PropAssetTooltip(asset),
+            CustomMinimumSize = new Vector2(160f, 0f),
+        };
+        StyleAssetButton(button, Color.FromHtml(asset.Color));
+        button.Pressed += () => SelectPropAsset(asset.AssetKey);
+        _propAssetBar.AddChild(button);
+        if (_canvas.SelectedPropAssetKey is null)
+        {
+            button.ButtonPressed = true;
+            SelectPropAsset(asset.AssetKey);
+        }
+    }
+
+    /// <summary>
+    /// One dropdown for every Asset that shares <paramref name="category"/>,
+    /// so a Workspace with many variants of one idea stays as compact in this
+    /// bar as a Workspace with none. The button itself carries no Asset color:
+    /// unlike a single Placement's button, it stands for several at once.
+    /// </summary>
+    private void AddPropAssetCategoryMenu(string category, IReadOnlyList<PropDisplayAsset> assets)
+    {
+        var label = CategoryDisplayName(category);
+        var menuButton = new MenuButton
+        {
+            Text = $"{label} ▾",
+            CustomMinimumSize = new Vector2(160f, 0f),
+            TooltipText = $"{label} · {assets.Count} Placements",
+        };
+        var menu = menuButton.GetPopup();
+        for (var index = 0; index < assets.Count; index++)
+        {
+            menu.AddItem(assets[index].Name);
+            menu.SetItemTooltip(index, PropAssetTooltip(assets[index]));
+        }
+        menu.IndexPressed += index => SelectPropAsset(assets[(int)index].AssetKey);
+        _propAssetBar.AddChild(menuButton);
+        if (_canvas.SelectedPropAssetKey is null && assets.Count > 0)
+        {
+            SelectPropAsset(assets[0].AssetKey);
+        }
+    }
+
+    private static string PropAssetTooltip(PropDisplayAsset asset) =>
+        $"{asset.Name} · {asset.FootprintWidthAuthoringPixels} × {asset.FootprintHeightAuthoringPixels} authoring px · anchor ({asset.AnchorXAuthoringPixels}, {asset.AnchorYAuthoringPixels})";
+
+    /// <summary>
+    /// A Category is an open, unread-for-meaning token like a surface - this
+    /// is the one place its spelling matters, turning "totems" into "Totems"
+    /// for the dropdown that groups it.
+    /// </summary>
+    private static string CategoryDisplayName(string category) =>
+        string.Join(
+            ' ',
+            category.Split('_', StringSplitOptions.RemoveEmptyEntries)
+                .Select(static word => char.ToUpperInvariant(word[0]) + word[1..]));
 
     private void BuildTemplateBar()
     {
@@ -2261,7 +2343,7 @@ public sealed partial class SceneMakerMain : Control
         foreach (var profile in _controller.Session.Configuration.AssetProfiles)
         {
             var isTerrain = profile.Role == WorkspaceAssetRole.Terrain;
-            var row = new GridContainer { Columns = 6 };
+            var row = new GridContainer { Columns = 7 };
             var enabled = new CheckBox { Text = profile.AssetKey, ButtonPressed = true };
             enabled.CustomMinimumSize = new Vector2(180f, 0f);
             var displayName = NewAssetField(profile.DisplayName, "Display name");
@@ -2282,12 +2364,16 @@ public sealed partial class SceneMakerMain : Control
             authoring.AddItem("curve", (int)TerrainAuthoring.Curve);
             authoring.Selected = authoring.GetItemIndex(
                 (int)(profile.Authoring ?? TerrainAuthoring.Cells));
+            // Optional on every role: whichever Assets share a token are
+            // offered together as one dropdown instead of one button each.
+            var category = NewAssetField(profile.Category ?? string.Empty, "e.g. totems");
             row.AddChild(enabled);
             row.AddChild(displayName);
             row.AddChild(role);
             row.AddChild(color);
             row.AddChild(surface);
             row.AddChild(authoring);
+            row.AddChild(category);
             _workspaceAssetRows.AddChild(row);
             var editorRow = new WorkspaceAssetEditorRow(
                 profile.AssetKey,
@@ -2296,7 +2382,9 @@ public sealed partial class SceneMakerMain : Control
                 role,
                 color,
                 surface,
-                authoring);
+                authoring,
+                category,
+                profile.PolyToolsAssetId);
             role.ItemSelected += item => SetWorkspaceAssetRole(editorRow, item);
             _workspaceAssetEditorRows.Add(profile.AssetKey, editorRow);
         }
@@ -2441,13 +2529,16 @@ public sealed partial class SceneMakerMain : Control
             var authoring = isTerrain
                 ? (TerrainAuthoring)row.Authoring.GetItemId(row.Authoring.Selected)
                 : (TerrainAuthoring?)null;
+            var category = row.Category.Text.Trim();
             profiles.Add(new WorkspaceAssetProfile(
                 row.AssetKey,
                 row.DisplayName.Text.Trim(),
                 role,
                 row.Color.Text.Trim(),
                 surface,
-                authoring));
+                authoring,
+                row.PolyToolsAssetId,
+                category.Length == 0 ? null : category));
         }
 
         var report = _controller.SaveAssetProfiles(profiles);
