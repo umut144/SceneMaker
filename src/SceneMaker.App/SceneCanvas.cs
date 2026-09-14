@@ -28,6 +28,11 @@ public sealed partial class SceneCanvas : Control
     // A draft that is neither promised nor refused yet. Cyan rather than red:
     // too few points is the ordinary state of a contour being drawn.
     private static readonly Color DraftPreviewColor = Color.FromHtml("#8FE3FF");
+    // The single area actively being authored - River inside Landscape, Bridge
+    // inside Structures - draws with this outline on top of its ordinary
+    // highlight, so the one area the author is working stands out even among
+    // the other areas the same context is showing for legibility.
+    private static readonly Color ActiveAreaAccent = Color.FromHtml("#FFFFFF");
     // One colour per authored hill, so two bodies that meet are still two
     // bodies. Earth, orange, violet and magenta on purpose: they have to read
     // apart from the Assets underneath them - world01's grass is #99E550 and its
@@ -713,7 +718,8 @@ public sealed partial class SceneCanvas : Control
                 zoom,
                 elevationRange,
                 highlighted: Mode is EditorMode.Terrain or EditorMode.River
-                    || LandscapeContextActive);
+                    || LandscapeContextActive,
+                active: Mode == EditorMode.River);
             DrawRouteSurfaces(
                 document,
                 pan,
@@ -1127,7 +1133,8 @@ public sealed partial class SceneCanvas : Control
         Vector2 pan,
         float zoom,
         (decimal Low, decimal High)? range,
-        bool highlighted)
+        bool highlighted,
+        bool active = false)
     {
         if (document.WaterBodies.Count == 0) return;
         var cellSize = _metrics!.AuthoringPixelsPerWaterCell * zoom;
@@ -1163,6 +1170,12 @@ public sealed partial class SceneCanvas : Control
                     || rectangle.Position.X > Size.X || rectangle.Position.Y > Size.Y)
                     continue;
                 DrawRect(rectangle, color);
+                // River is being authored right now, not merely shown for
+                // Landscape legibility: a crisp border on every cell is what
+                // pulls it above the other Landscape areas the same view is
+                // still drawing.
+                if (active)
+                    DrawRect(rectangle, ActiveAreaAccent, filled: false, width: 1.5f);
             }
         }
     }
@@ -1246,11 +1259,20 @@ public sealed partial class SceneCanvas : Control
                     ? ElevationColor(bridge.ElevationMeters, elevationRange)
                     : LitSurfaceColor(deckColor, bridge.ElevationMeters, elevationRange);
             var color = highlighted ? lit : new Color(lit.R, lit.G, lit.B, 0.24f);
+            var quads = new List<Vector2[]>(layout.Planks.Count);
             foreach (var plank in layout.Planks)
             {
-                DrawColoredPolygon(
-                    PlankQuad(plank, unit.X, unit.Y, pan, zoom, sceneHeightAuthoringPixels),
-                    color);
+                var quad = PlankQuad(plank, unit.X, unit.Y, pan, zoom, sceneHeightAuthoringPixels);
+                quads.Add(quad);
+                DrawColoredPolygon(quad, color);
+            }
+            // Structures is open on Bridge specifically, not just showing it
+            // alongside another Structure: a bright outline on every plank is
+            // what makes the whole deck read as the one thing being authored.
+            if (highlighted)
+            {
+                foreach (var quad in quads)
+                    DrawPolyline([.. quad, quad[0]], ActiveAreaAccent, 1.5f);
             }
 
             var postAsset = _propAssets.Resolve(bridge.AnchorAssetKey);
@@ -1271,6 +1293,7 @@ public sealed partial class SceneCanvas : Control
                     new Color(postColor.R, postColor.G, postColor.B, highlighted ? 0.38f : 0.12f));
                 DrawRect(rectangle, outline, filled: false, width: highlighted ? 3f : 2f);
                 if (!highlighted) continue;
+                DrawRect(rectangle, ActiveAreaAccent, filled: false, width: 1.5f);
                 DrawCollisionOutline(
                     PropEditing.CollisionBoundsFor(postAsset, anchor.X, anchor.Y),
                     pan,
