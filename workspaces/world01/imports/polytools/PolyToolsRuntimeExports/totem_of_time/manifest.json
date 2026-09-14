@@ -47316,7 +47316,22 @@
 	"presentation": {
 		"authored_facing": "neutral"
 	},
-	"regions": [],
+	"regions": [
+		{
+			"geometry_source": "component",
+			"name": "hurt_region",
+			"region_id": "component_398",
+			"role": "hurt",
+			"source_component_id": "component_369"
+		},
+		{
+			"geometry_source": "component",
+			"name": "collision_region",
+			"region_id": "component_399",
+			"role": "collision",
+			"source_component_id": "component_369"
+		}
+	],
 	"schema_version": 22,
 	"z_order": {
 		"back_to_front": "ascending",
