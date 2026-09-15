@@ -89,7 +89,7 @@ unrelated reasons.
 | Schema | Constant | Current |
 | --- | --- | --- |
 | Scene document | `SceneMakerSchemas.SceneVersion` | 22 |
-| Workspace config | `WorkspaceConfigurationStore.Version` | 16 |
+| Workspace config | `WorkspaceConfigurationStore.Version` | 17 |
 | Scene export | `SceneExport.Version` | 20 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 3 |
 | PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 22 |

@@ -81,7 +81,19 @@ public sealed record WorkspaceAssetProfile(
     /// instead of one button each, so a Workspace with many variants of one
     /// idea - "totems", say - stays as compact as one with none.
     /// </summary>
-    string? Category = null);
+    string? Category = null,
+
+    /// <summary>
+    /// A uniform multiplier on a Placement's PolyTools footprint and collision
+    /// box, applied before either becomes authoring pixels. It exists because
+    /// the model is the wrong place to ask for size: a Totem carved in
+    /// PolyTools at 1m x 1m should not have to be re-modeled to stand 5m tall,
+    /// and every Placement of that Asset - already-placed ones included, since
+    /// nothing here is baked into a Placement - grows the same way. Null (or
+    /// 1) means unscaled, which is every Asset today. Terrain never declares
+    /// one: it has no PolyTools footprint to scale.
+    /// </summary>
+    decimal? Scale = null);
 
 public sealed class WorkspaceConfiguration
 {
@@ -129,7 +141,7 @@ public static class WorkspaceConfigurationStore
 {
     public const string FileName = "config.json";
     public const string Format = "scene_maker_workspace";
-    public const int Version = 16;
+    public const int Version = 17;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -197,6 +209,7 @@ public static class WorkspaceConfigurationStore
                 Authoring = profile.Authoring,
                 PolyToolsAssetId = profile.PolyToolsAssetId,
                 Category = profile.Category,
+                Scale = profile.Scale,
             }).ToList(),
         };
         return Parse(document);
@@ -231,6 +244,7 @@ public static class WorkspaceConfigurationStore
                 Authoring = profile.Authoring,
                 PolyToolsAssetId = profile.PolyToolsAssetId,
                 Category = profile.Category,
+                Scale = profile.Scale,
             }).OrderBy(static entry => entry.AssetKey, StringComparer.Ordinal).ToList(),
         };
         var path = Path.Combine(Path.GetFullPath(workspaceDirectory), FileName);
@@ -352,6 +366,17 @@ public static class WorkspaceConfigurationStore
             throw new SceneMakerDocumentException(
                 $"Category '{category}' must be a lower_snake_case token such as 'totems'.");
         }
+        // Terrain has no PolyTools footprint for a scale to multiply.
+        if (isTerrain && entry.Scale is not null)
+        {
+            throw new SceneMakerDocumentException(
+                $"Terrain Asset '{entry.AssetKey}' must not declare a scale.");
+        }
+        if (entry.Scale is { } scale && scale <= 0m)
+        {
+            throw new SceneMakerDocumentException(
+                $"Asset '{entry.AssetKey}' scale must be positive.");
+        }
     }
 
     /// <summary>
@@ -404,7 +429,8 @@ public static class WorkspaceConfigurationStore
                 entry.Surface,
                 entry.Authoring,
                 entry.PolyToolsAssetId,
-                entry.Category);
+                entry.Category,
+                entry.Scale);
             if (!profiles.TryAdd(entry.AssetKey, profile))
             {
                 throw new SceneMakerDocumentException(
@@ -474,5 +500,8 @@ public static class WorkspaceConfigurationStore
         /// only Placement has a reason to yet.
         /// </summary>
         public string? Category { get; init; }
+
+        /// <summary>See <see cref="WorkspaceAssetProfile.Scale"/>.</summary>
+        public decimal? Scale { get; init; }
     }
 }

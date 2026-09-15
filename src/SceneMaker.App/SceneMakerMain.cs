@@ -248,6 +248,7 @@ public sealed partial class SceneMakerMain : Control
         LineEdit Surface,
         OptionButton Authoring,
         LineEdit Category,
+        SpinBox Scale,
 
         /// <summary>
         /// PolyTools' own id for this Asset, carried through unedited. Never a
@@ -2385,7 +2386,7 @@ public sealed partial class SceneMakerMain : Control
         foreach (var profile in _controller.Session.Configuration.AssetProfiles)
         {
             var isTerrain = profile.Role == WorkspaceAssetRole.Terrain;
-            var row = new GridContainer { Columns = 7 };
+            var row = new GridContainer { Columns = 8 };
             var enabled = new CheckBox { Text = profile.AssetKey, ButtonPressed = true };
             enabled.CustomMinimumSize = new Vector2(180f, 0f);
             var displayName = NewAssetField(profile.DisplayName, "Display name");
@@ -2409,6 +2410,10 @@ public sealed partial class SceneMakerMain : Control
             // Optional on every role: whichever Assets share a token are
             // offered together as one dropdown instead of one button each.
             var category = NewAssetField(profile.Category ?? string.Empty, "e.g. totems");
+            // Only a Placement has a PolyTools footprint to scale; Terrain
+            // never declares one (see WorkspaceAssetProfile.Scale).
+            var scale = new SpinBox { Editable = !isTerrain };
+            ConfigureScaleInput(scale, profile.Scale ?? 1m);
             row.AddChild(enabled);
             row.AddChild(displayName);
             row.AddChild(role);
@@ -2416,6 +2421,7 @@ public sealed partial class SceneMakerMain : Control
             row.AddChild(surface);
             row.AddChild(authoring);
             row.AddChild(category);
+            row.AddChild(scale);
             _workspaceAssetRows.AddChild(row);
             var editorRow = new WorkspaceAssetEditorRow(
                 profile.AssetKey,
@@ -2426,6 +2432,7 @@ public sealed partial class SceneMakerMain : Control
                 surface,
                 authoring,
                 category,
+                scale,
                 profile.PolyToolsAssetId);
             role.ItemSelected += item => SetWorkspaceAssetRole(editorRow, item);
             _workspaceAssetEditorRows.Add(profile.AssetKey, editorRow);
@@ -2441,6 +2448,8 @@ public sealed partial class SceneMakerMain : Control
         row.Surface.PlaceholderText = isTerrain ? DefaultSurface : string.Empty;
         row.Authoring.Disabled = !isTerrain;
         if (!isTerrain) row.Surface.Text = string.Empty;
+        row.Scale.Editable = !isTerrain;
+        if (isTerrain) row.Scale.Value = 1;
     }
 
     /// <summary>What a Terrain Asset presents unless the author says otherwise.</summary>
@@ -2567,6 +2576,22 @@ public sealed partial class SceneMakerMain : Control
         CustomMinimumSize = new Vector2(100f, 0f),
     };
 
+    /// <summary>
+    /// A unitless multiplier, not a measurement - so it gets its own field
+    /// rather than reusing <see cref="ConfigureWaterSpanInput"/>'s "m" suffix.
+    /// </summary>
+    private static void ConfigureScaleInput(SpinBox input, decimal value)
+    {
+        input.MinValue = 0.01;
+        input.MaxValue = 1000;
+        input.Step = 0.01;
+        input.AllowGreater = false;
+        input.AllowLesser = false;
+        input.Suffix = "x";
+        input.CustomMinimumSize = new Vector2(90f, 0f);
+        input.Value = (double)value;
+    }
+
     private void SaveWorkspaceAssets()
     {
         if (_controller.Session is null) return;
@@ -2581,6 +2606,8 @@ public sealed partial class SceneMakerMain : Control
                 ? (TerrainAuthoring)row.Authoring.GetItemId(row.Authoring.Selected)
                 : (TerrainAuthoring?)null;
             var category = row.Category.Text.Trim();
+            var scale = isTerrain ? (decimal?)null : (decimal)row.Scale.Value;
+            if (scale == 1m) scale = null;
             profiles.Add(new WorkspaceAssetProfile(
                 row.AssetKey,
                 row.DisplayName.Text.Trim(),
@@ -2589,7 +2616,8 @@ public sealed partial class SceneMakerMain : Control
                 surface,
                 authoring,
                 row.PolyToolsAssetId,
-                category.Length == 0 ? null : category));
+                category.Length == 0 ? null : category,
+                scale));
         }
 
         var report = _controller.SaveAssetProfiles(profiles);

@@ -1389,3 +1389,21 @@ do.
 
 - The settings menu is a closed enum instead of seven hand-picked integers
   (`a2f5e52`).
+
+- **A Placement Asset carries a uniform scale, not the model.** Workspace
+  config schema 17 added `WorkspaceAssetProfile.Scale`, optional and
+  Placement-only: null (or 1) means unscaled, which is every Asset today. It
+  is applied once, in `PropDisplayCatalogLoader.Create`/`ResolveCollision`,
+  by multiplying the PolyTools footprint and collision bounds around the
+  model's own pivot before either becomes authoring pixels — the same pivot
+  `Create` already anchors the Placement to, so the anchor scales along with
+  the footprint rather than needing separate offset math. Nothing else had to
+  change: a Placement stores only `asset_key` and an anchor position, never a
+  baked footprint, so every already-placed Prop of a rescaled Asset picks up
+  the new size the moment the catalog is reloaded, and the existing
+  interactive (`ValidateCandidate`/`ValidateMove`) and export-time
+  (`PropEditing.ValidateAssetReferences`) collision checks see the scaled
+  collision box with no changes of their own. The export was not touched:
+  `footprint_meters`/`anchor_meters` were already derived live from
+  `PropDisplayAsset`, so a scaled value flows out as ordinary content, not a
+  contract change.

@@ -32,6 +32,106 @@ public sealed class StandaloneWorkspaceTests
         Assert.Equal(16, portal.AnchorXAuthoringPixels);
     }
 
+    /// <summary>
+    /// A scale is a Workspace fact about the Asset, not a PolyTools one: the
+    /// model stays a 1m x 1m authoring, and Workspace config schema 17 grows
+    /// the footprint and collision box before either becomes authoring
+    /// pixels. Only "tree" declares one here, so "portal" is the control -
+    /// unscaled and unaffected, exactly as an Asset nobody touched stays
+    /// today.
+    /// </summary>
+    [Fact]
+    public void AnAssetScaleGrowsItsFootprintAndCollisionAroundThePivot()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game01");
+        WriteConfig(directory.Path, "game01", 0.5m, 32m, 192m, """
+            { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" },
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree", "scale": 2 },
+            { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF", "polytools_asset_id": "asset_portal" }
+        """);
+
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path);
+        var workspace = WorkspaceConfigurationStore.Load(directory.Path);
+        var props = PropDisplayCatalogLoader.Load(catalog, workspace);
+        var tree = props.Resolve("tree");
+        var portal = props.Resolve("portal");
+
+        Assert.Equal(2m, workspace.ResolveAssetProfile("tree").Scale);
+        Assert.Equal(131, tree.FootprintWidthAuthoringPixels);
+        Assert.Equal(130, tree.FootprintHeightAuthoringPixels);
+        Assert.Equal(65, tree.AnchorXAuthoringPixels);
+        Assert.Equal(0, tree.AnchorYAuthoringPixels);
+        Assert.NotNull(tree.Collision);
+        Assert.Equal(131, tree.Collision!.WidthAuthoringPixels);
+        Assert.Equal(130, tree.Collision!.HeightAuthoringPixels);
+
+        Assert.Null(portal.Category);
+        Assert.Equal(32, portal.FootprintWidthAuthoringPixels);
+        Assert.Equal(64, portal.FootprintHeightAuthoringPixels);
+    }
+
+    /// <summary>
+    /// The scenario in the room: two Totems that clear each other at their
+    /// PolyTools size stop clearing once the Asset is scaled up - no
+    /// Placement moves and nothing is re-saved, because a Placement stores
+    /// only asset_key and an anchor, never a baked footprint. The same
+    /// export-time check that always refused a collision (PropEditing.
+    /// ValidateAssetReferences) is what catches it; scaling adds no
+    /// mechanism of its own.
+    /// </summary>
+    [Fact]
+    public void ScalingAPlacementAssetCanMakeAlreadyPlacedPropsCollide()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(
+            directory.Path,
+            "scale01",
+            regions: """
+                [
+                  {
+                    "region_id": "collision_0001",
+                    "name": "trunk",
+                    "role": "collision",
+                    "geometry_source": "authored",
+                    "source_component_id": "body",
+                    "vertices": [[-0.1, 0.0], [0.1, 0.0], [0.1, 0.2]],
+                    "indices": [0, 1, 2]
+                  }
+                ]
+                """);
+        var catalog = PolyToolsCatalogImporter.Load(directory.Path, ["tree"]);
+        var grid = new WorkspaceGridConfiguration(1m, 10m, 40m, 0.5m, 0.125m, 0.25m);
+        var unscaledWorkspace = WorkspaceConfigurationStore.Create(
+            "scale01", grid,
+            [new WorkspaceAssetProfile(
+                "tree", "Tree", WorkspaceAssetRole.Placement, "#2E7D32",
+                PolyToolsAssetId: "asset_tree")]);
+        var unscaledProps = PropDisplayCatalogLoader.Load(catalog, unscaledWorkspace);
+
+        // Four authoring pixels apart: the 0.1m-radius trunks (2px wide at
+        // 10px/m) clear each other with one pixel to spare.
+        // Wide enough that the scaled-up visible footprint (as opposed to
+        // the narrow trunk collision box under test) still fits the Scene;
+        // that is not the question this test asks.
+        var scene = PropEditing.Place(
+            SceneDocument.CreateInstance("scale", 60, 60), unscaledProps, 150, 150, "tree");
+        scene = PropEditing.Place(scene, unscaledProps, 154, 150, "tree");
+        PropEditing.ValidateAssetReferences(scene, unscaledProps);
+
+        var scaledWorkspace = WorkspaceConfigurationStore.Create(
+            "scale01", grid,
+            [new WorkspaceAssetProfile(
+                "tree", "Tree", WorkspaceAssetRole.Placement, "#2E7D32",
+                PolyToolsAssetId: "asset_tree", Scale: 5m)]);
+        var scaledProps = PropDisplayCatalogLoader.Load(catalog, scaledWorkspace);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            PropEditing.ValidateAssetReferences(scene, scaledProps));
+
+        Assert.Contains("collides with something already in the Scene", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void SceneDocumentsPersistPolyToolsAssetKeysAndRespectDerivedFootprints()
     {
@@ -303,6 +403,64 @@ public sealed class StandaloneWorkspaceTests
             WorkspaceConfigurationStore.Load(directory.Path));
 
         Assert.Contains("Category", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WorkspaceConfigurationPersistsAssetScale()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game07");
+        var configuration = WorkspaceConfigurationStore.Create(
+            "game07",
+            new WorkspaceGridConfiguration(1m, 10m, 40m, 0.5m, 0.125m, 0.25m),
+            [
+                new WorkspaceAssetProfile(
+                    "tree", "Tree", WorkspaceAssetRole.Placement, "#2E7D32",
+                    PolyToolsAssetId: "asset_tree"),
+                new WorkspaceAssetProfile(
+                    "totem_of_life", "Totem Of Life", WorkspaceAssetRole.Placement,
+                    "#8E6CFF", PolyToolsAssetId: "asset_totem_of_life", Scale: 5m),
+            ]);
+
+        WorkspaceConfigurationStore.Save(directory.Path, configuration);
+        var json = File.ReadAllText(Path.Combine(directory.Path, "config.json"));
+        var restored = WorkspaceConfigurationStore.Load(directory.Path);
+
+        Assert.Null(restored.ResolveAssetProfile("tree").Scale);
+        Assert.Equal(5m, restored.ResolveAssetProfile("totem_of_life").Scale);
+        Assert.Contains("\"scale\": 5", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WorkspaceRejectsATerrainAssetThatDeclaresAScale()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game08");
+        WriteConfig(directory.Path, "game08", 1m, 10m, 40m, """
+            { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells", "scale": 2 }
+        """);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            WorkspaceConfigurationStore.Load(directory.Path));
+
+        Assert.Contains("must not declare a scale", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    public void WorkspaceRejectsANonPositiveScale(string scaleJson)
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game09");
+        WriteConfig(directory.Path, "game09", 1m, 10m, 40m, $$"""
+            { "asset_key": "tree", "display_name": "Tree", "role": "placement", "color": "#2E7D32", "polytools_asset_id": "asset_tree", "scale": {{scaleJson}} }
+        """);
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() =>
+            WorkspaceConfigurationStore.Load(directory.Path));
+
+        Assert.Contains("scale must be positive", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

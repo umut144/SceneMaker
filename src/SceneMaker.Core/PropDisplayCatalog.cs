@@ -91,8 +91,9 @@ public static class PropDisplayCatalogLoader
         PolyToolsCatalogAsset catalogAsset,
         decimal authoringPixelsPerMeter)
     {
-        var bounds = catalogAsset.BoundsMeters;
-        var collision = ResolveCollision(profile, catalogAsset, authoringPixelsPerMeter);
+        var scale = profile.Scale ?? 1m;
+        var bounds = ScaleBounds(catalogAsset.BoundsMeters, scale);
+        var collision = ResolveCollision(profile, catalogAsset, scale, authoringPixelsPerMeter);
         var left = checked((int)decimal.Floor(bounds.MinimumX * authoringPixelsPerMeter));
         var bottom = checked((int)decimal.Floor(bounds.MinimumY * authoringPixelsPerMeter));
         var right = checked((int)decimal.Ceiling(bounds.MaximumX * authoringPixelsPerMeter));
@@ -138,14 +139,31 @@ public static class PropDisplayCatalogLoader
     private static PropCollisionBox? ResolveCollision(
         WorkspaceAssetProfile profile,
         PolyToolsCatalogAsset catalogAsset,
+        decimal scale,
         decimal authoringPixelsPerMeter)
     {
         if (catalogAsset.CollisionBoundsMeters is not { } bounds) return null;
         return Box(
-            bounds,
+            ScaleBounds(bounds, scale),
             authoringPixelsPerMeter,
             $"Placement Asset '{profile.AssetKey}' collision");
     }
+
+    /// <summary>
+    /// Scales a PolyTools bounds box around the model's own pivot - the point
+    /// its Minimum/Maximum corners are measured from, and the same point
+    /// <see cref="Create"/> anchors the Placement to. Scaling both corners by
+    /// the same factor around that origin grows the footprint and carries the
+    /// anchor along with it, proportionally, with no separate offset math.
+    /// </summary>
+    private static AssetBoundsMeters ScaleBounds(AssetBoundsMeters bounds, decimal scale) =>
+        scale == 1m
+            ? bounds
+            : new AssetBoundsMeters(
+                bounds.MinimumX * scale,
+                bounds.MinimumY * scale,
+                bounds.MaximumX * scale,
+                bounds.MaximumY * scale);
 
     /// <summary>
     /// Metre bounds as a box measured from the Asset's anchor, rounded outward

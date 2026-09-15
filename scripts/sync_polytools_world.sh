@@ -10,7 +10,7 @@ import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
 current_manifest_schema=22
 current_catalog_schema=3
-current_config_version=16
+current_config_version=17
 
 cleanup() {
   local status=$?
