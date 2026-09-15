@@ -65,7 +65,8 @@
       "role": "placement",
       "color": "#800020",
       "polytools_asset_id": "asset_48",
-      "category": "totems"
+      "category": "totems",
+      "scale": 5
     },
     {
       "asset_key": "totem_of_mana",
@@ -73,7 +74,8 @@
       "role": "placement",
       "color": "#87CEEB",
       "polytools_asset_id": "asset_49",
-      "category": "totems"
+      "category": "totems",
+      "scale": 5
     },
     {
       "asset_key": "totem_of_time",
@@ -81,7 +83,8 @@
       "role": "placement",
       "color": "#AEEA00",
       "polytools_asset_id": "asset_50",
-      "category": "totems"
+      "category": "totems",
+      "scale": 5
     },
     {
       "asset_key": "tree",
