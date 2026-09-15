@@ -235,7 +235,7 @@ validate_manifest() {
           | map(select(.component_id == $region.source_component_id))) as $sources
         | (.region_id | type == "string" and length > 0)
         and (.name | type == "string" and test("^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"))
-        and (.role == "attack" or .role == "hurt" or .role == "collision")
+        and (.role == "attack" or .role == "hurt" or .role == "collision" or .role == "destructible")
         and (.geometry_source == "authored" or .geometry_source == "component")
         and (.source_component_id | type == "string" and length > 0)
         and ($sources | length == 1)
