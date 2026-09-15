@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace SceneMaker.Core;
 
 public readonly record struct PropBoundsAuthoringPixels(
@@ -45,9 +43,10 @@ public static class PropEditing
         if (!validation.IsValid)
             throw new SceneMakerDocumentException(validation.Reason!);
 
+        var (instanceId, counters) = AllocateInstanceId(scene, asset.AssetKey);
         var prop = new PropDocument
         {
-            InstanceId = NextInstanceId(scene, asset.AssetKey),
+            InstanceId = instanceId,
             AssetKey = assetKey,
             PositionAuthoringPx = new AuthoringPixelPosition { X = anchorX, Y = anchorY },
             ElevationMeters = elevationMeters ?? scene.DefaultElevationMeters,
@@ -58,6 +57,7 @@ public static class PropEditing
                 .Append(prop)
                 .OrderBy(static value => value.InstanceId, StringComparer.Ordinal)
                 .ToList(),
+            PropInstanceCounters = counters,
         };
         return placed;
     }
@@ -360,36 +360,41 @@ public static class PropEditing
     }
 
     /// <summary>
-    /// The lowest index this Asset has free, so that erasing a Prop and placing
-    /// a new one reuses the gap rather than counting on. Only this Asset's own
-    /// IDs are read, and the probe compares numbers: formatting a candidate
-    /// string per attempt made placing the n-th Prop allocate n strings.
+    /// Names the next Placement of one Asset and hands back the counter this
+    /// Scene must keep going forward. Deliberately not a scan for the lowest
+    /// free number, and never an index into the Props array: either of those
+    /// would let erasing a Placement and placing a new one reuse the erased
+    /// one's number, which is exactly what a consumer holding that number in
+    /// a reference outside this Scene - such as <c>world01</c>'s per-map design
+    /// file - cannot survive. A number this Scene has already spent on one
+    /// Placement is never spent on a second one, even after the first is gone.
     /// </summary>
-    private static string NextInstanceId(SceneDocument scene, string assetKey)
+    private static (string InstanceId, List<PropInstanceCounterDocument> Counters) AllocateInstanceId(
+        SceneDocument scene, string assetKey)
     {
-        var prefix = assetKey + "_";
-        HashSet<int> used = [];
-        foreach (var prop in scene.Props)
+        var nextIndex = 1;
+        foreach (var counter in scene.PropInstanceCounters)
         {
-            if (!prop.InstanceId.StartsWith(prefix, StringComparison.Ordinal)) continue;
-            // A different Asset whose key starts with this one ('stone' and
-            // 'stone_big') fails to parse here and is correctly ignored.
-            if (int.TryParse(
-                    prop.InstanceId.AsSpan(prefix.Length),
-                    NumberStyles.None,
-                    CultureInfo.InvariantCulture,
-                    out var index))
+            if (string.Equals(counter.AssetKey, assetKey, StringComparison.Ordinal))
             {
-                used.Add(index);
+                nextIndex = counter.NextIndex;
+                break;
             }
         }
 
-        for (var index = 1; index < int.MaxValue; index++)
+        if (nextIndex == int.MaxValue)
         {
-            if (used.Add(index)) return $"{assetKey}_{index:0000}";
+            throw new SceneMakerDocumentException(
+                $"Scene has exhausted stable instance IDs for '{assetKey}'.");
         }
-        throw new SceneMakerDocumentException(
-            $"Scene has exhausted stable instance IDs for '{assetKey}'.");
+
+        var instanceId = $"{assetKey}_{nextIndex:0000}";
+        var counters = scene.PropInstanceCounters
+            .Where(counter => !string.Equals(counter.AssetKey, assetKey, StringComparison.Ordinal))
+            .Append(new PropInstanceCounterDocument { AssetKey = assetKey, NextIndex = nextIndex + 1 })
+            .OrderBy(static counter => counter.AssetKey, StringComparer.Ordinal)
+            .ToList();
+        return (instanceId, counters);
     }
 }
 

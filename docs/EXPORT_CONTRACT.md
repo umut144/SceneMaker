@@ -5,9 +5,31 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 19**, embedded **scene 17**. A reader must reject any
+Current schemas: **export 20**, embedded **scene 17**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
+
+Export 20 guarantees that a Placement's `instance_id` is never reused within a
+Scene: once a number has named a Placement, no later Placement in that Scene
+will carry it again, including after the first one is deleted. This is a
+property of `scene.props[].instance_id`, a field the export already carried -
+nothing new appears on the wire - so treat this paragraph, not a diff in the
+document shape, as what the version bump ships.
+
+Read literally that guarantee is easy to satisfy and useless: refuse to place
+another Prop of an Asset once one has been placed, and no number is ever spent
+twice. What it actually promises is the same instance_id space SceneMaker has
+always drawn `asset_key_counter` from, kept alive for the Scene's whole life
+rather than for as long as a Placement happens to survive: uniqueness among
+every `instance_id` this Scene's Props have ever carried, not merely among
+the ones alive at export time - which is the uniqueness this format already
+had (`scene.props` is sorted and required unique by the embedded scene's own
+schema; see `AGENTS.md`). A consumer that keeps a long-lived reference to a
+Placement by id outside this Scene - `world01`'s per-map design file, which
+names a Totem's owning team by `instance_id` and outlives any individual
+Totem - can now depend on that reference resolving to the Placement it was
+written for, or to nothing, for as long as the Scene exists. It can no longer
+silently resolve to a different Placement that later took the same number.
 
 Export 19 makes a switchable body a switch and a name. `scene.switches` is a
 list of `{switch, initially_on}` and `scene.water_bodies[].switch` is one string
@@ -106,7 +128,7 @@ removes from the Terrain. Export 10 refused such a Scene outright rather than
 writing it through the additive shape; it is the version that could not say
 what a tunnel means, not a version whose meaning changed.
 
-The authored Scene currently has its own schema 19. It is deliberately newer
+The authored Scene currently has its own schema 22. It is deliberately newer
 than the embedded Scene: elevation-region contours are editor source, folded
 into the ordinary `terrain_cells` below and omitted from export. Authored route
 surfaces remain independent continuous bands and are exported separately from

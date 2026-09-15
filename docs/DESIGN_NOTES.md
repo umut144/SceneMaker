@@ -10,7 +10,7 @@ inside. Nothing described here loses data or blocks authoring.
 
 ## Instance IDs and document ordering
 
-`src/SceneMaker.Core/PropEditing.cs`, `NextInstanceId` — `ID-01`
+`src/SceneMaker.Core/PropEditing.cs`, `AllocateInstanceId` — `ID-01`
 
 IDs are `{assetKey}_{index:0000}`, and Props are held in canonical order sorted
 ordinally by `InstanceId`. The format pads to four digits, so the ten
@@ -26,8 +26,12 @@ migration — see the schema-version section in `AGENTS.md` for why that is not
 free. Worth doing only if a Scene ever gets near that many Props of one asset;
 `world01` is nowhere close.
 
-The allocation problem that used to sit alongside this one is fixed: naming a
-Prop no longer formats a candidate string per attempt.
+The allocation problem that used to sit alongside this one is fixed twice
+over: naming a Prop no longer formats a candidate string per attempt, and
+(export 20) no longer scans `Props` for the lowest free number either. A
+Placement Asset's next number is read off `scene.prop_instance_counters` and
+written back one higher — an O(1) allocation that also never reuses a number
+after the Prop that held it is erased. See `docs/EXPORT_CONTRACT.md`.
 
 ## The Prop asset bar selects an asset as a side effect
 

@@ -33,8 +33,13 @@ public sealed class PropEditingTests
     }
 
     [Fact]
-    public void ErasingAPropFreesItsInstanceIdForTheNextOne()
+    public void ErasingAPropNeverFreesItsInstanceIdForALaterOne()
     {
+        // world01 keeps a per-map design file that names a Placement by its
+        // instance_id and outlives that Placement, so a later Placement taking
+        // the same number would make the reference silently resolve to the
+        // wrong thing. Erasing must never move the counter back down, even
+        // when the erased Placement was the asset's only living one.
         using var workspace = TestWorkspace.Create();
         var scene = TestScenes.Instance(workspace);
         scene = PropEditing.Place(scene, workspace.Props, 0, 0, "stone");
@@ -45,8 +50,71 @@ public sealed class PropEditingTests
         scene = PropEditing.Place(scene, workspace.Props, 32, 0, "stone");
 
         Assert.Equal(
-            ["stone_0001", "stone_0002", "stone_0003"],
+            ["stone_0001", "stone_0003", "stone_0004"],
             scene.Props.Select(prop => prop.InstanceId));
+    }
+
+    [Fact]
+    public void ErasingEveryLivingPropOfAnAssetStillNeverReusesItsNumbers()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        scene = PropEditing.Place(scene, workspace.Props, 0, 0, "stone");
+
+        scene = PropEditing.EraseAt(scene, workspace.Props, 0, 0);
+        Assert.Empty(scene.Props);
+        scene = PropEditing.Place(scene, workspace.Props, 0, 0, "stone");
+
+        Assert.Equal("stone_0002", Assert.Single(scene.Props).InstanceId);
+    }
+
+    /// <summary>
+    /// The counter is what carries the non-reuse guarantee across a save and a
+    /// later load, not just within one in-memory session - requirement (2) of
+    /// the world01 request: the same counter has to survive save/load and
+    /// re-export so a Prop keeps its instance_id for its whole life.
+    /// </summary>
+    [Fact]
+    public void TheAllocationCounterSurvivesAJsonRoundTrip()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.Instance(workspace);
+        scene = PropEditing.Place(scene, workspace.Props, 0, 0, "stone");
+        scene = PropEditing.Place(scene, workspace.Props, 32, 0, "stone");
+        scene = PropEditing.EraseAt(scene, workspace.Props, 32, 0);
+
+        var restored = DocumentJson.DeserializeScene(DocumentJson.Serialize(scene));
+        restored = PropEditing.Place(restored, workspace.Props, 32, 0, "stone");
+
+        Assert.Equal(
+            ["stone_0001", "stone_0003"],
+            restored.Props.Select(prop => prop.InstanceId));
+    }
+
+    /// <summary>
+    /// A document where a counter has fallen behind a number a Prop already
+    /// carries could still open and export today and only start handing out a
+    /// reused instance_id on some later Placement. Validation refuses it
+    /// outright instead, so the failure is loud at load time.
+    /// </summary>
+    [Fact]
+    public void ASceneWhoseCounterHasFallenBehindASpentNumberIsRefused()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = PropEditing.Place(
+            TestScenes.EmptyInstance(), workspace.Props, 0, 0, "stone");
+        var corrupted = scene with
+        {
+            PropInstanceCounters =
+            [
+                new PropInstanceCounterDocument { AssetKey = "stone", NextIndex = 1 },
+            ],
+        };
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(
+            () => DocumentJson.Serialize(corrupted));
+
+        Assert.Contains("has not caught up to", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

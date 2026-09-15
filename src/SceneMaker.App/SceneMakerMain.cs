@@ -48,6 +48,8 @@ public sealed partial class SceneMakerMain : Control
     private readonly SpinBox _propLineOffsetEdit = new();
     private readonly Label _surfaceLabel = new();
     private readonly OptionButton _surfaceEdit = new();
+    private readonly Label _propInstanceIdLabel = new();
+    private readonly LineEdit _propInstanceIdEdit = new();
     private readonly Label _curvePointModeLabel = new();
     private readonly OptionButton _curvePointModeEdit = new();
 
@@ -739,6 +741,16 @@ public sealed partial class SceneMakerMain : Control
         ConfigureElevationInput(_elevationEdit);
         _elevationEdit.TooltipText = "The height the drawing tools author at.";
         _elevationEdit.ValueChanged += SetAuthoringElevation;
+        _propInstanceIdLabel.Name = "PropInstanceIdLabel";
+        _propInstanceIdLabel.Text = "Id";
+        _propInstanceIdLabel.VerticalAlignment = VerticalAlignment.Center;
+        _propInstanceIdEdit.Name = "PropInstanceId";
+        _propInstanceIdEdit.Editable = false;
+        _propInstanceIdEdit.TooltipText =
+            "This Placement's instance_id, stable for as long as it exists: "
+            + "SceneMaker never hands the number out again, even after this "
+            + "Placement is erased. Select and copy it to reference this exact "
+            + "Placement from outside SceneMaker.";
         _snapWaterToggle.Name = "SnapWaterToTerrain";
         _snapWaterToggle.Text = "Snap";
         _snapWaterToggle.ButtonPressed = true;
@@ -1004,6 +1016,7 @@ public sealed partial class SceneMakerMain : Control
     /// </summary>
     private void BuildInspectorRows()
     {
+        AddInspectorRow(_propInstanceIdLabel, _propInstanceIdEdit);
         AddInspectorRow(_surfaceLabel, _surfaceEdit);
         AddInspectorRow(_elevationLabel, _elevationEdit);
         AddInspectorRow(_selectedPointModeLabel, _selectedPointModeEdit);
@@ -3470,6 +3483,11 @@ public sealed partial class SceneMakerMain : Control
         var pathActive = _interaction.Mode == EditorMode.Path;
         var elevationRegionActive = _interaction.Mode == EditorMode.ElevationRegion;
         var bridgeActive = _interaction.Mode == EditorMode.Bridge;
+        var selectedProp = _interaction.Mode == EditorMode.Props
+            && _canvas.SelectedPropInstanceId is { } selectedPropInstanceId
+            ? _controller.Document?.Props.FirstOrDefault(
+                prop => prop.InstanceId == selectedPropInstanceId)
+            : null;
         var elevationRegionDrawing = elevationRegionActive
             && _interaction.ActiveTool == EditorTool.DrawElevationRegion;
         var selectedElevationRegion = elevationRegionActive
@@ -3612,6 +3630,9 @@ public sealed partial class SceneMakerMain : Control
         _elevationEdit.TooltipText = elevationRegionHeightEditing
             ? "The selected Hill's absolute top elevation."
             : "The height the drawing tools author at.";
+        _propInstanceIdLabel.Visible = selectedProp is not null;
+        _propInstanceIdEdit.Visible = selectedProp is not null;
+        _propInstanceIdEdit.Text = selectedProp?.InstanceId ?? string.Empty;
         RebuildOutliner();
         _inspectorHeaderLabel.Text = InspectorHeader(
             selectedRiverBody,

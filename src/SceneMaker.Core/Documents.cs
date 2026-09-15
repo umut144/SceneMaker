@@ -3,7 +3,7 @@ namespace SceneMaker.Core;
 public static class SceneMakerSchemas
 {
     public const string Scene = "srt.scene_maker_scene";
-    public const int SceneVersion = 21;
+    public const int SceneVersion = 22;
     public const string CoordinateSpace = "scene_local_bottom_left_y_up";
 }
 
@@ -58,6 +58,25 @@ public sealed record PropDocument
     /// there the Prop sits above the water it crosses.
     /// </summary>
     public required decimal ElevationMeters { get; init; }
+}
+
+/// <summary>
+/// The number this Scene will hand the next Placement of one Asset. It is
+/// the whole of how <see cref="PropEditing.Place"/> names a new Placement:
+/// read the entry for the Asset, name the Placement with it, write the entry
+/// back one higher. There is one entry per Asset that has ever been placed in
+/// this Scene, and none for an Asset that never has.
+///
+/// <para>It only grows. Deleting a Placement does not move its Asset's entry
+/// back down - see <see cref="SceneDocument.PropInstanceCounters"/> for why
+/// that is the point rather than an oversight.</para>
+/// </summary>
+public sealed record PropInstanceCounterDocument
+{
+    public required string AssetKey { get; init; }
+
+    /// <summary>The number the next Placement of this Asset will receive.</summary>
+    public required int NextIndex { get; init; }
 }
 
 /// <summary>
@@ -440,6 +459,20 @@ public sealed record SceneDocument
     public required List<PropDocument> Props { get; init; }
 
     /// <summary>
+    /// The next number this Scene will hand out per Placement Asset, ordered by
+    /// asset_key. See <see cref="PropInstanceCounterDocument"/>.
+    ///
+    /// <para>This is what keeps a Placement's <c>instance_id</c> from being
+    /// reused across the Scene's whole life, not merely unique among the
+    /// Placements alive right now - the property a consumer that keeps its own
+    /// long-lived references by id, such as <c>world01</c>, depends on. Once a
+    /// number has named a Placement, deleting that Placement does not let a
+    /// later one carry the same number: the counter that produced it never
+    /// moves back down.</para>
+    /// </summary>
+    public required List<PropInstanceCounterDocument> PropInstanceCounters { get; init; }
+
+    /// <summary>
     /// Closed, editable Terrain regions whose effective cells are derived.
     /// Their absolute tops fold with painted Terrain; they are not voxel data.
     /// </summary>
@@ -545,6 +578,7 @@ public sealed record SceneDocument
         SizeCells = new SceneSizeCells { Width = widthCells, Height = heightCells },
         TerrainCells = [],
         Props = [],
+        PropInstanceCounters = [],
         ElevationRegions = [],
         RouteSurfaces = [],
         Switches = [],

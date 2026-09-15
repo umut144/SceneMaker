@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace SceneMaker.Core;
@@ -73,6 +74,7 @@ public static partial class DocumentValidation
             previousInstanceId = prop.InstanceId;
         }
 
+        ValidatePropInstanceCounters(document);
         ValidateElevationRegions(document);
         ValidateRouteSurfaces(document);
         ValidateBridges(document);
@@ -511,6 +513,69 @@ public static partial class DocumentValidation
             throw new SceneMakerDocumentException(
                 FormattableString.Invariant(
                     $"{label} must align to the Workspace elevation quantum of {metrics.ElevationQuantumMeters:0.############################} m; found {elevationMeters:0.############################} m."));
+        }
+    }
+
+    /// <summary>
+    /// Every Placement Asset this Scene has ever placed must have a counter
+    /// entry that is still ahead of every number that Asset has already spent
+    /// - not merely among the Placements alive right now, since an Asset's
+    /// last living Placement can be the very one that was erased. A document
+    /// that fails this could still open and export today and only start
+    /// handing out a reused instance_id on some later Placement, which is
+    /// exactly the silent failure <see cref="PropInstanceCounterDocument"/>
+    /// exists to rule out rather than merely make unlikely.
+    /// </summary>
+    private static void ValidatePropInstanceCounters(SceneDocument document)
+    {
+        if (document.PropInstanceCounters is null)
+            throw new SceneMakerDocumentException("Scene requires prop_instance_counters.");
+
+        Dictionary<string, int> nextIndexByAssetKey = new(StringComparer.Ordinal);
+        string? previous = null;
+        foreach (var counter in document.PropInstanceCounters)
+        {
+            if (string.IsNullOrWhiteSpace(counter.AssetKey))
+                throw new SceneMakerDocumentException("prop_instance_counters requires an asset_key.");
+            if (previous is not null
+                && string.CompareOrdinal(counter.AssetKey, previous) <= 0)
+            {
+                throw new SceneMakerDocumentException(
+                    "prop_instance_counters must have unique asset keys in canonical ordinal order.");
+            }
+            if (counter.NextIndex < 1)
+            {
+                throw new SceneMakerDocumentException(
+                    $"prop_instance_counters['{counter.AssetKey}'].next_index must be at least 1.");
+            }
+            nextIndexByAssetKey[counter.AssetKey] = counter.NextIndex;
+            previous = counter.AssetKey;
+        }
+
+        // Only a Placement whose instance_id actually takes the counter's own
+        // "<asset_key>_<digits>" form spends a number from it. A different
+        // Asset whose key is a prefix of this one ('stone' inside 'stone_big')
+        // does not parse here and is correctly not counted, matching how the
+        // counter is advanced when a Placement is made.
+        foreach (var prop in document.Props)
+        {
+            var prefix = prop.AssetKey + "_";
+            if (!prop.InstanceId.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            if (!int.TryParse(
+                    prop.InstanceId.AsSpan(prefix.Length),
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var spentIndex))
+            {
+                continue;
+            }
+            if (!nextIndexByAssetKey.TryGetValue(prop.AssetKey, out var nextIndex)
+                || nextIndex <= spentIndex)
+            {
+                throw new SceneMakerDocumentException(
+                    $"Placement '{prop.InstanceId}' has spent a number "
+                    + $"prop_instance_counters['{prop.AssetKey}'] has not caught up to.");
+            }
         }
     }
 

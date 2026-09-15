@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 21,
+  "version": 22,
   "scene_id": "stack01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -3851,6 +3851,7 @@
     }
   ],
   "props": [],
+  "prop_instance_counters": [],
   "elevation_regions": [],
   "route_surfaces": [],
   "switches": [],

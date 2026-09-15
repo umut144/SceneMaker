@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 21,
+  "version": 22,
   "scene_id": "test_template02",
   "scene_kind": "template",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -1564,6 +1564,16 @@
         "y": 186
       },
       "elevation_meters": 1.0
+    }
+  ],
+  "prop_instance_counters": [
+    {
+      "asset_key": "ankh",
+      "next_index": 2
+    },
+    {
+      "asset_key": "tree",
+      "next_index": 2
     }
   ],
   "elevation_regions": [],

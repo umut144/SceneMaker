@@ -1,6 +1,6 @@
 {
   "schema": "srt.scene_maker_scene",
-  "version": 21,
+  "version": 22,
   "scene_id": "overworld01",
   "scene_kind": "instance",
   "coordinate_space": "scene_local_bottom_left_y_up",
@@ -60073,6 +60073,16 @@
         "y": 2790
       },
       "elevation_meters": 1.0
+    }
+  ],
+  "prop_instance_counters": [
+    {
+      "asset_key": "ankh",
+      "next_index": 3
+    },
+    {
+      "asset_key": "tree",
+      "next_index": 6
     }
   ],
   "elevation_regions": [

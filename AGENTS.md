@@ -88,9 +88,9 @@ unrelated reasons.
 
 | Schema | Constant | Current |
 | --- | --- | --- |
-| Scene document | `SceneMakerSchemas.SceneVersion` | 20 |
+| Scene document | `SceneMakerSchemas.SceneVersion` | 22 |
 | Workspace config | `WorkspaceConfigurationStore.Version` | 16 |
-| Scene export | `SceneExport.Version` | 18 |
+| Scene export | `SceneExport.Version` | 20 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 3 |
 | PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 22 |
 | Recent session | `RecentSessionStore.Version` | 4 |

@@ -13,10 +13,21 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 19;
+    public const int Version = 20;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
+    // Export 20 changes no field and adds one guarantee: a Placement's
+    // instance_id is never reused within a Scene. Once a number has named a
+    // Placement, no later Placement in that Scene will carry it again, even
+    // after the first is deleted - see EXPORT_CONTRACT.md. SceneMaker now
+    // allocates instance ids from a per-Asset counter kept with the authored
+    // Scene that only ever grows, in place of scanning Props for the lowest
+    // free number; the counter itself is an authoring detail and is not
+    // exported. The embedded Scene is unchanged: instance_id was already on
+    // the wire, and what changed is a promise about a value already there,
+    // which is why the number goes up with nothing new to show for it.
+    //
     // ElevationRegion contours remain folded into Terrain. Embedded scene 15
     // authors a bridge deck as a Placement repeated along the span - a count
     // and a gap - and export 14 adds their derived half: the planks laid out,
