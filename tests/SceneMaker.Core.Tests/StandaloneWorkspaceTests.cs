@@ -718,6 +718,46 @@ public sealed class StandaloneWorkspaceTests
         Assert.Equal(2.03m, tree.BoundsMeters.MaximumY);
     }
 
+    /// <summary>
+    /// Manifest schema 23 added "destructible": the area over which a
+    /// placed, immovable Asset can be hit and destroyed. Like "attack" and
+    /// "hurt" before it, nothing downstream reads the role yet - it is
+    /// accepted and carried on the Region, and only "collision" feeds the
+    /// bounds SceneMaker actually resolves.
+    /// </summary>
+    [Fact]
+    public void ImportAcceptsTheDestructibleRegionRole()
+    {
+        using var directory = TemporaryDirectory.Create();
+        WritePolyToolsImport(directory.Path, "game08_destructible", regions: """
+            [
+              {
+                "region_id": "region_destructible",
+                "name": "destructible_region",
+                "role": "destructible",
+                "geometry_source": "authored",
+                "source_component_id": "body",
+                "vertices": [[-1.01, 0.01], [1.02, 0.01], [1.02, 2.03]],
+                "indices": [0, 1, 2]
+              },
+              {
+                "region_id": "region_collision",
+                "name": "collision_region",
+                "role": "collision",
+                "geometry_source": "component",
+                "source_component_id": "body"
+              }
+            ]
+        """);
+
+        var tree = PolyToolsCatalogImporter.Load(directory.Path).Resolve("tree");
+
+        // The visible bounds come from the mesh, unaffected by either
+        // Region; asserting them is only proof the import did not throw.
+        Assert.Equal(-1.01m, tree.BoundsMeters.MinimumX);
+        Assert.Equal(1.02m, tree.BoundsMeters.MaximumX);
+    }
+
     [Fact]
     public void ImportAcceptsARegionNameWhoseSnakeCaseSegmentStartsWithADigit()
     {

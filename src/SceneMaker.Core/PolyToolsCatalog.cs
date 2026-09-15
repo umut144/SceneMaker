@@ -75,7 +75,7 @@ public static class PolyToolsCatalogImporter
     public const string PolyToolsDirectoryName = "polytools";
     public const string CatalogFileName = "catalog.json";
     public const int CatalogSchemaVersion = 3;
-    public const int ManifestSchemaVersion = 22;
+    public const int ManifestSchemaVersion = 23;
 
     /// <summary>
     /// Imports every legacy authoring Asset. Tests for the PolyTools boundary
@@ -543,7 +543,12 @@ public static class PolyToolsCatalogImporter
             if (!IsLowerSnakeCase(name))
                 throw new SceneMakerDocumentException($"{label} name must use lower_snake_case.");
             var role = RequireString(regionObject, "role", label);
-            if (role is not ("attack" or "hurt" or "collision"))
+            // "destructible" arrived in manifest schema 23: the area over
+            // which a placed, immovable Asset - a Totem, say - can be hit
+            // and destroyed. Accepted and carried on the Region like every
+            // other role; nothing downstream reads it yet, the same as
+            // "attack" and "hurt" today.
+            if (role is not ("attack" or "hurt" or "collision" or "destructible"))
                 throw new SceneMakerDocumentException($"{label} has unsupported role '{role}'.");
 
             var geometrySource = RequireString(regionObject, "geometry_source", label);

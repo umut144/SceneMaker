@@ -92,7 +92,7 @@ unrelated reasons.
 | Workspace config | `WorkspaceConfigurationStore.Version` | 17 |
 | Scene export | `SceneExport.Version` | 20 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 3 |
-| PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 22 |
+| PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 23 |
 | Recent session | `RecentSessionStore.Version` | 4 |
 
 There is no migration code and none is planned. Every reader rejects a document

@@ -8,7 +8,7 @@ source_catalog="$source_world_dir/catalog.json"
 config_path="$workspace_dir/config.json"
 import_parent="$workspace_dir/imports"
 destination_dir="$import_parent/polytools"
-current_manifest_schema=22
+current_manifest_schema=23
 current_catalog_schema=3
 current_config_version=17
 
