@@ -404,6 +404,23 @@ internal static class AtomicTextFile
     public static void Write(string path, string contents) =>
         WriteInternal(path, contents, overwrite: true);
 
+    /// <summary>
+    /// Writes <paramref name="contents"/> only if the file does not already
+    /// hold exactly that text, so an unchanged export leaves its old mtime
+    /// (and untouched working-tree status) instead of a byte-identical
+    /// rewrite. Returns whether anything was written.
+    /// </summary>
+    public static bool WriteIfChanged(string path, string contents)
+    {
+        if (File.Exists(path))
+        {
+            var existing = File.ReadAllText(path);
+            if (existing == contents) return false;
+        }
+        WriteInternal(path, contents, overwrite: true);
+        return true;
+    }
+
     private static void WriteInternal(string path, string contents, bool overwrite)
     {
         var directory = Path.GetDirectoryName(path)

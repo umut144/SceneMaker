@@ -26,6 +26,7 @@ public sealed partial class SceneMakerMain : Control
         CreateScene,
         LoadScene,
         LoadTemplate,
+        ExportGame,
         ExportWorkspace,
         ChunkHelper,
     }
@@ -1833,7 +1834,9 @@ public sealed partial class SceneMakerMain : Control
         AddSettingsItem(menu, "Create Scene", SettingsMenuItem.CreateScene);
         AddSettingsItem(menu, "Load Scene", SettingsMenuItem.LoadScene);
         AddSettingsItem(menu, "Load Template", SettingsMenuItem.LoadTemplate);
-        AddSettingsItem(menu, "Export Game", SettingsMenuItem.ExportWorkspace);
+        menu.AddSeparator("Export");
+        AddSettingsItem(menu, "Export Game", SettingsMenuItem.ExportGame);
+        AddSettingsItem(menu, "Export Workspace", SettingsMenuItem.ExportWorkspace);
         menu.AddSeparator("Canvas Helpers");
         AddSettingsItem(menu, "Chunk Helper: not applicable", SettingsMenuItem.ChunkHelper);
         SetSettingsItemDisabled(SettingsMenuItem.ChunkHelper, true);
@@ -2308,8 +2311,11 @@ public sealed partial class SceneMakerMain : Control
                 _templateFileDialog.CurrentDir = _controller.Game.TemplatesDirectoryPath;
                 _templateFileDialog.PopupCenteredRatio(0.75f);
                 break;
+            case SettingsMenuItem.ExportGame:
+                ExportGameCommand();
+                break;
             case SettingsMenuItem.ExportWorkspace:
-                ExportWorkspace();
+                ExportWorkspaceCommand();
                 break;
         }
     }
@@ -2360,10 +2366,19 @@ public sealed partial class SceneMakerMain : Control
         SetStatus(report.Message);
     }
 
-    private void ExportWorkspace()
+    private void ExportGameCommand()
     {
         _autosaveTimer.Stop();
         var report = _controller.ExportGame();
+        UpdateDocumentState();
+        if (report.Succeeded) SetStatus(report.Message);
+        else ShowError(report.Message);
+    }
+
+    private void ExportWorkspaceCommand()
+    {
+        _autosaveTimer.Stop();
+        var report = _controller.ExportWorkspace();
         UpdateDocumentState();
         if (report.Succeeded) SetStatus(report.Message);
         else ShowError(report.Message);
@@ -3994,7 +4009,10 @@ public sealed partial class SceneMakerMain : Control
         SetSettingsItemDisabled(SettingsMenuItem.CreateScene, !gameActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.LoadScene, !gameActionsAvailable);
         SetSettingsItemDisabled(SettingsMenuItem.LoadTemplate, !gameActionsAvailable);
-        SetSettingsItemDisabled(SettingsMenuItem.ExportWorkspace, !gameActionsAvailable);
+        SetSettingsItemDisabled(SettingsMenuItem.ExportGame, !gameActionsAvailable);
+        // Export Workspace exports every Game, not just the open one, so it
+        // only needs a Workspace open - not a Game - to have something to do.
+        SetSettingsItemDisabled(SettingsMenuItem.ExportWorkspace, !sceneActionsAvailable);
         UpdateDrawingToolAvailability();
         UpdateWaterHeatmapAvailability();
         UpdateTemplateControls();

@@ -645,9 +645,10 @@ public sealed class EditorController
     }
 
     /// <summary>
-    /// Writes the engine-neutral snapshot of every Scene in the Workspace,
+    /// Writes the engine-neutral snapshot of every Scene in the open Game,
     /// Scene Templates included. A consumer needs both: an Anchor is worthless
-    /// without a Template of its group to put there.
+    /// without a Template of its group to put there. A Scene whose export
+    /// content did not change keeps its old file untouched.
     /// </summary>
     public EditorReport ExportGame()
     {
@@ -659,19 +660,56 @@ public sealed class EditorController
         {
             var written = SceneExport.WriteGame(session, game);
             if (written.Count == 0) return EditorReport.Failed("This Game has no Scene to export.");
-            var message =
-                $"Exported {written.Count} Scene{(written.Count == 1 ? string.Empty : "s")} to '{Path.Combine(game.DirectoryPath, SceneExport.DirectoryName)}'.";
-            // The export succeeded either way; a warning says what to look at,
-            // not that something has to be fixed before exporting again.
-            var warnings = written.SelectMany(static result => result.Warnings).ToList();
-            return EditorReport.Ok(warnings.Count == 0
-                ? message
-                : $"{message} {warnings.Count} warning{(warnings.Count == 1 ? string.Empty : "s")}: {string.Join(" ", warnings)}");
+            return ExportReport(written, Path.Combine(game.DirectoryPath, SceneExport.DirectoryName));
         }
         catch (Exception exception) when (IsDocumentFailure(exception))
         {
             return EditorReport.Failed(exception.Message);
         }
+    }
+
+    /// <summary>
+    /// Writes the engine-neutral snapshot of every Scene in every Game of the
+    /// open Workspace. A Scene whose export content did not change keeps its
+    /// old file untouched, so exporting the whole Workspace after a small
+    /// edit only rewrites the handful of files that actually differ.
+    /// </summary>
+    public EditorReport ExportWorkspace()
+    {
+        var pending = SaveScene();
+        if (!pending.Succeeded) return pending;
+        if (Session is not { } session) return EditorReport.Failed("No Workspace is open.");
+        try
+        {
+            var written = SceneExport.WriteWorkspace(session);
+            if (written.Count == 0) return EditorReport.Failed("This Workspace has no Scene to export.");
+            return ExportReport(written, session.DirectoryPath);
+        }
+        catch (Exception exception) when (IsDocumentFailure(exception))
+        {
+            return EditorReport.Failed(exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// The report shared by <see cref="ExportGame"/> and
+    /// <see cref="ExportWorkspace"/>: how many Scenes were considered, how
+    /// many of those actually changed on disk, and any warnings gathered
+    /// along the way.
+    /// </summary>
+    private static EditorReport ExportReport(IReadOnlyList<SceneExportResult> written, string destination)
+    {
+        var changed = written.Count(static result => result.Changed);
+        var message = changed == written.Count
+            ? $"Exported {written.Count} Scene{(written.Count == 1 ? string.Empty : "s")} to '{destination}'."
+            : $"Exported {written.Count} Scene{(written.Count == 1 ? string.Empty : "s")} to '{destination}' "
+              + $"({changed} changed, {written.Count - changed} already up to date).";
+        // The export succeeded either way; a warning says what to look at,
+        // not that something has to be fixed before exporting again.
+        var warnings = written.SelectMany(static result => result.Warnings).ToList();
+        return EditorReport.Ok(warnings.Count == 0
+            ? message
+            : $"{message} {warnings.Count} warning{(warnings.Count == 1 ? string.Empty : "s")}: {string.Join(" ", warnings)}");
     }
 
     private static EditorReport Blocked(string reason) =>

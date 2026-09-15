@@ -7,8 +7,13 @@ namespace SceneMaker.Core;
 /// Writes a self-contained, engine-neutral scene snapshot. Consumers resolve
 /// asset keys in their own asset systems; the SceneMaker catalog is not exported.
 /// </summary>
-/// <summary>One written export: where it went, and what was odd about it.</summary>
-public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnings);
+/// <summary>
+/// One written export: where it went, what was odd about it, and whether the
+/// file's content actually changed. An export whose serialized content
+/// exactly matches what is already on disk is not rewritten, so `Changed` is
+/// false and the file's prior mtime (and working-tree status) is untouched.
+/// </summary>
+public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnings, bool Changed);
 
 public static class SceneExport
 {
@@ -152,8 +157,8 @@ public static class SceneExport
         };
         var directory = Path.Combine(game.DirectoryPath, DirectoryName);
         var path = Path.Combine(directory, scene.Document.SceneId + FileSuffix);
-        AtomicTextFile.Write(path, JsonSerializer.Serialize(document, JsonOptions) + "\n");
-        return new SceneExportResult(path, Warnings(scene.Document, configuration.Metrics));
+        var changed = AtomicTextFile.WriteIfChanged(path, JsonSerializer.Serialize(document, JsonOptions) + "\n");
+        return new SceneExportResult(path, Warnings(scene.Document, configuration.Metrics), changed);
     }
 
     /// <summary>
@@ -165,6 +170,45 @@ public static class SceneExport
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(game);
+        var scenes = LoadValidatedScenes(session, game);
+        return scenes.Select(scene => Write(session, game, scene)).ToList();
+    }
+
+    /// <summary>
+    /// Exports every Scene of every Game in the Workspace. A Scene id is only
+    /// unique within its own Game - two Games are free to each have a
+    /// "base" Scene - but every Game's exports land in the same kind of flat
+    /// per-Game directory that <see cref="WriteGame"/> already guards, so
+    /// nothing further has to agree across Games for this to be safe.
+    /// </summary>
+    public static IReadOnlyList<SceneExportResult> WriteWorkspace(WorkspaceSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var games = GameStore
+            .EnumerateGameKeys(session.Workspace)
+            .Select(gameKey => GameStore.Load(session.Workspace, gameKey))
+            .ToList();
+
+        // A Workspace export is one operation, the same way a Game export is:
+        // refuse every Scene of every Game before the first output is
+        // replaced, so a late invalid Scene in one Game cannot leave another
+        // Game's exports half-written.
+        var loaded = games
+            .Select(game => (game, scenes: LoadValidatedScenes(session, game)))
+            .ToList();
+
+        return loaded
+            .SelectMany(entry => entry.scenes.Select(scene => Write(session, entry.game, scene)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Loads every Scene of <paramref name="game"/> and refuses to export any
+    /// of them if the Game is not itself in a state that can be exported: a
+    /// duplicate Scene id, or a Scene that fails its own validation.
+    /// </summary>
+    private static IReadOnlyList<LoadedScene> LoadValidatedScenes(WorkspaceSession session, LoadedGame game)
+    {
         var scenes = SceneStore
             .EnumeratePaths(game)
             .Select(path => SceneStore.Load(game, path))
@@ -195,7 +239,7 @@ public static class SceneExport
                 session.PropAssets);
         }
 
-        return scenes.Select(scene => Write(session, game, scene)).ToList();
+        return scenes;
     }
 
     /// <summary>

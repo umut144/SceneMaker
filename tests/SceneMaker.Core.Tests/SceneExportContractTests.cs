@@ -719,4 +719,61 @@ public sealed class SceneExportContractTests
             document);
         return File.ReadAllText(SceneExport.Write(session, workspace.Game, scene).Path);
     }
+
+    /// <summary>
+    /// A rewrite whose serialized content exactly matches what is already on
+    /// disk leaves the file untouched, so a caller doing nothing worth doing
+    /// again can tell. A rewrite that does change the Scene's exported content
+    /// still has to overwrite it.
+    /// </summary>
+    [Fact]
+    public void WriteReportsWhetherTheExportActuallyChanged()
+    {
+        using var workspace = TestWorkspace.Create();
+        var document = PropEditing.Place(
+            TestScenes.Instance(workspace), workspace.Props, 32, 32, "stone");
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        var scenePath = Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json");
+
+        var first = SceneExport.Write(session, workspace.Game, new LoadedScene(scenePath, document));
+        Assert.True(first.Changed);
+
+        var second = SceneExport.Write(session, workspace.Game, new LoadedScene(scenePath, document));
+        Assert.False(second.Changed);
+
+        var withAnotherProp = PropEditing.Place(document, workspace.Props, 96, 96, "stone");
+        var third = SceneExport.Write(
+            session, workspace.Game, new LoadedScene(scenePath, withAnotherProp));
+        Assert.True(third.Changed);
+    }
+
+    /// <summary>
+    /// Every Game of the Workspace is exported, not only the one a caller
+    /// happens to have open - a Scene id is namespaced to its own Game, so two
+    /// Games are each free to name a Scene "a" without colliding.
+    /// </summary>
+    [Fact]
+    public void WriteWorkspaceExportsEveryGameInTheWorkspace()
+    {
+        using var workspace = TestWorkspace.Create();
+        SceneStore.CreateInstance(workspace.Game, "a", 4, 4);
+        var secondGame = workspace.CreateGame("second");
+        SceneStore.CreateInstance(secondGame, "a", 4, 4);
+
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        var written = SceneExport.WriteWorkspace(session);
+
+        Assert.Equal(2, written.Count);
+        Assert.All(written, result => Assert.True(File.Exists(result.Path)));
+        Assert.Contains(
+            written,
+            result => result.Path.StartsWith(
+                Path.Combine(workspace.Game.DirectoryPath, SceneExport.DirectoryName),
+                StringComparison.Ordinal));
+        Assert.Contains(
+            written,
+            result => result.Path.StartsWith(
+                Path.Combine(secondGame.DirectoryPath, SceneExport.DirectoryName),
+                StringComparison.Ordinal));
+    }
 }
