@@ -81015,8 +81015,8 @@
       "instance_id": "ankh_0001",
       "asset_key": "ankh",
       "position_authoring_px": {
-        "x": 1196,
-        "y": 2265
+        "x": 1218,
+        "y": 2102
       },
       "elevation_meters": 1.000
     },
@@ -81024,8 +81024,8 @@
       "instance_id": "ankh_0002",
       "asset_key": "ankh",
       "position_authoring_px": {
-        "x": 960,
-        "y": 877
+        "x": 1167,
+        "y": 1001
       },
       "elevation_meters": 1.000
     },
@@ -81033,8 +81033,8 @@
       "instance_id": "ankh_0003",
       "asset_key": "ankh",
       "position_authoring_px": {
-        "x": 3375,
-        "y": 2232
+        "x": 3469,
+        "y": 2252
       },
       "elevation_meters": 1.000
     },
@@ -81042,8 +81042,8 @@
       "instance_id": "ankh_0004",
       "asset_key": "ankh",
       "position_authoring_px": {
-        "x": 3560,
-        "y": 946
+        "x": 3478,
+        "y": 1014
       },
       "elevation_meters": 1.000
     },
@@ -81159,8 +81159,8 @@
       "instance_id": "tree_0007",
       "asset_key": "tree",
       "position_authoring_px": {
-        "x": 1563,
-        "y": 816
+        "x": 1543,
+        "y": 945
       },
       "elevation_meters": 1.000
     },
@@ -81204,8 +81204,8 @@
       "instance_id": "tree_0012",
       "asset_key": "tree",
       "position_authoring_px": {
-        "x": 1171,
-        "y": 635
+        "x": 1192,
+        "y": 625
       },
       "elevation_meters": 1.000
     },
