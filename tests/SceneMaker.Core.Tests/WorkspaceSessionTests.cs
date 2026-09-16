@@ -22,11 +22,11 @@ public sealed class WorkspaceSessionTests
             ["grass", "river", "sand"],
             session.TerrainAssets.Assets.Select(asset => asset.AssetKey));
         Assert.Equal(
-            ["portal", "stone"],
+            ["leaf", "portal", "stone"],
             session.PropAssets.Assets.Select(asset => asset.AssetKey));
         Assert.Equal("Water", session.TerrainAssets.Resolve("river").Name);
         Assert.Equal(
-            ["portal", "stone"],
+            ["leaf", "portal", "stone"],
             session.Catalog.Assets.Select(asset => asset.AssetKey));
         Assert.Equal(session.Configuration.Metrics, session.Metrics);
     }
@@ -51,7 +51,7 @@ public sealed class WorkspaceSessionTests
 
         var session = WorkspaceSession.Load(workspace.RootPath);
 
-        Assert.Equal(["portal", "stone"], session.PropAssets.Assets.Select(asset => asset.AssetKey));
+        Assert.Equal(["leaf", "portal", "stone"], session.PropAssets.Assets.Select(asset => asset.AssetKey));
         Assert.Equal(["grass", "river", "sand"], session.TerrainAssets.Assets.Select(asset => asset.AssetKey));
     }
 
@@ -227,7 +227,7 @@ public sealed class WorkspaceSessionTests
         Assert.Equal(["grass"], narrowed.TerrainAssets.Assets.Select(asset => asset.AssetKey));
         Assert.Equal(["stone"], narrowed.PropAssets.Assets.Select(asset => asset.AssetKey));
         Assert.Equal(["grass", "river", "sand"], session.TerrainAssets.Assets.Select(asset => asset.AssetKey));
-        Assert.Equal(["portal", "stone"], session.PropAssets.Assets.Select(asset => asset.AssetKey));
+        Assert.Equal(["leaf", "portal", "stone"], session.PropAssets.Assets.Select(asset => asset.AssetKey));
     }
 
     [Fact]

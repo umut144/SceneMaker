@@ -25,6 +25,11 @@ public sealed partial class SceneCanvas : Control
     private static readonly Color SelectionColor = Color.FromHtml("#FFD866");
     private static readonly Color ValidPreviewColor = Color.FromHtml("#FFD866");
     private static readonly Color InvalidPreviewColor = Color.FromHtml("#FF5C5C");
+    // Deliberately more intense than InvalidPreviewColor and hatched rather
+    // than filled: a placement overlap is not a tool preview refusing to
+    // commit, it is already-committed content that world01 will refuse to
+    // load, so it has to read as a different kind of problem at a glance.
+    private static readonly Color OverlapWarningColor = Color.FromHtml("#FF0033");
     // A draft that is neither promised nor refused yet. Cyan rather than red:
     // too few points is the ordinary state of a contour being drawn.
     private static readonly Color DraftPreviewColor = Color.FromHtml("#8FE3FF");
@@ -765,6 +770,10 @@ public sealed partial class SceneCanvas : Control
                 heightAuthoringPixels,
                 elevationRange,
                 highlighted: Mode == EditorMode.Props);
+            // Independent of Mode and of the Props highlight above: an
+            // overlap world01 will refuse to load is a correctness problem
+            // the author needs to see regardless of which tool is active.
+            DrawPropOverlaps(document, pan, zoom, heightAuthoringPixels);
         }
         switch (Mode)
         {
@@ -2398,6 +2407,81 @@ public sealed partial class SceneCanvas : Control
                 zoom,
                 sceneHeightAuthoringPixels,
                 outline);
+        }
+    }
+
+    /// <summary>
+    /// Marks every pair of Props whose placement footprints overlap - the
+    /// exact condition world01's importer refuses to load, see
+    /// <see cref="PropEditing.FindOverlaps(SceneDocument, PropDisplayCatalog)"/> -
+    /// with the intersection of just those two footprints, not the whole of
+    /// either Prop. A Placement being dragged is checked at its live position
+    /// so this updates as it moves, the same substitution <see cref="DrawProps"/>
+    /// makes for its own highlight.
+    /// </summary>
+    private void DrawPropOverlaps(
+        SceneDocument document,
+        Vector2 pan,
+        float zoom,
+        int sceneHeightAuthoringPixels)
+    {
+        if (_propAssets is null) return;
+        var placements = document.Props
+            .Select(prop =>
+            {
+                var asset = _propAssets.Resolve(prop.AssetKey);
+                var (anchorX, anchorY) = prop.InstanceId == _interaction.DraggedPropInstanceId
+                                          && _interaction.DraggedPropPosition is { } dragged
+                    ? (dragged.X, dragged.Y)
+                    : (prop.PositionAuthoringPx.X, prop.PositionAuthoringPx.Y);
+                return (prop.InstanceId, Bounds: PropEditing.BoundsFor(asset, anchorX, anchorY));
+            })
+            .ToList();
+        foreach (var overlap in PropEditing.FindOverlaps(placements))
+        {
+            var rectangle = CanvasRectangle(
+                overlap.Intersection, pan, zoom, sceneHeightAuthoringPixels);
+            DrawRect(
+                rectangle,
+                new Color(OverlapWarningColor.R, OverlapWarningColor.G, OverlapWarningColor.B, 0.45f));
+            DrawHatching(rectangle, OverlapWarningColor);
+            DrawRect(rectangle, OverlapWarningColor, filled: false, width: 2f);
+        }
+    }
+
+    /// <summary>
+    /// Diagonal lines at 45 degrees, evenly spaced and clipped to the
+    /// rectangle, so the pattern reads the same regardless of the rectangle's
+    /// aspect ratio or the current zoom.
+    /// </summary>
+    private void DrawHatching(Rect2 rectangle, Color color)
+    {
+        const float spacing = 7f;
+        var left = rectangle.Position.X;
+        var top = rectangle.Position.Y;
+        var right = rectangle.End.X;
+        var bottom = rectangle.End.Y;
+        if (right <= left || bottom <= top) return;
+
+        // Each line of slope 1 is x - y = c; stepping c across the
+        // rectangle's full diagonal range covers it edge to edge.
+        var minC = left - bottom;
+        var maxC = right - top;
+        for (var c = minC; c <= maxC; c += spacing)
+        {
+            List<Vector2> points = [];
+            void Consider(float x, float y)
+            {
+                if (x >= left - 0.01f && x <= right + 0.01f && y >= top - 0.01f && y <= bottom + 0.01f)
+                    points.Add(new Vector2(x, y));
+            }
+            Consider(left, left - c);
+            Consider(right, right - c);
+            Consider(top + c, top);
+            Consider(bottom + c, bottom);
+            if (points.Count < 2) continue;
+            points.Sort(static (a, b) => a.X.CompareTo(b.X));
+            DrawLine(points[0], points[^1], color, 1.5f);
         }
     }
 

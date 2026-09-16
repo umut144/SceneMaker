@@ -12,7 +12,31 @@ public readonly record struct PropBoundsAuthoringPixels(
     public bool Overlaps(PropBoundsAuthoringPixels other) =>
         Left < other.Right && Right > other.Left
         && Bottom < other.Top && Top > other.Bottom;
+
+    /// <summary>
+    /// The rectangle the two bounds share, or null when they do not overlap -
+    /// touching edges or corners included, matching <see cref="Overlaps"/>.
+    /// </summary>
+    public PropBoundsAuthoringPixels? Intersect(PropBoundsAuthoringPixels other)
+    {
+        if (!Overlaps(other)) return null;
+        var left = Math.Max(Left, other.Left);
+        var bottom = Math.Max(Bottom, other.Bottom);
+        var right = Math.Min(Right, other.Right);
+        var top = Math.Min(Top, other.Top);
+        return new PropBoundsAuthoringPixels(left, bottom, checked(right - left), checked(top - bottom));
+    }
 }
+
+/// <summary>
+/// Two Props on the same Scene whose placement footprints overlap, and the
+/// rectangle they share. world01 refuses to load a Scene where this holds for
+/// any pair - see <see cref="PropEditing.FindOverlaps(SceneDocument, PropDisplayCatalog)"/>.
+/// </summary>
+public readonly record struct PropFootprintOverlap(
+    string FirstInstanceId,
+    string SecondInstanceId,
+    PropBoundsAuthoringPixels Intersection);
 
 /// <summary>
 /// Whether a Prop may be authored where it was asked for. Terrain is not part
@@ -340,6 +364,58 @@ public static class PropEditing
             checked(anchorY + collision.OffsetYAuthoringPixels),
             collision.WidthAuthoringPixels,
             collision.HeightAuthoringPixels);
+    }
+
+    /// <summary>
+    /// Every pair among <paramref name="placements"/> whose footprint bounds
+    /// overlap, paired with the intersection of just those two footprints -
+    /// the exact region a caller should point at, not the whole of either
+    /// Prop. Takes bounds directly rather than a Scene so a live drag in
+    /// progress can be checked against its current position before the
+    /// document catches up. O(n^2): a Scene's Prop count never approaches
+    /// where that would matter.
+    /// </summary>
+    public static IReadOnlyList<PropFootprintOverlap> FindOverlaps(
+        IReadOnlyList<(string InstanceId, PropBoundsAuthoringPixels Bounds)> placements)
+    {
+        ArgumentNullException.ThrowIfNull(placements);
+        List<PropFootprintOverlap> overlaps = [];
+        for (var i = 0; i < placements.Count; i++)
+        {
+            for (var j = i + 1; j < placements.Count; j++)
+            {
+                if (placements[i].Bounds.Intersect(placements[j].Bounds) is { } intersection)
+                {
+                    overlaps.Add(new PropFootprintOverlap(
+                        placements[i].InstanceId, placements[j].InstanceId, intersection));
+                }
+            }
+        }
+        return overlaps;
+    }
+
+    /// <summary>
+    /// Every overlapping Prop pair on the Scene as authored, by placement
+    /// footprint. SceneMaker itself allows a footprint to overlap while
+    /// authoring - <see cref="ValidateCandidate"/> only refuses a Placement
+    /// whose narrower collision box overlaps another's, a tree's crown may
+    /// still reach over a lamp - but world01 refuses to load a Scene where any
+    /// two footprints do, so this is checked again before export.
+    /// </summary>
+    public static IReadOnlyList<PropFootprintOverlap> FindOverlaps(
+        SceneDocument scene,
+        PropDisplayCatalog propAssets)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(propAssets);
+        return FindOverlaps(scene.Props
+            .Select(prop => (
+                prop.InstanceId,
+                Bounds: BoundsFor(
+                    propAssets.Resolve(prop.AssetKey),
+                    prop.PositionAuthoringPx.X,
+                    prop.PositionAuthoringPx.Y)))
+            .ToList());
     }
 
     public static decimal PositionMeters(int authoringPixels, WorkspaceMetrics metrics) =>

@@ -134,6 +134,7 @@ public sealed class TestWorkspace : IDisposable
               "bridge_set": "bridge",
               "assets": [
                 { "asset_key": "grass", "display_name": "Grass", "role": "terrain", "color": "#99E550", "surface": "land", "authoring": "cells" },
+                { "asset_key": "leaf", "display_name": "Leaf", "role": "placement", "color": "#4CAF50", "polytools_asset_id": "asset_leaf" },
                 { "asset_key": "portal", "display_name": "Portal", "role": "placement", "color": "#8E6CFF", "polytools_asset_id": "asset_portal" },
                 { "asset_key": "river", "display_name": "Water", "role": "terrain", "color": "#3C7DD9", "surface": "water", "authoring": "curve" },
                 { "asset_key": "sand", "display_name": "Sand", "role": "terrain", "color": "#E5C07B", "surface": "sand", "authoring": "cells" },
@@ -186,6 +187,14 @@ public sealed class TestWorkspace : IDisposable
                   "runtime_package": "PolyToolsRuntimeExports/grass/manifest.json"
                 },
                 {
+                  "asset_key": "leaf",
+                  "display_name": "Leaf",
+                  "asset_type": "props",
+                  "asset_id": "asset_leaf",
+                  "asset_category": "single",
+                  "runtime_package": "PolyToolsRuntimeExports/leaf/manifest.json"
+                },
+                {
                   "asset_key": "portal",
                   "display_name": "Portal",
                   "asset_type": "props",
@@ -224,6 +233,12 @@ public sealed class TestWorkspace : IDisposable
         WriteBridgeSetManifest(importDirectory);
         WriteManifest(importDirectory, "grass", "terrain");
         if (secondCurveAsset) WriteManifest(importDirectory, "lava", "terrain");
+
+        // Leaf authors no collision Region at all - a footprint with nothing
+        // occupied, the same shape a bridge plank has in a real Workspace -
+        // so a test can place it overlapping another Placement's footprint
+        // without also tripping the separate, narrower collision check.
+        WriteManifest(importDirectory, "leaf", "props", withCollision: false);
         WriteManifest(importDirectory, "portal", "props");
         WriteManifest(importDirectory, "river", "terrain");
         WriteManifest(importDirectory, "sand", "terrain");
@@ -294,7 +309,8 @@ public sealed class TestWorkspace : IDisposable
         string importDirectory,
         string assetKey,
         string assetType,
-        bool withNamedPart = false)
+        bool withNamedPart = false,
+        bool withCollision = true)
     {
         var directory = Path.Combine(importDirectory, "PolyToolsRuntimeExports", assetKey);
         Directory.CreateDirectory(directory);
@@ -334,6 +350,22 @@ public sealed class TestWorkspace : IDisposable
                 }
             """
             : string.Empty;
+        // An Asset with no collision Region occupies nothing - a bridge plank
+        // is the real case this stands in for - so the array holding the
+        // named part's own region is empty rather than defaulted to a box.
+        var regions = withCollision
+            ? """
+                {
+                  "region_id": "collision_0001",
+                  "name": "collision_region",
+                  "role": "collision",
+                  "geometry_source": "authored",
+                  "source_component_id": "body",
+                  "vertices": [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
+                  "indices": [0, 1, 2]
+                }
+            """ + partRegion
+            : string.Empty;
         File.WriteAllText(
             Path.Combine(directory, "manifest.json"),
             $$"""
@@ -362,17 +394,7 @@ public sealed class TestWorkspace : IDisposable
                   "contour_stroke_mesh": null
                 }{{part}}
               ],
-              "regions": [
-                {
-                  "region_id": "collision_0001",
-                  "name": "collision_region",
-                  "role": "collision",
-                  "geometry_source": "authored",
-                  "source_component_id": "body",
-                  "vertices": [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
-                  "indices": [0, 1, 2]
-                }{{partRegion}}
-              ]
+              "regions": [{{regions}}]
             }
             """);
     }

@@ -734,6 +734,19 @@ public static class SceneExport
         RouteSurfaceEditing.ValidateAssetReferences(scene, terrainAssets);
         WaterEditing.ValidateAssetReferences(scene, terrainAssets);
 
+        // world01 refuses to load a Scene where any two Props' placement
+        // footprints overlap. SceneMaker itself allows that while authoring,
+        // so writing an export anyway would only move today's overlap from
+        // this editor to that runtime's load-time refusal.
+        if (PropEditing.FindOverlaps(scene, propAssets) is { Count: > 0 } overlaps)
+        {
+            throw new SceneMakerDocumentException(
+                "Overlapping Placements: " + string.Join(
+                    " ",
+                    overlaps.Select(static overlap =>
+                        $"'{overlap.FirstInstanceId}' and '{overlap.SecondInstanceId}' overlap.")));
+        }
+
         // A bridge is only exportable while both of its Assets are still
         // enabled. Refusing here rather than writing a post or a plank with no
         // model is the same promise the placement rule already makes.

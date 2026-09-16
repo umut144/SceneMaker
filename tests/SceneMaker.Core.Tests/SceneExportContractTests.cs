@@ -75,7 +75,7 @@ public sealed class SceneExportContractTests
         var profiles = Export(workspace).GetProperty("asset_profiles").EnumerateArray().ToList();
 
         Assert.Equal(
-            ["grass", "portal", "river", "sand", "stone"],
+            ["grass", "leaf", "portal", "river", "sand", "stone"],
             profiles.Select(profile => profile.GetProperty("asset_key").GetString()));
         foreach (var profile in profiles)
             Assert.Equal(["asset_key", "surface", "footprint_meters", "anchor_meters"], Keys(profile));

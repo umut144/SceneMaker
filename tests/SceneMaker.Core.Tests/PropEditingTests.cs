@@ -230,6 +230,111 @@ public sealed class PropEditingTests
             PropEditing.Place(scene, workspace.Props, 64, 64, "stone"));
     }
 
+    [Fact]
+    public void OverlappingFootprintsAreFoundAsAPair()
+    {
+        using var workspace = TestWorkspace.Create();
+        var scene = TwoStonesAt(workspace, 64, 64, 64, 64);
+
+        var overlap = Assert.Single(PropEditing.FindOverlaps(scene, workspace.Props));
+
+        Assert.Equal("stone_0001", overlap.FirstInstanceId);
+        Assert.Equal("stone_0002", overlap.SecondInstanceId);
+        Assert.Equal(
+            PropEditing.BoundsFor(workspace.Props.Resolve("stone"), 64, 64),
+            overlap.Intersection);
+    }
+
+    [Fact]
+    public void TouchingFootprintsAreNotAnOverlap()
+    {
+        // world01 allows touching edges - only a strict overlap is refused -
+        // and SceneMaker's own check has to draw that line in the same place.
+        using var workspace = TestWorkspace.Create();
+        var width = workspace.Props.Resolve("stone").FootprintWidthAuthoringPixels;
+        var scene = TwoStonesAt(workspace, 64, 64, 64 + width, 64);
+
+        Assert.Empty(PropEditing.FindOverlaps(scene, workspace.Props));
+    }
+
+    [Fact]
+    public void OneAuthoringPixelOfOverlapIsStillFound()
+    {
+        using var workspace = TestWorkspace.Create();
+        var width = workspace.Props.Resolve("stone").FootprintWidthAuthoringPixels;
+        var scene = TwoStonesAt(workspace, 64, 64, 64 + width - 1, 64);
+
+        var overlap = Assert.Single(PropEditing.FindOverlaps(scene, workspace.Props));
+        Assert.Equal(1, overlap.Intersection.Width);
+    }
+
+    [Fact]
+    public void ExportRefusesOverlappingFootprints()
+    {
+        // Leaf authors no collision Region (see TestWorkspace.WriteManifest's
+        // withCollision), so this scene trips only the new footprint check,
+        // not PropEditing.ValidateAssetReferences's separate, narrower
+        // collision check - isolating the behaviour this test is about. The
+        // condition itself is the same one world01's own importer refuses to
+        // load - see world_data::map::validate_authored_prop_footprints - so
+        // an author hears about it here rather than only from that runtime.
+        using var workspace = TestWorkspace.Create();
+        var scene = TestScenes.EmptyInstance() with
+        {
+            Props =
+            [
+                new PropDocument
+                {
+                    InstanceId = "leaf_0001",
+                    AssetKey = "leaf",
+                    PositionAuthoringPx = new AuthoringPixelPosition { X = 64, Y = 64 },
+                    ElevationMeters = 1m,
+                },
+                new PropDocument
+                {
+                    InstanceId = "stone_0001",
+                    AssetKey = "stone",
+                    PositionAuthoringPx = new AuthoringPixelPosition { X = 64, Y = 64 },
+                    ElevationMeters = 1m,
+                },
+            ],
+            PropInstanceCounters =
+            [
+                new PropInstanceCounterDocument { AssetKey = "leaf", NextIndex = 2 },
+                new PropInstanceCounterDocument { AssetKey = "stone", NextIndex = 2 },
+            ],
+        };
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(() => Export(workspace, scene));
+
+        Assert.Contains(
+            "'leaf_0001' and 'stone_0001' overlap", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static SceneDocument TwoStonesAt(
+        TestWorkspace workspace, int firstX, int firstY, int secondX, int secondY) =>
+        TestScenes.EmptyInstance() with
+        {
+            Props =
+            [
+                new PropDocument
+                {
+                    InstanceId = "stone_0001",
+                    AssetKey = "stone",
+                    PositionAuthoringPx = new AuthoringPixelPosition { X = firstX, Y = firstY },
+                    ElevationMeters = 1m,
+                },
+                new PropDocument
+                {
+                    InstanceId = "stone_0002",
+                    AssetKey = "stone",
+                    PositionAuthoringPx = new AuthoringPixelPosition { X = secondX, Y = secondY },
+                    ElevationMeters = 1m,
+                },
+            ],
+            PropInstanceCounters = [new PropInstanceCounterDocument { AssetKey = "stone", NextIndex = 3 }],
+        };
+
     private static SceneExportResult Export(TestWorkspace workspace, SceneDocument scene)
     {
         var session = WorkspaceSession.Load(workspace.RootPath);
