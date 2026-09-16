@@ -2371,7 +2371,7 @@ public sealed partial class SceneMakerMain : Control
         _autosaveTimer.Stop();
         var report = _controller.ExportGame();
         UpdateDocumentState();
-        if (report.Succeeded) SetStatus(report.Message);
+        if (report.Succeeded) ReportExportAndSyncWorld01(report.Message);
         else ShowError(report.Message);
     }
 
@@ -2380,8 +2380,28 @@ public sealed partial class SceneMakerMain : Control
         _autosaveTimer.Stop();
         var report = _controller.ExportWorkspace();
         UpdateDocumentState();
-        if (report.Succeeded) SetStatus(report.Message);
+        if (report.Succeeded) ReportExportAndSyncWorld01(report.Message);
         else ShowError(report.Message);
+    }
+
+    /// <summary>
+    /// A successful Export of the world01 Workspace still leaves world01
+    /// itself unsynced until its own sync script runs; run it right here so
+    /// no one has to remember a second manual step. Every other Workspace
+    /// has no such script, so <see cref="World01Sync.RunIfApplicable"/> is a
+    /// no-op for it and this just reports the export as usual.
+    /// </summary>
+    private void ReportExportAndSyncWorld01(string exportMessage)
+    {
+        var sync = _controller.Session is { } session ? World01Sync.RunIfApplicable(session) : null;
+        if (sync is not { } result)
+        {
+            SetStatus(exportMessage);
+            return;
+        }
+        var combined = $"{exportMessage} {result.Message}";
+        if (result.Succeeded) SetStatus(combined);
+        else ShowError(combined);
     }
 
     private void ShowWorkspaceAssetsDialog()
