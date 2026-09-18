@@ -5,9 +5,19 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 20**, embedded **scene 17**. A reader must reject any
+Current schemas: **export 21**, embedded **scene 17**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
+
+Export 21 adds `game_key` at the top level, beside `workspace_key`: the same
+key that names the Scene's Game directory in the Workspace
+(`workspaces/<workspace>/<game>/...`). The export always said which Workspace
+it came from; it never said which Game, and a consumer holding every Game's
+exports together - `world01` does - had no way to tell them apart or to know
+that resyncing one Game must never touch another's files. There is no default
+and none is derived from the file name: a Scene whose Game cannot be named
+refuses to export rather than write a file with a guessed or missing
+`game_key`. The embedded Scene is unchanged.
 
 Export 20 guarantees that a Placement's `instance_id` is never reused within a
 Scene: once a number has named a Placement, no later Placement in that Scene
@@ -171,6 +181,7 @@ purpose.
   "format": "scene_maker_scene_export",
   "version": 16,
   "workspace_key": "world01",
+  "game_key": "moba",
   "grid": {
     "terrain_cell_meters": 1.0,        // edge length of one Terrain cell
     "authoring_pixels_per_meter": 32,  // unit of every *_authoring_px value
@@ -1177,6 +1188,10 @@ treat a violation as a corrupt file rather than a case to handle:
   editor refuses to create a second Scene under an existing id, and an export
   refuses a Workspace whose ids collide rather than overwriting a file. A
   consumer may use it as a stable name across a reconnect.
+- `game_key` names the Game this Scene was exported from - the same key that
+  names its directory in the Workspace - on every export, Instance or
+  Template alike. There is no default; a Scene whose Game cannot be named
+  refuses to export.
 - Every Terrain cell lies inside `size_cells`; no two cells share a coordinate.
 - Every water cell lies inside `size_cells` measured in water cells; within one
   body no two cells share a coordinate. Across bodies they may.

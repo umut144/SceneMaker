@@ -90,7 +90,7 @@ unrelated reasons.
 | --- | --- | --- |
 | Scene document | `SceneMakerSchemas.SceneVersion` | 22 |
 | Workspace config | `WorkspaceConfigurationStore.Version` | 17 |
-| Scene export | `SceneExport.Version` | 20 |
+| Scene export | `SceneExport.Version` | 21 |
 | PolyTools catalog | `PolyToolsCatalogImporter.CatalogSchemaVersion` | 3 |
 | PolyTools runtime manifest | `PolyToolsCatalogImporter.ManifestSchemaVersion` | 23 |
 | Recent session | `RecentSessionStore.Version` | 4 |

@@ -21,14 +21,15 @@ public sealed class SceneExportContractTests
 
         Assert.Equal(
             [
-                "format", "version", "workspace_key", "grid", "asset_profiles",
+                "format", "version", "workspace_key", "game_key", "grid", "asset_profiles",
                 "water_raster", "water_bakes", "route_surface_bakes",
                 "route_surface_cut_raster", "bridge_bakes", "scene",
             ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(20, root.GetProperty("version").GetInt32());
+        Assert.Equal(21, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
+        Assert.Equal(TestWorkspace.DefaultGameKey, root.GetProperty("game_key").GetString());
         Assert.Equal(
             [
                 "terrain_cell_meters", "authoring_pixels_per_meter", "game_pixels_per_meter",
@@ -775,5 +776,56 @@ public sealed class SceneExportContractTests
             result => result.Path.StartsWith(
                 Path.Combine(secondGame.DirectoryPath, SceneExport.DirectoryName),
                 StringComparison.Ordinal));
+
+        var gameKeys = written
+            .Select(static result => GameKeyOf(result.Path))
+            .OrderBy(static key => key, StringComparer.Ordinal)
+            .ToList();
+        Assert.Equal([TestWorkspace.DefaultGameKey, "second"], gameKeys);
+    }
+
+    /// <summary>
+    /// A Template lives in exactly one Game's directory, the same as any
+    /// Instance, so it carries the same `game_key`.
+    /// </summary>
+    [Fact]
+    public void TemplateExportsCarryTheirGameKeyToo()
+    {
+        using var workspace = TestWorkspace.Create();
+        var template = SceneStore.CreateTemplate(workspace.Game, "grove", 2, 2, 1, 0, 0);
+        var session = WorkspaceSession.Load(workspace.RootPath);
+
+        var written = SceneExport.Write(session, workspace.Game, template);
+
+        using var parsed = JsonDocument.Parse(File.ReadAllText(written.Path));
+        var root = parsed.RootElement;
+        Assert.Equal("template", root.GetProperty("scene").GetProperty("scene_kind").GetString());
+        Assert.Equal(TestWorkspace.DefaultGameKey, root.GetProperty("game_key").GetString());
+    }
+
+    /// <summary>
+    /// There is no fallback for a Scene whose Game cannot be named: the
+    /// export refuses rather than write a file with a missing or guessed
+    /// `game_key`.
+    /// </summary>
+    [Fact]
+    public void ExportRefusesAGameWithNoGameKey()
+    {
+        using var workspace = TestWorkspace.Create();
+        var document = PropEditing.Place(
+            TestScenes.Instance(workspace), workspace.Props, 32, 32, "stone");
+        var session = WorkspaceSession.Load(workspace.RootPath);
+        var scenePath = Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json");
+        var gameWithNoKey = new LoadedGame(workspace.Workspace, "");
+
+        var exception = Assert.Throws<SceneMakerDocumentException>(
+            () => SceneExport.Write(session, gameWithNoKey, new LoadedScene(scenePath, document)));
+        Assert.Contains("game_key", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static string GameKeyOf(string exportPath)
+    {
+        using var parsed = JsonDocument.Parse(File.ReadAllText(exportPath));
+        return parsed.RootElement.GetProperty("game_key").GetString()!;
     }
 }

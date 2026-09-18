@@ -18,10 +18,22 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 20;
+    public const int Version = 21;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
+    // Export 21 adds one field to the export's own top level: `game_key`,
+    // the same key that already names the Scene's Game directory in the
+    // Workspace (workspaces/<workspace>/<game>/...). The export always named
+    // the Workspace it came from; it never said which Game, and a consumer
+    // that holds every Game's exports together - world01 does - had no way
+    // to tell them apart or to know that resyncing one Game must never touch
+    // another's files. `workspace_key` already answers "which Workspace";
+    // `game_key` now answers "which Game", right beside it. There is no
+    // default and none is derived from the file name: a Scene whose Game
+    // cannot be named refuses to export rather than guess. The embedded
+    // Scene is unchanged.
+    //
     // Export 20 changes no field and adds one guarantee: a Placement's
     // instance_id is never reused within a Scene. Once a number has named a
     // Placement, no later Placement in that Scene will carry it again, even
@@ -130,12 +142,18 @@ public static class SceneExport
         ArgumentNullException.ThrowIfNull(game);
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(configuration);
+        if (string.IsNullOrWhiteSpace(game.GameKey))
+        {
+            throw new SceneMakerDocumentException(
+                $"Scene '{scene.Document.SceneId}' cannot be exported: its Game has no game_key.");
+        }
         Validate(scene.Document, configuration, terrainAssets, propAssets);
         var document = new ExportDocument
         {
             Format = Format,
             Version = Version,
             WorkspaceKey = configuration.WorkspaceKey,
+            GameKey = game.GameKey,
             Grid = new ExportGridDocument
             {
                 TerrainCellMeters = configuration.Grid.TerrainCellMeters,
@@ -762,6 +780,7 @@ public static class SceneExport
         public required string Format { get; init; }
         public required int Version { get; init; }
         public required string WorkspaceKey { get; init; }
+        public required string GameKey { get; init; }
         public required ExportGridDocument Grid { get; init; }
         public required List<ExportAssetProfileDocument> AssetProfiles { get; init; }
 
