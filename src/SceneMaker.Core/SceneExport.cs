@@ -18,21 +18,20 @@ public sealed record SceneExportResult(string Path, IReadOnlyList<string> Warnin
 public static class SceneExport
 {
     public const string Format = "scene_maker_scene_export";
-    public const int Version = 21;
+    public const int Version = 22;
     public const string DirectoryName = "exports";
     public const string FileSuffix = ".scene_export.json";
 
-    // Export 21 adds one field to the export's own top level: `game_key`,
-    // the same key that already names the Scene's Game directory in the
-    // Workspace (workspaces/<workspace>/<game>/...). The export always named
-    // the Workspace it came from; it never said which Game, and a consumer
-    // that holds every Game's exports together - world01 does - had no way
-    // to tell them apart or to know that resyncing one Game must never touch
-    // another's files. `workspace_key` already answers "which Workspace";
-    // `game_key` now answers "which Game", right beside it. There is no
-    // default and none is derived from the file name: a Scene whose Game
-    // cannot be named refuses to export rather than guess. The embedded
-    // Scene is unchanged.
+    // Export 22 removes `game_key` and with it the Game level entirely. A
+    // Workspace holds one flat set of Scenes again, and which mechanics a
+    // Scene is played under is the consumer's decision, made from its own
+    // design data - world01 calls that a Realm. SceneMaker has no business
+    // knowing what physics applies to a map it authors, so it says nothing
+    // about it. `workspace_key` still answers which World a Scene came from.
+    // The embedded Scene is unchanged.
+    //
+    // Export 21 had added `game_key` for a consumer that held several Games'
+    // exports together. That consumer now holds one set.
     //
     // Export 20 changes no field and adds one guarantee: a Placement's
     // instance_id is never reused within a Scene. Once a number has named a
@@ -120,12 +119,12 @@ public static class SceneExport
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
     };
 
-    /// <summary>Exports <paramref name="scene"/> out of its open Game.</summary>
-    public static SceneExportResult Write(WorkspaceSession session, LoadedGame game, LoadedScene scene)
+    /// <summary>Exports <paramref name="scene"/> out of its open Workspace.</summary>
+    public static SceneExportResult Write(WorkspaceSession session, LoadedScene scene)
     {
         ArgumentNullException.ThrowIfNull(session);
         return Write(
-            game,
+            session.Workspace,
             scene,
             session.Configuration,
             session.TerrainAssets,
@@ -133,27 +132,21 @@ public static class SceneExport
     }
 
     public static SceneExportResult Write(
-        LoadedGame game,
+        LoadedWorkspace workspace,
         LoadedScene scene,
         WorkspaceConfiguration configuration,
         TerrainDisplayCatalog terrainAssets,
         PropDisplayCatalog propAssets)
     {
-        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(configuration);
-        if (string.IsNullOrWhiteSpace(game.GameKey))
-        {
-            throw new SceneMakerDocumentException(
-                $"Scene '{scene.Document.SceneId}' cannot be exported: its Game has no game_key.");
-        }
         Validate(scene.Document, configuration, terrainAssets, propAssets);
         var document = new ExportDocument
         {
             Format = Format,
             Version = Version,
             WorkspaceKey = configuration.WorkspaceKey,
-            GameKey = game.GameKey,
             Grid = new ExportGridDocument
             {
                 TerrainCellMeters = configuration.Grid.TerrainCellMeters,
@@ -173,63 +166,38 @@ public static class SceneExport
                 scene.Document, configuration.Metrics, propAssets),
             Scene = ExportScene(scene.Document, configuration.Metrics),
         };
-        var directory = Path.Combine(game.DirectoryPath, DirectoryName);
+        var directory = Path.Combine(workspace.DirectoryPath, DirectoryName);
         var path = Path.Combine(directory, scene.Document.SceneId + FileSuffix);
         var changed = AtomicTextFile.WriteIfChanged(path, JsonSerializer.Serialize(document, JsonOptions) + "\n");
         return new SceneExportResult(path, Warnings(scene.Document, configuration.Metrics), changed);
     }
 
     /// <summary>
-    /// Exports every Scene of the Game, Instances and Templates alike.
+    /// Exports every Scene of the Workspace, Instances and Templates alike.
     /// Templates ship as their own files so that one of them can be replaced
     /// between seasons without rewriting the map that uses it.
-    /// </summary>
-    public static IReadOnlyList<SceneExportResult> WriteGame(WorkspaceSession session, LoadedGame game)
-    {
-        ArgumentNullException.ThrowIfNull(session);
-        ArgumentNullException.ThrowIfNull(game);
-        var scenes = LoadValidatedScenes(session, game);
-        return scenes.Select(scene => Write(session, game, scene)).ToList();
-    }
-
-    /// <summary>
-    /// Exports every Scene of every Game in the Workspace. A Scene id is only
-    /// unique within its own Game - two Games are free to each have a
-    /// "base" Scene - but every Game's exports land in the same kind of flat
-    /// per-Game directory that <see cref="WriteGame"/> already guards, so
-    /// nothing further has to agree across Games for this to be safe.
+    ///
+    /// <para>One operation: every Scene is refused before the first output is
+    /// replaced, so a late invalid Scene cannot leave the exports
+    /// half-written.</para>
     /// </summary>
     public static IReadOnlyList<SceneExportResult> WriteWorkspace(WorkspaceSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var games = GameStore
-            .EnumerateGameKeys(session.Workspace)
-            .Select(gameKey => GameStore.Load(session.Workspace, gameKey))
-            .ToList();
-
-        // A Workspace export is one operation, the same way a Game export is:
-        // refuse every Scene of every Game before the first output is
-        // replaced, so a late invalid Scene in one Game cannot leave another
-        // Game's exports half-written.
-        var loaded = games
-            .Select(game => (game, scenes: LoadValidatedScenes(session, game)))
-            .ToList();
-
-        return loaded
-            .SelectMany(entry => entry.scenes.Select(scene => Write(session, entry.game, scene)))
-            .ToList();
+        var scenes = LoadValidatedScenes(session);
+        return scenes.Select(scene => Write(session, scene)).ToList();
     }
 
     /// <summary>
-    /// Loads every Scene of <paramref name="game"/> and refuses to export any
-    /// of them if the Game is not itself in a state that can be exported: a
+    /// Loads every Scene of the Workspace and refuses to export any of them if
+    /// the Workspace is not itself in a state that can be exported: a
     /// duplicate Scene id, or a Scene that fails its own validation.
     /// </summary>
-    private static IReadOnlyList<LoadedScene> LoadValidatedScenes(WorkspaceSession session, LoadedGame game)
+    private static IReadOnlyList<LoadedScene> LoadValidatedScenes(WorkspaceSession session)
     {
         var scenes = SceneStore
-            .EnumeratePaths(game)
-            .Select(path => SceneStore.Load(game, path))
+            .EnumeratePaths(session.Workspace)
+            .Select(path => SceneStore.Load(session.Workspace, path))
             .ToList();
 
         // Exports are named by Scene id in one flat directory, so two Scenes
@@ -780,7 +748,6 @@ public static class SceneExport
         public required string Format { get; init; }
         public required int Version { get; init; }
         public required string WorkspaceKey { get; init; }
-        public required string GameKey { get; init; }
         public required ExportGridDocument Grid { get; init; }
         public required List<ExportAssetProfileDocument> AssetProfiles { get; init; }
 

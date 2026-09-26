@@ -21,15 +21,14 @@ public sealed class SceneExportContractTests
 
         Assert.Equal(
             [
-                "format", "version", "workspace_key", "game_key", "grid", "asset_profiles",
+                "format", "version", "workspace_key", "grid", "asset_profiles",
                 "water_raster", "water_bakes", "route_surface_bakes",
                 "route_surface_cut_raster", "bridge_bakes", "scene",
             ],
             Keys(root));
         Assert.Equal("scene_maker_scene_export", root.GetProperty("format").GetString());
-        Assert.Equal(21, root.GetProperty("version").GetInt32());
+        Assert.Equal(22, root.GetProperty("version").GetInt32());
         Assert.Equal("test_world", root.GetProperty("workspace_key").GetString());
-        Assert.Equal(TestWorkspace.DefaultGameKey, root.GetProperty("game_key").GetString());
         Assert.Equal(
             [
                 "terrain_cell_meters", "authoring_pixels_per_meter", "game_pixels_per_meter",
@@ -716,9 +715,9 @@ public sealed class SceneExportContractTests
         if (extend is not null) document = extend(document, workspace);
         var session = WorkspaceSession.Load(workspace.RootPath);
         var scene = new LoadedScene(
-            Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json"),
+            Path.Combine(workspace.Workspace.ScenesDirectoryPath, "base.scene.json"),
             document);
-        return File.ReadAllText(SceneExport.Write(session, workspace.Game, scene).Path);
+        return File.ReadAllText(SceneExport.Write(session, scene).Path);
     }
 
     /// <summary>
@@ -734,98 +733,42 @@ public sealed class SceneExportContractTests
         var document = PropEditing.Place(
             TestScenes.Instance(workspace), workspace.Props, 32, 32, "stone");
         var session = WorkspaceSession.Load(workspace.RootPath);
-        var scenePath = Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json");
+        var scenePath = Path.Combine(workspace.Workspace.ScenesDirectoryPath, "base.scene.json");
 
-        var first = SceneExport.Write(session, workspace.Game, new LoadedScene(scenePath, document));
+        var first = SceneExport.Write(session, new LoadedScene(scenePath, document));
         Assert.True(first.Changed);
 
-        var second = SceneExport.Write(session, workspace.Game, new LoadedScene(scenePath, document));
+        var second = SceneExport.Write(session, new LoadedScene(scenePath, document));
         Assert.False(second.Changed);
 
         var withAnotherProp = PropEditing.Place(document, workspace.Props, 96, 96, "stone");
-        var third = SceneExport.Write(
-            session, workspace.Game, new LoadedScene(scenePath, withAnotherProp));
+        var third = SceneExport.Write(session, new LoadedScene(scenePath, withAnotherProp));
         Assert.True(third.Changed);
     }
 
     /// <summary>
-    /// Every Game of the Workspace is exported, not only the one a caller
-    /// happens to have open - a Scene id is namespaced to its own Game, so two
-    /// Games are each free to name a Scene "a" without colliding.
+    /// Every Scene of the Workspace is exported, Instances and Templates
+    /// alike: a consumer needs both, because an Anchor is worthless without a
+    /// Template of its group to put there.
     /// </summary>
     [Fact]
-    public void WriteWorkspaceExportsEveryGameInTheWorkspace()
+    public void WriteWorkspaceExportsEverySceneAndTemplate()
     {
         using var workspace = TestWorkspace.Create();
-        SceneStore.CreateInstance(workspace.Game, "a", 4, 4);
-        var secondGame = workspace.CreateGame("second");
-        SceneStore.CreateInstance(secondGame, "a", 4, 4);
+        SceneStore.CreateInstance(workspace.Workspace, "a", 4, 4);
+        SceneStore.CreateTemplate(workspace.Workspace, "grove", 2, 2, 1, 0, 0);
 
         var session = WorkspaceSession.Load(workspace.RootPath);
         var written = SceneExport.WriteWorkspace(session);
 
         Assert.Equal(2, written.Count);
         Assert.All(written, result => Assert.True(File.Exists(result.Path)));
-        Assert.Contains(
+        Assert.All(
             written,
-            result => result.Path.StartsWith(
-                Path.Combine(workspace.Game.DirectoryPath, SceneExport.DirectoryName),
+            result => Assert.StartsWith(
+                Path.Combine(workspace.Workspace.DirectoryPath, SceneExport.DirectoryName),
+                result.Path,
                 StringComparison.Ordinal));
-        Assert.Contains(
-            written,
-            result => result.Path.StartsWith(
-                Path.Combine(secondGame.DirectoryPath, SceneExport.DirectoryName),
-                StringComparison.Ordinal));
-
-        var gameKeys = written
-            .Select(static result => GameKeyOf(result.Path))
-            .OrderBy(static key => key, StringComparer.Ordinal)
-            .ToList();
-        Assert.Equal([TestWorkspace.DefaultGameKey, "second"], gameKeys);
     }
 
-    /// <summary>
-    /// A Template lives in exactly one Game's directory, the same as any
-    /// Instance, so it carries the same `game_key`.
-    /// </summary>
-    [Fact]
-    public void TemplateExportsCarryTheirGameKeyToo()
-    {
-        using var workspace = TestWorkspace.Create();
-        var template = SceneStore.CreateTemplate(workspace.Game, "grove", 2, 2, 1, 0, 0);
-        var session = WorkspaceSession.Load(workspace.RootPath);
-
-        var written = SceneExport.Write(session, workspace.Game, template);
-
-        using var parsed = JsonDocument.Parse(File.ReadAllText(written.Path));
-        var root = parsed.RootElement;
-        Assert.Equal("template", root.GetProperty("scene").GetProperty("scene_kind").GetString());
-        Assert.Equal(TestWorkspace.DefaultGameKey, root.GetProperty("game_key").GetString());
-    }
-
-    /// <summary>
-    /// There is no fallback for a Scene whose Game cannot be named: the
-    /// export refuses rather than write a file with a missing or guessed
-    /// `game_key`.
-    /// </summary>
-    [Fact]
-    public void ExportRefusesAGameWithNoGameKey()
-    {
-        using var workspace = TestWorkspace.Create();
-        var document = PropEditing.Place(
-            TestScenes.Instance(workspace), workspace.Props, 32, 32, "stone");
-        var session = WorkspaceSession.Load(workspace.RootPath);
-        var scenePath = Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json");
-        var gameWithNoKey = new LoadedGame(workspace.Workspace, "");
-
-        var exception = Assert.Throws<SceneMakerDocumentException>(
-            () => SceneExport.Write(session, gameWithNoKey, new LoadedScene(scenePath, document)));
-        Assert.Contains("game_key", exception.Message, StringComparison.Ordinal);
-    }
-
-    private static string GameKeyOf(string exportPath)
-    {
-        using var parsed = JsonDocument.Parse(File.ReadAllText(exportPath));
-        return parsed.RootElement.GetProperty("game_key").GetString()!;
-    }
 }

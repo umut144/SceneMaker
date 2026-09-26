@@ -2,7 +2,7 @@
   "format": "scene_maker_scene_export",
   "version": 21,
   "workspace_key": "world01",
-  "game_key": "testbed",
+  "game_key": "sandbox",
   "grid": {
     "terrain_cell_meters": 1.0,
     "authoring_pixels_per_meter": 32,
@@ -31544,7 +31544,7 @@
   "scene": {
     "schema": "srt.scene_maker_scene",
     "version": 17,
-    "scene_id": "core01",
+    "scene_id": "overworld01",
     "scene_kind": "instance",
     "coordinate_space": "scene_local_bottom_left_y_up",
     "size_cells": {

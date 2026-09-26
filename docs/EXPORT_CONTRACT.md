@@ -5,19 +5,21 @@ all. Everything a reader needs in order to load a map and compose it is here;
 nothing else in this repository is part of the contract, and the authored
 `scenes/`, `templates/` and `config.json` documents are explicitly not.
 
-Current schemas: **export 21**, embedded **scene 17**. A reader must reject any
+Current schemas: **export 22**, embedded **scene 17**. A reader must reject any
 other version rather than guess. There is no migration path in either
 direction; see the schema section of `AGENTS.md` for why.
 
-Export 21 adds `game_key` at the top level, beside `workspace_key`: the same
-key that names the Scene's Game directory in the Workspace
-(`workspaces/<workspace>/<game>/...`). The export always said which Workspace
-it came from; it never said which Game, and a consumer holding every Game's
-exports together - `world01` does - had no way to tell them apart or to know
-that resyncing one Game must never touch another's files. There is no default
-and none is derived from the file name: a Scene whose Game cannot be named
-refuses to export rather than write a file with a guessed or missing
-`game_key`. The embedded Scene is unchanged.
+Export 22 removes `game_key` and with it the Game level entirely. A Workspace
+holds one flat set of Scenes: `scenes/`, `templates/` and `exports/` sit
+directly under it, and SceneMaker has no grouping level between a Workspace and
+its Scenes. Which mechanics a Scene is played under is the consumer's decision,
+made from its own design data - `world01` calls that a Realm - and a map editor
+has no business knowing what physics applies to what it authors, so the export
+says nothing about it. `workspace_key` still says which World a Scene came
+from. The embedded Scene is unchanged.
+
+Export 21 had added `game_key` for a consumer holding several Games' exports
+together. That consumer now holds one set.
 
 Export 20 guarantees that a Placement's `instance_id` is never reused within a
 Scene: once a number has named a Placement, no later Placement in that Scene
@@ -146,16 +148,14 @@ that folded Terrain.
 
 ## What is on disk
 
-A Workspace holds one or more Games, each its own `scenes/`, `templates/` and
-`exports/` directory: `workspaces/<workspace>/<game>/exports/` holds one file
-per Scene of that Game, named `<scene_id>.scene_export.json`. A `scene_id` is
-unique within its own Game, never across the Workspace - two Games are each
-free to author a Scene called "base" - which is what `game_key` on every
-export is for: it says which of them a file belongs to. Exporting from the
-editor writes every Scene of every Game at once;
-`scripts/export_scene.sh <workspace> <game> <scene-id>` rewrites a single one.
+A Workspace holds its `scenes/`, `templates/` and `exports/` directories
+directly: `workspaces/<workspace>/exports/` holds one file per Scene, named
+`<scene_id>.scene_export.json`. A `scene_id` is unique across the Workspace.
+Exporting from the editor writes every Scene at once;
+`scripts/export_scene.sh <workspace> <scene-id>` rewrites a single one.
 
-**Every file in one Game's `exports/` directory carries the same `version`.**
+**Every file in a Workspace's `exports/` directory carries the same
+`version`.**
 That directory is one set, written by one export, and a consumer reads it as
 one: a mixed set is a half-finished export rather than something to be
 tolerated. Exporting from the editor writes them all; the single-Scene export
@@ -180,39 +180,13 @@ A reader should index every `"template"` file by
 `scene.template_definition.group_number`; several Templates share a group on
 purpose.
 
-### The `testbed` Game
-
-`workspaces/world01/testbed` is not a game. It carries no design
-intent and nobody plays it; it exists only so world01's shared crates have
-real authored data to test against - navigation over real Terrain, separation
-out of a real collider, a river switched off taking the water bodies hanging
-under it, none of which a synthetic four-by-four map can show. Its Scenes are
-exported and synced exactly like any other Game's; that is deliberate, so a
-change to the export contract reaches `testbed` automatically instead of
-needing a hand migration every time - see the version history above for how
-often that already happens.
-
-Its Scenes are never developed further. A Scene under `testbed` is extended
-when world01 needs a property it cannot yet express, and otherwise left
-untouched; a change that breaks an existing world01 test belongs in a new
-Scene, not an edit to one already in use. The `instance_id` of every Placement,
-Template Anchor, water body and route surface in a `testbed` Scene is a
-contract with world01: objects may be added, but nothing already there is
-renamed or removed without coordinating across both repositories first.
-
-world01 requests a new test Scene by describing the property a test needs -
-not the geometry that would provide it - as a row in
-`BevyProjects/world01/docs/TESTBED_CONTRACT.md`. How that gets authored is
-SceneMaker's call.
-
 ## Document shape
 
 ```jsonc
 {
   "format": "scene_maker_scene_export",
-  "version": 16,
+  "version": 22,
   "workspace_key": "world01",
-  "game_key": "moba",
   "grid": {
     "terrain_cell_meters": 1.0,        // edge length of one Terrain cell
     "authoring_pixels_per_meter": 32,  // unit of every *_authoring_px value
@@ -1219,10 +1193,6 @@ treat a violation as a corrupt file rather than a case to handle:
   editor refuses to create a second Scene under an existing id, and an export
   refuses a Workspace whose ids collide rather than overwriting a file. A
   consumer may use it as a stable name across a reconnect.
-- `game_key` names the Game this Scene was exported from - the same key that
-  names its directory in the Workspace - on every export, Instance or
-  Template alike. There is no default; a Scene whose Game cannot be named
-  refuses to export.
 - Every Terrain cell lies inside `size_cells`; no two cells share a coordinate.
 - Every water cell lies inside `size_cells` measured in water cells; within one
   body no two cells share a coordinate. Across bodies they may.

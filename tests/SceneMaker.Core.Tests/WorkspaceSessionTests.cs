@@ -187,25 +187,30 @@ public sealed class WorkspaceSessionTests
         Assert.Throws<SceneMakerDocumentException>(() => WorkspaceSession.Load(workspace.RootPath));
     }
 
+    /// <summary>
+    /// A Workspace holds its Scenes directly, so its `scenes/` and
+    /// `templates/` directories are part of what makes it one. Loading a
+    /// directory that lost either of them fails rather than opening a
+    /// Workspace that cannot hold a Scene.
+    /// </summary>
     [Fact]
-    public void LoadingAWorkspaceDoesNotRequireAnyGame()
+    public void LoadingAWorkspaceReportsItsMissingScenesDirectory()
     {
         using var workspace = TestWorkspace.Create();
-        Directory.Delete(workspace.Game.DirectoryPath, recursive: true);
+        Directory.Delete(workspace.Workspace.ScenesDirectoryPath);
 
-        // A World is ordinary with no Game yet - loading it is not an error.
-        var session = WorkspaceSession.Load(workspace.RootPath);
-        Assert.Equal("test_world", session.WorkspaceKey);
+        Assert.Throws<SceneMakerDocumentException>(
+            () => WorkspaceSession.Load(workspace.RootPath));
     }
 
     [Fact]
-    public void LoadingAGameReportsItsMissingScenesDirectory()
+    public void LoadingAWorkspaceReportsItsMissingTemplatesDirectory()
     {
         using var workspace = TestWorkspace.Create();
-        Directory.Delete(Path.Combine(workspace.Game.DirectoryPath, GameStore.ScenesDirectoryName));
+        Directory.Delete(workspace.Workspace.TemplatesDirectoryPath);
 
         Assert.Throws<SceneMakerDocumentException>(
-            () => GameStore.Load(workspace.Workspace, TestWorkspace.DefaultGameKey));
+            () => WorkspaceSession.Load(workspace.RootPath));
     }
 
     [Fact]

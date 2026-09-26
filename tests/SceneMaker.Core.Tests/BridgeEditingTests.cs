@@ -440,9 +440,8 @@ public sealed class BridgeEditingTests
 
         var written = SceneExport.Write(
             session,
-            workspace.Game,
             new LoadedScene(
-                Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json"),
+                Path.Combine(workspace.Workspace.ScenesDirectoryPath, "base.scene.json"),
                 scene));
 
         using var parsed = System.Text.Json.JsonDocument.Parse(File.ReadAllText(written.Path));

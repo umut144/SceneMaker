@@ -77,32 +77,27 @@ if [ "$run_tests" -eq 1 ]; then
     mkdir -p "$staged"
     cp -- "$workspace/config.json" "$staged/config.json"
     [ -d "$workspace/imports" ] && cp -R -- "$workspace/imports" "$staged/imports"
-    # Each Game is its own scenes/templates/exports directory, one level under
-    # the World. A World with no Game yet has nothing to export.
-    for game in "$workspace"*/; do
-      [ -d "$game/scenes" ] && [ -d "$game/templates" ] || continue
-      game_key=$(basename -- "$game")
-      staged_game="$staged/$game_key"
-      mkdir -p "$staged_game/exports"
-      for authored in scenes templates; do
-        [ -d "$game/$authored" ] && cp -R -- "$game/$authored" "$staged_game/$authored"
-      done
-      # Warnings stay on stderr where the exporter put them; the written paths
-      # are inside a temporary directory and are worth nothing to anyone. Not
-      # piped into `wc`: a pipeline carries the last command's status, and the
-      # one thing this step exists to notice is the exporter refusing.
-      written=$(dotnet run --project src/SceneMaker.Cli/SceneMaker.Cli.csproj -- "$staged" "$game_key")
-      printf 'Exported %s Scene(s) and Template(s) of %s/%s.\n' \
-        "$(printf '%s' "$written" | grep -c . || true)" "$workspace_key" "$game_key"
+    # A Workspace holds its scenes/ and templates/ directly; both are required,
+    # so one without them is not a Workspace this can export.
+    [ -d "$workspace/scenes" ] && [ -d "$workspace/templates" ] || continue
+    mkdir -p "$staged/exports"
+    for authored in scenes templates; do
+      cp -R -- "$workspace/$authored" "$staged/$authored"
     done
+    # Warnings stay on stderr where the exporter put them; the written paths
+    # are inside a temporary directory and are worth nothing to anyone. Not
+    # piped into `wc`: a pipeline carries the last command's status, and the
+    # one thing this step exists to notice is the exporter refusing.
+    written=$(dotnet run --project src/SceneMaker.Cli/SceneMaker.Cli.csproj -- "$staged")
+    printf 'Exported %s Scene(s) and Template(s) of %s.\n' \
+      "$(printf '%s' "$written" | grep -c . || true)" "$workspace_key"
   done
 fi
 
 if [ "$export_real" -eq 1 ]; then
   # Real writes this time: no staging copy, no temporary directory. One
   # invocation per Workspace, in the Workspace's own directory - the CLI's
-  # workspace-only mode exports every Game of it - so a Workspace with no
-  # Game yet is skipped the same way the --tests loop skips one.
+  # workspace-only mode exports every Scene of it.
   for workspace in workspaces/*/; do
     [ -f "$workspace/config.json" ] || continue
     workspace_key=$(basename -- "$workspace")

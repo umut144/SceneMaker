@@ -38,7 +38,7 @@ public sealed class EditorControllerSceneTests
         Assert.Equal(1.125m, controller.Document?.DefaultElevationMeters);
         Assert.Equal(
             1.125m,
-            SceneStore.Load(controller.Game!, controller.Scene!.FilePath)
+            SceneStore.Load(controller.Session!.Workspace, controller.Scene!.FilePath)
                 .Document.DefaultElevationMeters);
     }
 
@@ -54,7 +54,7 @@ public sealed class EditorControllerSceneTests
         Assert.Equal(SceneKind.Template, controller.Document?.SceneKind);
         Assert.Equal(3, controller.Document?.TemplateDefinition?.GroupNumber);
         Assert.True(File.Exists(Path.Combine(
-            workspace.Game.DirectoryPath, GameStore.TemplatesDirectoryName, "grove.scene.json")));
+            workspace.Workspace.DirectoryPath, WorkspaceStore.TemplatesDirectoryName, "grove.scene.json")));
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public sealed class EditorControllerSceneTests
         Assert.True(controller.SaveScene().Succeeded);
 
         Assert.False(controller.IsDirty);
-        var stored = SceneStore.Load(controller.Game!, controller.Scene!.FilePath);
+        var stored = SceneStore.Load(controller.Session!.Workspace, controller.Scene!.FilePath);
         Assert.Single(stored.Document.TerrainCells);
     }
 

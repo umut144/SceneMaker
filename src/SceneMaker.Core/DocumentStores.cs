@@ -4,16 +4,19 @@ namespace SceneMaker.Core;
 
 public static class WorkspaceStore
 {
+    public const string ScenesDirectoryName = "scenes";
+    public const string TemplatesDirectoryName = "templates";
+
     /// <summary>
     /// Creates a World whole: its PolyTools import boundary and a default
     /// configuration. If any step fails the directory is removed again,
     /// because a half-built Workspace would only fail to load later without
     /// saying why.
     ///
-    /// <para>It creates no Game. A World with no Game is ordinary right after
-    /// creation - there is nothing yet to put a Scene in - and
-    /// <see cref="GameStore.Create"/> is the separate, later step that adds
-    /// one.</para>
+    /// <para>A Workspace holds its Scenes directly: one flat `scenes/` and
+    /// `templates/` per World. Which mechanics a Scene is played under is the
+    /// consumer's decision, made from its own design data, so SceneMaker has
+    /// no grouping level between a Workspace and its Scenes.</para>
     /// </summary>
     public static LoadedWorkspace Create(
         string parentDirectoryPath,
@@ -40,6 +43,8 @@ public static class WorkspaceStore
                 fullDirectory,
                 PolyToolsCatalogImporter.ImportDirectoryName,
                 PolyToolsCatalogImporter.PolyToolsDirectoryName));
+            Directory.CreateDirectory(Path.Combine(fullDirectory, ScenesDirectoryName));
+            Directory.CreateDirectory(Path.Combine(fullDirectory, TemplatesDirectoryName));
             WorkspaceConfigurationStore.CreateDefault(fullDirectory, workspaceId, minimumChannelDepthMeters);
             complete = true;
             return new LoadedWorkspace(fullDirectory, workspaceId);
@@ -72,6 +77,20 @@ public static class WorkspaceStore
         }
     }
 
+    private static void RequireDocumentDirectories(LoadedWorkspace workspace)
+    {
+        if (!Directory.Exists(workspace.ScenesDirectoryPath))
+        {
+            throw new SceneMakerDocumentException(
+                $"Workspace '{workspace.WorkspaceKey}' requires its '{ScenesDirectoryName}' directory.");
+        }
+        if (!Directory.Exists(workspace.TemplatesDirectoryPath))
+        {
+            throw new SceneMakerDocumentException(
+                $"Workspace '{workspace.WorkspaceKey}' requires its '{TemplatesDirectoryName}' directory.");
+        }
+    }
+
     public static LoadedWorkspace Load(string workspaceDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceDirectory);
@@ -90,7 +109,9 @@ public static class WorkspaceStore
                 throw new SceneMakerDocumentException(
                     $"Workspace '{configuration.WorkspaceKey}' must use directory '{configuration.WorkspaceKey}'.");
             }
-            return new LoadedWorkspace(directory, configuration.WorkspaceKey);
+            var workspace = new LoadedWorkspace(directory, configuration.WorkspaceKey);
+            RequireDocumentDirectories(workspace);
+            return workspace;
         }
         catch (SceneMakerDocumentException)
         {
@@ -104,126 +125,12 @@ public static class WorkspaceStore
     }
 }
 
-/// <summary>
-/// One named Game inside a World: its own `scenes/` and `templates/`
-/// directories, holding the map sets built from the World's shared Assets and
-/// PolyTools import. See <see cref="LoadedGame"/> for why a Game carries no
-/// file of its own.
-/// </summary>
-public static class GameStore
-{
-    public const string ScenesDirectoryName = "scenes";
-    public const string TemplatesDirectoryName = "templates";
-
-    public static LoadedGame Create(LoadedWorkspace workspace, string gameKey)
-    {
-        ArgumentNullException.ThrowIfNull(workspace);
-        DocumentValidation.ValidateStableId("game_key", gameKey);
-
-        var fullDirectory = Path.Combine(workspace.DirectoryPath, gameKey);
-        if (Directory.Exists(fullDirectory))
-        {
-            throw new SceneMakerDocumentException(
-                $"Refusing to overwrite existing Game directory '{fullDirectory}'.");
-        }
-
-        var complete = false;
-        try
-        {
-            Directory.CreateDirectory(fullDirectory);
-            Directory.CreateDirectory(Path.Combine(fullDirectory, ScenesDirectoryName));
-            Directory.CreateDirectory(Path.Combine(fullDirectory, TemplatesDirectoryName));
-            complete = true;
-            return new LoadedGame(workspace, gameKey);
-        }
-        catch (SceneMakerDocumentException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            throw new SceneMakerDocumentException(
-                $"Could not create Game '{fullDirectory}': {exception.Message}", exception);
-        }
-        finally
-        {
-            if (!complete) WorkspaceStore.RemoveIncompleteDirectory(fullDirectory);
-        }
-    }
-
-    public static LoadedGame Load(LoadedWorkspace workspace, string gameKey)
-    {
-        ArgumentNullException.ThrowIfNull(workspace);
-        DocumentValidation.ValidateStableId("game_key", gameKey);
-        var game = new LoadedGame(workspace, gameKey);
-        RequireDirectories(game);
-        return game;
-    }
-
-    /// <summary>
-    /// Opens the Game at <paramref name="gameDirectory"/>, a direct child of
-    /// the Workspace directory. Throws if it does not belong to this Workspace
-    /// or is missing either document directory.
-    /// </summary>
-    public static LoadedGame LoadAt(LoadedWorkspace workspace, string gameDirectory)
-    {
-        ArgumentNullException.ThrowIfNull(workspace);
-        ArgumentException.ThrowIfNullOrWhiteSpace(gameDirectory);
-        var fullDirectory = Path.GetFullPath(gameDirectory).TrimEnd(
-            Path.DirectorySeparatorChar,
-            Path.AltDirectorySeparatorChar);
-        var expectedParent = Path.GetFullPath(workspace.DirectoryPath).TrimEnd(
-            Path.DirectorySeparatorChar,
-            Path.AltDirectorySeparatorChar);
-        var actualParent = Path.GetDirectoryName(fullDirectory)?.TrimEnd(
-            Path.DirectorySeparatorChar,
-            Path.AltDirectorySeparatorChar);
-        if (!string.Equals(actualParent, expectedParent, StringComparison.Ordinal))
-        {
-            throw new SceneMakerDocumentException(
-                $"Game directory '{fullDirectory}' does not belong to Workspace '{workspace.WorkspaceKey}'.");
-        }
-        return Load(workspace, Path.GetFileName(fullDirectory));
-    }
-
-    /// <summary>Every Game directory under the Workspace, in name order.</summary>
-    public static IEnumerable<string> EnumerateGameKeys(LoadedWorkspace workspace)
-    {
-        ArgumentNullException.ThrowIfNull(workspace);
-        return Directory.EnumerateDirectories(workspace.DirectoryPath)
-            .Select(directory => Path.GetFileName(directory)!)
-            .Where(gameKey =>
-                Directory.Exists(Path.Combine(workspace.DirectoryPath, gameKey, ScenesDirectoryName))
-                && Directory.Exists(Path.Combine(workspace.DirectoryPath, gameKey, TemplatesDirectoryName)))
-            .OrderBy(static gameKey => gameKey, StringComparer.Ordinal);
-    }
-
-    private static void RequireDirectories(LoadedGame game)
-    {
-        if (!Directory.Exists(game.DirectoryPath))
-        {
-            throw new SceneMakerDocumentException(
-                $"Workspace '{game.Workspace.WorkspaceKey}' has no Game '{game.GameKey}'.");
-        }
-        if (!Directory.Exists(game.ScenesDirectoryPath))
-        {
-            throw new SceneMakerDocumentException(
-                $"Game '{game.GameKey}' requires its '{ScenesDirectoryName}' directory.");
-        }
-        if (!Directory.Exists(game.TemplatesDirectoryPath))
-        {
-            throw new SceneMakerDocumentException(
-                $"Game '{game.GameKey}' requires its '{TemplatesDirectoryName}' directory.");
-        }
-    }
-}
-
 public static class SceneStore
 {
     public const string FileSuffix = ".scene.json";
 
-    public static IEnumerable<string> EnumeratePaths(LoadedGame game) =>
-        new[] { game.ScenesDirectoryPath, game.TemplatesDirectoryPath }
+    public static IEnumerable<string> EnumeratePaths(LoadedWorkspace workspace) =>
+        new[] { workspace.ScenesDirectoryPath, workspace.TemplatesDirectoryPath }
             .SelectMany(directory => Directory.EnumerateFiles(
                 directory,
                 $"*{FileSuffix}",
@@ -231,43 +138,43 @@ public static class SceneStore
             .OrderBy(static path => path, StringComparer.Ordinal);
 
     /// <summary>
-    /// Finds the file of <paramref name="sceneId"/> in the Game, whether it is
-    /// a Scene Instance or a Scene Template. A Scene id names one Scene, so
-    /// the same id in both directories is an error rather than a preference.
+    /// Finds the file of <paramref name="sceneId"/> in the Workspace, whether
+    /// it is a Scene Instance or a Scene Template. A Scene id names one Scene,
+    /// so the same id in both directories is an error rather than a preference.
     /// </summary>
-    public static string ResolvePath(LoadedGame game, string sceneId)
+    public static string ResolvePath(LoadedWorkspace workspace, string sceneId)
     {
-        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(workspace);
         DocumentValidation.ValidateStableId("scene_id", sceneId);
-        var candidates = ExistingPaths(game, sceneId);
+        var candidates = ExistingPaths(workspace, sceneId);
         return candidates.Count switch
         {
             1 => candidates[0],
             0 => throw new SceneMakerDocumentException(
-                $"Game '{game.GameKey}' has no Scene '{sceneId}'."),
+                $"Workspace '{workspace.WorkspaceKey}' has no Scene '{sceneId}'."),
             _ => throw new SceneMakerDocumentException(
                 $"Scene id '{sceneId}' names both a Scene Instance and a Scene Template."),
         };
     }
 
-    /// <summary>Every file in the Game that carries this Scene id.</summary>
-    private static List<string> ExistingPaths(LoadedGame game, string sceneId) =>
-        new[] { game.ScenesDirectoryPath, game.TemplatesDirectoryPath }
+    /// <summary>Every file in the Workspace that carries this Scene id.</summary>
+    private static List<string> ExistingPaths(LoadedWorkspace workspace, string sceneId) =>
+        new[] { workspace.ScenesDirectoryPath, workspace.TemplatesDirectoryPath }
             .Select(directory => Path.Combine(directory, sceneId + FileSuffix))
             .Where(File.Exists)
             .ToList();
 
     public static LoadedScene CreateInstance(
-        LoadedGame game,
+        LoadedWorkspace workspace,
         string sceneId,
         int widthCells,
         int heightCells,
         decimal defaultElevationMeters = SceneDocument.GroundElevationMeters) =>
-        WriteNewScene(game, SceneDocument.CreateInstance(
+        WriteNewScene(workspace, SceneDocument.CreateInstance(
             sceneId, widthCells, heightCells, defaultElevationMeters));
 
     public static LoadedScene CreateTemplate(
-        LoadedGame game,
+        LoadedWorkspace workspace,
         string sceneId,
         int widthCells,
         int heightCells,
@@ -275,7 +182,7 @@ public static class SceneStore
         int insertionAnchorX,
         int insertionAnchorY,
         decimal defaultElevationMeters = SceneDocument.GroundElevationMeters) =>
-        WriteNewScene(game, SceneDocument.CreateTemplate(
+        WriteNewScene(workspace, SceneDocument.CreateTemplate(
             sceneId,
             widthCells,
             heightCells,
@@ -284,19 +191,19 @@ public static class SceneStore
             insertionAnchorY,
             defaultElevationMeters));
 
-    private static LoadedScene WriteNewScene(LoadedGame game, SceneDocument document)
+    private static LoadedScene WriteNewScene(LoadedWorkspace workspace, SceneDocument document)
     {
-        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(workspace);
         DocumentValidation.Validate(document);
         // A Scene id names one Scene in the whole Game, not one per directory:
         // the exports live in a single flat directory named by id, and
         // consumers name a Template by that id across a reconnect.
-        if (ExistingPaths(game, document.SceneId).Count > 0)
+        if (ExistingPaths(workspace, document.SceneId).Count > 0)
         {
             throw new SceneMakerDocumentException(
-                $"Scene '{document.SceneId}' already exists in this Game.");
+                $"Scene '{document.SceneId}' already exists in this Workspace.");
         }
-        var directory = DirectoryFor(game, document.SceneKind);
+        var directory = DirectoryFor(workspace, document.SceneKind);
         Directory.CreateDirectory(directory);
         var filePath = Path.Combine(directory, document.SceneId + FileSuffix);
 
@@ -304,12 +211,12 @@ public static class SceneStore
         return new LoadedScene(filePath, document);
     }
 
-    public static LoadedScene Load(LoadedGame game, string filePath)
+    public static LoadedScene Load(LoadedWorkspace workspace, string filePath)
     {
-        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(workspace);
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         var fullPath = Path.GetFullPath(filePath);
-        RequireDirectSceneChild(game, fullPath);
+        RequireDirectSceneChild(workspace, fullPath);
         if (!fullPath.EndsWith(FileSuffix, StringComparison.Ordinal))
             throw new SceneMakerDocumentException($"Scene file must end with '{FileSuffix}'.");
 
@@ -324,7 +231,7 @@ public static class SceneStore
             }
             if (!string.Equals(
                     Path.GetDirectoryName(fullPath),
-                    DirectoryFor(game, document.SceneKind),
+                    DirectoryFor(workspace, document.SceneKind),
                     StringComparison.Ordinal))
             {
                 throw new SceneMakerDocumentException(
@@ -343,19 +250,19 @@ public static class SceneStore
         }
     }
 
-    public static void Save(LoadedGame game, LoadedScene scene)
+    public static void Save(LoadedWorkspace workspace, LoadedScene scene)
     {
-        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(scene);
         var fullPath = Path.GetFullPath(scene.FilePath);
-        RequireDirectSceneChild(game, fullPath, scene.Document.SceneKind);
+        RequireDirectSceneChild(workspace, fullPath, scene.Document.SceneKind);
         if (Path.GetFileName(fullPath) != scene.Document.SceneId + FileSuffix)
             throw new SceneMakerDocumentException("Scene ID and filename must remain identical.");
         AtomicTextFile.Write(fullPath, DocumentJson.Serialize(scene.Document));
     }
 
     private static void RequireDirectSceneChild(
-        LoadedGame game,
+        LoadedWorkspace workspace,
         string fullPath,
         SceneKind? kind = null)
     {
@@ -363,8 +270,8 @@ public static class SceneStore
             Path.DirectorySeparatorChar,
             Path.AltDirectorySeparatorChar);
         var expectedParents = kind is null
-            ? new[] { game.ScenesDirectoryPath, game.TemplatesDirectoryPath }
-            : new[] { DirectoryFor(game, kind.Value) };
+            ? new[] { workspace.ScenesDirectoryPath, workspace.TemplatesDirectoryPath }
+            : new[] { DirectoryFor(workspace, kind.Value) };
         if (!expectedParents.Any(directory => string.Equals(
                 actualParent,
                 Path.GetFullPath(directory).TrimEnd(
@@ -373,21 +280,21 @@ public static class SceneStore
                 StringComparison.Ordinal)))
         {
             throw new SceneMakerDocumentException(
-                "Scene file must be directly inside the Game scenes or templates directory.");
+                "Scene file must be directly inside the Workspace scenes or templates directory.");
         }
     }
 
-    public static string DirectoryFor(LoadedGame game, SceneKind kind) => kind switch
+    public static string DirectoryFor(LoadedWorkspace workspace, SceneKind kind) => kind switch
     {
-        SceneKind.Instance => game.ScenesDirectoryPath,
-        SceneKind.Template => game.TemplatesDirectoryPath,
+        SceneKind.Instance => workspace.ScenesDirectoryPath,
+        SceneKind.Template => workspace.TemplatesDirectoryPath,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
     private static string DirectoryNameFor(SceneKind kind) => kind switch
     {
-        SceneKind.Instance => GameStore.ScenesDirectoryName,
-        SceneKind.Template => GameStore.TemplatesDirectoryName,
+        SceneKind.Instance => WorkspaceStore.ScenesDirectoryName,
+        SceneKind.Template => WorkspaceStore.TemplatesDirectoryName,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 }

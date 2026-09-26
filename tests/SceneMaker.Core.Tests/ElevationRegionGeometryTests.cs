@@ -616,10 +616,10 @@ public sealed class ElevationRegionGeometryTests
         scene = PropEditing.Place(scene, workspace.Props, 64, 64, "stone", 10.0m);
         var session = WorkspaceSession.Load(workspace.RootPath);
         var loaded = new LoadedScene(
-            Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json"),
+            Path.Combine(workspace.Workspace.ScenesDirectoryPath, "base.scene.json"),
             scene);
 
-        var written = SceneExport.Write(session, workspace.Game, loaded);
+        var written = SceneExport.Write(session, loaded);
         var json = File.ReadAllText(written.Path);
         using var parsed = JsonDocument.Parse(json);
         var exportedScene = parsed.RootElement.GetProperty("scene");

@@ -57,8 +57,9 @@ public sealed class EditorControllerWorkspaceTests
         using var workspace = TestWorkspace.Create();
         var controller = new EditorController();
 
-        var report = controller.OpenWorkspaceAt(
-            Path.Combine(workspace.RootPath, TestWorkspace.DefaultGameKey));
+        // Any directory that is not a Workspace does: scenes/ carries no
+        // config.json of its own.
+        var report = controller.OpenWorkspaceAt(workspace.Workspace.ScenesDirectoryPath);
 
         Assert.False(report.Succeeded);
         Assert.Contains("no config.json", report.Message, StringComparison.Ordinal);

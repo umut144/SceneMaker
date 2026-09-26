@@ -1,7 +1,8 @@
 # SceneMaker context
 
-SceneMaker is a standalone semantic scene authoring tool. A workspace is one
-game and contains its own scene/template data and `config.json`.
+SceneMaker is a standalone semantic scene authoring tool. A Workspace is one
+PolyTools World and holds its `scenes/`, `templates/`, `exports/` and
+`config.json` directly.
 
 The Workspace configuration is SceneMaker's closed authoring catalog. Besides
 the grid metrics it owns every enabled Asset's stable `asset_key`, display name,
@@ -553,19 +554,19 @@ number each one carries and places them at Anchors of that group. Because a
 missing group would leave an Anchor silently empty, an Instance export also
 lists `required_template_groups`: the groups its own Anchors ask for, so the
 consumer can check its set on load. Exporting from the editor always writes
-every Scene of the open Game; the CLI can export a single Scene by id for a
-surgical swap.
+every Scene of the open Workspace; the CLI can export a single Scene by id for
+a surgical swap.
 
 For the included workspace, run `scripts/sync_polytools_world.sh` after a
 successful PolyTools Runtime Export. Run `scripts/export_scene.sh` to validate
-and export every Scene of `world01`'s `sandbox` Game; the default output goes
-to `world01/sandbox/exports/`. That Game currently holds two Scene Instances -
-`overworld01`, a 100 x 100 Grass map, and `cave01` - plus two Scene Templates.
-`world01` also holds a second Game, `moba`, sharing the same `config.json` and
-PolyTools import.
+and export every Scene of `world01`; the default output goes to
+`world01/exports/`. It currently holds four Scene Instances - `overworld01`, a
+100 x 100 Grass map, plus `cave01`, `fork01` and `stack01` - and two Scene
+Templates.
 
-The Workspace key `world01`, the Game key `sandbox`, and the Scene id
-`overworld01` are three different names for three different things: the
-Workspace key is bound to the PolyTools world it imports from and must equal
-the directory it lives in; a Game key names one subdirectory of maps built
-from that World's Assets; and a Scene id names one map inside that Game.
+The Workspace key `world01` and the Scene id `overworld01` are two different
+names for two different things: the Workspace key is bound to the PolyTools
+world it imports from and must equal the directory it lives in, while a Scene id
+names one map inside that Workspace. Which mechanics a map is played under is
+not SceneMaker's concern - the consumer decides that from its own design
+data.

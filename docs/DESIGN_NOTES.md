@@ -1247,6 +1247,21 @@ part of the first horizontal Section slice.
 
 ## A Workspace becomes a World; a Game sits between it and Scenes
 
+**Reverted, 2026-09-26.** The Game level is gone again, and export 22 dropped
+`game_key` with it. The reasoning below still explains correctly why a Workspace
+should not stand for a kind of map - that part held - but the level it
+introduced answered a question that turned out not to be SceneMaker's: the
+consumer reduced itself to one game, and which mechanics a map is played under
+is now decided there, from its own design data, under the name Realm. A map
+editor has no business knowing what physics applies to what it authors. What
+remains is the first half: a Workspace is one PolyTools World, and it holds its
+Scenes directly.
+
+The rest of this section is kept because the question it answers - why several
+kinds of map inside one World must not each become a Workspace - will come back
+the moment someone considers a second Workspace again.
+
+
 `docs/TASKS.md#WORLD-01`
 
 Cobblestone and Grass were missing from `world01_moba`'s Terrain palette

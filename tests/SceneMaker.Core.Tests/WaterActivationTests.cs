@@ -306,9 +306,9 @@ public sealed class WaterActivationTests
     {
         var session = WorkspaceSession.Load(workspace.RootPath);
         var scene = new LoadedScene(
-            Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json"),
+            Path.Combine(workspace.Workspace.ScenesDirectoryPath, "base.scene.json"),
             extend(TestScenes.Instance(workspace), workspace));
-        return SceneExport.Write(session, workspace.Game, scene).Warnings;
+        return SceneExport.Write(session, scene).Warnings;
     }
 
     private static SceneDocument Fixture()
@@ -355,9 +355,9 @@ public sealed class WaterActivationTests
         var document = extend(TestScenes.Instance(workspace), workspace);
         var session = WorkspaceSession.Load(workspace.RootPath);
         var scene = new LoadedScene(
-            Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json"),
+            Path.Combine(workspace.Workspace.ScenesDirectoryPath, "base.scene.json"),
             document);
-        using var parsed = JsonDocument.Parse(File.ReadAllText(SceneExport.Write(session, workspace.Game, scene).Path));
+        using var parsed = JsonDocument.Parse(File.ReadAllText(SceneExport.Write(session, scene).Path));
         return parsed.RootElement.Clone();
     }
 }

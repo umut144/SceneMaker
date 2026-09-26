@@ -44,8 +44,8 @@ public sealed class RiverPersistenceTests
         Assert.False(controller.IsDirty);
 
         var stored = SceneStore.Load(
-            controller.Game!,
-            Path.Combine(controller.Game!.ScenesDirectoryPath, "base.scene.json"));
+            controller.Session!.Workspace,
+            Path.Combine(controller.Session!.Workspace.ScenesDirectoryPath, "base.scene.json"));
         var body = Assert.Single(stored.Document.WaterBodies);
         Assert.Equal("river_0001", body.WaterBodyId);
         Assert.Equal(WaterKind.River, body.WaterKind);

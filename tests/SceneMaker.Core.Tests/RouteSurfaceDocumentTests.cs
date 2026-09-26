@@ -302,9 +302,8 @@ public sealed class RouteSurfaceDocumentTests
         var session = WorkspaceSession.Load(workspace.RootPath);
         var written = SceneExport.Write(
             session,
-            workspace.Game,
             new LoadedScene(
-                Path.Combine(workspace.Game.TemplatesDirectoryPath, "route_template.scene.json"),
+                Path.Combine(workspace.Workspace.TemplatesDirectoryPath, "route_template.scene.json"),
                 template));
         using var parsed = JsonDocument.Parse(File.ReadAllText(written.Path));
         Assert.Single(parsed.RootElement.GetProperty("scene")
@@ -318,10 +317,10 @@ public sealed class RouteSurfaceDocumentTests
         using var workspace = TestWorkspace.Create();
         var session = WorkspaceSession.Load(workspace.RootPath);
         var loaded = new LoadedScene(
-            Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json"),
+            Path.Combine(workspace.Workspace.ScenesDirectoryPath, "base.scene.json"),
             WithRoute(TestScenes.Instance(workspace)));
 
-        var result = SceneExport.Write(session, workspace.Game, loaded);
+        var result = SceneExport.Write(session, loaded);
 
         Assert.Empty(result.Warnings);
         using var parsed = JsonDocument.Parse(File.ReadAllText(result.Path));
@@ -350,9 +349,8 @@ public sealed class RouteSurfaceDocumentTests
 
         var result = SceneExport.Write(
             session,
-            workspace.Game,
             new LoadedScene(
-                Path.Combine(workspace.Game.ScenesDirectoryPath, "base.scene.json"),
+                Path.Combine(workspace.Workspace.ScenesDirectoryPath, "base.scene.json"),
                 document));
 
         Assert.Empty(result.Warnings);

@@ -24,17 +24,13 @@ namespace SceneMaker.TestSupport;
 /// A second curve Asset, <c>lava</c>, is added only when <see cref="Create"/> is
 /// asked for it, so an area that draws curves offers a real choice.
 ///
-/// The Workspace directory is named after its key. It carries one Game,
-/// named <see cref="DefaultGameKey"/>, with the empty <c>scenes</c> and
-/// <c>templates</c> directories a real Game requires - tests that need a
-/// <see cref="LoadedGame"/> use <see cref="Game"/> or <see cref="CreateGame"/>
-/// for a second one.
+/// The Workspace directory is named after its key and carries the empty
+/// <c>scenes</c> and <c>templates</c> directories every Workspace requires.
 /// </summary>
 public sealed class TestWorkspace : IDisposable
 {
     public const int AuthoringPixelsPerCell = 32;
     public const int AuthoringPixelsPerWaterCell = 16;
-    public const string DefaultGameKey = "game";
 
     private readonly string _containerPath;
 
@@ -64,12 +60,6 @@ public sealed class TestWorkspace : IDisposable
     /// <summary>The Workspace this fixture wrote, for callers that need a <see cref="LoadedWorkspace"/>.</summary>
     public LoadedWorkspace Workspace => new(RootPath, Configuration.WorkspaceKey);
 
-    /// <summary>The one Game <see cref="Create"/> already wrote, ready to hold Scenes.</summary>
-    public LoadedGame Game => GameStore.Load(Workspace, DefaultGameKey);
-
-    /// <summary>A second Game in this Workspace, for tests that need more than one.</summary>
-    public LoadedGame CreateGame(string gameKey) => GameStore.Create(Workspace, gameKey);
-
     /// <summary>
     /// The shared fixture. <paramref name="secondCurveAsset"/> adds a second
     /// curve-authored Terrain Asset, <c>lava</c>, for the tests that need a
@@ -86,8 +76,8 @@ public sealed class TestWorkspace : IDisposable
         // WorkspaceStore.Load requires the directory to be named after the key.
         var rootPath = Path.Combine(containerPath, worldKey);
         Directory.CreateDirectory(rootPath);
-        Directory.CreateDirectory(Path.Combine(rootPath, DefaultGameKey, GameStore.ScenesDirectoryName));
-        Directory.CreateDirectory(Path.Combine(rootPath, DefaultGameKey, GameStore.TemplatesDirectoryName));
+        Directory.CreateDirectory(Path.Combine(rootPath, WorkspaceStore.ScenesDirectoryName));
+        Directory.CreateDirectory(Path.Combine(rootPath, WorkspaceStore.TemplatesDirectoryName));
         WriteImport(rootPath, worldKey, secondCurveAsset);
         WriteConfiguration(rootPath, worldKey, secondCurveAsset);
         var catalog = PolyToolsCatalogImporter.Load(rootPath);
