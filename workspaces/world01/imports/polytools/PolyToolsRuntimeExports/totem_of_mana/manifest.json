@@ -106,13 +106,13 @@
 					55,
 					54
 				],
-				"inner_offset_meters": 0.00520833333333333,
+				"inner_offset_meters": 0.00520833333333335,
 				"join": {
 					"fallback": "bevel",
 					"miter_limit": 4.0,
 					"type": "miter"
 				},
-				"outer_offset_meters": 0.00520833333333333,
+				"outer_offset_meters": 0.00520833333333335,
 				"reference_pixels_per_meter": 192.0,
 				"role": "boundary_stroke",
 				"runs": [
@@ -4158,13 +4158,13 @@
 					36,
 					37
 				],
-				"inner_offset_meters": 0.00520833333333333,
+				"inner_offset_meters": 0.00520833333333335,
 				"join": {
 					"fallback": "bevel",
 					"miter_limit": 4.0,
 					"type": "miter"
 				},
-				"outer_offset_meters": 0.00520833333333333,
+				"outer_offset_meters": 0.00520833333333335,
 				"reference_pixels_per_meter": 192.0,
 				"role": "boundary_stroke",
 				"runs": [
@@ -5041,13 +5041,13 @@
 					45,
 					44
 				],
-				"inner_offset_meters": 0.00520833333333333,
+				"inner_offset_meters": 0.00520833333333335,
 				"join": {
 					"fallback": "bevel",
 					"miter_limit": 4.0,
 					"type": "miter"
 				},
-				"outer_offset_meters": 0.00520833333333333,
+				"outer_offset_meters": 0.00520833333333335,
 				"reference_pixels_per_meter": 192.0,
 				"role": "boundary_stroke",
 				"runs": [
@@ -5896,13 +5896,13 @@
 					37,
 					36
 				],
-				"inner_offset_meters": 0.00520833333333333,
+				"inner_offset_meters": 0.00520833333333335,
 				"join": {
 					"fallback": "bevel",
 					"miter_limit": 4.0,
 					"type": "miter"
 				},
-				"outer_offset_meters": 0.00520833333333333,
+				"outer_offset_meters": 0.00520833333333335,
 				"reference_pixels_per_meter": 192.0,
 				"role": "boundary_stroke",
 				"runs": [
@@ -6779,13 +6779,13 @@
 					45,
 					44
 				],
-				"inner_offset_meters": 0.00520833333333333,
+				"inner_offset_meters": 0.00520833333333335,
 				"join": {
 					"fallback": "bevel",
 					"miter_limit": 4.0,
 					"type": "miter"
 				},
-				"outer_offset_meters": 0.00520833333333333,
+				"outer_offset_meters": 0.00520833333333335,
 				"reference_pixels_per_meter": 192.0,
 				"role": "boundary_stroke",
 				"runs": [
@@ -7646,13 +7646,13 @@
 					44,
 					45
 				],
-				"inner_offset_meters": 0.00520833333333333,
+				"inner_offset_meters": 0.00520833333333335,
 				"join": {
 					"fallback": "bevel",
 					"miter_limit": 4.0,
 					"type": "miter"
 				},
-				"outer_offset_meters": 0.00520833333333333,
+				"outer_offset_meters": 0.00520833333333335,
 				"reference_pixels_per_meter": 192.0,
 				"role": "boundary_stroke",
 				"runs": [
@@ -8543,13 +8543,13 @@
 					44,
 					45
 				],
-				"inner_offset_meters": 0.00520833333333333,
+				"inner_offset_meters": 0.00520833333333335,
 				"join": {
 					"fallback": "bevel",
 					"miter_limit": 4.0,
 					"type": "miter"
 				},
-				"outer_offset_meters": 0.00520833333333333,
+				"outer_offset_meters": 0.00520833333333335,
 				"reference_pixels_per_meter": 192.0,
 				"role": "boundary_stroke",
 				"runs": [
@@ -9404,13 +9404,13 @@
 					20,
 					21
 				],
-				"inner_offset_meters": 0.00520833333333333,
+				"inner_offset_meters": 0.00520833333333335,
 				"join": {
 					"fallback": "bevel",
 					"miter_limit": 4.0,
 					"type": "miter"
 				},
-				"outer_offset_meters": 0.00520833333333333,
+				"outer_offset_meters": 0.00520833333333335,
 				"reference_pixels_per_meter": 192.0,
 				"role": "boundary_stroke",
 				"runs": [
@@ -9900,13 +9900,13 @@
 					21,
 					20
 				],
-				"inner_offset_meters": 0.00520833333333333,
+				"inner_offset_meters": 0.00520833333333335,
 				"join": {
 					"fallback": "bevel",
 					"miter_limit": 4.0,
 					"type": "miter"
 				},
-				"outer_offset_meters": 0.00520833333333333,
+				"outer_offset_meters": 0.00520833333333335,
 				"reference_pixels_per_meter": 192.0,
 				"role": "boundary_stroke",
 				"runs": [
@@ -10406,13 +10406,13 @@
 					21,
 					20
 				],
-				"inner_offset_meters": 0.00520833333333333,
+				"inner_offset_meters": 0.00520833333333335,
 				"join": {
 					"fallback": "bevel",
 					"miter_limit": 4.0,
 					"type": "miter"
 				},
-				"outer_offset_meters": 0.00520833333333333,
+				"outer_offset_meters": 0.00520833333333335,
 				"reference_pixels_per_meter": 192.0,
 				"role": "boundary_stroke",
 				"runs": [
@@ -10882,13 +10882,13 @@
 					20,
 					21
 				],
-				"inner_offset_meters": 0.00520833333333333,
+				"inner_offset_meters": 0.00520833333333335,
 				"join": {
 					"fallback": "bevel",
 					"miter_limit": 4.0,
 					"type": "miter"
 				},
-				"outer_offset_meters": 0.00520833333333333,
+				"outer_offset_meters": 0.00520833333333335,
 				"reference_pixels_per_meter": 192.0,
 				"role": "boundary_stroke",
 				"runs": [
