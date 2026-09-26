@@ -97,7 +97,11 @@ internal static class World01Sync
             UseShellExecute = false,
         };
         startInfo.ArgumentList.Add(script);
-        startInfo.EnvironmentVariables["SCENEMAKER_WORKSPACE"] = workspaceDirectory;
+        // world01's sync reads one flat export directory. Naming it explicitly
+        // keeps this working wherever the two repositories sit relative to each
+        // other, rather than relying on that script's own path default.
+        startInfo.EnvironmentVariables["SCENEMAKER_EXPORTS"] =
+            Path.Combine(workspaceDirectory, SceneExport.DirectoryName);
 
         try
         {
