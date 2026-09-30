@@ -1,5 +1,21 @@
+# Godot
 .godot/
+.mono/
+
+# .NET build output
 **/bin/
 **/obj/
+test-results/
+*.trx
+*.user
+
+# Editors and OS
 .DS_Store
+Thumbs.db
+.vs/
+.idea/
+.vscode/
+*.swp
+
+# Local tooling (developer's check watcher)
 .agent-check/
