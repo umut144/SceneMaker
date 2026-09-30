@@ -19,3 +19,7 @@ Thumbs.db
 
 # Local tooling (developer's check watcher)
 .agent-check/
+
+# Agent instruction files (local only)
+AGENTS.md
+CLAUDE.md

@@ -91,8 +91,7 @@ One JSON file per Scene. The full field-by-field contract, including what each f
   without an engine. Full validation runs at the file boundaries only.
 - There is no C++ or GDExtension in this repository.
 
-Reasoning behind individual decisions is written down in [`docs/DESIGN_NOTES.md`](docs/DESIGN_NOTES.md); the
-project rules are in [`AGENTS.md`](AGENTS.md).
+Reasoning behind individual decisions is written down in [`docs/DESIGN_NOTES.md`](docs/DESIGN_NOTES.md).
 
 ## Setup
 
